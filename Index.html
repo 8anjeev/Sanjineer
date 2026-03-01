@@ -1,0 +1,1819 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Sanjineer</title>
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" id="pwa-manifest">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *{font-family:'Outfit',sans-serif;box-sizing:border-box;}
+    body{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%);min-height:100vh;}
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-thumb{background:rgba(99,102,241,.4);border-radius:3px;}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    .tab-content{animation:fadeIn .18s ease-out;}
+    .stat-card{transition:transform .12s;}
+    .stat-card:hover{transform:translateY(-2px);}
+    .tab-btn{transition:all .15s;}
+    .tab-btn.active{background:rgba(255,255,255,.2);box-shadow:0 3px 14px rgba(0,0,0,.25);}
+    .expand-content{max-height:0;overflow:hidden;transition:max-height .35s ease;}
+    .expand-content.open{max-height:4000px;}
+    .calendar-day{transition:.1s;cursor:pointer;}
+    .calendar-day:hover{transform:scale(1.06);}
+    .low-badge{animation:pulse 1.6s infinite;}
+    input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+    #apk-modal{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1rem;}
+    #apk-modal.show{display:flex;}
+    .apk-card{background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:1.75rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+    #pwa-banner{position:fixed;bottom:0;left:0;right:0;z-index:200;background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:.75rem 1rem;display:none;align-items:center;justify-content:space-between;}
+    .photo-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid rgba(99,102,241,.4);}
+
+```
+.wbtn.selected{outline:3px solid #6366f1;background:#e0e7ff;}
+```
+
+  </style>
+</head>
+<body>
+
+<!-- ========== MAIN APP ========== -->
+
+<div id="main-app" class="flex flex-col min-h-screen">
+
+<!-- HEADER -->
+
+<header class="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-3 shadow-2xl">
+  <div class="flex items-center justify-between gap-2">
+    <!-- Left: Logo + App name -->
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <div class="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-xl text-xl">🏗️</div>
+      <div>
+        <h1 class="text-sm font-black text-white leading-tight">Sanjineer</h1>
+        <p class="text-purple-200 text-[9px] leading-tight">Construction Site Manager</p>
+        <p id="header-date" class="text-purple-300 text-[8px]"></p>
+      </div>
+    </div>
+    <!-- CENTER: Company & Engineer -->
+    <div class="flex-1 text-center px-1">
+      <p id="hdr-company" class="text-white font-black text-sm leading-tight truncate"></p>
+      <p id="hdr-engineer" class="text-amber-300 font-bold text-[11px] leading-tight truncate"></p>
+      <button onclick="openEditProfile()" class="text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full mt-0.5">✏️ Edit Profile</button>
+    </div>
+    <!-- Right: Spends + APK -->
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+      <div class="text-right">
+        <p class="text-purple-200 text-[9px]">Total Spends</p>
+        <p id="header-spends" class="text-rose-300 font-bold text-lg leading-tight">₹0</p>
+      </div>
+      <button onclick="showApkModal()" class="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg active:scale-95">
+        <svg width="18" height="18" fill="none" stroke="white" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- NAV -->
+
+<nav class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky top-0 z-30 px-2">
+  <div class="flex overflow-x-auto gap-1 py-1.5" style="scrollbar-width:none;">
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="daily">📋 Report</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="departmental">🏗️ Dept Work</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="attendance">📅 Attendance</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="expenses">💰 Expenses</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="materials">🧱 Materials</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="tools">🔧 Tools</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="rentals">📦 Rentals</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="contractors">👥 Teams</button>
+  </div>
+</nav>
+
+<main class="flex-1 overflow-y-auto p-3 pb-6">
+
+<!-- ===== DASHBOARD ===== -->
+
+<div id="tab-dashboard" class="tab-content" style="display:none">
+  <div class="grid grid-cols-2 gap-2.5 mb-3">
+    <div class="stat-card bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-amber-100">Advances Given</p><p id="dash-advance" class="text-xl font-bold">₹0</p><p class="text-[10px] text-amber-200">This Month</p></div>
+    <div class="stat-card bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-rose-100">Remaining</p><p id="dash-remaining" class="text-xl font-bold">₹0</p><p class="text-[10px] text-rose-200">After Advances</p></div>
+  </div>
+  <div class="grid grid-cols-3 gap-2.5 mb-3">
+    <div class="stat-card bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-emerald-100">Material</p><p id="dash-material" class="text-xl font-bold">₹0</p></div>
+    <div class="stat-card bg-gradient-to-br from-cyan-500 to-sky-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-cyan-100">Cash In</p><p id="dash-petty" class="text-xl font-bold">₹0</p></div>
+    <div class="stat-card bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-violet-100">Cash Left</p><p id="dash-petty-left" class="text-xl font-bold">₹0</p></div>
+  </div>
+  <div class="grid grid-cols-2 gap-2.5 mb-3">
+    <div class="stat-card bg-gradient-to-br from-indigo-500 to-violet-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-indigo-100">Rental Expense</p><p id="dash-rental-out" class="text-xl font-bold">₹0</p></div>
+    <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-green-100">Rental Income</p><p id="dash-rental-in" class="text-xl font-bold">₹0</p></div>
+  </div>
+  <div id="dash-low-stock" class="mb-3 hidden"><div class="bg-gradient-to-br from-red-500 to-rose-600 rounded-xl p-3 text-white shadow-xl"><p class="font-bold text-sm mb-1.5">⚠️ Low Stock Alert</p><div id="dash-low-list"></div></div></div>
+  <div class="bg-white rounded-xl p-3 shadow-xl"><h3 class="font-bold text-gray-800 mb-2">Teams This Month</h3><div id="team-details"><p class="text-gray-400 text-center py-4 text-sm">No teams yet</p></div></div>
+</div>
+
+<!-- ===== DAILY / REPORT TAB ===== -->
+
+<div id="tab-daily" class="tab-content" style="display:none">
+  <!-- Date Picker -->
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-lg font-bold text-gray-800">📋 Daily Report</h3>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input type="date" id="daily-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <button onclick="loadDailyReport()" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-semibold active:scale-95">📂 Load</button>
+        <button onclick="printDailyReport()" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      </div>
+    </div>
+    <p id="daily-label" class="text-xs text-gray-500 mt-2 font-medium"></p>
+  </div>
+
+  <!-- Site Status (Weather 3 options only) -->
+
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="text-sm font-bold text-gray-700 mb-3">🌤️ Site Status</h3>
+    <div class="flex gap-2 mb-3">
+      <button onclick="setWeather('☀️ Sunny')" id="wbtn-sunny" class="wbtn flex-1 py-2 rounded-xl text-sm font-bold border-2 border-gray-200 bg-amber-50 text-amber-700">☀️ Sunny</button>
+      <button onclick="setWeather('☁️ Cloudy')" id="wbtn-cloudy" class="wbtn flex-1 py-2 rounded-xl text-sm font-bold border-2 border-gray-200 bg-gray-100 text-gray-700">☁️ Cloudy</button>
+      <button onclick="setWeather('🌧️ Rainy')" id="wbtn-rainy" class="wbtn flex-1 py-2 rounded-xl text-sm font-bold border-2 border-gray-200 bg-blue-50 text-blue-700">🌧️ Rainy</button>
+    </div>
+    <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm mb-2 resize-none focus:outline-none focus:border-indigo-400"></textarea>
+    <button onclick="saveDailyMeta()" class="w-full py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-sm font-semibold active:scale-95">💾 Save Site Status</button>
+  </div>
+
+  <!-- Summary cards -->
+
+  <div class="grid grid-cols-2 gap-3 mb-3">
+    <div class="bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl p-3 text-white"><p class="text-xs text-rose-100">Advances Today</p><p id="daily-advances" class="text-xl font-bold">₹0</p></div>
+    <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-3 text-white"><p class="text-xs text-amber-100">Material Today</p><p id="daily-mat-cost" class="text-xl font-bold">₹0</p></div>
+  </div>
+
+  <!-- Labour Summary -->
+
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">👷 Labour Summary</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Type</th><th class="px-3 py-2 text-center">Count</th><th class="px-3 py-2 text-center">Hours</th><th class="px-3 py-2 text-left">Work Done</th><th class="px-3 py-2 text-center rounded-r-lg">✏️</th></tr></thead>
+        <tbody id="daily-labour"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No attendance today</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Departmental Work Summary (from Dept Work tab, read-only) -->
+
+  <div id="daily-dept-section" class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-bold text-gray-800 text-sm">🏗️ Departmental Work</h3>
+      <button onclick="switchTab('departmental')" class="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-lg text-xs font-semibold active:scale-95">+ Add →</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead><tr class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Category</th><th class="px-2 py-2 text-center">Workers</th><th class="px-2 py-2 text-center">Hours</th><th class="px-2 py-2 text-left">Work Done</th><th class="px-2 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
+        <tbody id="daily-dept-table"><tr><td colspan="5" class="px-3 py-3 text-center text-gray-400">No departmental work today</td></tr></tbody>
+        <tfoot><tr id="daily-dept-foot" class="bg-purple-50 font-bold text-purple-700 text-xs" style="display:none"><td class="px-2 py-1.5 rounded-l-lg">Total</td><td id="daily-dept-foot-w" class="px-2 py-1.5 text-center">0</td><td id="daily-dept-foot-h" class="px-2 py-1.5 text-center">0h</td><td class="px-2 py-1.5"></td><td id="daily-dept-foot-a" class="px-2 py-1.5 text-right rounded-r-lg">₹0</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Materials Today -->
+
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">🧱 Materials Purchased Today</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="bg-gradient-to-r from-amber-500 to-orange-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Material</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
+        <tbody id="daily-mat-table"><tr><td colspan="3" class="px-3 py-4 text-center text-gray-400">None today</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Photos — bottom most -->
+
+  <div class="bg-white rounded-2xl p-4 shadow-xl">
+    <h3 class="text-sm font-bold text-gray-700 mb-3">📷 Site Photos (max 4)</h3>
+    <div class="flex gap-2 flex-wrap mb-3" id="photo-previews"><p class="text-gray-400 text-xs">No photos yet</p></div>
+    <label class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-sm font-semibold cursor-pointer active:scale-95 inline-flex items-center gap-2">
+      📷 Add Photo
+      <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="addPhoto(event)">
+    </label>
+    <p class="text-[10px] text-gray-400 mt-2">Stored locally · shown in print at bottom</p>
+  </div>
+</div>
+
+<!-- ===== ATTENDANCE ===== -->
+
+<div id="tab-attendance" class="tab-content" style="display:none">
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div><h3 class="font-bold text-gray-800">🖨️ Print Monthly Report</h3><p class="text-xs text-gray-500">Attendance + Payments by Team</p></div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <select id="print-month" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none"></select>
+        <button onclick="printMonthlyReport()" class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      </div>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">➕ Add Worker</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <input type="text" id="w-name" placeholder="Worker Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <select id="w-category" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+        <option value="">Select Role</option>
+        <option>Mason</option><option>Labour</option><option>Carpenter</option>
+        <option>Helper</option><option>Fitter</option><option>Fitter Helper</option><option>Supervisor</option>
+      </select>
+      <select id="w-team" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+        <option value="">Select Team</option>
+      </select>
+      <input type="number" id="w-wage" placeholder="Hourly Wage (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <button onclick="addWorker()" class="col-span-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Worker</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl p-4 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">👷 Workers List</h3>
+    <div id="workers-list"><p class="text-gray-400 text-center py-4">No workers yet</p></div>
+  </div>
+</div>
+
+<!-- ===== EXPENSES ===== -->
+
+<div id="tab-expenses" class="tab-content" style="display:none">
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-1">💰 Deposit Petty Cash</h3>
+    <p class="text-xs text-gray-500 mb-3">Record cash brought to site</p>
+    <div class="grid grid-cols-3 gap-3">
+      <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="date" id="petty-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <button onclick="addPettyCash()" class="bg-gradient-to-r from-cyan-500 to-sky-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💰 Deposit</button>
+    </div>
+  </div>
+  <div class="grid grid-cols-3 gap-3 mb-3">
+    <div class="bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl p-3 text-white"><p class="text-[10px] text-emerald-100">Material Cost</p><p id="exp-mat-total" class="text-xl font-bold">₹0</p></div>
+    <div class="bg-gradient-to-br from-cyan-500 to-sky-500 rounded-xl p-3 text-white"><p class="text-[10px] text-cyan-100">Cash In</p><p id="exp-petty-in" class="text-xl font-bold">₹0</p></div>
+    <div class="bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-3 text-white"><p class="text-[10px] text-violet-100">Remaining</p><p id="exp-petty-left" class="text-xl font-bold">₹0</p></div>
+  </div>
+  <div class="bg-white rounded-2xl p-4 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">💰 Expense Ledger</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Date</th><th class="px-3 py-2 text-left">Description</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
+        <tbody id="expenses-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No expenses yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MATERIALS (integrated with Stock) ===== -->
+
+<div id="tab-materials" class="tab-content" style="display:none">
+  <!-- Add new material item -->
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-1">🧱 Add Material / Stock Item</h3>
+    <p class="text-xs text-gray-500 mb-3">Add material to track stock. Set minimum alert level.</p>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+    </div>
+    <button onclick="addMaterialItem()" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
+  </div>
+
+  <!-- Material list with expandable records -->
+
+  <div id="materials-list" class="space-y-3">
+    <p class="text-white/50 text-center py-4">No materials added yet</p>
+  </div>
+</div>
+
+<!-- ===== DEPARTMENTAL WORK TAB ===== -->
+
+<div id="tab-departmental" class="tab-content" style="display:none">
+  <!-- Date picker + Add + Print -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex-1">
+        <p class="text-xs text-gray-500 font-semibold mb-1">📅 Select Date</p>
+        <input type="date" id="dept-tab-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <div class="flex gap-2 self-end">
+        <button onclick="loadDeptTab()" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
+        <button onclick="printDeptReport()" class="px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Print</button>
+      </div>
+    </div>
+    <p id="dept-tab-label" class="text-xs text-indigo-600 font-semibold mt-1.5"></p>
+  </div>
+
+  <!-- Summary card -->
+
+  <div id="dept-tab-summary" class="grid grid-cols-3 gap-2 mb-3">
+    <div class="bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-2.5 text-white text-center">
+      <p class="text-[10px] text-violet-100">Total Workers</p><p id="dept-total-workers" class="text-lg font-black">0</p>
+    </div>
+    <div class="bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl p-2.5 text-white text-center">
+      <p class="text-[10px] text-indigo-100">Total Hours</p><p id="dept-total-hours" class="text-lg font-black">0</p>
+    </div>
+    <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-2.5 text-white text-center">
+      <p class="text-[10px] text-amber-100">Total Amount</p><p id="dept-total-amount" class="text-base font-black">₹0</p>
+    </div>
+  </div>
+
+  <!-- Records table -->
+
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="font-bold text-gray-800 text-sm">📋 Departmental Work Records</h3>
+      <button onclick="openAddDeptModal()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-xs font-bold active:scale-95">+ Add</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full" style="font-size:11px;">
+        <thead>
+          <tr class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
+            <th class="px-2 py-2 text-left rounded-l-lg">Category</th>
+            <th class="px-2 py-2 text-center">Workers</th>
+            <th class="px-2 py-2 text-center">Hours</th>
+            <th class="px-2 py-2 text-left">Work Done</th>
+            <th class="px-2 py-2 text-right">Amount</th>
+            <th class="px-2 py-2 text-center rounded-r-lg">Del</th>
+          </tr>
+        </thead>
+        <tbody id="dept-tab-table">
+          <tr><td colspan="6" class="px-3 py-4 text-center text-gray-400 text-xs">No entries for this date</td></tr>
+        </tbody>
+        <tfoot>
+          <tr class="bg-indigo-50 font-bold text-indigo-700" style="font-size:11px;">
+            <td class="px-2 py-2 rounded-l-lg">Total</td>
+            <td id="dept-foot-workers" class="px-2 py-2 text-center">0</td>
+            <td id="dept-foot-hours" class="px-2 py-2 text-center">0h</td>
+            <td class="px-2 py-2"></td>
+            <td id="dept-foot-amount" class="px-2 py-2 text-right">₹0</td>
+            <td class="px-2 py-2 rounded-r-lg"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOOLS ===== -->
+
+<div id="tab-tools" class="tab-content" style="display:none">
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">➕ Add Tool / Equipment</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="number" id="tl-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="date" id="tl-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <input type="number" id="tl-cost" placeholder="Cost (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <button onclick="addTool()" class="col-span-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Tool</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">🔧 Tools List</h3>
+    <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-violet-500 to-purple-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Tool</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-center">Date</th><th class="px-3 py-2 text-right">Cost</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
+    <tbody id="tools-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No tools</td></tr></tbody></table>
+  </div>
+  <div class="bg-white rounded-2xl p-4 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">📋 Assign Tool</h3>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <select id="as-tool" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Tool</option></select>
+      <select id="as-worker" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Worker</option></select>
+      <input type="date" id="as-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+      <button onclick="assignTool()" class="bg-gradient-to-r from-indigo-500 to-blue-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Assign</button>
+    </div>
+    <div id="tool-assignments"><p class="text-gray-400 text-center py-2 text-sm">No assignments</p></div>
+  </div>
+</div>
+
+<!-- ===== RENTALS ===== -->
+
+<div id="tab-rentals" class="tab-content" style="display:none">
+  <!-- Date filter + print -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex-1">
+        <p class="text-xs text-gray-500 font-semibold mb-1">📅 Filter by Start Date</p>
+        <input type="date" id="rental-filter-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <div class="flex gap-2 self-end">
+        <button onclick="updateRentals()" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
+        <button onclick="printRentalReport()" class="px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Print</button>
+      </div>
+    </div>
+    <p class="text-[10px] text-gray-400 mt-1">Leave empty to show all records</p>
+  </div>
+  <div class="bg-white/10 rounded-2xl p-2 mb-3">
+    <div class="flex gap-2">
+      <button id="rtab-borrow" class="rental-tab flex-1 px-4 py-2 text-sm font-semibold rounded-xl">📦 We Rented</button>
+      <button id="rtab-given" class="rental-tab flex-1 px-4 py-2 text-sm font-semibold rounded-xl">💰 Given Out</button>
+    </div>
+  </div>
+  <div id="rsec-borrow">
+    <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+      <h3 class="font-bold text-gray-800 mb-3">📦 Equipment We Rented</h3>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <input type="text" id="rb-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="number" id="rb-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="number" id="rb-rate" placeholder="Daily Rate (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="date" id="rb-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+      </div>
+      <button onclick="addRental('borrow')" class="w-full bg-gradient-to-r from-rose-500 to-pink-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Rental</button>
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-rose-500 to-pink-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Item</th><th class="px-3 py-2">Qty</th><th class="px-3 py-2">From</th><th class="px-3 py-2">Days</th><th class="px-3 py-2 text-right">Total</th><th class="px-3 py-2 rounded-r-lg">Del</th></tr></thead>
+        <tbody id="rtable-borrow"><tr><td colspan="6" class="px-3 py-4 text-center text-gray-400">None yet</td></tr></tbody>
+        <tfoot><tr class="bg-rose-50"><td colspan="4" class="px-3 py-2 font-bold text-rose-700">Total Expense</td><td id="rental-exp-total" class="px-3 py-2 text-right font-bold text-rose-700">₹0</td><td></td></tr></tfoot></table>
+      </div>
+    </div>
+  </div>
+  <div id="rsec-given" style="display:none">
+    <div class="bg-white rounded-2xl p-4 shadow-xl">
+      <h3 class="font-bold text-gray-800 mb-3">💰 Given to Others</h3>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <input type="text" id="rg-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="text" id="rg-client" placeholder="Client Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="number" id="rg-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="number" id="rg-rate" placeholder="Daily Rate (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="date" id="rg-date" class="col-span-2 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+      </div>
+      <button onclick="addRental('given')" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Item</th><th>Qty</th><th>Client</th><th>From</th><th>Days</th><th class="text-right">Total</th><th class="rounded-r-lg">Del</th></tr></thead>
+        <tbody id="rtable-given"><tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">None yet</td></tr></tbody>
+        <tfoot><tr class="bg-emerald-50"><td colspan="5" class="px-3 py-2 font-bold text-emerald-700">Total Income</td><td id="rental-inc-total" class="px-3 py-2 text-right font-bold text-emerald-700">₹0</td><td></td></tr></tfoot></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TEAMS ===== -->
+
+<div id="tab-contractors" class="tab-content" style="display:none">
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <div class="flex items-center justify-between gap-2">
+      <button onclick="changeViewMonth(-1)" class="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-sm font-medium">← Prev</button>
+      <div class="text-center"><p class="text-xs text-gray-500">Period</p><p id="teams-period" class="font-bold text-gray-800"></p></div>
+      <button onclick="changeViewMonth(1)" class="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-sm font-medium">Next →</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl flex items-center justify-between gap-2 flex-wrap">
+    <p class="text-sm font-semibold text-gray-700">Export & Print</p>
+    <div class="flex gap-2">
+      <button onclick="printMonthlyReport()" class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="exportExcel()" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">📊 Excel</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">➕ Add Contractor / Staff</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <input type="text" id="ct-name" placeholder="Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+      <select id="ct-type" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none">
+        <option value="Team">Team/Contractor</option><option value="Staff">Staff</option>
+      </select>
+      <input type="number" id="ct-total" placeholder="Contract Amount (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+      <button onclick="addContractor()" class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
+    </div>
+  </div>
+  <div id="contractors-list" class="space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
+</div>
+
+</main>
+</div><!-- end main-app -->
+
+<!-- ====== MODALS ====== -->
+
+<!-- Edit Profile -->
+
+<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-bold text-gray-800">⚙️ Profile Settings</h3>
+      <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="text-gray-400 text-xl">✕</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-4">This name appears on all your reports and prints</p>
+    <div class="space-y-3">
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company / Project Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Engineer / Owner Name</label><input id="edit-engineer" type="text" placeholder="e.g. Er. Sanjeev Kumar" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <button onclick="saveProfile()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold active:scale-95">💾 Save Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- Attendance Modal -->
+
+<div id="att-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-4"><h3 id="att-modal-title" class="font-bold text-gray-800">Attendance</h3><button onclick="closeAttModal()" class="text-gray-400 text-xl">✕</button></div>
+    <div class="space-y-3">
+      <div><label class="text-xs font-medium text-gray-600">Date</label><input type="date" id="att-date" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+      <div><label class="text-xs font-medium text-gray-600">Hours Worked</label><input type="number" id="att-hours" placeholder="Hours" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+      <div><label class="text-xs font-medium text-gray-600">Advance Payment (Optional)</label><input type="number" id="att-advance" placeholder="Amount" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+      <button onclick="saveAttendance()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Contractor Payment Modal -->
+
+<div id="ct-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-4"><h3 id="ct-modal-title" class="font-bold text-gray-800">Add Payment</h3><button onclick="closeCTModal()" class="text-gray-400 text-xl">✕</button></div>
+    <div class="space-y-3">
+      <div><label class="text-xs font-medium text-gray-600">Date</label><input type="date" id="ct-pay-date" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+      <div><label class="text-xs font-medium text-gray-600">Amount (₹)</label><input type="number" id="ct-pay-amt" placeholder="Amount" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+      <button onclick="saveCTPayment()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Material Purchase Modal -->
+
+<div id="mat-purchase-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
+    <div class="flex items-center justify-between mb-4"><h3 id="mat-modal-title" class="font-bold text-gray-800 text-base">📦 Record Purchase</h3><button onclick="closeMatModal()" class="text-gray-400 text-xl">✕</button></div>
+    <div class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="mp-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity *</label><input type="number" id="mp-qty" placeholder="e.g. 50" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Unit</label><input type="text" id="mp-unit" placeholder="bags, kg, nos..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Total Cost (₹) *</label><input type="number" id="mp-cost" placeholder="Total amount paid" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      </div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Supplier Name</label><input type="text" id="mp-supplier" placeholder="Supplier / vendor name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">📷 Bill / Receipt Photo (Optional)</label>
+        <label class="flex items-center gap-2 px-4 py-2 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-indigo-400 transition-colors">
+          <span class="text-sm text-gray-500" id="bill-file-label">Tap to attach bill photo</span>
+          <input type="file" id="mp-bill" accept="image/*" class="hidden" onchange="billFileSelected(event)">
+        </label>
+        <div id="bill-preview" class="mt-2 hidden"><img id="bill-img-preview" class="w-full max-h-32 object-cover rounded-xl border border-gray-200"><button onclick="clearBill()" class="text-xs text-rose-500 mt-1">✕ Remove</button></div>
+      </div>
+      <button onclick="saveMatPurchase()" class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-bold text-base active:scale-95">💾 Save Purchase</button>
+    </div>
+  </div>
+</div>
+
+<!-- Material Use Modal -->
+
+<div id="mat-use-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-4"><h3 id="mat-use-title" class="font-bold text-gray-800">🔨 Mark as Used</h3><button onclick="closeMatUseModal()" class="text-gray-400 text-xl">✕</button></div>
+    <div class="space-y-3">
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="mu-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity Used *</label><input type="number" id="mu-qty" placeholder="e.g. 10" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Note</label><input type="text" id="mu-note" placeholder="Where/how used..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <button onclick="saveMatUse()" class="w-full py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl font-bold text-base active:scale-95">🔨 Mark Used</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill Viewer Modal -->
+
+<div id="bill-view-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4" onclick="document.getElementById('bill-view-modal').classList.add('hidden')">
+  <div class="max-w-sm w-full" onclick="event.stopPropagation()">
+    <div class="flex justify-between items-center mb-2">
+      <p class="text-white font-semibold">Bill / Receipt</p>
+      <button onclick="document.getElementById('bill-view-modal').classList.add('hidden')" class="text-white text-2xl">✕</button>
+    </div>
+    <img id="bill-view-img" class="w-full rounded-xl shadow-2xl">
+  </div>
+</div>
+
+<!-- Departmental Work Add Modal -->
+
+<div id="dept-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800">🏗️ Add Departmental Work</h3>
+      <button onclick="closeDeptModal()" class="text-gray-400 text-xl">✕</button>
+    </div>
+    <div class="space-y-2.5">
+      <div>
+        <label class="text-xs font-semibold text-gray-500 block mb-1">Worker Category *</label>
+        <select id="da-cat" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+          <option value="">Select Category</option>
+          <option>Mason</option><option>Labour</option><option>Carpenter</option>
+          <option>Helper</option><option>Fitter</option><option>Fitter Helper</option><option>Supervisor</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 block mb-1">No. of Workers *</label>
+          <input type="number" id="da-workers" placeholder="e.g. 5" min="1" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 block mb-1">Work Hours</label>
+          <input type="number" id="da-hours" placeholder="e.g. 8" step="0.5" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 block mb-1">Work Done / Description</label>
+        <input type="text" id="da-work" placeholder="e.g. Brick laying at ground floor" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 block mb-1">Qty Done</label>
+          <input type="number" id="da-qty" placeholder="e.g. 200" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 block mb-1">Unit</label>
+          <input type="text" id="da-unit" placeholder="sqft, rft..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 block mb-1">Amount (₹)</label>
+        <input type="number" id="da-amount" placeholder="Total payment for this work" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <button onclick="saveDeptEntry()" class="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- APK Modal -->
+
+<div id="apk-modal" onclick="if(event.target===this)hideApkModal()">
+  <div class="apk-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;gap:.75rem"><div style="width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px">📲</div><div><p style="color:white;font-weight:800;font-size:1rem;margin:0">Download as APK</p><p style="color:#a5b4fc;font-size:.72rem;margin:0">Sanjineer for Android</p></div></div>
+      <button onclick="hideApkModal()" style="background:rgba(255,255,255,.1);border:none;color:white;width:32px;height:32px;border-radius:50%;cursor:pointer">✕</button>
+    </div>
+    <div style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.35);border-radius:.75rem;padding:.75rem 1rem;margin-bottom:1rem"><p style="color:#fcd34d;font-size:.78rem;margin:0">💡 Use one of these free methods to convert to Android APK</p></div>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:.875rem;padding:.875rem;margin-bottom:.75rem">
+      <p style="color:white;font-weight:700;font-size:.85rem;margin:0 0 .3rem">1. PWABuilder <span style="color:#86efac;font-size:.72rem">⭐ Easiest</span></p>
+      <p style="color:#c4b5fd;font-size:.76rem;margin:0 0 .6rem">Host HTML on GitHub Pages, paste URL on PWABuilder.com</p>
+      <button onclick="window.open('https://www.pwabuilder.com','_blank')" style="width:100%;padding:.6rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer">🌐 Open PWABuilder.com</button>
+    </div>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:.875rem;padding:.875rem;margin-bottom:.75rem">
+      <p style="color:white;font-weight:700;font-size:.85rem;margin:0 0 .3rem">2. Install as PWA <span style="color:#fbbf24;font-size:.72rem">⚡ Instant</span></p>
+      <p style="color:#c4b5fd;font-size:.76rem;margin:0 0 .6rem">Android Chrome: tap ⋮ → "Add to Home Screen"</p>
+      <button onclick="triggerPWAInstall()" style="width:100%;padding:.6rem;background:linear-gradient(135deg,#f59e0b,#ea580c);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer">📲 Install Now</button>
+    </div>
+    <button onclick="downloadHTML()" style="width:100%;padding:.7rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:white;border-radius:.75rem;font-weight:700;font-size:.82rem;cursor:pointer">💾 Download HTML File</button>
+  </div>
+</div>
+
+<!-- Toast -->
+
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-xl shadow-2xl opacity-0 transition-all duration-300 z-[100] text-sm font-medium pointer-events-none"></div>
+<div id="del-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-rose-600 text-white px-5 py-2.5 rounded-xl shadow-2xl hidden z-[100]">
+  <div class="flex items-center gap-3 text-sm"><span id="del-msg">Delete this?</span><button onclick="confirmDel()" class="px-3 py-1 bg-white text-rose-600 rounded-lg font-bold text-xs">Delete</button></div>
+</div>
+<div id="pwa-banner">
+  <div><p class="text-white font-semibold text-sm">📲 Install App</p><p class="text-indigo-200 text-xs">Add to home screen</p></div>
+  <div class="flex gap-2">
+    <button onclick="installPWA()" class="px-4 py-2 bg-white text-indigo-700 rounded-xl text-sm font-bold">Install</button>
+    <button onclick="dismissPWA()" class="px-3 py-2 text-white/60 text-xs">Later</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STORAGE
+// ============================================================
+var DB='cm_data', META='cm_meta', MATS='cm_matstore', DEPT='cm_dept', PHOTOS='cm_photos', PROF='cm_profile';
+function ld(){try{return JSON.parse(localStorage.getItem(DB)||'[]');}catch(e){return [];}}
+function sd(d){localStorage.setItem(DB,JSON.stringify(d));}
+function lm(){try{return JSON.parse(localStorage.getItem(META)||'{}');}catch(e){return {};}}
+function sm(x){localStorage.setItem(META,JSON.stringify(x));}
+function lmat(){try{return JSON.parse(localStorage.getItem(MATS)||'[]');}catch(e){return [];}}
+function smat(x){localStorage.setItem(MATS,JSON.stringify(x));}
+function ldept(){try{return JSON.parse(localStorage.getItem(DEPT)||'{}');}catch(e){return {};}}
+function sdept(x){localStorage.setItem(DEPT,JSON.stringify(x));}
+function lph(){try{return JSON.parse(localStorage.getItem(PHOTOS)||'{}');}catch(e){return {};}}
+function sph(x){localStorage.setItem(PHOTOS,JSON.stringify(x));}
+function lprof(){try{return JSON.parse(localStorage.getItem(PROF)||'null');}catch(e){return null;}}
+function sprof(x){localStorage.setItem(PROF,JSON.stringify(x));}
+
+// ============================================================
+// UTILS
+// ============================================================
+var CATS = ['Mason','Labour','Carpenter','Helper','Fitter','Fitter Helper','Supervisor'];
+
+function ist() {
+  var n = new Date();
+  return new Date(n.getTime() + 19800000).toISOString().split('T')[0];
+}
+function fc(n) {
+  return '\u20b9' + (parseFloat(n)||0).toLocaleString('en-IN', {maximumFractionDigits:2});
+}
+function fd(d) {
+  if (!d) return '--';
+  var p = d.split('-');
+  return p[2]+'/'+p[1]+'/'+p[0];
+}
+function fdl(d) {
+  if (!d) return '';
+  return new Date(d+'T00:00:00').toLocaleDateString('en-IN', {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+function daysb(d1, d2) {
+  return Math.max(1, Math.ceil(Math.abs(new Date(d2) - new Date(d1)) / 86400000) + 1);
+}
+function mkey(d) {
+  d = d || VM;
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2);
+}
+function mlabel(d) {
+  d = d || VM;
+  return ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()] + ' ' + d.getFullYear();
+}
+function dedup(list) {
+  var m = {};
+  list.forEach(function(a) {
+    var k = a.name + '_' + a.date;
+    if (!m[k] || a.__id > m[k].__id) m[k] = a;
+  });
+  return Object.values(m);
+}
+
+// ============================================================
+// STATE
+// ============================================================
+var AD = [], WID = null, CID = null, MID = null, BILL = null;
+var VM = new Date(), DD = ist(), DTD = ist();
+var PDEL = null, DTMR = null, PWA = null;
+var NID = parseInt(localStorage.getItem('cm_nid') || '1');
+
+function gid() {
+  var id = 'r' + NID++;
+  localStorage.setItem('cm_nid', NID);
+  return id;
+}
+
+// ============================================================
+// CRUD
+// ============================================================
+function ins(o) {
+  var r = JSON.parse(JSON.stringify(o));
+  r.__id = gid(); r.__ts = Date.now();
+  AD.push(r); sd(AD); return r;
+}
+function upd(id, o) {
+  var i = AD.findIndex(function(d){ return d.__id === id; });
+  if (i >= 0) { Object.keys(o).forEach(function(k){ AD[i][k] = o[k]; }); sd(AD); }
+  return AD[i];
+}
+function del(id) {
+  AD = AD.filter(function(d){ return d.__id !== id; }); sd(AD);
+}
+
+// ============================================================
+// TOAST & CONFIRM DELETE
+// ============================================================
+function toast(msg, t) {
+  var el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.background = t==='err' ? '#dc2626' : t==='ok' ? '#059669' : '#1f2937';
+  el.style.opacity = '1';
+  setTimeout(function(){ el.style.opacity = '0'; }, 2600);
+}
+function askDel(msg, fn) {
+  if (DTMR) clearTimeout(DTMR);
+  PDEL = fn;
+  document.getElementById('del-msg').textContent = msg;
+  document.getElementById('del-toast').classList.remove('hidden');
+  DTMR = setTimeout(function(){
+    document.getElementById('del-toast').classList.add('hidden');
+    PDEL = null;
+  }, 3500);
+}
+function confirmDel() {
+  document.getElementById('del-toast').classList.add('hidden');
+  clearTimeout(DTMR);
+  if (PDEL) { PDEL(); PDEL = null; }
+}
+
+// ============================================================
+// PROFILE
+// ============================================================
+function applyProfile() {
+  var p = lprof();
+  var el1 = document.getElementById('hdr-company');
+  var el2 = document.getElementById('hdr-engineer');
+  if (el1) el1.textContent = p ? p.company : 'Tap Edit Profile';
+  if (el2) el2.textContent = p ? p.engineer : 'Set your name';
+}
+function openEditProfile() {
+  var p = lprof() || {};
+  document.getElementById('edit-company').value = p.company || '';
+  document.getElementById('edit-engineer').value = p.engineer || '';
+  document.getElementById('profile-modal').style.display = 'flex';
+}
+function closeProfileModal() {
+  document.getElementById('profile-modal').style.display = 'none';
+}
+function saveProfile() {
+  var co = document.getElementById('edit-company').value.trim();
+  var en = document.getElementById('edit-engineer').value.trim();
+  if (!co || !en) { toast('Please fill both fields', 'err'); return; }
+  sprof({company: co, engineer: en});
+  applyProfile();
+  closeProfileModal();
+  toast('Profile saved!', 'ok');
+}
+
+// ============================================================
+// APK / PWA
+// ============================================================
+function showApkModal(){ document.getElementById('apk-modal').classList.add('show'); }
+function hideApkModal(){ document.getElementById('apk-modal').classList.remove('show'); }
+function triggerPWAInstall(){
+  if (PWA) { PWA.prompt(); PWA.userChoice.then(function(){ hideApkModal(); PWA = null; }); }
+  else toast('Chrome menu > Add to Home Screen', 'info');
+}
+function downloadHTML(){
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['<!DOCTYPE html>'+document.documentElement.outerHTML], {type:'text/html'}));
+  a.download = 'Sanjineer.html'; a.click(); URL.revokeObjectURL(a.href);
+  toast('Downloaded!', 'ok');
+}
+function installPWA(){
+  if (PWA) { PWA.prompt(); PWA.userChoice.then(function(){ document.getElementById('pwa-banner').style.display='none'; }); PWA = null; }
+}
+function dismissPWA(){
+  document.getElementById('pwa-banner').style.display = 'none';
+  localStorage.setItem('pwa_dismissed','1');
+}
+
+// ============================================================
+// TABS — core show/hide using inline style only (no Tailwind dependency)
+// ============================================================
+var TABS = ['dashboard','daily','departmental','attendance','expenses','materials','tools','rentals','contractors'];
+
+function switchTab(name) {
+  // Hide all tab contents
+  TABS.forEach(function(t) {
+    var el = document.getElementById('tab-' + t);
+    if (el) el.style.display = 'none';
+  });
+  // Show selected
+  var el = document.getElementById('tab-' + name);
+  if (el) el.style.display = 'block';
+
+  // Update nav button styles
+  document.querySelectorAll('.tab-btn').forEach(function(b) {
+    if (b.dataset.tab === name) {
+      b.style.background = 'rgba(255,255,255,0.22)';
+      b.style.color = '#ffffff';
+      b.style.boxShadow = '0 3px 14px rgba(0,0,0,0.25)';
+      b.style.fontWeight = '700';
+    } else {
+      b.style.background = '';
+      b.style.color = 'rgba(255,255,255,0.65)';
+      b.style.boxShadow = '';
+      b.style.fontWeight = '600';
+    }
+  });
+
+  // Reload data
+  AD = ld();
+  if      (name === 'dashboard')    updateDash();
+  else if (name === 'daily')        { loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); }
+  else if (name === 'departmental') loadDeptTab();
+  else if (name === 'attendance')   viewWorkers();
+  else if (name === 'expenses')     viewExpenses();
+  else if (name === 'materials')    viewMaterials();
+  else if (name === 'tools')        viewTools();
+  else if (name === 'rentals')      viewRentals();
+  else if (name === 'contractors')  viewContractors();
+  updateDropdowns();
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+function boot() {
+  AD = ld();
+
+  // Wire tab buttons
+  document.querySelectorAll('.tab-btn').forEach(function(b) {
+    b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
+  });
+
+  // Month dropdowns
+  var now = new Date();
+  ['print-month','dept-print-month'].forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (var i = 0; i < 12; i++) {
+      var d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      var o = document.createElement('option');
+      o.value = mkey(d); o.textContent = mlabel(d);
+      if (!i) o.selected = true;
+      sel.appendChild(o);
+    }
+  });
+
+  // Set default dates
+  var t = ist(); DD = t; DTD = t;
+  ['daily-date','dept-tab-date','petty-date','tl-date','as-date','rb-date','rg-date'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = t;
+  });
+  var rfd = document.getElementById('rental-filter-date');
+  if (rfd) rfd.value = '';
+
+  // Header date IST
+  var hd = new Date(new Date().getTime() + 19800000);
+  var hdEl = document.getElementById('header-date');
+  if (hdEl) hdEl.textContent = hd.toLocaleDateString('en-IN', {weekday:'short',day:'numeric',month:'short',year:'numeric'});
+
+  // Rental sub-tabs
+  setupRentalTabs();
+
+  // Open dashboard
+  switchTab('dashboard');
+}
+
+function setupRentalTabs() {
+  ['borrow','given'].forEach(function(rt) {
+    var btn = document.getElementById('rtab-' + rt);
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      ['borrow','given'].forEach(function(x) {
+        var sec = document.getElementById('rsec-' + x);
+        var tb  = document.getElementById('rtab-' + x);
+        if (sec) sec.style.display = 'none';
+        if (tb)  { tb.style.background='rgba(255,255,255,0.15)'; tb.style.color='#374151'; }
+      });
+      var sec = document.getElementById('rsec-' + rt);
+      if (sec) sec.style.display = 'block';
+      if (rt === 'borrow') { btn.style.background='linear-gradient(135deg,#f43f5e,#ec4899)'; btn.style.color='#fff'; }
+      else                  { btn.style.background='linear-gradient(135deg,#10b981,#14b8a6)'; btn.style.color='#fff'; }
+    });
+  });
+  // Default to borrow tab
+  setTimeout(function() {
+    var b = document.getElementById('rtab-borrow');
+    if (b) b.click();
+  }, 100);
+}
+
+// ============================================================
+// DAILY REPORT
+// ============================================================
+function loadDailyReport() {
+  var v = document.getElementById('daily-date').value;
+  DD = v || ist();
+  document.getElementById('daily-date').value = DD;
+  AD = ld(); loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary();
+  toast('Loaded: ' + fd(DD), 'ok');
+}
+function loadMeta() {
+  var dy = lm()[DD] || {};
+  ['sunny','cloudy','rainy'].forEach(function(w) {
+    var e = document.getElementById('wbtn-' + w); if (e) e.classList.remove('selected');
+  });
+  if (dy.weather) {
+    var k = dy.weather.indexOf('Sunny')>=0 ? 'sunny' : dy.weather.indexOf('Cloudy')>=0 ? 'cloudy' : 'rainy';
+    var e = document.getElementById('wbtn-' + k); if (e) e.classList.add('selected');
+  }
+  var ds = document.getElementById('daily-status'); if (ds) ds.value = dy.status || '';
+}
+function setWeather(w) {
+  ['sunny','cloudy','rainy'].forEach(function(k) { var e=document.getElementById('wbtn-'+k); if(e) e.classList.remove('selected'); });
+  var k = w.indexOf('Sunny')>=0 ? 'sunny' : w.indexOf('Cloudy')>=0 ? 'cloudy' : 'rainy';
+  var e = document.getElementById('wbtn-' + k); if (e) e.classList.add('selected');
+  var m = lm(); m[DD] = m[DD] || {}; m[DD].weather = w; sm(m);
+}
+function saveDailyMeta() {
+  var m = lm(); m[DD] = m[DD] || {};
+  var sw = ['sunny','cloudy','rainy'].find(function(k) { var e=document.getElementById('wbtn-'+k); return e&&e.classList.contains('selected'); });
+  if (sw) m[DD].weather = document.getElementById('wbtn-' + sw).textContent.trim();
+  m[DD].status = document.getElementById('daily-status').value.trim();
+  sm(m); toast('Status saved', 'ok');
+}
+function loadPhotos() {
+  var arr = lph()[DD] || [];
+  var div = document.getElementById('photo-previews');
+  if (!div) return;
+  div.innerHTML = arr.length
+    ? arr.map(function(s,i){ return '<div class="relative"><img src="'+s+'" class="photo-thumb"><button onclick="removePhoto('+i+')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;background:#ef4444;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;line-height:18px;text-align:center;">x</button></div>'; }).join('')
+    : '<p class="text-gray-400 text-xs">No photos yet</p>';
+}
+function addPhoto(e) {
+  var ph = lph(), arr = ph[DD] || [];
+  if (arr.length >= 4) { toast('Max 4 photos', 'err'); e.target.value = ''; return; }
+  var f = e.target.files[0]; if (!f) return;
+  var r = new FileReader();
+  r.onload = function(ev) { arr.push(ev.target.result); ph[DD] = arr; sph(ph); loadPhotos(); toast('Photo added','ok'); };
+  r.readAsDataURL(f); e.target.value = '';
+}
+function removePhoto(i) { var ph=lph(),arr=ph[DD]||[]; arr.splice(i,1); ph[DD]=arr; sph(ph); loadPhotos(); }
+function viewDaily() {
+  var lbl = document.getElementById('daily-label'); if (lbl) lbl.textContent = fdl(DD);
+  var att = dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD; }));
+  var adv = att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); }, 0)
+           + AD.filter(function(a){ return a.type==='contractor_payment' && a.date===DD; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); }, 0);
+  var da = document.getElementById('daily-advances'); if (da) da.textContent = fc(adv);
+  var mats = AD.filter(function(a){ return a.type==='material' && a.date===DD && !a.is_petty_cash; });
+  var mc = mats.reduce(function(s,m){ return s+(parseFloat(m.cost)||0); }, 0);
+  var dm = document.getElementById('daily-mat-cost'); if (dm) dm.textContent = fc(mc);
+  var dmt = document.getElementById('daily-mat-table');
+  if (dmt) dmt.innerHTML = mats.length
+    ? mats.map(function(m){ return '<tr class="border-b border-gray-100"><td class="px-2 py-2 font-medium text-xs">'+m.material_name+'</td><td class="px-2 py-2 text-center text-xs">'+(m.quantity||'--')+'</td><td class="px-2 py-2 text-right text-xs">'+fc(m.cost)+'</td></tr>'; }).join('')
+    : '<tr><td colspan="3" class="py-3 text-center text-gray-400 text-xs">None today</td></tr>';
+  // Labour grouped by category
+  var grp = {};
+  att.forEach(function(a){ if (!grp[a.category]) grp[a.category]=[]; grp[a.category].push(a); });
+  var cats = Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
+  var dl = document.getElementById('daily-labour');
+  if (dl) dl.innerHTML = cats.length
+    ? cats.map(function(cat){
+        var wks=grp[cat], hrs=wks.reduce(function(s,w){ return s+(parseFloat(w.hours)||0); },0);
+        var wd=(wks.find(function(w){ return w.work_done; })||{}).work_done||'--';
+        return '<tr class="border-b border-gray-100" data-cat="'+cat+'"><td class="px-2 py-2 font-bold text-xs">'+cat+'</td><td class="px-2 py-2 text-center font-bold text-xs" style="color:#4f46e5">'+wks.length+'</td><td class="px-2 py-2 text-center text-xs">'+hrs.toFixed(1)+'h</td><td class="px-2 py-2 text-xs wd-cell">'+wd+'</td><td class="px-2 py-2 text-center"><button onclick="editWD(\''+cat+'\')" style="font-size:10px;padding:2px 7px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:5px;cursor:pointer;">Edit</button></td></tr>';
+      }).join('')
+    : '<tr><td colspan="5" class="py-4 text-center text-gray-400 text-xs">No attendance for this date</td></tr>';
+}
+function editWD(cat) {
+  var row = document.querySelector('[data-cat="'+cat+'"]'); if (!row) return;
+  var cell = row.querySelector('.wd-cell'), cur = cell.textContent.trim()==='--' ? '' : cell.textContent.trim();
+  var safe = cat.replace(/\s/g,'_');
+  cell.innerHTML = '<div style="display:flex;gap:4px"><input id="wd-'+safe+'" style="flex:1;padding:2px 6px;border:1px solid #6366f1;border-radius:4px;font-size:11px" value="'+cur+'"><button onclick="saveWD(\''+cat+'\')" style="padding:2px 8px;background:#059669;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;">OK</button></div>';
+  var inp = document.getElementById('wd-'+safe); if (inp) inp.focus();
+}
+function saveWD(cat) {
+  var safe = cat.replace(/\s/g,'_'), val = (document.getElementById('wd-'+safe)||{}).value || '';
+  dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD && a.category===cat; })).forEach(function(a){ upd(a.__id,{work_done:val}); });
+  AD = ld(); toast('Saved','ok'); viewDaily();
+}
+function viewDeptSummary() {
+  var entries = ldept()[DD] || [];
+  var tb = document.getElementById('daily-dept-table'), foot = document.getElementById('daily-dept-foot');
+  if (!entries.length) {
+    if (tb) tb.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-xs text-gray-400">No departmental work. <button onclick="switchTab(\'departmental\')" style="color:#6366f1;text-decoration:underline;background:none;border:none;cursor:pointer;">Add in Dept Work tab</button></td></tr>';
+    if (foot) foot.style.display = 'none'; return;
+  }
+  var tw=0, th=0, ta=0;
+  if (tb) tb.innerHTML = entries.map(function(e){
+    tw+=parseInt(e.workers||0); th+=parseFloat(e.hours||0); ta+=parseFloat(e.amount||0);
+    return '<tr class="border-b border-gray-100"><td class="px-2 py-1.5 font-bold text-xs">'+e.cat+'</td><td class="px-2 py-1.5 text-center font-bold text-xs" style="color:#4f46e5">'+e.workers+'</td><td class="px-2 py-1.5 text-center text-xs">'+(e.hours||'--')+'h</td><td class="px-2 py-1.5 text-xs">'+(e.work||'--')+'</td><td class="px-2 py-1.5 text-right font-bold text-xs" style="color:#059669">'+(e.amount?fc(e.amount):'--')+'</td></tr>';
+  }).join('');
+  if (foot) { foot.style.display='';
+    var fw=document.getElementById('daily-dept-foot-w'); if(fw) fw.textContent=tw;
+    var fh=document.getElementById('daily-dept-foot-h'); if(fh) fh.textContent=th+'h';
+    var fa=document.getElementById('daily-dept-foot-a'); if(fa) fa.textContent=fc(ta);
+  }
+}
+
+// ============================================================
+// DEPT WORK TAB
+// ============================================================
+function loadDeptTab() {
+  var el = document.getElementById('dept-tab-date');
+  if (el && el.value) DTD = el.value; else { DTD = ist(); if (el) el.value = DTD; }
+  var lbl = document.getElementById('dept-tab-label'); if (lbl) lbl.textContent = fdl(DTD);
+  renderDept();
+}
+function renderDept() {
+  var entries = ldept()[DTD] || [];
+  var tb = document.getElementById('dept-tab-table'), foot = document.getElementById('dept-tab-foot');
+  var tw=0, th=0, ta=0;
+  if (tb) tb.innerHTML = entries.length
+    ? entries.map(function(e,i){
+        tw+=parseInt(e.workers||0); th+=parseFloat(e.hours||0); ta+=parseFloat(e.amount||0);
+        return '<tr class="border-b border-gray-100"><td class="px-2 py-2 font-bold text-xs">'+e.cat+'</td><td class="px-2 py-2 text-center font-bold text-xs" style="color:#4f46e5">'+e.workers+'</td><td class="px-2 py-2 text-center text-xs">'+(e.hours||'--')+'h</td><td class="px-2 py-2 text-xs">'+(e.work||'--')+(e.qty?' ('+e.qty+' '+(e.unit||'')+')':'')+'</td><td class="px-2 py-2 text-right font-bold text-xs" style="color:#059669">'+(e.amount?fc(e.amount):'--')+'</td><td class="px-2 py-2 text-center"><button onclick="delDeptEntry('+i+')" style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer;">X</button></td></tr>';
+      }).join('')
+    : '<tr><td colspan="6" class="py-4 text-center text-gray-400 text-xs">No entries yet. Tap + Add Entry</td></tr>';
+  if (foot) foot.style.display = entries.length ? '' : 'none';
+  ['dept-foot-workers','dept-total-workers'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent=tw; });
+  ['dept-foot-hours','dept-total-hours'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent=th+'h'; });
+  ['dept-foot-amount','dept-total-amount'].forEach(function(id){ var e=document.getElementById(id); if(e) e.textContent=fc(ta); });
+}
+function openAddDeptModal() {
+  ['da-cat','da-workers','da-hours','da-work','da-qty','da-unit','da-amount'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  var lbl = document.getElementById('dept-modal-date-label'); if (lbl) lbl.textContent = fdl(DTD);
+  document.getElementById('dept-add-modal').style.display = 'flex';
+}
+function closeDeptModal(){ document.getElementById('dept-add-modal').style.display = 'none'; }
+function saveDeptEntry() {
+  var cat = document.getElementById('da-cat').value;
+  var workers = parseInt(document.getElementById('da-workers').value)||0;
+  if (!cat || !workers) { toast('Select category and enter workers','err'); return; }
+  var entry = { cat:cat, workers:workers, hours:parseFloat(document.getElementById('da-hours').value)||0, work:document.getElementById('da-work').value.trim(), qty:document.getElementById('da-qty').value, unit:document.getElementById('da-unit').value.trim(), amount:parseFloat(document.getElementById('da-amount').value)||0 };
+  var store = ldept(); if (!store[DTD]) store[DTD]=[];
+  store[DTD].push(entry); sdept(store);
+  closeDeptModal(); toast('Entry saved','ok'); renderDept();
+}
+function delDeptEntry(i) {
+  askDel('Delete this entry?', function(){
+    var store = ldept(); if (!store[DTD]) return;
+    store[DTD].splice(i,1); if (!store[DTD].length) delete store[DTD];
+    sdept(store); toast('Deleted','ok'); renderDept();
+  });
+}
+
+// ============================================================
+// WORKERS & ATTENDANCE
+// ============================================================
+function addWorker() {
+  var name=document.getElementById('w-name').value.trim(), cat=document.getElementById('w-category').value;
+  var team=document.getElementById('w-team').value, wage=parseFloat(document.getElementById('w-wage').value)||0;
+  if (!name||!cat||!team) { toast('Fill all fields','err'); return; }
+  ins({type:'worker',name:name,category:cat,team_name:team,hourly_wage:wage});
+  document.getElementById('w-name').value=''; document.getElementById('w-wage').value='';
+  toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers();
+}
+function delWorker(id) {
+  var w=AD.find(function(d){ return d.__id===id; });
+  askDel('Delete '+w.name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewWorkers(); });
+}
+function openAttModal(wid, date) {
+  WID=wid; var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
+  var d=date||ist();
+  var ex=dedup(AD.filter(function(d2){ return d2.type==='attendance'&&d2.name===w.name&&d2.date===d; }));
+  var att=ex.length?ex[0]:null;
+  document.getElementById('att-modal-title').textContent='Attendance — '+w.name;
+  document.getElementById('att-date').value=d;
+  document.getElementById('att-hours').value=att?att.hours:'';
+  document.getElementById('att-advance').value=att?att.advance:'';
+  document.getElementById('att-modal').style.display='flex';
+}
+function closeAttModal(){ document.getElementById('att-modal').style.display='none'; WID=null; }
+function saveAttendance() {
+  var date=document.getElementById('att-date').value;
+  var hours=parseFloat(document.getElementById('att-hours').value)||0;
+  var advance=parseFloat(document.getElementById('att-advance').value)||0;
+  if (!WID) { toast('Error','err'); return; }
+  var w=AD.find(function(d){ return d.__id===WID; }); if(!w) return;
+  var ex=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&d.date===date; }));
+  if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,payment:hours*w.hourly_wage});
+  else ins({type:'attendance',name:w.name,category:w.category,date:date,hours:hours,advance:advance,payment:hours*w.hourly_wage,hourly_wage:w.hourly_wage});
+  AD=ld(); closeAttModal(); toast('Saved','ok');
+  if (date===DD) viewDaily(); viewWorkers();
+}
+function viewWorkers() {
+  AD=ld(); var workers=AD.filter(function(d){ return d.type==='worker'; });
+  var div=document.getElementById('workers-list'); var cums=mkey(new Date());
+  if (!workers.length) { div.innerHTML='<p class="text-gray-400 text-center py-4">No workers yet</p>'; return; }
+  var grp={};
+  workers.forEach(function(w){ if(!grp[w.category]) grp[w.category]=[]; grp[w.category].push(w); });
+  var cats=Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
+  div.innerHTML=cats.map(function(cat){
+    return '<div class="mb-4"><h4 class="text-xs font-bold mb-2 uppercase" style="color:#6366f1">'+cat+' ('+grp[cat].length+')</h4>'
+      + grp[cat].map(function(w){
+          var ma=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); }));
+          var days=ma.filter(function(a){ return parseFloat(a.hours)>0; }).length;
+          var hrs=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
+          var adv=ma.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+          var pay=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+          return '<div class="bg-gray-50 rounded-xl p-3 mb-2" style="border:1px solid #e5e7eb">'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+            +'<div style="display:flex;align-items:center;gap:8px">'
+            +'<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px">'+w.name[0].toUpperCase()+'</div>'
+            +'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+w.name+'</p><p style="font-size:10px;color:#6b7280">'+fc(w.hourly_wage)+'/hr &middot; '+w.team_name+'</p></div></div>'
+            +'<div style="display:flex;gap:5px">'
+            +'<button onclick="toggleCal(\''+w.__id+'\')" style="font-size:11px;padding:3px 9px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:7px;cursor:pointer;">📅</button>'
+            +'<button onclick="delWorker(\''+w.__id+'\')" style="font-size:11px;padding:3px 9px;background:#fee2e2;color:#dc2626;border:none;border-radius:7px;cursor:pointer;">Del</button>'
+            +'</div></div>'
+            +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center;margin-bottom:6px">'
+            +'<div style="background:white;border-radius:8px;padding:5px"><p style="font-size:9px;color:#9ca3af">Days</p><p style="font-weight:700;font-size:13px">'+days+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px"><p style="font-size:9px;color:#9ca3af">Hrs</p><p style="font-weight:700;font-size:13px">'+hrs.toFixed(1)+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px"><p style="font-size:9px;color:#d97706">Adv</p><p style="font-weight:700;font-size:13px;color:#d97706">'+fc(adv)+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px"><p style="font-size:9px;color:#059669">Pay</p><p style="font-weight:700;font-size:13px;color:#059669">'+fc(pay)+'</p></div>'
+            +'</div>'
+            +'<div id="cal-'+w.__id+'" style="max-height:0;overflow:hidden;transition:max-height 0.35s ease"><div id="cal-c-'+w.__id+'">'+renderCal(w,new Date())+'</div></div>'
+            +'</div>';
+        }).join('')+'</div>';
+  }).join('');
+}
+function toggleCal(id){
+  var el=document.getElementById('cal-'+id);
+  if (!el) return;
+  el.style.maxHeight = el.style.maxHeight === '0px' || !el.style.maxHeight ? '2000px' : '0px';
+}
+function changeCal(wid,dir,yr,mo){
+  var w=AD.find(function(x){ return x.__id===wid; }); if(!w) return;
+  var c=document.getElementById('cal-c-'+wid); if(c) c.innerHTML=renderCal(w,new Date(yr,mo+dir,1));
+}
+function renderCal(w,vd){
+  var yr=vd.getFullYear(), mo=vd.getMonth();
+  var fd2=new Date(yr,mo,1).getDay(), days=new Date(yr,mo+1,0).getDate();
+  var msStr=yr+'-'+('0'+(mo+1)).slice(-2), today=ist();
+  var mp={};
+  AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(msStr); })
+    .forEach(function(a){ if(!mp[a.date]||a.__id>mp[a.date].__id) mp[a.date]=a; });
+  var uniq=Object.values(mp);
+  var tD=uniq.filter(function(a){ return parseFloat(a.hours)>0; }).length;
+  var tH=uniq.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
+  var tA=uniq.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+  var tP=uniq.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+  var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var blanks=Array(fd2).fill('<div></div>').join('');
+  var cells=Array.from({length:days},function(_,i){
+    var day=i+1, ds=yr+'-'+('0'+(mo+1)).slice(-2)+'-'+('0'+day).slice(-2);
+    var a=mp[ds], isT=ds===today, isPast=ds<today;
+    var bg=a?(parseFloat(a.hours)===0?'#fee2e2':'#10b981'):(isT?'#c7d2fe':isPast?'#fef2f2':'transparent');
+    var col=a?(parseFloat(a.hours)===0?'#dc2626':'#ffffff'):(isT?'#4338ca':isPast?'#f87171':'#9ca3af');
+    return '<div onclick="openAttModal(\''+w.__id+'\',\''+ds+'\')" style="cursor:pointer;border-radius:6px;min-height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';color:'+col+';padding:2px">'
+      +'<div style="font-size:10px;font-weight:700">'+day+'</div>'
+      +(a?'<div style="font-size:8px">'+parseFloat(a.hours).toFixed(1)+'h</div>':'')+'</div>';
+  }).join('');
+  return '<div style="background:white;border-radius:10px;padding:10px;margin-top:6px;border:1px solid #e5e7eb">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+    +'<button onclick="changeCal(\''+w.__id+'\',-1,'+yr+','+mo+')" style="padding:3px 10px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:6px;cursor:pointer;font-size:12px">&#8592;</button>'
+    +'<span style="font-weight:700;font-size:12px;color:#374151">'+MN[mo]+' '+yr+'</span>'
+    +'<button onclick="changeCal(\''+w.__id+'\',1,'+yr+','+mo+')" style="padding:3px 10px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:6px;cursor:pointer;font-size:12px">&#8594;</button>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:8px;text-align:center">'
+    +'<div style="background:#eff6ff;border-radius:6px;padding:4px"><p style="font-size:8px;color:#3b82f6">Days</p><p style="font-weight:700;font-size:11px;color:#1d4ed8">'+tD+'</p></div>'
+    +'<div style="background:#f5f3ff;border-radius:6px;padding:4px"><p style="font-size:8px;color:#8b5cf6">Hrs</p><p style="font-weight:700;font-size:11px;color:#7c3aed">'+tH.toFixed(1)+'</p></div>'
+    +'<div style="background:#fffbeb;border-radius:6px;padding:4px"><p style="font-size:8px;color:#d97706">Adv</p><p style="font-weight:700;font-size:11px;color:#b45309">'+fc(tA)+'</p></div>'
+    +'<div style="background:#f0fdf4;border-radius:6px;padding:4px"><p style="font-size:8px;color:#059669">Pay</p><p style="font-weight:700;font-size:11px;color:#047857">'+fc(tP)+'</p></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:9px;font-weight:600;color:#9ca3af;margin-bottom:4px">'+['S','M','T','W','T','F','S'].map(function(x){ return '<div>'+x+'</div>'; }).join('')+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">'+blanks+cells+'</div>'
+    +'</div>';
+}
+
+// ============================================================
+// EXPENSES
+// ============================================================
+function addPettyCash(){
+  var amt=parseFloat(document.getElementById('petty-amount').value)||0, date=document.getElementById('petty-date').value;
+  if (!amt||!date) { toast('Enter amount and date','err'); return; }
+  ins({type:'material',material_name:'Petty Cash Deposit',quantity:0,cost:amt,date:date,is_petty_cash:true});
+  document.getElementById('petty-amount').value=''; AD=ld(); toast('Cash deposited','ok'); viewExpenses(); updateDash();
+}
+function delExpense(id){
+  var m=AD.find(function(d){ return d.__id===id; });
+  askDel('Delete '+m.material_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewExpenses(); updateDash(); });
+}
+function viewExpenses(){
+  AD=ld();
+  var records=AD.filter(function(d){ return d.type==='material'; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  var pIn=records.filter(function(r){ return r.is_petty_cash; }).reduce(function(s,r){ return s+(parseFloat(r.cost)||0); },0);
+  var mOut=records.filter(function(r){ return !r.is_petty_cash; }).reduce(function(s,r){ return s+(parseFloat(r.cost)||0); },0);
+  var e1=document.getElementById('exp-mat-total'); if(e1) e1.textContent=fc(mOut);
+  var e2=document.getElementById('exp-petty-in'); if(e2) e2.textContent=fc(pIn);
+  var e3=document.getElementById('exp-petty-left'); if(e3) e3.textContent=fc(pIn-mOut);
+  var et=document.getElementById('expenses-table');
+  if (et) et.innerHTML=records.length
+    ? records.map(function(r){ return '<tr style="border-bottom:1px solid #f3f4f6'+(r.is_petty_cash?';background:#ecfeff':'')+'">'
+        +'<td class="px-2 py-2 text-xs" style="color:#6b7280">'+fd(r.date)+'</td>'
+        +'<td class="px-2 py-2 text-xs font-medium">'+r.material_name+(r.is_petty_cash?' <span style="font-size:9px;background:#cffafe;color:#0e7490;padding:1px 5px;border-radius:999px">Cash In</span>':'')+'</td>'
+        +'<td class="px-2 py-2 text-xs text-center">'+(r.quantity||'--')+'</td>'
+        +'<td class="px-2 py-2 text-xs text-right font-medium">'+fc(r.cost)+'</td>'
+        +'<td class="px-2 py-2 text-center"><button onclick="delExpense(\''+r.__id+'\')" style="font-size:10px;padding:1px 7px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td>'
+        +'</tr>'; }).join('')
+    : '<tr><td colspan="5" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">No expenses yet</td></tr>';
+}
+
+// ============================================================
+// MATERIALS
+// ============================================================
+function addMaterialItem(){
+  var name=document.getElementById('mat-name').value.trim(), unit=document.getElementById('mat-unit').value.trim();
+  var initQty=parseFloat(document.getElementById('mat-init-qty').value)||0, minQty=parseFloat(document.getElementById('mat-min-qty').value)||0;
+  if (!name) { toast('Enter material name','err'); return; }
+  var mats=lmat();
+  mats.push({id:'mat'+Date.now(),name:name,unit:unit,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0}]:[],created:Date.now()});
+  smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty'].forEach(function(id){ document.getElementById(id).value=''; });
+  toast('Material added','ok'); viewMaterials(); updateDash();
+}
+function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
+function delMaterialItem(id){ askDel('Delete material?', function(){ smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); updateDash(); }); }
+function openMatPurchaseModal(id){
+  MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
+  document.getElementById('mat-modal-title').textContent='Purchase — '+item.name;
+  document.getElementById('mp-date').value=ist(); document.getElementById('mp-qty').value='';
+  document.getElementById('mp-unit').value=item.unit||''; document.getElementById('mp-cost').value='';
+  document.getElementById('mp-supplier').value=''; BILL=null;
+  document.getElementById('bill-file-label').textContent='Tap to attach bill photo';
+  document.getElementById('bill-preview').classList.add('hidden');
+  document.getElementById('mat-purchase-modal').style.display='flex';
+}
+function closeMatModal(){ document.getElementById('mat-purchase-modal').style.display='none'; }
+function billFileSelected(e){
+  var f=e.target.files[0]; if(!f) return;
+  var r=new FileReader(); r.onload=function(ev){ BILL=ev.target.result; document.getElementById('bill-file-label').textContent='Bill attached'; document.getElementById('bill-img-preview').src=BILL; document.getElementById('bill-preview').classList.remove('hidden'); }; r.readAsDataURL(f);
+}
+function clearBill(){ BILL=null; document.getElementById('bill-file-label').textContent='Tap to attach bill photo'; document.getElementById('bill-preview').classList.add('hidden'); document.getElementById('mp-bill').value=''; }
+function saveMatPurchase(){
+  var date=document.getElementById('mp-date').value, qty=parseFloat(document.getElementById('mp-qty').value)||0;
+  var unit=document.getElementById('mp-unit').value.trim(), cost=parseFloat(document.getElementById('mp-cost').value)||0;
+  var supplier=document.getElementById('mp-supplier').value.trim();
+  if (!date||!qty) { toast('Enter date and quantity','err'); return; }
+  var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
+  item.transactions.push({type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,bill:BILL||null});
+  smat(mats);
+  if (cost>0) { ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false}); AD=ld(); }
+  closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); updateDash();
+}
+function openMatUseModal(id){
+  MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
+  document.getElementById('mat-use-title').textContent='Mark Used — '+item.name+' ('+getbal(item)+' '+item.unit+' in stock)';
+  document.getElementById('mu-date').value=ist(); document.getElementById('mu-qty').value=''; document.getElementById('mu-note').value='';
+  document.getElementById('mat-use-modal').style.display='flex';
+}
+function closeMatUseModal(){ document.getElementById('mat-use-modal').style.display='none'; }
+function saveMatUse(){
+  var date=document.getElementById('mu-date').value, qty=parseFloat(document.getElementById('mu-qty').value)||0, note=document.getElementById('mu-note').value.trim();
+  if (!date||!qty) { toast('Enter date and quantity','err'); return; }
+  var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
+  if (qty>getbal(item)) { toast('Only '+getbal(item)+' '+item.unit+' in stock!','err'); return; }
+  item.transactions.push({type:'use',qty:qty,date:date,note:note}); smat(mats);
+  closeMatUseModal(); toast('Usage recorded','ok'); viewMaterials(); updateDash();
+}
+function viewBill(dataUrl){ document.getElementById('bill-view-img').src=dataUrl; document.getElementById('bill-view-modal').classList.remove('hidden'); }
+function delMatTxn(matId,idx){
+  askDel('Delete transaction?', function(){ var mats=lmat(), item=mats.find(function(m){ return m.id===matId; }); if(!item) return; item.transactions.splice(idx,1); smat(mats); toast('Deleted','ok'); viewMaterials(); });
+}
+function viewMaterials(){
+  var mats=lmat(), div=document.getElementById('materials-list');
+  if (!div) return;
+  if (!mats.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No materials added yet</p>'; return; }
+  div.innerHTML=mats.map(function(item){
+    var bal=getbal(item), low=item.minQty>0&&bal<=item.minQty;
+    var txns=(item.transactions||[]).slice().reverse();
+    var tPQ=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+t.qty; },0);
+    var tC=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+(parseFloat(t.cost)||0); },0);
+    return '<div style="background:white;border-radius:12px;overflow:hidden;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f3f4f6">'
+      +'<div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,'+(low?'#ef4444,#f43f5e':'#6366f1,#8b5cf6')+');display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:13px">'+item.name[0].toUpperCase()+'</div>'
+      +'<div style="flex:1;min-width:0"><p style="font-weight:700;color:#1f2937;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+(low?' <span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:999px">LOW</span>':'')+'</p>'
+      +'<p style="font-size:10px"><span style="font-weight:600;color:'+(low?'#dc2626':'#059669')+'">Stock: '+bal+' '+item.unit+'</span> &nbsp;|&nbsp; Bought: '+tPQ+' &nbsp;|&nbsp; <span style="color:#b45309;font-weight:600">'+fc(tC)+'</span></p></div>'
+      +'<div style="display:flex;gap:4px;flex-shrink:0">'
+      +'<button onclick="openMatPurchaseModal(\''+item.id+'\')" style="font-size:10px;padding:3px 7px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Buy</button>'
+      +'<button onclick="openMatUseModal(\''+item.id+'\')" style="font-size:10px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Use</button>'
+      +'<button onclick="delMaterialItem(\''+item.id+'\')" style="font-size:10px;padding:3px 7px;background:#f3f4f6;color:#6b7280;border:none;border-radius:7px;cursor:pointer">X</button>'
+      +'</div></div>'
+      +'<button onclick="toggleMatHistory(\'mx-'+item.id+'\')" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:#4f46e5">'
+      +'<span>History ('+txns.length+')</span><span>&#9660;</span></button>'
+      +'<div id="mx-'+item.id+'" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease">'
+      +'<div style="padding:4px 8px 8px">'
+      +(txns.length ? txns.map(function(t,ri){
+          var idx=item.transactions.length-1-ri, isP=t.type==='purchase';
+          return '<div style="display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;margin-bottom:3px;background:'+(isP?'#f0fdf4':'#fff1f2')+';border:1px solid '+(isP?'#bbf7d0':'#fecdd3')+'">'
+            +'<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:999px;background:'+(isP?'#dcfce7':'#fee2e2')+';color:'+(isP?'#15803d':'#be123c')+'">'+(isP?'BUY':'USE')+'</span>'
+            +'<span style="font-size:10px;color:#6b7280">'+fd(t.date)+'</span>'
+            +'<span style="font-size:10px;font-weight:700;color:'+(isP?'#047857':'#be123c')+'">'+(isP?'+':'-')+t.qty+' '+(t.unit||item.unit)+'</span>'
+            +(isP&&t.cost?'<span style="font-size:10px;color:#b45309;font-weight:600">'+fc(t.cost)+'</span>':'')
+            +(isP&&t.supplier?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+t.supplier+'</span>':'')
+            +(!isP&&t.note?'<span style="font-size:10px;color:#6b7280">'+t.note+'</span>':'')
+            +'<div style="margin-left:auto;display:flex;gap:3px;flex-shrink:0">'
+            +(isP&&t.bill?'<button onclick="viewBill(\''+t.bill+'\')" style="font-size:10px;padding:1px 5px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:3px;cursor:pointer">Bill</button>':'')
+            +'<button onclick="delMatTxn(\''+item.id+'\','+idx+')" style="font-size:10px;padding:1px 5px;background:white;border:1px solid #e5e7eb;color:#f43f5e;border-radius:3px;cursor:pointer">X</button>'
+            +'</div></div>';
+        }).join('') : '<p style="font-size:10px;text-align:center;color:#9ca3af;padding:8px">No transactions yet</p>')
+      +'</div></div></div>';
+  }).join('');
+}
+function toggleMatHistory(id){
+  var el=document.getElementById(id); if(!el) return;
+  el.style.maxHeight = el.style.maxHeight === '0px' || !el.style.maxHeight ? '1000px' : '0px';
+}
+
+// ============================================================
+// TOOLS
+// ============================================================
+function addTool(){
+  var name=document.getElementById('tl-name').value.trim(), qty=parseFloat(document.getElementById('tl-qty').value)||1;
+  var date=document.getElementById('tl-date').value, cost=parseFloat(document.getElementById('tl-cost').value)||0;
+  if (!name) { toast('Enter tool name','err'); return; }
+  ins({type:'tool',tool_name:name,tool_qty:qty,purchase_date:date,purchase_cost:cost});
+  ['tl-name','tl-qty','tl-cost'].forEach(function(id){ document.getElementById(id).value=''; });
+  AD=ld(); toast('Added','ok'); viewTools(); updateDropdowns();
+}
+function delTool(id){
+  var t=AD.find(function(d){ return d.__id===id; });
+  askDel('Delete '+t.tool_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewTools(); });
+}
+function assignTool(){
+  var tid=document.getElementById('as-tool').value, wid=document.getElementById('as-worker').value, date=document.getElementById('as-date').value;
+  if (!tid||!wid) { toast('Select tool and worker','err'); return; }
+  var t=AD.find(function(d){ return d.__id===tid; }), w=AD.find(function(d){ return d.__id===wid; });
+  ins({type:'tool_assign',tool_name:t.tool_name,worker_name:w.name,date:date});
+  AD=ld(); toast('Assigned','ok'); viewTools();
+}
+function viewTools(){
+  AD=ld();
+  var tools=AD.filter(function(d){ return d.type==='tool'; });
+  var tt=document.getElementById('tools-table');
+  if (tt) tt.innerHTML=tools.length
+    ? tools.map(function(t){ return '<tr style="border-bottom:1px solid #f3f4f6"><td class="px-2 py-2 text-xs font-medium">'+t.tool_name+'</td><td class="px-2 py-2 text-xs text-center">'+(t.tool_qty||1)+'</td><td class="px-2 py-2 text-xs text-center" style="color:#6b7280">'+fd(t.purchase_date)+'</td><td class="px-2 py-2 text-xs text-right">'+(t.purchase_cost?fc(t.purchase_cost):'--')+'</td><td class="px-2 py-2 text-center"><button onclick="delTool(\''+t.__id+'\')" style="font-size:10px;padding:1px 7px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
+    : '<tr><td colspan="5" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">No tools yet</td></tr>';
+  var asgn=AD.filter(function(d){ return d.type==='tool_assign'; });
+  var ta=document.getElementById('tool-assignments');
+  if (ta) ta.innerHTML=asgn.length
+    ? asgn.map(function(a){ return '<div style="padding:8px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;margin-bottom:4px"><p style="font-weight:600;color:#374151;font-size:12px">'+a.tool_name+'</p><p style="font-size:10px;color:#9ca3af">&#8594; '+a.worker_name+' &middot; '+fd(a.date)+'</p></div>'; }).join('')
+    : '<p style="text-align:center;color:#9ca3af;font-size:12px;padding:8px">No assignments</p>';
+}
+
+// ============================================================
+// RENTALS
+// ============================================================
+function addRental(mode){
+  if (mode==='borrow'){
+    var name=document.getElementById('rb-name').value.trim(), qty=parseFloat(document.getElementById('rb-qty').value)||1;
+    var rate=parseFloat(document.getElementById('rb-rate').value)||0, date=document.getElementById('rb-date').value;
+    if (!name||!date) { toast('Enter name & date','err'); return; }
+    ins({type:'rental',rental_name:name,qty:qty,rate:rate,borrowed_date:date,is_given:false});
+    ['rb-name','rb-qty','rb-rate'].forEach(function(id){ document.getElementById(id).value=''; });
+  } else {
+    var name=document.getElementById('rg-name').value.trim(), qty=parseFloat(document.getElementById('rg-qty').value)||1;
+    var client=document.getElementById('rg-client').value.trim(), rate=parseFloat(document.getElementById('rg-rate').value)||0, date=document.getElementById('rg-date').value;
+    if (!name||!client||!date) { toast('Fill required fields','err'); return; }
+    ins({type:'rental',rental_name:name,qty:qty,client_name:client,rate:rate,borrowed_date:date,is_given:true});
+    ['rg-name','rg-qty','rg-client','rg-rate'].forEach(function(id){ document.getElementById(id).value=''; });
+  }
+  AD=ld(); toast('Added','ok'); viewRentals(); updateDash();
+}
+function delRental(id){ askDel('Delete rental?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewRentals(); updateDash(); }); }
+function viewRentals(){
+  AD=ld(); var today=ist(), fdate=document.getElementById('rental-filter-date').value||'', asOf=fdate||today;
+  var borrow=AD.filter(function(d){ return d.type==='rental'&&!d.is_given&&(!fdate||d.borrowed_date<=fdate); }), tExp=0;
+  var rb=document.getElementById('rtable-borrow');
+  if (rb) rb.innerHTML=borrow.length
+    ? borrow.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tExp+=tot; return '<tr style="border-bottom:1px solid #f3f4f6"><td class="px-2 py-2 text-xs font-medium">'+r.rental_name+'</td><td class="px-2 py-2 text-xs text-center">'+(r.qty||1)+'</td><td class="px-2 py-2 text-xs text-center">'+fd(r.borrowed_date)+'</td><td class="px-2 py-2 text-xs text-center">'+days+'d</td><td class="px-2 py-2 text-xs text-right font-medium" style="color:#dc2626">'+fc(tot)+'</td><td class="px-2 py-2 text-center"><button onclick="delRental(\''+r.__id+'\')" style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">None yet</td></tr>';
+  var ret=document.getElementById('rental-exp-total'); if(ret) ret.textContent=fc(tExp);
+  var given=AD.filter(function(d){ return d.type==='rental'&&d.is_given&&(!fdate||d.borrowed_date<=fdate); }), tInc=0;
+  var rg=document.getElementById('rtable-given');
+  if (rg) rg.innerHTML=given.length
+    ? given.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tInc+=tot; return '<tr style="border-bottom:1px solid #f3f4f6"><td class="px-2 py-2 text-xs font-medium">'+r.rental_name+'</td><td class="px-2 py-2 text-xs text-center">'+(r.qty||1)+'</td><td class="px-2 py-2 text-xs">'+(r.client_name||'--')+'</td><td class="px-2 py-2 text-xs text-center">'+fd(r.borrowed_date)+'</td><td class="px-2 py-2 text-xs text-center">'+days+'d</td><td class="px-2 py-2 text-xs text-right font-medium" style="color:#059669">'+fc(tot)+'</td><td class="px-2 py-2 text-center"><button onclick="delRental(\''+r.__id+'\')" style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
+    : '<tr><td colspan="7" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">None yet</td></tr>';
+  var rit=document.getElementById('rental-inc-total'); if(rit) rit.textContent=fc(tInc);
+}
+
+// ============================================================
+// CONTRACTORS
+// ============================================================
+function addContractor(){
+  var name=document.getElementById('ct-name').value.trim(), type=document.getElementById('ct-type').value, total=parseFloat(document.getElementById('ct-total').value)||0;
+  if (!name) { toast('Enter name','err'); return; }
+  ins({type:'contractor',contractor_name:name,contractor_type:type,total_contract:total});
+  ['ct-name','ct-total'].forEach(function(id){ document.getElementById(id).value=''; });
+  AD=ld(); toast('Added','ok'); viewContractors(); updateDropdowns();
+}
+function delContractor(id){
+  var c=AD.find(function(d){ return d.__id===id; });
+  askDel('Delete '+c.contractor_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); });
+}
+function openCTModal(cid){
+  CID=cid; var c=AD.find(function(d){ return d.__id===cid; }); if(!c) return;
+  document.getElementById('ct-modal-title').textContent='Add Advance — '+c.contractor_name;
+  document.getElementById('ct-pay-date').value=ist(); document.getElementById('ct-pay-amt').value='';
+  document.getElementById('ct-modal').style.display='flex';
+}
+function closeCTModal(){ document.getElementById('ct-modal').style.display='none'; CID=null; }
+function saveCTPayment(){
+  var date=document.getElementById('ct-pay-date').value, amt=parseFloat(document.getElementById('ct-pay-amt').value)||0;
+  if (!amt) { toast('Enter amount','err'); return; }
+  var c=AD.find(function(d){ return d.__id===CID; }); if(!c) return;
+  ins({type:'contractor_payment',contractor_name:c.contractor_name,payment:amt,date:date});
+  AD=ld(); closeCTModal(); toast('Saved','ok'); viewContractors(); updateDash();
+}
+function delCTPay(id){ askDel('Delete payment?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); updateDash(); }); }
+function viewContractors(){
+  AD=ld(); var vms=mkey(VM);
+  var tp=document.getElementById('teams-period'); if(tp) tp.textContent=mlabel(VM);
+  var ctrs=AD.filter(function(d){ return d.type==='contractor'; }), div=document.getElementById('contractors-list');
+  if (!div) return;
+  if (!ctrs.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No contractors yet</p>'; return; }
+  div.innerHTML=ctrs.map(function(c){
+    var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+    var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+    var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+    var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+    var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(vms); });
+    var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
+    var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP, bal=tp2-ta2;
+    return '<div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 12px rgba(0,0,0,0.1);margin-bottom:12px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
+      +'<div style="display:flex;align-items:center;gap:8px">'
+      +'<div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px">'+c.contractor_name[0].toUpperCase()+'</div>'
+      +'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+c.contractor_name+'</p>'
+      +'<p style="font-size:10px;color:#6b7280">'+(c.contractor_type||'Team')+' &nbsp;|&nbsp; Bal: <span style="font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</span></p></div></div>'
+      +'<div style="display:flex;gap:6px">'
+      +'<button onclick="openCTModal(\''+c.__id+'\')" style="padding:5px 12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">+Advance</button>'
+      +'<button onclick="delContractor(\''+c.__id+'\')" style="padding:5px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:10px;font-size:12px;cursor:pointer">Del</button>'
+      +'</div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
+      +'<div style="background:#eff6ff;border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:#3b82f6">Payment</p><p style="font-size:13px;font-weight:700;color:#1d4ed8">'+fc(tp2)+'</p></div>'
+      +'<div style="background:#fffbeb;border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:#d97706">Advances</p><p style="font-size:13px;font-weight:700;color:#b45309">'+fc(ta2)+'</p></div>'
+      +'<div style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+';border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:'+(bal>=0?'#059669':'#dc2626')+'">Balance</p><p style="font-size:13px;font-weight:700;color:'+(bal>=0?'#047857':'#be123c')+'">'+fc(bal)+'</p></div>'
+      +'</div>'
+      +(tw.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px;margin-bottom:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Team ('+tw.length+')</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+tw.map(function(w){ return '<div style="background:white;border-radius:8px;padding:6px"><p style="font-weight:600;color:#374151;font-size:12px">'+w.name+'</p><p style="font-size:9px;color:#9ca3af">'+w.category+' &middot; '+fc(w.hourly_wage)+'/hr</p></div>'; }).join('')+'</div></div>' : '')
+      +(pays.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Advances ('+mlabel(VM)+')</p><table style="width:100%;font-size:11px;border-collapse:collapse"><tbody>'
+        +pays.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(p){ return '<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:4px 6px;color:#6b7280">'+fd(p.date)+'</td><td style="padding:4px 6px;text-align:right;font-weight:600">'+fc(p.payment)+'</td><td style="padding:4px 6px;text-align:center"><button onclick="delCTPay(\''+p.__id+'\')" style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
+        +'</tbody><tfoot><tr style="background:#fefce8"><td style="padding:5px 6px;font-weight:700;color:#b45309">Total</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#b45309">'+fc(cP)+'</td><td></td></tr></tfoot></table></div>'
+      : '<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:6px">No advances this month</p>')
+      +'</div>';
+  }).join('');
+}
+function changeViewMonth(d){ VM=new Date(VM.getFullYear(),VM.getMonth()+d,1); viewContractors(); }
+
+// ============================================================
+// DROPDOWNS & DASHBOARD
+// ============================================================
+function updateDropdowns(){
+  var at=document.getElementById('as-tool');
+  if(at) at.innerHTML='<option value="">Select Tool</option>'+AD.filter(function(d){ return d.type==='tool'; }).map(function(t){ return '<option value="'+t.__id+'">'+t.tool_name+'</option>'; }).join('');
+  var aw=document.getElementById('as-worker');
+  if(aw) aw.innerHTML='<option value="">Select Worker</option>'+AD.filter(function(d){ return d.type==='worker'; }).map(function(w){ return '<option value="'+w.__id+'">'+w.name+' ('+w.category+')</option>'; }).join('');
+  var wt=document.getElementById('w-team');
+  if(wt) wt.innerHTML='<option value="">Select Team</option>'+AD.filter(function(d){ return d.type==='contractor'; }).map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join('');
+}
+function getLowStock(){ return lmat().filter(function(i){ return i.minQty>0&&getbal(i)<=i.minQty; }); }
+function updateDash(){
+  AD=ld(); var cums=mkey(new Date()), today=ist();
+  var att=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums); }));
+  var wAdv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+  var ctPays=AD.filter(function(d){ return d.type==='contractor_payment'&&(d.date||'').startsWith(cums); }).reduce(function(s,d){ return s+(parseFloat(d.payment)||0); },0);
+  var totalAdv=wAdv+ctPays;
+  var wPay=att.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+  var ctContr=AD.filter(function(d){ return d.type==='contractor'; }).reduce(function(s,c){ return s+(parseFloat(c.total_contract)||0); },0);
+  var mats=AD.filter(function(d){ return d.type==='material'&&!d.is_petty_cash; });
+  var pIn=AD.filter(function(d){ return d.type==='material'&&d.is_petty_cash; }).reduce(function(s,d){ return s+(parseFloat(d.cost)||0); },0);
+  var pOut=mats.reduce(function(s,d){ return s+(parseFloat(d.cost)||0); },0);
+  var matMonth=mats.filter(function(m){ return (m.date||'').startsWith(cums); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
+  var rExp=AD.filter(function(d){ return d.type==='rental'&&!d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
+  var rInc=AD.filter(function(d){ return d.type==='rental'&&d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
+  var allPay=dedup(AD.filter(function(d){ return d.type==='attendance'; })).reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+  function se(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+  se('dash-advance',fc(totalAdv)); se('dash-remaining',fc(Math.max(0,wPay+ctContr-totalAdv)));
+  se('dash-material',fc(matMonth)); se('dash-petty',fc(pIn)); se('dash-petty-left',fc(pIn-pOut));
+  se('dash-rental-out',fc(rExp)); se('dash-rental-in',fc(rInc));
+  se('header-spends',fc(allPay+pOut+rExp));
+  var low=getLowStock(), lsDiv=document.getElementById('dash-low-stock');
+  if (low.length) { lsDiv.classList.remove('hidden'); document.getElementById('dash-low-list').innerHTML=low.map(function(i){ return '<p style="color:white;font-size:12px">&bull; '+i.name+': '+getbal(i)+' '+i.unit+' (min '+i.minQty+')</p>'; }).join(''); }
+  else lsDiv.classList.add('hidden');
+  var ctrs=AD.filter(function(d){ return d.type==='contractor'; });
+  var td=document.getElementById('team-details');
+  if (!td) return;
+  td.innerHTML=ctrs.length ? ctrs.map(function(c){
+    var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+    var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums)&&tw.some(function(w){ return w.name===d.name; }); }));
+    var pay=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0)+(parseFloat(c.total_contract)||0);
+    var adv=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(cums); }).reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
+    var bal=pay-adv;
+    return '<div style="background:#eff6ff;border-radius:10px;padding:10px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
+      +'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+c.contractor_name+'</p><p style="font-size:10px;color:#6b7280">'+tw.length+' workers</p></div>'
+      +'<div style="text-align:right"><p style="font-size:10px;color:#6b7280">Balance</p><p style="font-weight:700;font-size:13px;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</p></div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+      +'<div style="background:white;border-radius:8px;padding:6px;text-align:center"><p style="font-size:9px;color:#3b82f6">Payment</p><p style="font-weight:700;font-size:13px;color:#1d4ed8">'+fc(pay)+'</p></div>'
+      +'<div style="background:white;border-radius:8px;padding:6px;text-align:center"><p style="font-size:9px;color:#d97706">Advances</p><p style="font-weight:700;font-size:13px;color:#b45309">'+fc(adv)+'</p></div>'
+      +'</div></div>';
+  }).join('') : '<p style="text-align:center;color:#9ca3af;padding:12px;font-size:13px">No teams yet</p>';
+}
+
+// ============================================================
+// PRINT HELPERS
+// ============================================================
+function pp(){ return lprof()||{company:'',engineer:''}; }
+function pcs(){
+  return '*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}'
+    +'body{background:#fff;color:#1f2937;font-size:12px;padding:20px 24px}'
+    +'.bar{position:fixed;top:0;left:0;right:0;background:#4f46e5;color:white;display:flex;align-items:center;gap:12px;padding:10px 16px;z-index:9999}'
+    +'.bar button{padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700}'
+    +'.bb{background:rgba(255,255,255,.2);color:white}.bp{background:#f59e0b;color:#1f2937}'
+    +'.content{margin-top:52px}'
+    +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #4f46e5;padding-bottom:12px;margin-bottom:16px}'
+    +'.logo{width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px}'
+    +'.cn{font-size:18px;font-weight:900;color:#4f46e5}.csub{font-size:9px;color:#7c3aed;font-weight:700}'
+    +'.hcname{font-size:16px;font-weight:900;color:#1e1b4b;text-align:center}.hceng{font-size:11px;font-weight:700;color:#7c3aed;text-align:center}'
+    +'.rt{font-size:14px;font-weight:800;color:#1e1b4b;text-align:right}.rd{font-size:12px;font-weight:700;text-align:right;margin-top:3px}'
+    +'.rp{font-size:8px;color:#9ca3af;text-align:right;margin-top:2px}'
+    +'.sumrow{display:flex;gap:10px;margin-bottom:16px}'
+    +'.sc{flex:1;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 12px}'
+    +'.scl{font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase}'
+    +'.scv{font-size:18px;font-weight:900;margin-top:2px}'
+    +'.sec{margin-bottom:16px}'
+    +'.st{font-size:12px;font-weight:800;color:#1e1b4b;background:#f3f4f6;padding:6px 10px;border-left:4px solid #4f46e5;margin-bottom:0}'
+    +'table{width:100%;border-collapse:collapse;font-size:11px}'
+    +'thead tr{background:#4f46e5;color:white}'
+    +'thead th{padding:7px 10px;text-align:left;font-weight:700;font-size:10px}'
+    +'tbody tr{border-bottom:1px solid #f3f4f6}'
+    +'tbody tr:nth-child(even){background:#f9fafb}'
+    +'tbody td{padding:6px 10px;color:#374151}'
+    +'tfoot tr{background:#eef2ff;font-weight:700}'
+    +'tfoot td{padding:7px 10px;color:#4f46e5}'
+    +'.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}'
+    +'.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}'
+    +'.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}'
+    +'@media print{.bar{display:none!important}.content{margin-top:0}body{padding:8px 12px}@page{margin:6mm;size:A4}}';
+}
+function phdr(title, sub){
+  var p=pp(), now=new Date(new Date().getTime()+19800000);
+  return '<div class="hdr"><div style="display:flex;align-items:center;gap:12px"><div class="logo">&#x1F3D7;</div><div><div class="cn">Sanjineer</div><div class="csub">Construction Manager</div></div></div>'
+    +'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+p.company+'</div><div class="hceng">'+p.engineer+'</div></div>'
+    +'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN')+'</div></div></div>';
+}
+function pftr(){
+  return '<div class="footer">'
+    +'<div class="sig"><div class="sl"></div><div class="slb">Site Supervisor</div></div>'
+    +'<div class="sig" style="text-align:center"><div class="sl" style="margin:0 auto"></div><div class="slb">Prepared By</div></div>'
+    +'<div class="sig" style="text-align:right"><div class="sl" style="margin-left:auto"></div><div class="slb">Authorized</div></div>'
+    +'</div><div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">Generated by Sanjineer App</div>';
+}
+function opw(html){
+  var pw=window.open('','_blank','width=900,height=700');
+  if (pw) { pw.document.write(html); pw.document.close(); }
+  else toast('Allow popups to print','err');
+}
+
+// ============================================================
+// PRINT: DAILY
+// ============================================================
+function printDailyReport(){
+  AD=ld(); var d=DD, dl=fdl(d), meta=lm()[d]||{}, photos=lph()[d]||[];
+  var att=dedup(AD.filter(function(a){ return a.type==='attendance'&&a.date===d; }));
+  var mats=AD.filter(function(a){ return a.type==='material'&&a.date===d&&!a.is_petty_cash; });
+  var adv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(a){ return a.type==='contractor_payment'&&a.date===d; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); },0);
+  var mc=mats.reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
+  var grp={}; att.forEach(function(a){ if(!grp[a.category]) grp[a.category]=[]; grp[a.category].push(a); });
+  var cats=Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
+  var dept=ldept()[d]||[];
+  var dW=dept.reduce(function(s,e){ return s+parseInt(e.workers||0); },0);
+  var dH=dept.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
+  var dA=dept.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
+  var low=getLowStock();
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</title><style>'+pcs()+'</style></head><body>'
+
+```
++'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button><span style="flex:1;font-weight:700">Daily Report &mdash; '+dl+'</span><button class="bp" onclick="window.print()">&#128438; Print</button></div>'
++'<div class="content">'+phdr('Daily Report',dl)
++(meta.weather||meta.status ? '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">'+(meta.weather?'<strong>'+meta.weather+'</strong> &mdash; ':'')+meta.status+'</div></div>' : '')
++'<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Advances</div><div class="scv" style="color:#dc2626">'+fc(adv)+'</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material</div><div class="scv" style="color:#d97706">'+fc(mc)+'</div></div></div>'
++(low.length ? '<div style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px"><strong>&#9888; Low Stock:</strong> '+low.map(function(i){ return i.name+' ('+getbal(i)+' left)'; }).join(', ')+'</div>' : '')
++'<div class="sec"><div class="st">&#128119; Labour Summary</div>'
++(cats.length ? '<table><thead><tr><th>Category</th><th style="text-align:center">Count</th><th style="text-align:center">Hours</th><th>Work Done</th></tr></thead><tbody>'
+  +cats.map(function(cat){ var wks=grp[cat],hrs=wks.reduce(function(s,w){ return s+(parseFloat(w.hours)||0); },0),wd=(wks.find(function(w){ return w.work_done; })||{}).work_done||'--'; return '<tr><td style="font-weight:700;padding:6px 10px">'+cat+'</td><td style="text-align:center;padding:6px 10px;font-weight:700;color:#4f46e5">'+wks.length+'</td><td style="text-align:center;padding:6px 10px">'+hrs.toFixed(1)+'h</td><td style="padding:6px 10px">'+wd+'</td></tr>'; }).join('')
+  +'</tbody></table>' : '<p style="padding:10px;color:#9ca3af">No attendance.</p>')+'</div>'
++(dept.length ? '<div class="sec"><div class="st" style="border-left-color:#7c3aed">&#127959; Departmental Work</div><table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
+  +dept.map(function(e){ return '<tr><td style="font-weight:700;padding:6px 10px">'+e.cat+'</td><td style="text-align:center;padding:6px 10px;color:#7c3aed;font-weight:700">'+e.workers+'</td><td style="text-align:center;padding:6px 10px">'+(e.hours||'--')+'h</td><td style="padding:6px 10px">'+(e.work||'--')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+(e.amount?fc(e.amount):'--')+'</td></tr>'; }).join('')
+  +'</tbody><tfoot><tr><td style="padding:7px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dW+'</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dH+'h</td><td></td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(dA)+'</td></tr></tfoot></table></div>' : '')
++(mats.length ? '<div class="sec"><div class="st" style="border-left-color:#059669">&#129712; Materials</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
+  +mats.map(function(m){ return '<tr><td style="font-weight:600;padding:6px 10px">'+m.material_name+'</td><td style="text-align:center;padding:6px 10px">'+(m.quantity||'--')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(m.cost)+'</td></tr>'; }).join('')
+  +'</tbody><tfoot><tr><td colspan="2" style="padding:7px 10px;font-weight:900">Total</td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(mc)+'</td></tr></tfoot></table></div>' : '')
++(photos.length ? '<div class="sec"><div class="st">&#128247; Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
++pftr()+'</div></body></html>';
+```
+
+opw(html);
+}
+
+// ============================================================
+// PRINT: MONTHLY
+// ============================================================
+function printMonthlyReport(){
+AD=ld();
+var selEl=document.getElementById(‘print-month’), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+’-01’));
+var ctrs=AD.filter(function(d){ return d.type===‘contractor’; }), rows=’’, gTP=0, gTA=0;
+ctrs.forEach(function(c){
+var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); }));
+var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(selMs); });
+var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
+var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP, bal=tp2-ta2; gTP+=tp2; gTA+=ta2;
+rows+=’<tr><td style="font-weight:700;padding:6px 10px">’+c.contractor_name+’</td><td style="padding:6px 10px;color:#6b7280">’+(c.contractor_type||‘Team’)+’</td><td style="text-align:center;padding:6px 10px">’+tw.length+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">’+fc(tp2)+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#dc2626">’+fc(ta2)+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">’+fc(bal)+’</td></tr>’;
+});
+var matT=AD.filter(function(d){ return d.type===‘material’&&!d.is_petty_cash&&(d.date||’’).startsWith(selMs); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
+var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly</title><style>’+pcs()+’</style></head><body>’
++’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Report — ‘+mL+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
++’<div class="content">’+phdr(‘Monthly Report’,mL)
++’<div class="sumrow"><div class="sc" style="border-color:#86efac"><div class="scl">Total Payment</div><div class="scv" style="color:#059669">’+fc(gTP)+’</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Total Advances</div><div class="scv" style="color:#dc2626">’+fc(gTA)+’</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material Cost</div><div class="scv" style="color:#d97706">’+fc(matT)+’</div></div></div>’
++’<div class="sec"><div class="st">👥 Team Summary</div>’
++(ctrs.length ? ‘<table><thead><tr><th>Team</th><th>Type</th><th style="text-align:center">Workers</th><th style="text-align:right">Payment</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead><tbody>’+rows+’</tbody><tfoot><tr><td colspan="3" style="padding:8px 10px;font-weight:900">GRAND TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">’+fc(gTP)+’</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">’+fc(gTA)+’</td><td style="text-align:right;padding:8px 10px;font-weight:900">’+fc(gTP-gTA)+’</td></tr></tfoot></table>’ : ‘<p style="padding:10px;color:#9ca3af">No data.</p>’)+’</div>’
++pftr()+’</div></body></html>’;
+opw(html);
+}
+
+// ============================================================
+// PRINT: DEPT DAY
+// ============================================================
+function printDeptReport(){
+var entries=ldept()[DTD]||[], dl=fdl(DTD);
+var tW=entries.reduce(function(s,e){ return s+parseInt(e.workers||0); },0);
+var tH=entries.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
+var tA=entries.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
+var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dept Work</title><style>’+pcs()+’</style></head><body>’
++’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Dept Work — ‘+dl+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
++’<div class="content">’+phdr(‘Departmental Work’,dl)
++’<div class="sumrow"><div class="sc" style="border-color:#a5b4fc"><div class="scl">Workers</div><div class="scv" style="color:#4f46e5">’+tW+’</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Hours</div><div class="scv" style="color:#059669">’+tH+‘h</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Amount</div><div class="scv" style="color:#dc2626">’+fc(tA)+’</div></div></div>’
++(entries.length ? ‘<table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>’
++entries.map(function(e){ return ‘<tr><td style="font-weight:700;padding:7px 10px">’+e.cat+’</td><td style="text-align:center;padding:7px 10px;font-weight:700;color:#7c3aed">’+e.workers+’</td><td style="text-align:center;padding:7px 10px">’+(e.hours||’–’)+‘h</td><td style="padding:7px 10px">’+(e.work||’–’)+(e.qty?’ (’+e.qty+’ ‘+(e.unit||’’)+’)’:’’)+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">’+(e.amount?fc(e.amount):’–’)+’</td></tr>’; }).join(’’)
++’</tbody><tfoot><tr><td style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:8px 10px;font-weight:900">’+tW+’</td><td style="text-align:center;padding:8px 10px;font-weight:900">’+tH+‘h</td><td></td><td style="text-align:right;padding:8px 10px;font-weight:900">’+fc(tA)+’</td></tr></tfoot></table>’
+: ‘<p style="padding:10px;color:#9ca3af">No entries.</p>’)
++pftr()+’</div></body></html>’;
+opw(html);
+}
+
+// ============================================================
+// PRINT: DEPT MONTHLY
+// ============================================================
+function printDeptMonthly(){
+var selEl=document.getElementById(‘dept-print-month’), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+’-01’));
+var store=ldept(), dates=Object.keys(store).filter(function(d){ return d.startsWith(selMs); }).sort();
+if (!dates.length) { toast(‘No dept data for ‘+mL,‘err’); return; }
+var catSet={};
+dates.forEach(function(d){ (store[d]||[]).forEach(function(e){ catSet[e.cat]=1; }); });
+var cats=CATS.filter(function(c){ return catSet[c]; });
+Object.keys(catSet).forEach(function(c){ if(cats.indexOf(c)<0) cats.push(c); });
+var totW={}, totH={};
+cats.forEach(function(c){ totW[c]=0; totH[c]=0; });
+var rows=dates.map(function(d){
+var ents=store[d]||[], day=d.split(’-’)[2];
+var cells=’<td style="font-weight:700;text-align:center;background:#f5f3ff;border:1px solid #e5e7eb;padding:5px">’+day+’</td>’;
+cats.forEach(function(cat){
+var e=ents.find(function(x){ return x.cat===cat; });
+if (e) { totW[cat]+=parseInt(e.workers||0); totH[cat]+=parseFloat(e.hours||0); cells+=’<td style="text-align:center;border:1px solid #e5e7eb;padding:5px"><strong>’+e.workers+’</strong><br><span style="font-size:9px;color:#6b7280">(’+e.hours+‘h)</span></td>’; }
+else cells+=’<td style="text-align:center;border:1px solid #e5e7eb;padding:5px;color:#d1d5db">—</td>’;
+});
+return ‘<tr>’+cells+’</tr>’;
+}).join(’’);
+var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Dept</title><style>’+pcs()+‘table{border-collapse:collapse}</style></head><body>’
++’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Dept — ‘+mL+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
++’<div class="content">’+phdr(‘Monthly Dept Work’,mL)
++’<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>’
++’<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151">Date</th>’
++cats.map(function(c){ return ‘<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151;min-width:80px">’+c+’</th>’; }).join(’’)
++’</tr></thead><tbody>’+rows+’</tbody><tfoot><tr>’
++’<td style="background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">TOTAL</td>’
++cats.map(function(c){ return ‘<td style="text-align:center;background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">’+totW[c]+’<br><span style="font-size:9px;font-weight:400">(’+totH[c]+‘h)</span></td>’; }).join(’’)
++’</tr></tfoot></table></div>’+pftr()+’</div></body></html>’;
+opw(html);
+}
+
+// ============================================================
+// PRINT: RENTALS
+// ============================================================
+function printRentalReport(){
+AD=ld(); var today=ist(), fdate=document.getElementById(‘rental-filter-date’).value||’’, asOf=fdate||today;
+var borrow=AD.filter(function(d){ return d.type===‘rental’&&!d.is_given&&(!fdate||d.borrowed_date<=fdate); }), tExp=0;
+var bRows=borrow.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tExp+=tot; return ‘<tr><td style="padding:7px 10px;font-weight:600">’+r.rental_name+’</td><td style="text-align:center;padding:7px 10px">’+(r.qty||1)+’</td><td style="text-align:center;padding:7px 10px">’+fd(r.borrowed_date)+’</td><td style="text-align:center;padding:7px 10px">’+days+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#dc2626">’+fc(tot)+’</td></tr>’; }).join(’’);
+var given=AD.filter(function(d){ return d.type===‘rental’&&d.is_given&&(!fdate||d.borrowed_date<=fdate); }), tInc=0;
+var gRows=given.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tInc+=tot; return ‘<tr><td style="padding:7px 10px;font-weight:600">’+r.rental_name+’</td><td style="text-align:center;padding:7px 10px">’+(r.qty||1)+’</td><td style="padding:7px 10px">’+(r.client_name||’–’)+’</td><td style="text-align:center;padding:7px 10px">’+fd(r.borrowed_date)+’</td><td style="text-align:center;padding:7px 10px">’+days+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">’+fc(tot)+’</td></tr>’; }).join(’’);
+var net=tInc-tExp;
+var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rental</title><style>’+pcs()+’</style></head><body>’
++’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Rental Report</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
++’<div class="content">’+phdr(‘Rental Report’,‘As of ‘+fdl(asOf))
++’<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Expense</div><div class="scv" style="color:#dc2626">’+fc(tExp)+’</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Income</div><div class="scv" style="color:#059669">’+fc(tInc)+’</div></div><div class="sc" style="border-color:'+(net>=0?'#86efac':'#fca5a5')+'"><div class="scl">Net</div><div class="scv" style="color:'+(net>=0?'#059669':'#dc2626')+'">’+fc(net)+’</div></div></div>’
++’<div class="sec"><div class="st">Equipment Rented (Expense)</div>’
++(borrow.length ? ‘<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:center">From</th><th style="text-align:center">Days</th><th style="text-align:right">Total</th></tr></thead><tbody>’+bRows+’</tbody><tfoot><tr><td colspan="4" style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">’+fc(tExp)+’</td></tr></tfoot></table>’ : ‘<p style="padding:10px;color:#9ca3af">None.</p>’)+’</div>’
++’<div class="sec"><div class="st">Given to Others (Income)</div>’
++(given.length ? ‘<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Client</th><th style="text-align:center">From</th><th style="text-align:center">Days</th><th style="text-align:right">Total</th></tr></thead><tbody>’+gRows+’</tbody><tfoot><tr><td colspan="5" style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">’+fc(tInc)+’</td></tr></tfoot></table>’ : ‘<p style="padding:10px;color:#9ca3af">None.</p>’)+’</div>’
++pftr()+’</div></body></html>’;
+opw(html);
+}
+
+// ============================================================
+// EXCEL EXPORT
+// ============================================================
+function exportExcel(){
+AD=ld(); var vms=mkey(VM), ctrs=AD.filter(function(d){ return d.type===‘contractor’; });
+if (!ctrs.length) { toast(‘No teams to export’,‘err’); return; }
+var wb=XLSX.utils.book_new();
+var data=[[‘Sanjineer — Payment Report’],[‘Month: ‘+mlabel(VM)],[‘Company: ‘+pp().company],[‘Generated: ‘+new Date().toLocaleDateString(‘en-IN’)],[],[‘Team’,‘Type’,‘Workers’,‘Payment (₹)’,‘Advances (₹)’,‘Balance (₹)’]];
+ctrs.forEach(function(c){
+var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(vms); });
+var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
+var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP;
+data.push([c.contractor_name, c.contractor_type||‘Team’, tw.length, tp2, ta2, tp2-ta2]);
+});
+var ws=XLSX.utils.aoa_to_sheet(data);
+ws[’!cols’]=[{wch:22},{wch:14},{wch:10},{wch:16},{wch:16},{wch:14}];
+XLSX.utils.book_append_sheet(wb,ws,‘Summary’);
+XLSX.writeFile(wb,‘Sanjineer_’+vms+’.xlsx’);
+toast(‘Excel exported!’,‘ok’);
+}
+
+// ============================================================
+// PWA MANIFEST
+// ============================================================
+(function(){
+var m={name:‘Sanjineer’,short_name:‘Sanjineer’,start_url:’.’,display:‘standalone’,background_color:’#0f172a’,theme_color:’#4f46e5’,
+icons:[{src:‘data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="%234f46e5"/><text x="96" y="130" font-size="100" text-anchor="middle">%F0%9F%8F%97</text></svg>’,sizes:‘192x192’,type:‘image/svg+xml’}]};
+var el=document.getElementById(‘pwa-manifest’);
+if (el) el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:‘application/json’}));
+})();
+window.addEventListener(‘beforeinstallprompt’,function(e){
+e.preventDefault(); PWA=e;
+if (!localStorage.getItem(‘pwa_dismissed’)) document.getElementById(‘pwa-banner’).style.display=‘flex’;
+});
+
+// ============================================================
+// INIT — runs when page loads
+// ============================================================
+document.addEventListener(‘DOMContentLoaded’, function() {
+applyProfile();
+boot();
+});
+</script>
+
+</body>
+</html>
