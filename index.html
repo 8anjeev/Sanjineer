@@ -36,9 +36,7 @@
     #pwa-banner{position:fixed;bottom:0;left:0;right:0;z-index:200;background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:.75rem 1rem;display:none;align-items:center;justify-content:space-between;}
     .photo-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid rgba(99,102,241,.4);}
 
-```
 .wbtn.selected{outline:3px solid #6366f1;background:#e0e7ff;}
-```
 
   </style>
 </head>
@@ -253,6 +251,18 @@
       <button onclick="addPettyCash()" class="bg-gradient-to-r from-cyan-500 to-sky-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💰 Deposit</button>
     </div>
   </div>
+  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-1">🧱 Record Material Purchase</h3>
+    <p class="text-xs text-gray-500 mb-3">Quick entry for material bought on site</p>
+    <div class="grid grid-cols-2 gap-3">
+      <input type="text" id="exp-mat-name" placeholder="Material Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
+      <input type="date" id="exp-mat-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
+      <input type="number" id="exp-mat-qty" placeholder="Quantity (optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
+      <input type="number" id="exp-mat-cost" placeholder="Amount (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
+      <input type="text" id="exp-mat-supplier" placeholder="Supplier (optional)" class="col-span-2 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
+      <button onclick="addExpenseMaterial()" class="col-span-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Save Purchase</button>
+    </div>
+  </div>
   <div class="grid grid-cols-3 gap-3 mb-3">
     <div class="bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl p-3 text-white"><p class="text-[10px] text-emerald-100">Material Cost</p><p id="exp-mat-total" class="text-xl font-bold">₹0</p></div>
     <div class="bg-gradient-to-br from-cyan-500 to-sky-500 rounded-xl p-3 text-white"><p class="text-[10px] text-cyan-100">Cash In</p><p id="exp-petty-in" class="text-xl font-bold">₹0</p></div>
@@ -304,24 +314,32 @@
       </div>
       <div class="flex gap-2 self-end">
         <button onclick="loadDeptTab()" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
-        <button onclick="printDeptReport()" class="px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Print</button>
+        <button onclick="printDeptReport()" class="px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Day</button>
       </div>
     </div>
     <p id="dept-tab-label" class="text-xs text-indigo-600 font-semibold mt-1.5"></p>
   </div>
+  <!-- Monthly Print -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex-1">
+        <p class="text-xs text-gray-500 font-semibold mb-1">🗓️ Monthly Print</p>
+        <select id="dept-print-month" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none"></select>
+      </div>
+      <div class="self-end">
+        <button onclick="printDeptMonthly()" class="px-3 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Month</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Summary card -->
 
-  <div id="dept-tab-summary" class="grid grid-cols-3 gap-2 mb-3">
-    <div class="bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-2.5 text-white text-center">
-      <p class="text-[10px] text-violet-100">Total Workers</p><p id="dept-total-workers" class="text-lg font-black">0</p>
+  <div id="dept-tab-summary" class="mb-3">
+    <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-3 text-white text-center shadow-xl">
+      <p class="text-xs text-amber-100 font-semibold">Total Balance Amount</p>
+      <p id="dept-total-amount" class="text-2xl font-black mt-0.5">₹0</p>
     </div>
-    <div class="bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl p-2.5 text-white text-center">
-      <p class="text-[10px] text-indigo-100">Total Hours</p><p id="dept-total-hours" class="text-lg font-black">0</p>
-    </div>
-    <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-2.5 text-white text-center">
-      <p class="text-[10px] text-amber-100">Total Amount</p><p id="dept-total-amount" class="text-base font-black">₹0</p>
-    </div>
+    <div style="display:none"><p id="dept-total-workers">0</p><p id="dept-total-hours">0</p></div>
   </div>
 
   <!-- Records table -->
@@ -394,19 +412,27 @@
 <!-- ===== RENTALS ===== -->
 
 <div id="tab-rentals" class="tab-content" style="display:none">
-  <!-- Date filter + print -->
+  <!-- Date filter + Monthly print -->
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <div class="flex items-center gap-2 flex-wrap">
+    <div class="flex items-center gap-2 flex-wrap mb-2">
       <div class="flex-1">
         <p class="text-xs text-gray-500 font-semibold mb-1">📅 Filter by Start Date</p>
         <input type="date" id="rental-filter-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       </div>
-      <div class="flex gap-2 self-end">
+      <div class="self-end">
         <button onclick="updateRentals()" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="flex-1">
+        <p class="text-xs text-gray-500 font-semibold mb-1">🗓️ Print by Month</p>
+        <select id="rental-print-month" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none"></select>
+      </div>
+      <div class="self-end">
         <button onclick="printRentalReport()" class="px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Print</button>
       </div>
     </div>
-    <p class="text-[10px] text-gray-400 mt-1">Leave empty to show all records</p>
+    <p class="text-[10px] text-gray-400 mt-1">Leave date empty to show all records</p>
   </div>
   <div class="bg-white/10 rounded-2xl p-2 mb-3">
     <div class="flex gap-2">
@@ -493,7 +519,7 @@
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1">
       <h3 class="font-bold text-gray-800">⚙️ Profile Settings</h3>
-      <button onclick="document.getElementById('profile-modal').classList.add('hidden')" class="text-gray-400 text-xl">✕</button>
+      <button onclick="closeProfileModal()" class="text-gray-400 text-xl">✕</button>
     </div>
     <p class="text-xs text-gray-400 mb-4">This name appears on all your reports and prints</p>
     <div class="space-y-3">
@@ -895,7 +921,7 @@ function boot() {
 
   // Month dropdowns
   var now = new Date();
-  ['print-month','dept-print-month'].forEach(function(id) {
+  ['print-month','dept-print-month','rental-print-month'].forEach(function(id) {
     var sel = document.getElementById(id);
     if (!sel) return;
     sel.innerHTML = '';
@@ -910,7 +936,7 @@ function boot() {
 
   // Set default dates
   var t = ist(); DD = t; DTD = t;
-  ['daily-date','dept-tab-date','petty-date','tl-date','as-date','rb-date','rg-date'].forEach(function(id) {
+  ['daily-date','dept-tab-date','petty-date','exp-mat-date','tl-date','as-date','rb-date','rg-date'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.value = t;
   });
   var rfd = document.getElementById('rental-filter-date');
@@ -1243,6 +1269,20 @@ function delExpense(id){
   var m=AD.find(function(d){ return d.__id===id; });
   askDel('Delete '+m.material_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewExpenses(); updateDash(); });
 }
+function addExpenseMaterial(){
+  var name=document.getElementById('exp-mat-name').value.trim();
+  var date=document.getElementById('exp-mat-date').value;
+  var qty=parseFloat(document.getElementById('exp-mat-qty').value)||0;
+  var cost=parseFloat(document.getElementById('exp-mat-cost').value)||0;
+  var supplier=document.getElementById('exp-mat-supplier').value.trim();
+  if (!name) { toast('Enter material name','err'); return; }
+  if (!date) { toast('Select a date','err'); return; }
+  if (!cost) { toast('Enter amount','err'); return; }
+  ins({type:'material',material_name:name,quantity:qty||undefined,cost:cost,date:date,supplier:supplier||undefined,is_petty_cash:false});
+  ['exp-mat-name','exp-mat-qty','exp-mat-cost','exp-mat-supplier'].forEach(function(id){ document.getElementById(id).value=''; });
+  AD=ld(); toast('Purchase recorded!','ok'); viewExpenses(); updateDash();
+}
+
 function viewExpenses(){
   AD=ld();
   var records=AD.filter(function(d){ return d.type==='material'; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
@@ -1635,8 +1675,6 @@ function printDailyReport(){
   var dA=dept.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
   var low=getLowStock();
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</title><style>'+pcs()+'</style></head><body>'
-
-```
 +'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button><span style="flex:1;font-weight:700">Daily Report &mdash; '+dl+'</span><button class="bp" onclick="window.print()">&#128438; Print</button></div>'
 +'<div class="content">'+phdr('Daily Report',dl)
 +(meta.weather||meta.status ? '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">'+(meta.weather?'<strong>'+meta.weather+'</strong> &mdash; ':'')+meta.status+'</div></div>' : '')
@@ -1654,7 +1692,6 @@ function printDailyReport(){
   +'</tbody><tfoot><tr><td colspan="2" style="padding:7px 10px;font-weight:900">Total</td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(mc)+'</td></tr></tfoot></table></div>' : '')
 +(photos.length ? '<div class="sec"><div class="st">&#128247; Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
 +pftr()+'</div></body></html>';
-```
 
 opw(html);
 }
@@ -1664,27 +1701,27 @@ opw(html);
 // ============================================================
 function printMonthlyReport(){
 AD=ld();
-var selEl=document.getElementById(‘print-month’), selMs=selEl?selEl.value:mkey(VM);
-var mL=mlabel(new Date(selMs+’-01’));
-var ctrs=AD.filter(function(d){ return d.type===‘contractor’; }), rows=’’, gTP=0, gTA=0;
+var selEl=document.getElementById('print-month'), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+'-01'));
+var ctrs=AD.filter(function(d){ return d.type==='contractor'; }), rows='', gTP=0, gTA=0;
 ctrs.forEach(function(c){
-var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); }));
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); }));
 var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
-var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(selMs); });
+var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(selMs); });
 var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP, bal=tp2-ta2; gTP+=tp2; gTA+=ta2;
-rows+=’<tr><td style="font-weight:700;padding:6px 10px">’+c.contractor_name+’</td><td style="padding:6px 10px;color:#6b7280">’+(c.contractor_type||‘Team’)+’</td><td style="text-align:center;padding:6px 10px">’+tw.length+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">’+fc(tp2)+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#dc2626">’+fc(ta2)+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">’+fc(bal)+’</td></tr>’;
+rows+='<tr><td style="font-weight:700;padding:6px 10px">'+c.contractor_name+'</td><td style="padding:6px 10px;color:#6b7280">'+(c.contractor_type||'Team')+'</td><td style="text-align:center;padding:6px 10px">'+tw.length+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+fc(tp2)+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#dc2626">'+fc(ta2)+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</td></tr>';
 });
-var matT=AD.filter(function(d){ return d.type===‘material’&&!d.is_petty_cash&&(d.date||’’).startsWith(selMs); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Report — ‘+mL+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Monthly Report’,mL)
-+’<div class="sumrow"><div class="sc" style="border-color:#86efac"><div class="scl">Total Payment</div><div class="scv" style="color:#059669">’+fc(gTP)+’</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Total Advances</div><div class="scv" style="color:#dc2626">’+fc(gTA)+’</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material Cost</div><div class="scv" style="color:#d97706">’+fc(matT)+’</div></div></div>’
-+’<div class="sec"><div class="st">👥 Team Summary</div>’
-+(ctrs.length ? ‘<table><thead><tr><th>Team</th><th>Type</th><th style="text-align:center">Workers</th><th style="text-align:right">Payment</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead><tbody>’+rows+’</tbody><tfoot><tr><td colspan="3" style="padding:8px 10px;font-weight:900">GRAND TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">’+fc(gTP)+’</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">’+fc(gTA)+’</td><td style="text-align:right;padding:8px 10px;font-weight:900">’+fc(gTP-gTA)+’</td></tr></tfoot></table>’ : ‘<p style="padding:10px;color:#9ca3af">No data.</p>’)+’</div>’
-+pftr()+’</div></body></html>’;
+var matT=AD.filter(function(d){ return d.type==='material'&&!d.is_petty_cash&&(d.date||'').startsWith(selMs); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly</title><style>'+pcs()+'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Report — '+mL+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Monthly Report',mL)
++'<div class="sumrow"><div class="sc" style="border-color:#86efac"><div class="scl">Total Payment</div><div class="scv" style="color:#059669">'+fc(gTP)+'</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Total Advances</div><div class="scv" style="color:#dc2626">'+fc(gTA)+'</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material Cost</div><div class="scv" style="color:#d97706">'+fc(matT)+'</div></div></div>'
++'<div class="sec"><div class="st">👥 Team Summary</div>'
++(ctrs.length ? '<table><thead><tr><th>Team</th><th>Type</th><th style="text-align:center">Workers</th><th style="text-align:right">Payment</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td colspan="3" style="padding:8px 10px;font-weight:900">GRAND TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">'+fc(gTP)+'</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">'+fc(gTA)+'</td><td style="text-align:right;padding:8px 10px;font-weight:900">'+fc(gTP-gTA)+'</td></tr></tfoot></table>' : '<p style="padding:10px;color:#9ca3af">No data.</p>')+'</div>'
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -1696,15 +1733,15 @@ var entries=ldept()[DTD]||[], dl=fdl(DTD);
 var tW=entries.reduce(function(s,e){ return s+parseInt(e.workers||0); },0);
 var tH=entries.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
 var tA=entries.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dept Work</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Dept Work — ‘+dl+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Departmental Work’,dl)
-+’<div class="sumrow"><div class="sc" style="border-color:#a5b4fc"><div class="scl">Workers</div><div class="scv" style="color:#4f46e5">’+tW+’</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Hours</div><div class="scv" style="color:#059669">’+tH+‘h</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Amount</div><div class="scv" style="color:#dc2626">’+fc(tA)+’</div></div></div>’
-+(entries.length ? ‘<table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>’
-+entries.map(function(e){ return ‘<tr><td style="font-weight:700;padding:7px 10px">’+e.cat+’</td><td style="text-align:center;padding:7px 10px;font-weight:700;color:#7c3aed">’+e.workers+’</td><td style="text-align:center;padding:7px 10px">’+(e.hours||’–’)+‘h</td><td style="padding:7px 10px">’+(e.work||’–’)+(e.qty?’ (’+e.qty+’ ‘+(e.unit||’’)+’)’:’’)+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">’+(e.amount?fc(e.amount):’–’)+’</td></tr>’; }).join(’’)
-+’</tbody><tfoot><tr><td style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:8px 10px;font-weight:900">’+tW+’</td><td style="text-align:center;padding:8px 10px;font-weight:900">’+tH+‘h</td><td></td><td style="text-align:right;padding:8px 10px;font-weight:900">’+fc(tA)+’</td></tr></tfoot></table>’
-: ‘<p style="padding:10px;color:#9ca3af">No entries.</p>’)
-+pftr()+’</div></body></html>’;
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dept Work</title><style>'+pcs()+'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Dept Work — '+dl+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Departmental Work',dl)
++'<div class="sumrow"><div class="sc" style="border-color:#a5b4fc"><div class="scl">Workers</div><div class="scv" style="color:#4f46e5">'+tW+'</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Hours</div><div class="scv" style="color:#059669">'+tH+'h</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Amount</div><div class="scv" style="color:#dc2626">'+fc(tA)+'</div></div></div>'
++(entries.length ? '<table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++entries.map(function(e){ return '<tr><td style="font-weight:700;padding:7px 10px">'+e.cat+'</td><td style="text-align:center;padding:7px 10px;font-weight:700;color:#7c3aed">'+e.workers+'</td><td style="text-align:center;padding:7px 10px">'+(e.hours||'–')+'h</td><td style="padding:7px 10px">'+(e.work||'–')+(e.qty?' ('+e.qty+' '+(e.unit||'')+')':'')+'</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">'+(e.amount?fc(e.amount):'–')+'</td></tr>'; }).join('')
++'</tbody><tfoot><tr><td style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:8px 10px;font-weight:900">'+tW+'</td><td style="text-align:center;padding:8px 10px;font-weight:900">'+tH+'h</td><td></td><td style="text-align:right;padding:8px 10px;font-weight:900">'+fc(tA)+'</td></tr></tfoot></table>'
+: '<p style="padding:10px;color:#9ca3af">No entries.</p>')
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -1712,10 +1749,10 @@ opw(html);
 // PRINT: DEPT MONTHLY
 // ============================================================
 function printDeptMonthly(){
-var selEl=document.getElementById(‘dept-print-month’), selMs=selEl?selEl.value:mkey(VM);
-var mL=mlabel(new Date(selMs+’-01’));
+var selEl=document.getElementById('dept-print-month'), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+'-01'));
 var store=ldept(), dates=Object.keys(store).filter(function(d){ return d.startsWith(selMs); }).sort();
-if (!dates.length) { toast(‘No dept data for ‘+mL,‘err’); return; }
+if (!dates.length) { toast('No dept data for '+mL,'err'); return; }
 var catSet={};
 dates.forEach(function(d){ (store[d]||[]).forEach(function(e){ catSet[e.cat]=1; }); });
 var cats=CATS.filter(function(c){ return catSet[c]; });
@@ -1723,25 +1760,25 @@ Object.keys(catSet).forEach(function(c){ if(cats.indexOf(c)<0) cats.push(c); });
 var totW={}, totH={};
 cats.forEach(function(c){ totW[c]=0; totH[c]=0; });
 var rows=dates.map(function(d){
-var ents=store[d]||[], day=d.split(’-’)[2];
-var cells=’<td style="font-weight:700;text-align:center;background:#f5f3ff;border:1px solid #e5e7eb;padding:5px">’+day+’</td>’;
+var ents=store[d]||[], day=d.split('-')[2];
+var cells='<td style="font-weight:700;text-align:center;background:#f5f3ff;border:1px solid #e5e7eb;padding:5px">'+day+'</td>';
 cats.forEach(function(cat){
 var e=ents.find(function(x){ return x.cat===cat; });
-if (e) { totW[cat]+=parseInt(e.workers||0); totH[cat]+=parseFloat(e.hours||0); cells+=’<td style="text-align:center;border:1px solid #e5e7eb;padding:5px"><strong>’+e.workers+’</strong><br><span style="font-size:9px;color:#6b7280">(’+e.hours+‘h)</span></td>’; }
-else cells+=’<td style="text-align:center;border:1px solid #e5e7eb;padding:5px;color:#d1d5db">—</td>’;
+if (e) { totW[cat]+=parseInt(e.workers||0); totH[cat]+=parseFloat(e.hours||0); cells+='<td style="text-align:center;border:1px solid #e5e7eb;padding:5px"><strong>'+e.workers+'</strong><br><span style="font-size:9px;color:#6b7280">('+e.hours+'h)</span></td>'; }
+else cells+='<td style="text-align:center;border:1px solid #e5e7eb;padding:5px;color:#d1d5db">—</td>';
 });
-return ‘<tr>’+cells+’</tr>’;
-}).join(’’);
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Dept</title><style>’+pcs()+‘table{border-collapse:collapse}</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Dept — ‘+mL+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Monthly Dept Work’,mL)
-+’<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>’
-+’<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151">Date</th>’
-+cats.map(function(c){ return ‘<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151;min-width:80px">’+c+’</th>’; }).join(’’)
-+’</tr></thead><tbody>’+rows+’</tbody><tfoot><tr>’
-+’<td style="background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">TOTAL</td>’
-+cats.map(function(c){ return ‘<td style="text-align:center;background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">’+totW[c]+’<br><span style="font-size:9px;font-weight:400">(’+totH[c]+‘h)</span></td>’; }).join(’’)
-+’</tr></tfoot></table></div>’+pftr()+’</div></body></html>’;
+return '<tr>'+cells+'</tr>';
+}).join('');
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Dept</title><style>'+pcs()+'table{border-collapse:collapse}</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Dept — '+mL+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Monthly Dept Work',mL)
++'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'
++'<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151">Date</th>'
++cats.map(function(c){ return '<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151;min-width:80px">'+c+'</th>'; }).join('')
++'</tr></thead><tbody>'+rows+'</tbody><tfoot><tr>'
++'<td style="background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">TOTAL</td>'
++cats.map(function(c){ return '<td style="text-align:center;background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">'+totW[c]+'<br><span style="font-size:9px;font-weight:400">('+totH[c]+'h)</span></td>'; }).join('')
++'</tr></tfoot></table></div>'+pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -1749,21 +1786,27 @@ opw(html);
 // PRINT: RENTALS
 // ============================================================
 function printRentalReport(){
-AD=ld(); var today=ist(), fdate=document.getElementById(‘rental-filter-date’).value||’’, asOf=fdate||today;
-var borrow=AD.filter(function(d){ return d.type===‘rental’&&!d.is_given&&(!fdate||d.borrowed_date<=fdate); }), tExp=0;
-var bRows=borrow.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tExp+=tot; return ‘<tr><td style="padding:7px 10px;font-weight:600">’+r.rental_name+’</td><td style="text-align:center;padding:7px 10px">’+(r.qty||1)+’</td><td style="text-align:center;padding:7px 10px">’+fd(r.borrowed_date)+’</td><td style="text-align:center;padding:7px 10px">’+days+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#dc2626">’+fc(tot)+’</td></tr>’; }).join(’’);
-var given=AD.filter(function(d){ return d.type===‘rental’&&d.is_given&&(!fdate||d.borrowed_date<=fdate); }), tInc=0;
-var gRows=given.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tInc+=tot; return ‘<tr><td style="padding:7px 10px;font-weight:600">’+r.rental_name+’</td><td style="text-align:center;padding:7px 10px">’+(r.qty||1)+’</td><td style="padding:7px 10px">’+(r.client_name||’–’)+’</td><td style="text-align:center;padding:7px 10px">’+fd(r.borrowed_date)+’</td><td style="text-align:center;padding:7px 10px">’+days+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">’+fc(tot)+’</td></tr>’; }).join(’’);
+AD=ld();
+var selEl=document.getElementById('rental-print-month'), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+'-01'));
+var today=ist(), asOf=selMs+'-'+new Date(new Date(selMs+'-01').getFullYear(), new Date(selMs+'-01').getMonth()+1, 0).getDate();
+// last day of selected month, capped at today if current month
+if (asOf>today) asOf=today;
+var borrow=AD.filter(function(d){ return d.type==='rental'&&!d.is_given&&(d.borrowed_date||'').startsWith(selMs); }), tExp=0;
+var bRows=borrow.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tExp+=tot; return '<tr><td style="padding:7px 10px;font-weight:600">'+r.rental_name+'</td><td style="text-align:center;padding:7px 10px">'+(r.qty||1)+'</td><td style="text-align:center;padding:7px 10px">'+fd(r.borrowed_date)+'</td><td style="text-align:center;padding:7px 10px">'+days+'</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#dc2626">'+fc(tot)+'</td></tr>'; }).join('');
+var given=AD.filter(function(d){ return d.type==='rental'&&d.is_given&&(d.borrowed_date||'').startsWith(selMs); }), tInc=0;
+var gRows=given.map(function(r){ var days=daysb(r.borrowed_date,asOf), tot=days*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); tInc+=tot; return '<tr><td style="padding:7px 10px;font-weight:600">'+r.rental_name+'</td><td style="text-align:center;padding:7px 10px">'+(r.qty||1)+'</td><td style="padding:7px 10px">'+(r.client_name||'–')+'</td><td style="text-align:center;padding:7px 10px">'+fd(r.borrowed_date)+'</td><td style="text-align:center;padding:7px 10px">'+days+'</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">'+fc(tot)+'</td></tr>'; }).join('');
 var net=tInc-tExp;
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rental</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Rental Report</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Rental Report’,‘As of ‘+fdl(asOf))
-+’<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Expense</div><div class="scv" style="color:#dc2626">’+fc(tExp)+’</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Income</div><div class="scv" style="color:#059669">’+fc(tInc)+’</div></div><div class="sc" style="border-color:'+(net>=0?'#86efac':'#fca5a5')+'"><div class="scl">Net</div><div class="scv" style="color:'+(net>=0?'#059669':'#dc2626')+'">’+fc(net)+’</div></div></div>’
-+’<div class="sec"><div class="st">Equipment Rented (Expense)</div>’
-+(borrow.length ? ‘<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:center">From</th><th style="text-align:center">Days</th><th style="text-align:right">Total</th></tr></thead><tbody>’+bRows+’</tbody><tfoot><tr><td colspan="4" style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">’+fc(tExp)+’</td></tr></tfoot></table>’ : ‘<p style="padding:10px;color:#9ca3af">None.</p>’)+’</div>’
-+’<div class="sec"><div class="st">Given to Others (Income)</div>’
-+(given.length ? ‘<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Client</th><th style="text-align:center">From</th><th style="text-align:center">Days</th><th style="text-align:right">Total</th></tr></thead><tbody>’+gRows+’</tbody><tfoot><tr><td colspan="5" style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">’+fc(tInc)+’</td></tr></tfoot></table>’ : ‘<p style="padding:10px;color:#9ca3af">None.</p>’)+’</div>’
-+pftr()+’</div></body></html>’;
+if (!borrow.length&&!given.length) { toast('No rentals for '+mL,'err'); return; }
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rental</title><style>'+pcs()+'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Rental Report — '+mL+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Rental Report',mL)
++'<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Expense</div><div class="scv" style="color:#dc2626">'+fc(tExp)+'</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Income</div><div class="scv" style="color:#059669">'+fc(tInc)+'</div></div><div class="sc" style="border-color:'+(net>=0?'#86efac':'#fca5a5')+'"><div class="scl">Net</div><div class="scv" style="color:'+(net>=0?'#059669':'#dc2626')+'">'+fc(net)+'</div></div></div>'
++'<div class="sec"><div class="st">Equipment Rented (Expense)</div>'
++(borrow.length ? '<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:center">From</th><th style="text-align:center">Days</th><th style="text-align:right">Total</th></tr></thead><tbody>'+bRows+'</tbody><tfoot><tr><td colspan="4" style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">'+fc(tExp)+'</td></tr></tfoot></table>' : '<p style="padding:10px;color:#9ca3af">None.</p>')+'</div>'
++'<div class="sec"><div class="st">Given to Others (Income)</div>'
++(given.length ? '<table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th>Client</th><th style="text-align:center">From</th><th style="text-align:center">Days</th><th style="text-align:right">Total</th></tr></thead><tbody>'+gRows+'</tbody><tfoot><tr><td colspan="5" style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">'+fc(tInc)+'</td></tr></tfoot></table>' : '<p style="padding:10px;color:#9ca3af">None.</p>')+'</div>'
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -1771,45 +1814,45 @@ opw(html);
 // EXCEL EXPORT
 // ============================================================
 function exportExcel(){
-AD=ld(); var vms=mkey(VM), ctrs=AD.filter(function(d){ return d.type===‘contractor’; });
-if (!ctrs.length) { toast(‘No teams to export’,‘err’); return; }
+AD=ld(); var vms=mkey(VM), ctrs=AD.filter(function(d){ return d.type==='contractor'; });
+if (!ctrs.length) { toast('No teams to export','err'); return; }
 var wb=XLSX.utils.book_new();
-var data=[[‘Sanjineer — Payment Report’],[‘Month: ‘+mlabel(VM)],[‘Company: ‘+pp().company],[‘Generated: ‘+new Date().toLocaleDateString(‘en-IN’)],[],[‘Team’,‘Type’,‘Workers’,‘Payment (₹)’,‘Advances (₹)’,‘Balance (₹)’]];
+var data=[['Sanjineer — Payment Report'],['Month: '+mlabel(VM)],['Company: '+pp().company],['Generated: '+new Date().toLocaleDateString('en-IN')],[],['Team','Type','Workers','Payment (₹)','Advances (₹)','Balance (₹)']];
 ctrs.forEach(function(c){
-var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
 var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
-var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(vms); });
+var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(vms); });
 var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP;
-data.push([c.contractor_name, c.contractor_type||‘Team’, tw.length, tp2, ta2, tp2-ta2]);
+data.push([c.contractor_name, c.contractor_type||'Team', tw.length, tp2, ta2, tp2-ta2]);
 });
 var ws=XLSX.utils.aoa_to_sheet(data);
-ws[’!cols’]=[{wch:22},{wch:14},{wch:10},{wch:16},{wch:16},{wch:14}];
-XLSX.utils.book_append_sheet(wb,ws,‘Summary’);
-XLSX.writeFile(wb,‘Sanjineer_’+vms+’.xlsx’);
-toast(‘Excel exported!’,‘ok’);
+ws['!cols']=[{wch:22},{wch:14},{wch:10},{wch:16},{wch:16},{wch:14}];
+XLSX.utils.book_append_sheet(wb,ws,'Summary');
+XLSX.writeFile(wb,'Sanjineer_'+vms+'.xlsx');
+toast('Excel exported!','ok');
 }
 
 // ============================================================
 // PWA MANIFEST
 // ============================================================
 (function(){
-var m={name:‘Sanjineer’,short_name:‘Sanjineer’,start_url:’.’,display:‘standalone’,background_color:’#0f172a’,theme_color:’#4f46e5’,
-icons:[{src:‘data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="%234f46e5"/><text x="96" y="130" font-size="100" text-anchor="middle">%F0%9F%8F%97</text></svg>’,sizes:‘192x192’,type:‘image/svg+xml’}]};
-var el=document.getElementById(‘pwa-manifest’);
-if (el) el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:‘application/json’}));
+var m={name:'Sanjineer',short_name:'Sanjineer',start_url:'.',display:'standalone',background_color:'#0f172a',theme_color:'#4f46e5',
+icons:[{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="%234f46e5"/><text x="96" y="130" font-size="100" text-anchor="middle">%F0%9F%8F%97</text></svg>',sizes:'192x192',type:'image/svg+xml'}]};
+var el=document.getElementById('pwa-manifest');
+if (el) el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
 })();
-window.addEventListener(‘beforeinstallprompt’,function(e){
+window.addEventListener('beforeinstallprompt',function(e){
 e.preventDefault(); PWA=e;
-if (!localStorage.getItem(‘pwa_dismissed’)) document.getElementById(‘pwa-banner’).style.display=‘flex’;
+if (!localStorage.getItem('pwa_dismissed')) document.getElementById('pwa-banner').style.display='flex';
 });
 
 // ============================================================
 // INIT — runs when page loads
 // ============================================================
-document.addEventListener(‘DOMContentLoaded’, function() {
+document.addEventListener('DOMContentLoaded', function() {
 applyProfile();
 boot();
 });
