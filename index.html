@@ -688,7 +688,7 @@
 // ============================================================
 // STORAGE
 // ============================================================
-var DB='cm_data', META='cm_meta', MATS='cm_matstore', DEPT='cm_dept', PHOTOS='cm_photos', PROF='cm_profile';
+var DB='cm_data', META='cm_meta', MATS='cm_matstore', DEPT='cm_dept', PROF='cm_profile', PHKEYS='cm_phkeys';
 function ld(){try{return JSON.parse(localStorage.getItem(DB)||'[]');}catch(e){return [];}}
 function sd(d){localStorage.setItem(DB,JSON.stringify(d));}
 function lm(){try{return JSON.parse(localStorage.getItem(META)||'{}');}catch(e){return {};}}
@@ -697,10 +697,89 @@ function lmat(){try{return JSON.parse(localStorage.getItem(MATS)||'[]');}catch(e
 function smat(x){localStorage.setItem(MATS,JSON.stringify(x));}
 function ldept(){try{return JSON.parse(localStorage.getItem(DEPT)||'{}');}catch(e){return {};}}
 function sdept(x){localStorage.setItem(DEPT,JSON.stringify(x));}
-function lph(){try{return JSON.parse(localStorage.getItem(PHOTOS)||'{}');}catch(e){return {};}}
-function sph(x){localStorage.setItem(PHOTOS,JSON.stringify(x));}
 function lprof(){try{return JSON.parse(localStorage.getItem(PROF)||'null');}catch(e){return null;}}
 function sprof(x){localStorage.setItem(PROF,JSON.stringify(x));}
+
+// ── photo key index (lightweight, stays in localStorage) ──
+function lphkeys(){try{return JSON.parse(localStorage.getItem(PHKEYS)||'{}');}catch(e){return {};}}
+function sphkeys(x){localStorage.setItem(PHKEYS,JSON.stringify(x));}
+
+// ============================================================
+// INDEXEDDB — stores all image data (photos + bills)
+// Uses the device's full available storage, not the 5-10 MB
+// localStorage quota.
+// ============================================================
+var _IDB = null;
+function openIDB(cb) {
+  if (_IDB) { cb(_IDB); return; }
+  var req = indexedDB.open('sanjineer_img', 1);
+  req.onupgradeneeded = function(ev) {
+    ev.target.result.createObjectStore('imgs');
+  };
+  req.onsuccess = function(ev) { _IDB = ev.target.result; cb(_IDB); };
+  req.onerror   = function()   { cb(null); };
+}
+function idbPut(key, val, cb) {
+  openIDB(function(db) {
+    if (!db) { if (cb) cb(false); return; }
+    var tx  = db.transaction('imgs','readwrite');
+    var req = tx.objectStore('imgs').put(val, key);
+    req.onsuccess = function() { if (cb) cb(true); };
+    req.onerror   = function() { if (cb) cb(false); };
+  });
+}
+function idbGet(key, cb) {
+  openIDB(function(db) {
+    if (!db) { cb(null); return; }
+    var tx  = db.transaction('imgs','readonly');
+    var req = tx.objectStore('imgs').get(key);
+    req.onsuccess = function() { cb(req.result || null); };
+    req.onerror   = function() { cb(null); };
+  });
+}
+function idbDel(key, cb) {
+  openIDB(function(db) {
+    if (!db) { if (cb) cb(); return; }
+    var tx = db.transaction('imgs','readwrite');
+    tx.objectStore('imgs').delete(key);
+    tx.oncomplete = function() { if (cb) cb(); };
+    tx.onerror    = function() { if (cb) cb(); };
+  });
+}
+// Load multiple IDB keys in parallel, callback with ordered results
+function idbGetAll(keys, cb) {
+  if (!keys.length) { cb([]); return; }
+  var results = new Array(keys.length).fill(null);
+  var done = 0;
+  keys.forEach(function(k, i) {
+    idbGet(k, function(val) {
+      results[i] = val;
+      done++;
+      if (done === keys.length) cb(results);
+    });
+  });
+}
+
+// ── Migrate old localStorage photos to IDB (one-time) ───────
+function migrateOldPhotos() {
+  var old = null;
+  try { old = JSON.parse(localStorage.getItem('cm_photos') || 'null'); } catch(e) {}
+  if (!old) return;
+  var idx = lphkeys();
+  Object.keys(old).forEach(function(date) {
+    var arr = old[date] || [];
+    if (!arr.length) return;
+    var keys = [];
+    arr.forEach(function(dataUrl, i) {
+      var k = 'ph_' + date + '_' + Date.now() + '_' + i;
+      keys.push(k);
+      idbPut(k, dataUrl);
+    });
+    idx[date] = keys;
+  });
+  sphkeys(idx);
+  localStorage.removeItem('cm_photos');
+}
 
 // ============================================================
 // UTILS
@@ -939,6 +1018,9 @@ function boot() {
   // Rental sub-tabs
   setupRentalTabs();
 
+  // Migrate any old localStorage photos to IDB (one-time, silent)
+  migrateOldPhotos();
+
   // Open dashboard
   switchTab('dashboard');
 }
@@ -1002,23 +1084,29 @@ function saveDailyMeta() {
   sm(m); toast('Status saved', 'ok');
 }
 function loadPhotos() {
-  var arr = lph()[DD] || [];
   var div = document.getElementById('photo-previews');
   if (!div) return;
-  div.innerHTML = arr.length
-    ? arr.map(function(s,i){ return '<div class="relative"><img src="'+s+'" class="photo-thumb"><button onclick="removePhoto('+i+')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;background:#ef4444;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;line-height:18px;text-align:center;">x</button></div>'; }).join('')
-    : '<p class="text-gray-400 text-xs">No photos yet</p>';
+  var keys = lphkeys()[DD] || [];
+  if (!keys.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
+  div.innerHTML = '<p class="text-gray-400 text-xs">Loading photos...</p>';
+  idbGetAll(keys, function(imgs) {
+    var valid = imgs.filter(Boolean);
+    if (!valid.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
+    div.innerHTML = valid.map(function(s, i) {
+      return '<div style="position:relative;display:inline-block">'
+        + '<img src="' + s + '" class="photo-thumb">'
+        + '<button onclick="removePhoto(' + i + ')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;background:#ef4444;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;line-height:18px;text-align:center;">x</button>'
+        + '</div>';
+    }).join('');
+  });
 }
 function addPhoto(e) {
   var files = e.target.files;
   if (!files || !files.length) return;
-  // Check limit BEFORE async — snapshot count now
-  var currentCount = (lph()[DD] || []).length;
-  if (currentCount >= 4) { toast('Max 4 photos allowed', 'err'); e.target.value = ''; return; }
-  // Hold strong reference to File BEFORE clearing input
+  var keys = lphkeys()[DD] || [];
+  if (keys.length >= 4) { toast('Max 4 photos allowed', 'err'); e.target.value = ''; return; }
   var f = files[0];
   if (!f) { e.target.value = ''; return; }
-  // Read as data URL (keeps file alive even after input reset)
   var reader = new FileReader();
   reader.onload = function(ev) {
     var dataUrl = ev.target.result;
@@ -1026,8 +1114,8 @@ function addPhoto(e) {
     var img = new Image();
     img.onload = function() {
       try {
-        // Compress to max 720px, quality 0.55 — keeps each photo ~80-150KB
-        var MAX = 720;
+        // Resize to max 1280px — no artificial compression limit, IDB handles full device storage
+        var MAX = 1280;
         var w = img.width, h = img.height;
         if (w > MAX || h > MAX) {
           var ratio = Math.min(MAX / w, MAX / h);
@@ -1036,30 +1124,22 @@ function addPhoto(e) {
         }
         var canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        var compressed = canvas.toDataURL('image/jpeg', 0.55);
-        // Re-read storage to get latest state (handles rapid taps)
-        var ph2 = lph(), arr2 = ph2[DD] || [];
-        if (arr2.length >= 4) { toast('Max 4 photos already saved', 'err'); return; }
-        arr2.push(compressed);
-        ph2[DD] = arr2;
-        try {
-          sph(ph2);
-        } catch (storageErr) {
-          // Storage quota: try with lower quality
-          try {
-            var smaller = canvas.toDataURL('image/jpeg', 0.35);
-            arr2[arr2.length - 1] = smaller;
-            ph2[DD] = arr2;
-            sph(ph2);
-          } catch (e2) {
-            toast('Storage full — clear old photos', 'err');
-            return;
-          }
-        }
-        loadPhotos();
-        toast('Photo ' + arr2.length + ' of 4 saved ✓', 'ok');
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        var compressed = canvas.toDataURL('image/jpeg', 0.82);
+        // Re-check keys (guard against rapid taps)
+        var curKeys = lphkeys()[DD] || [];
+        if (curKeys.length >= 4) { toast('Max 4 photos already saved', 'err'); return; }
+        var idbKey = 'ph_' + DD + '_' + Date.now();
+        idbPut(idbKey, compressed, function(ok) {
+          if (!ok) { toast('Could not save photo — try again', 'err'); return; }
+          var idx = lphkeys();
+          var arr = idx[DD] || [];
+          arr.push(idbKey);
+          idx[DD] = arr;
+          sphkeys(idx);
+          loadPhotos();
+          toast('Photo ' + arr.length + ' of 4 saved ✓', 'ok');
+        });
       } catch (err) {
         toast('Error processing photo', 'err');
       }
@@ -1068,11 +1148,22 @@ function addPhoto(e) {
     img.src = dataUrl;
   };
   reader.onerror = function() { toast('Could not read file', 'err'); };
-  // Reset input BEFORE starting read — file object already captured above
   e.target.value = '';
   reader.readAsDataURL(f);
 }
-function removePhoto(i) { var ph=lph(),arr=ph[DD]||[]; arr.splice(i,1); ph[DD]=arr; sph(ph); loadPhotos(); }
+function removePhoto(i) {
+  var idx = lphkeys(), keys = idx[DD] || [];
+  if (i < 0 || i >= keys.length) return;
+  var key = keys[i];
+  idbDel(key, function() {
+    var idx2 = lphkeys(), arr = idx2[DD] || [];
+    arr.splice(i, 1);
+    if (!arr.length) delete idx2[DD]; else idx2[DD] = arr;
+    sphkeys(idx2);
+    loadPhotos();
+    toast('Photo removed', 'ok');
+  });
+}
 function viewDaily() {
   var lbl = document.getElementById('daily-label'); if (lbl) lbl.textContent = fdl(DD);
   var att = dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD; }));
@@ -1374,7 +1465,26 @@ function openMatPurchaseModal(id){
 function closeMatModal(){ document.getElementById('mat-purchase-modal').style.display='none'; }
 function billFileSelected(e){
   var f=e.target.files[0]; if(!f) return;
-  var r=new FileReader(); r.onload=function(ev){ BILL=ev.target.result; document.getElementById('bill-file-label').textContent='Bill attached'; document.getElementById('bill-img-preview').src=BILL; document.getElementById('bill-preview').classList.remove('hidden'); }; r.readAsDataURL(f);
+  var r=new FileReader();
+  r.onload=function(ev){
+    var dataUrl=ev.target.result;
+    // Compress bill photo too
+    var img=new Image();
+    img.onload=function(){
+      var MAX=1280, w=img.width, h=img.height;
+      if(w>MAX||h>MAX){ var ratio=Math.min(MAX/w,MAX/h); w=Math.round(w*ratio); h=Math.round(h*ratio); }
+      var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      var compressed=cv.toDataURL('image/jpeg',0.82);
+      // Store in memory until saveMatPurchase is called
+      BILL={dataUrl:compressed, key:'bill_'+Date.now()};
+      document.getElementById('bill-file-label').textContent='Bill attached ✓';
+      document.getElementById('bill-img-preview').src=compressed;
+      document.getElementById('bill-preview').classList.remove('hidden');
+    };
+    img.src=dataUrl;
+  };
+  r.readAsDataURL(f);
 }
 function clearBill(){ BILL=null; document.getElementById('bill-file-label').textContent='Tap to attach bill photo'; document.getElementById('bill-preview').classList.add('hidden'); document.getElementById('mp-bill').value=''; }
 function saveMatPurchase(){
@@ -1383,10 +1493,24 @@ function saveMatPurchase(){
   var supplier=document.getElementById('mp-supplier').value.trim();
   if (!date||!qty) { toast('Enter date and quantity','err'); return; }
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
-  item.transactions.push({type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,bill:BILL||null});
-  smat(mats);
-  if (cost>0) { ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false}); AD=ld(); }
-  closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); updateDash();
+  var txn={type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier};
+  var billRef=BILL;
+  function finalize(){
+    item.transactions.push(txn);
+    smat(mats);
+    if (cost>0) { ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false}); AD=ld(); }
+    closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); updateDash();
+  }
+  if (billRef && billRef.key && billRef.dataUrl) {
+    // Save bill image to IDB, store only the key in the transaction
+    idbPut(billRef.key, billRef.dataUrl, function(ok){
+      txn.bill_id = ok ? billRef.key : null;
+      if (!ok) toast('Bill photo could not be saved','err');
+      finalize();
+    });
+  } else {
+    finalize();
+  }
 }
 function openMatUseModal(id){
   MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
@@ -1403,7 +1527,13 @@ function saveMatUse(){
   item.transactions.push({type:'use',qty:qty,date:date,note:note}); smat(mats);
   closeMatUseModal(); toast('Usage recorded','ok'); viewMaterials(); updateDash();
 }
-function viewBill(dataUrl){ document.getElementById('bill-view-img').src=dataUrl; document.getElementById('bill-view-modal').classList.remove('hidden'); }
+function viewBill(ref){
+  // ref can be an IDB key (string like 'bill_xxx') or a legacy dataUrl (starts with 'data:')
+  if (!ref) return;
+  var show=function(src){ document.getElementById('bill-view-img').src=src; document.getElementById('bill-view-modal').classList.remove('hidden'); };
+  if (typeof ref==='string' && ref.indexOf('data:')===0) { show(ref); return; }
+  idbGet(ref, function(dataUrl){ if(dataUrl) show(dataUrl); else toast('Bill photo not found','err'); });
+}
 function delMatTxn(matId,idx){
   askDel('Delete transaction?', function(){ var mats=lmat(), item=mats.find(function(m){ return m.id===matId; }); if(!item) return; item.transactions.splice(idx,1); smat(mats); toast('Deleted','ok'); viewMaterials(); });
 }
@@ -1440,7 +1570,7 @@ function viewMaterials(){
             +(isP&&t.supplier?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+t.supplier+'</span>':'')
             +(!isP&&t.note?'<span style="font-size:10px;color:#6b7280">'+t.note+'</span>':'')
             +'<div style="margin-left:auto;display:flex;gap:3px;flex-shrink:0">'
-            +(isP&&t.bill?'<button onclick="viewBill(\''+t.bill+'\')" style="font-size:10px;padding:1px 5px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:3px;cursor:pointer">Bill</button>':'')
+            +(isP&&(t.bill_id||t.bill)?'<button onclick="viewBill(\''+( t.bill_id||t.bill)+'\')" style="font-size:10px;padding:1px 5px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:3px;cursor:pointer">Bill</button>':'')
             +'<button onclick="delMatTxn(\''+item.id+'\','+idx+')" style="font-size:10px;padding:1px 5px;background:white;border:1px solid #e5e7eb;color:#f43f5e;border-radius:3px;cursor:pointer">X</button>'
             +'</div></div>';
         }).join('') : '<p style="font-size:10px;text-align:center;color:#9ca3af;padding:8px">No transactions yet</p>')
@@ -1706,7 +1836,15 @@ function opw(html){
 // PRINT: DAILY
 // ============================================================
 function printDailyReport(){
-  AD=ld(); var d=DD, dl=fdl(d), meta=lm()[d]||{}, photos=lph()[d]||[];
+  AD=ld();
+  var photoKeys = lphkeys()[DD] || [];
+  idbGetAll(photoKeys, function(photos) {
+    photos = photos.filter(Boolean);
+    _printDailyReportInner(photos);
+  });
+}
+function _printDailyReportInner(photos){
+  AD=ld(); var d=DD, dl=fdl(d), meta=lm()[d]||{};
   var att=dedup(AD.filter(function(a){ return a.type==='attendance'&&a.date===d; }));
   var mats=AD.filter(function(a){ return a.type==='material'&&a.date===d&&!a.is_petty_cash; });
   var adv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(a){ return a.type==='contractor_payment'&&a.date===d; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); },0);
