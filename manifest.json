@@ -1,0 +1,17 @@
+{
+  "name": "Sanjineer",
+  "short_name": "Sanjineer",
+  "description": "Construction Site Manager",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='36' fill='%234f46e5'/><text x='96' y='130' font-size='100' text-anchor='middle'>&#127959;</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
