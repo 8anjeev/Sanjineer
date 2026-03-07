@@ -193,17 +193,19 @@
 <!-- ===== ATTENDANCE ===== -->
 
 <div id="tab-attendance" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <div><h3 class="font-bold text-gray-800">💳 Payment Details</h3><p class="text-xs text-gray-500">Worker-wise attendance & payments by team</p></div>
-      <div class="flex gap-2 items-center flex-wrap">
-        <select id="print-month" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none"></select>
-        <button onclick="printMonthlyReport()" class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
-      </div>
+  <!-- Worker Attendance Print Panel -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print Worker Attendance <span class="font-normal text-gray-400">— select worker & month</span></p>
+    <div class="flex gap-2 items-center flex-wrap">
+      <select id="att-print-worker" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+        <option value="">-- Select Worker --</option>
+      </select>
+      <select id="att-print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
+      <button onclick="printWorkerAttendance()" class="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">➕ Add Worker</h3>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Worker</p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="w-name" placeholder="Worker Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <select id="w-category" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
@@ -218,8 +220,8 @@
       <button onclick="addWorker()" class="col-span-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Worker</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-4 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">👷 Workers List</h3>
+  <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">👷 Workers List</p>
     <div id="workers-list"><p class="text-gray-400 text-center py-4">No workers yet</p></div>
   </div>
 </div>
@@ -227,18 +229,16 @@
 <!-- ===== EXPENSES ===== -->
 
 <div id="tab-expenses" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-1">💰 Deposit Petty Cash</h3>
-    <p class="text-xs text-gray-500 mb-3">Record cash brought to site</p>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">💰 Petty Cash <span class="font-normal text-gray-400">— record cash brought to site</span></p>
     <div class="grid grid-cols-3 gap-3">
       <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="date" id="petty-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <button onclick="addPettyCash()" class="bg-gradient-to-r from-cyan-500 to-sky-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💰 Deposit</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-1">🧱 Record Material Purchase</h3>
-    <p class="text-xs text-gray-500 mb-3">Quick entry for material bought on site</p>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🧱 Material Purchase <span class="font-normal text-gray-400">— quick entry for material bought on site</span></p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="exp-mat-name" placeholder="Material Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
       <input type="date" id="exp-mat-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
@@ -284,8 +284,8 @@
     <div class="bg-gradient-to-br from-cyan-500 to-sky-500 rounded-xl p-3 text-white"><p class="text-[10px] text-cyan-100">Cash In</p><p id="exp-petty-in" class="text-xl font-bold">₹0</p></div>
     <div class="bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-3 text-white"><p class="text-[10px] text-violet-100">Remaining</p><p id="exp-petty-left" class="text-xl font-bold">₹0</p></div>
   </div>
-  <div class="bg-white rounded-2xl p-4 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">💰 Expense Ledger</h3>
+  <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">💰 Expense Ledger</p>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead><tr class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Date</th><th class="px-3 py-2 text-left">Description</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
@@ -298,9 +298,8 @@
 <!-- ===== MATERIALS ===== -->
 
 <div id="tab-materials" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-1">🧱 Add Material / Stock Item</h3>
-    <p class="text-xs text-gray-500 mb-3">Add material to track stock. Set minimum alert level.</p>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🧱 Add Material / Stock Item <span class="font-normal text-gray-400">— set min alert level</span></p>
     <div class="grid grid-cols-2 gap-3 mb-3">
       <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -341,7 +340,7 @@
   <div style="display:none"><span id="dept-total-workers">0</span><span id="dept-total-hours">0</span></div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
-      <h3 class="font-bold text-gray-800 text-sm">📋 Departmental Work Records</h3>
+      <p class="text-xs font-semibold text-gray-500">📋 Departmental Work Records</p>
       <button onclick="openAddDeptModal()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-xs font-bold active:scale-95">+ Add</button>
     </div>
     <div class="overflow-x-auto">
@@ -377,8 +376,8 @@
 <!-- ===== TOOLS ===== -->
 
 <div id="tab-tools" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">➕ Add Tool / Equipment</h3>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Tool / Equipment</p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="tl-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -387,13 +386,13 @@
       <button onclick="addTool()" class="col-span-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Tool</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">🔧 Tools List</h3>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🔧 Tools List</p>
     <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-violet-500 to-purple-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Tool</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-center">Date</th><th class="px-3 py-2 text-right">Cost</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
     <tbody id="tools-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No tools</td></tr></tbody></table>
   </div>
-  <div class="bg-white rounded-2xl p-4 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">📋 Assign Tool</h3>
+  <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">📋 Assign Tool</p>
     <div class="grid grid-cols-2 gap-3 mb-3">
       <select id="as-tool" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Tool</option></select>
       <select id="as-worker" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Worker</option></select>
@@ -410,9 +409,8 @@
 
   <!-- ── CLIENT FILTER & PRINT PANEL ── -->
 
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-1 text-sm">🖨️ Print by Client</h3>
-    <p class="text-[10px] text-gray-400 mb-3">Filter a client's rental records across months and print</p>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print by Client <span class="font-normal text-gray-400">— filter client rental records by month</span></p>
 
 ```
 <!-- Client selector -->
@@ -452,7 +450,7 @@
 
   <div id="rsec-borrow">
     <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-      <h3 class="font-bold text-gray-800 mb-3">📦 Equipment We Rented</h3>
+      <p class="text-xs font-semibold text-gray-500 mb-2">📦 Equipment We Rented</p>
       <div class="grid grid-cols-2 gap-3 mb-3">
         <input type="text" id="rb-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
         <input type="text" id="rb-client" placeholder="Owner / Party Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -498,7 +496,7 @@
 
   <div id="rsec-given" style="display:none">
     <div class="bg-white rounded-2xl p-4 shadow-xl">
-      <h3 class="font-bold text-gray-800 mb-3">💰 Given to Others</h3>
+      <p class="text-xs font-semibold text-gray-500 mb-2">💰 Given to Others</p>
       <div class="grid grid-cols-2 gap-3 mb-3">
         <input type="text" id="rg-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
         <input type="text" id="rg-client" placeholder="Client Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -551,15 +549,19 @@
       <button onclick="changeViewMonth(1)" class="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-sm font-medium">Next →</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl flex items-center justify-between gap-2 flex-wrap">
-    <p class="text-sm font-semibold text-gray-700">Export & Print</p>
-    <div class="flex gap-2">
-      <button onclick="printMonthlyReport()" class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
-      <button onclick="exportExcel()" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">📊 Excel</button>
+  <!-- Monthly Payment Report Panel -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Monthly Payment Report <span class="font-normal text-gray-400">— select month & team</span></p>
+    <div class="flex gap-2 items-center flex-wrap mb-2">
+      <select id="print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
+      <select id="teams-print-filter" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+        <option value="all">All Teams</option>
+      </select>
+      <button onclick="printMonthlyReport()" class="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="font-bold text-gray-800 mb-3">➕ Add Contractor / Staff</h3>
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Contractor / Staff</p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="ct-name" placeholder="Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
       <select id="ct-type" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none">
@@ -912,7 +914,8 @@ function fdl(d) {
   return new Date(d+'T00:00:00').toLocaleDateString('en-IN', {weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 function daysb(d1, d2) {
-  return Math.max(1, Math.ceil(Math.abs(new Date(d2) - new Date(d1)) / 86400000) + 1);
+  var diff = new Date(d2+'T00:00:00') - new Date(d1+'T00:00:00');
+  return Math.max(1, Math.round(diff / 86400000));
 }
 function mkey(d) {
   d = d || VM;
@@ -1092,7 +1095,7 @@ function boot() {
   });
 
   var now = new Date();
-  ['print-month','dept-print-month'].forEach(function(id) {
+  ['print-month','dept-print-month','att-print-month'].forEach(function(id) {
     var sel = document.getElementById(id);
     if (!sel) return;
     sel.innerHTML = '';
@@ -2159,6 +2162,12 @@ var aw=document.getElementById(‘as-worker’);
 if(aw) aw.innerHTML=’<option value="">Select Worker</option>’+AD.filter(function(d){ return d.type===‘worker’; }).map(function(w){ return ‘<option value="'+w.__id+'">’+w.name+’ (’+w.category+’)</option>’; }).join(’’);
 var wt=document.getElementById(‘w-team’);
 if(wt) wt.innerHTML=’<option value="">Select Team</option>’+AD.filter(function(d){ return d.type===‘contractor’; }).map(function(t){ return ‘<option value="'+t.contractor_name+'">’+t.contractor_name+’</option>’; }).join(’’);
+// Attendance print worker dropdown
+var apw=document.getElementById(‘att-print-worker’);
+if(apw){ var workers=AD.filter(function(d){ return d.type===‘worker’; }); apw.innerHTML=’<option value="">– Select Worker –</option>’+workers.map(function(w){ return ‘<option value="'+w.__id+'">’+w.name+’ — ‘+w.category+(w.team_name?’ (’+w.team_name+’)’:’’)+’</option>’; }).join(’’); }
+// Teams print filter dropdown
+var tpf=document.getElementById(‘teams-print-filter’);
+if(tpf){ var teams=AD.filter(function(d){ return d.type===‘contractor’; }); tpf.innerHTML=’<option value="all">All Teams</option>’+teams.map(function(t){ return ‘<option value="'+t.contractor_name+'">’+t.contractor_name+’</option>’; }).join(’’); }
 }
 function getLowStock(){ return lmat().filter(function(i){ return i.minQty>0&&getbal(i)<=i.minQty; }); }
 function updateDash(){
@@ -2226,15 +2235,15 @@ return ‘*{margin:0;padding:0;box-sizing:border-box;font-family:“Segoe UI”,
 +’.scl{font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase}’
 +’.scv{font-size:18px;font-weight:900;margin-top:2px}’
 +’.sec{margin-bottom:16px}’
-+’.st{font-size:12px;font-weight:800;color:#1e1b4b;background:#f3f4f6;padding:6px 10px;border-left:4px solid #4f46e5;margin-bottom:0}’
++’.st{font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;padding:4px 10px;border-left:3px solid #9ca3af;margin-bottom:0}’
 +‘table{width:100%;border-collapse:collapse;font-size:11px}’
-+‘thead tr{background:#4f46e5;color:white}’
-+‘thead th{padding:7px 10px;text-align:left;font-weight:700;font-size:10px}’
++‘thead tr{background:#f3f4f6;color:#374151}’
++‘thead th{padding:5px 10px;text-align:left;font-weight:700;font-size:10px;border-bottom:1.5px solid #d1d5db}’
 +‘tbody tr{border-bottom:1px solid #f3f4f6}’
 +‘tbody tr:nth-child(even){background:#f9fafb}’
 +‘tbody td{padding:6px 10px;color:#374151}’
-+‘tfoot tr{background:#eef2ff;font-weight:700}’
-+‘tfoot td{padding:7px 10px;color:#4f46e5}’
++‘tfoot tr{background:#f3f4f6;font-weight:700}’
++‘tfoot td{padding:5px 10px;color:#374151}’
 +’.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}’
 +’.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}’
 +’.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}’
@@ -2307,11 +2316,97 @@ opw(html);
 // ============================================================
 // PRINT: MONTHLY
 // ============================================================
+// ============================================================
+// PRINT: WORKER ATTENDANCE (date-wise for selected month)
+// ============================================================
+function printWorkerAttendance(){
+AD=ld();
+var workerSel=document.getElementById(‘att-print-worker’);
+var wid=workerSel?workerSel.value:’’;
+if(!wid){ toast(‘Please select a worker’,‘err’); return; }
+var monthSel=document.getElementById(‘att-print-month’);
+var selMs=monthSel?monthSel.value:mkey(VM);
+var mL=mlabel(new Date(selMs+’-01T00:00:00’));
+var worker=AD.find(function(d){ return d.__id===wid&&d.type===‘worker’; });
+if(!worker){ toast(‘Worker not found’,‘err’); return; }
+
+var allAtt=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(selMs)&&d.name===worker.name; }));
+allAtt.sort(function(a,b){ return (a.date||’’).localeCompare(b.date||’’); });
+
+var totalHrs=0, totalAdv=0, totalPay=0;
+var rows=allAtt.map(function(a){
+var hrs=parseFloat(a.hours)||0;
+var adv=parseFloat(a.advance)||0;
+var pay=hrs*(parseFloat(a.hourly_wage||worker.hourly_wage)||0);
+totalHrs+=hrs; totalAdv+=adv; totalPay+=pay;
+return ‘<tr>’
++’<td style="padding:7px 10px;font-weight:600">’+fdl(a.date)+’</td>’
++’<td style="text-align:center;padding:7px 10px">’+hrs+‘h</td>’
++’<td style="text-align:right;padding:7px 10px;color:#059669;font-weight:700">’+fc(pay)+’</td>’
++’<td style="text-align:right;padding:7px 10px;color:#dc2626">’+fc(adv)+’</td>’
++’</tr>’;
+}).join(’’);
+
+var bal=totalPay-totalAdv;
+var profData=lprof()||{};
+var company=profData.company||‘Sanjineer’;
+var engineer=profData.engineer||’’;
+
+var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance — ‘+worker.name+’</title><style>’+pcs()+’\n’
++’.worker-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e5e7eb}’
++’.wh-left{} .wh-right{text-align:right}’
++’.wh-name{font-size:18px;font-weight:900;color:#1e1b4b}’
++’.wh-sub{font-size:11px;color:#6b7280;margin-top:2px}’
++’.wh-pay{font-size:22px;font-weight:900;color:#059669}’
++’.wh-paylbl{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase}’
++’</style></head><body>’
++’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance — ‘+worker.name+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
++’<div class="content">’
++’<div class="worker-header">’
++’<div class="wh-left">’
++’<div class="wh-name">’+worker.name+’</div>’
++’<div class="wh-sub">’+worker.category+(worker.team_name?’  ·  Team: ‘+worker.team_name:’’)+’</div>’
++’<div class="wh-sub" style="margin-top:4px">Period: <strong>’+mL+’</strong></div>’
++’</div>’
++’<div class="wh-right">’
++’<div class="wh-paylbl">Final Payment</div>’
++’<div class="wh-pay">’+fc(bal)+’</div>’
++’<div style="font-size:10px;color:#6b7280;margin-top:2px">Pay ‘+fc(totalPay)+’ − Adv ‘+fc(totalAdv)+’</div>’
++’</div>’
++’</div>’
++(allAtt.length
+? ‘<table><thead><tr>’
++’<th>Date</th>’
++’<th style="text-align:center">Hours</th>’
++’<th style="text-align:right">Daily Pay</th>’
++’<th style="text-align:right">Advance</th>’
++’</tr></thead><tbody>’+rows+’</tbody>’
++’<tfoot><tr style="background:#f0f4ff">’
++’<td style="padding:8px 10px;font-weight:900">TOTAL</td>’
++’<td style="text-align:center;padding:8px 10px;font-weight:900">’+totalHrs.toFixed(1)+‘h</td>’
++’<td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">’+fc(totalPay)+’</td>’
++’<td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">’+fc(totalAdv)+’</td>’
++’</tr>’
++’<tr style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+'">’
++’<td colspan="3" style="padding:8px 10px;font-weight:900;font-size:13px">NET PAYABLE</td>’
++’<td style="text-align:right;padding:8px 10px;font-weight:900;font-size:16px;color:'+(bal>=0?'#059669':'#dc2626')+'">’+fc(bal)+’</td>’
++’</tr></tfoot></table>’
+: ‘<p style="padding:16px;color:#9ca3af;text-align:center">No attendance records for ‘+mL+’</p>’)
++pftr()+’</div></body></html>’;
+opw(html);
+}
+
+// ============================================================
+// PRINT: MONTHLY PAYMENT REPORT (Teams tab)
+// ============================================================
 function printMonthlyReport(){
 AD=ld();
 var selEl=document.getElementById(‘print-month’), selMs=selEl?selEl.value:mkey(VM);
-var mL=mlabel(new Date(selMs+’-01’));
+var mL=mlabel(new Date(selMs+’-01T00:00:00’));
+var teamFilter=document.getElementById(‘teams-print-filter’);
+var selTeam=teamFilter?teamFilter.value:‘all’;
 var ctrs=AD.filter(function(d){ return d.type===‘contractor’; });
+if(selTeam!==‘all’) ctrs=ctrs.filter(function(c){ return c.contractor_name===selTeam; });
 if (!ctrs.length) { toast(‘No teams found’,‘err’); return; }
 var gTP=0, gTA=0, sectionsHtml=’’;
 ctrs.forEach(function(c){
@@ -2370,8 +2465,8 @@ sectionsHtml+=’<div class="sec">’
 +’</div>’;
 });
 var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Details</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Payment Details — ‘+mL+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Payment Details’,mL)
++’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Payment Report — ‘+mL+(selTeam!==‘all’?’ · ‘+selTeam:’’)+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
++’<div class="content">’+phdr(‘Monthly Payment Report’, mL+(selTeam!==‘all’?’ — ‘+selTeam:’’))
 +sectionsHtml
 +’<div style="margin-top:16px;padding:10px 14px;background:#f0f4ff;border:2px solid #c7d2fe;border-radius:10px;display:flex;justify-content:space-between;align-items:center">’
 +’<span style="font-weight:900;font-size:13px;color:#1e1b4b">GRAND TOTAL</span>’
