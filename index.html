@@ -201,6 +201,10 @@ body{margin:0}
     .bg-gray-50.rounded-xl{box-shadow:0 6px 20px rgba(0,0,0,0.18),0 2px 7px rgba(0,0,0,0.12)!important;}
     .stat-card{box-shadow:0 10px 30px rgba(0,0,0,0.32),0 3px 10px rgba(0,0,0,0.18)!important;}
   </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -226,11 +230,14 @@ body{margin:0}
       <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px;line-height:1"></p>
       <button onclick="openEditProfile()" class="bg-white/20 text-white rounded-full font-semibold" style="font-size:10px;padding:1px 8px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none">✏️ Edit</button>
     </div>
-    <!-- Right: date + spends -->
-    <div class="text-right flex-shrink-0" style="line-height:1">
+    <!-- Right: cloud + date + spends -->
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+    <button id="cloud-sync-btn" onclick="openCloudModal()" title="Cloud Sync" style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">&#x1F512;</button>
+    <div class="text-right" style="line-height:1">
       <p id="header-date" class="text-purple-300" style="font-size:10px;line-height:1"></p>
       <p class="text-purple-200" style="font-size:8px;line-height:1">Total Spends</p>
       <p id="header-spends" class="text-rose-300 font-bold" style="font-size:13px;line-height:1">₹0</p>
+    </div>
     </div>
   </div>
 </header>
@@ -735,6 +742,23 @@ body{margin:0}
 </div>
 
 <!-- ====== MODALS ====== -->
+
+<!-- Cloud Sync -->
+<!-- ===== CLOUD SYNC MODAL ===== -->
+<div id="cloud-modal" class="modal-overlay fixed inset-0 z-[100]" style="background:rgba(0,0,0,0.75);padding:12px;align-items:flex-start;padding-top:5vh">
+  <div style="background:white;border-radius:20px;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;margin:0 auto">
+    <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899);padding:14px 16px;border-radius:20px 20px 0 0;position:sticky;top:0;z-index:1">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <p style="color:white;font-weight:900;font-size:16px;margin:0">&#x2601;&#xFE0F; Cloud Sync</p>
+          <p id="cloud-hdr-status" style="color:rgba(255,255,255,0.75);font-size:11px;margin:2px 0 0">Not signed in</p>
+        </div>
+        <button onclick="closeCloudModal()" style="color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.15);border:none;font-size:18px;cursor:pointer;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center">&#x2715;</button>
+      </div>
+    </div>
+    <div id="cloud-modal-body" style="padding:0"></div>
+  </div>
+</div>
 
 <!-- Edit Profile -->
 
@@ -1289,6 +1313,7 @@ function boot() {
   migrateOldPhotos();
   _setupPWA();
   switchTab('dashboard');
+  fbInit();
 }
 
 function setupRentalTabs() {
@@ -2789,6 +2814,457 @@ run(); // DOM already ready (GitHub Pages cached page scenario)
 }
 window.addEventListener('load', run); // final safety net
 })();
+
+
+// ============================================================
+// FIREBASE CLOUD SYNC
+// ============================================================
+var FB_CFG = {
+  apiKey: 'AIzaSyBv7VEzV-meeFn79Z3QCPbS8MM37VFUSiU',
+  authDomain: 'sanjeev-baitha.firebaseapp.com',
+  projectId: 'sanjeev-baitha',
+  storageBucket: 'sanjeev-baitha.firebasestorage.app',
+  messagingSenderId: '929848215498',
+  appId: '1:929848215498:web:dc02a02d9d6cce21ec3133'
+};
+
+var fb_auth = null, fb_db = null;
+var FB_USER = null, FB_ROLE = null, FB_ADMIN_UID = null, FB_TABS = null;
+var FB_PUSH_TMR = null, FB_LISTENER = null, FB_SYNCING = false, FB_LAST_SYNC = null;
+
+var ALL_TABS = [
+  {id:'dashboard',       label:'📊 Dashboard'},
+  {id:'daily',           label:'📋 Report'},
+  {id:'departmental',    label:'🏗️ Dept'},
+  {id:'attendance',      label:'📅 Attendance'},
+  {id:'expenses',        label:'💰 Expenses'},
+  {id:'materials',       label:'🧱 Materials'},
+  {id:'tools',           label:'🔧 Tools'},
+  {id:'rentals',         label:'📦 Rentals'},
+  {id:'contractors',     label:'👥 Teams'}
+];
+
+// ── Patch storage fns to auto-push ──────────────────────────
+var _origSd, _origSmat, _origSdept, _origSprof;
+function fbPatchStorage() {
+  _origSd    = sd;
+  _origSmat  = smat;
+  _origSdept = sdept;
+  _origSprof = sprof;
+  sd    = function(d) { _origSd(d);    fbSchedulePush(); };
+  smat  = function(x) { _origSmat(x);  fbSchedulePush(); };
+  sdept = function(x) { _origSdept(x); fbSchedulePush(); };
+  sprof = function(x) { _origSprof(x); fbSchedulePush(); };
+}
+
+function fbInit() {
+  if (typeof firebase === 'undefined') { console.warn('Firebase SDK not loaded'); return; }
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FB_CFG);
+    fb_auth = firebase.auth();
+    fb_db   = firebase.firestore();
+    fbPatchStorage();
+    fb_auth.onAuthStateChanged(function(user) {
+      FB_USER = user;
+      if (user) { fbOnLogin(user); }
+      else { fbOnLogout(); }
+    });
+  } catch(e) { console.error('Firebase init error:', e); }
+}
+
+function fbOnLogin(user) {
+  fb_db.collection('sanjineer_usermap').doc(user.uid).get()
+    .then(function(doc) {
+      if (!doc.exists) {
+        // Brand new user → make admin
+        FB_ROLE = 'admin'; FB_ADMIN_UID = user.uid;
+        fb_db.collection('sanjineer_usermap').doc(user.uid).set({adminUID: user.uid, role: 'admin', email: user.email});
+        fbPushNow(function() { toast('Local data uploaded to cloud ☁️', 'ok'); });
+        fbStartListener();
+      } else if (doc.data().adminUID === user.uid) {
+        // Returning admin
+        FB_ROLE = 'admin'; FB_ADMIN_UID = user.uid;
+        fbPull(function() { fbStartListener(); });
+      } else {
+        // Viewer
+        FB_ROLE = 'viewer'; FB_ADMIN_UID = doc.data().adminUID;
+        fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+          .collection('viewers').doc(user.uid).get()
+          .then(function(vd) {
+            FB_TABS = vd.exists ? (vd.data().allowedTabs || ALL_TABS.map(function(t){return t.id;})) : ALL_TABS.map(function(t){return t.id;});
+            fbPull(function() { fbStartListener(); fbApplyViewerRestrictions(); });
+          });
+      }
+      fbUpdateCloudBtn();
+      fbUpdateHdrStatus();
+    })
+    .catch(function(e) { toast('Auth error: ' + e.message, 'err'); });
+}
+
+function fbOnLogout() {
+  FB_USER = null; FB_ROLE = null; FB_ADMIN_UID = null; FB_TABS = null;
+  if (FB_LISTENER) { try { FB_LISTENER(); } catch(e){} FB_LISTENER = null; }
+  ALL_TABS.forEach(function(t) {
+    var btn = document.querySelector('[data-tab="' + t.id + '"]');
+    if (btn) btn.style.display = '';
+  });
+  var editBtn = document.querySelector('[onclick="openEditProfile()"]');
+  if (editBtn) editBtn.style.display = '';
+  fbUpdateCloudBtn();
+  fbUpdateHdrStatus();
+}
+
+function fbPull(cb) {
+  if (!FB_ADMIN_UID) return;
+  FB_SYNCING = true; fbUpdateCloudBtn();
+  fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('appdata').doc('main').get()
+    .then(function(doc) {
+      if (doc.exists) {
+        var d = doc.data();
+        // Write directly to safeLS to avoid triggering push loop
+        if (d.data    !== undefined) safeLS.setItem('cm_data',    JSON.stringify(d.data));
+        if (d.meta    !== undefined) safeLS.setItem('cm_meta',    JSON.stringify(d.meta));
+        if (d.mats    !== undefined) safeLS.setItem('cm_matstore',JSON.stringify(d.mats));
+        if (d.dept    !== undefined) safeLS.setItem('cm_dept',    JSON.stringify(d.dept));
+        if (d.profile !== undefined) safeLS.setItem('cm_profile', JSON.stringify(d.profile));
+        AD = ld(); updateDash(); applyProfile(); updateDropdowns();
+        FB_LAST_SYNC = new Date();
+        toast('Synced from cloud ☁️', 'ok');
+      }
+      FB_SYNCING = false; fbUpdateCloudBtn(); fbUpdateHdrStatus();
+      if (cb) cb();
+    })
+    .catch(function(e) {
+      FB_SYNCING = false; fbUpdateCloudBtn();
+      toast('Pull error: ' + e.message, 'err');
+      if (cb) cb();
+    });
+}
+
+function fbPushNow(cb) {
+  if (!FB_USER || FB_ROLE !== 'admin' || !FB_ADMIN_UID) return;
+  FB_SYNCING = true; fbUpdateCloudBtn();
+  fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('appdata').doc('main')
+    .set({
+      data:    ld(),
+      meta:    lm(),
+      mats:    lmat(),
+      dept:    ldept(),
+      profile: lprof() || {},
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: FB_USER.uid
+    })
+    .then(function() {
+      FB_LAST_SYNC = new Date();
+      FB_SYNCING = false; fbUpdateCloudBtn(); fbUpdateHdrStatus();
+      if (cb) cb();
+    })
+    .catch(function(e) {
+      FB_SYNCING = false; fbUpdateCloudBtn();
+      toast('Push error: ' + e.message, 'err');
+    });
+}
+
+function fbSchedulePush() {
+  if (!FB_USER || FB_ROLE !== 'admin') return;
+  if (FB_PUSH_TMR) clearTimeout(FB_PUSH_TMR);
+  FB_PUSH_TMR = setTimeout(function() { fbPushNow(); }, 2500);
+}
+
+function fbStartListener() {
+  if (!FB_ADMIN_UID || !fb_db) return;
+  if (FB_LISTENER) { try { FB_LISTENER(); } catch(e){} }
+  FB_LISTENER = fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('appdata').doc('main')
+    .onSnapshot(function(doc) {
+      if (!doc.exists || !FB_USER) return;
+      var d = doc.data();
+      // Ignore own updates (avoid echo loop)
+      if (d.updatedBy && d.updatedBy === FB_USER.uid) return;
+      if (d.data    !== undefined) safeLS.setItem('cm_data',    JSON.stringify(d.data));
+      if (d.meta    !== undefined) safeLS.setItem('cm_meta',    JSON.stringify(d.meta));
+      if (d.mats    !== undefined) safeLS.setItem('cm_matstore',JSON.stringify(d.mats));
+      if (d.dept    !== undefined) safeLS.setItem('cm_dept',    JSON.stringify(d.dept));
+      if (d.profile !== undefined) safeLS.setItem('cm_profile', JSON.stringify(d.profile));
+      AD = ld(); updateDash(); applyProfile(); updateDropdowns();
+      FB_LAST_SYNC = new Date();
+      fbUpdateHdrStatus();
+      toast('Updated from another device 📱', 'ok');
+    }, function(err) { /* silent - permissions */ });
+}
+
+function fbApplyViewerRestrictions() {
+  if (!FB_TABS) return;
+  ALL_TABS.forEach(function(t) {
+    var btn = document.querySelector('[data-tab="' + t.id + '"]');
+    if (btn) btn.style.display = FB_TABS.indexOf(t.id) >= 0 ? '' : 'none';
+  });
+  var firstTab = FB_TABS.length > 0 ? FB_TABS[0] : 'dashboard';
+  switchTab(firstTab);
+  // Hide edit profile for viewers
+  var editBtn = document.querySelector('[onclick="openEditProfile()"]');
+  if (editBtn) editBtn.style.display = 'none';
+}
+
+function fbUpdateCloudBtn() {
+  var btn = document.getElementById('cloud-sync-btn');
+  if (!btn) return;
+  if (!FB_USER)          { btn.textContent = '🔐'; btn.title = 'Sign in to sync'; return; }
+  if (FB_SYNCING)        { btn.textContent = '🔄'; btn.title = 'Syncing...'; return; }
+  if (FB_ROLE==='viewer'){ btn.textContent = '👁️'; btn.title = 'Viewer mode'; return; }
+  btn.textContent = '☁️'; btn.title = 'Cloud synced — tap to manage';
+}
+
+function fbUpdateHdrStatus() {
+  var el = document.getElementById('cloud-hdr-status');
+  if (!el) return;
+  if (!FB_USER) { el.textContent = 'Not signed in'; return; }
+  var role = FB_ROLE === 'admin' ? '👑 Admin' : '👁️ Viewer';
+  var sync = FB_LAST_SYNC ? ('· Synced ' + FB_LAST_SYNC.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})) : '';
+  el.textContent = role + ' · ' + (FB_USER.email||'') + ' ' + sync;
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+function openCloudModal() {
+  fbRenderModal();
+  document.getElementById('cloud-modal').classList.add('modal-show');
+}
+function closeCloudModal() {
+  document.getElementById('cloud-modal').classList.remove('modal-show');
+}
+function fbRenderModal() {
+  var body = document.getElementById('cloud-modal-body');
+  if (!body) return;
+  fbUpdateHdrStatus();
+  if (!FB_USER)              body.innerHTML = fbHtmlLogin();
+  else if (FB_ROLE==='admin') { body.innerHTML = fbHtmlAdmin(); setTimeout(fbLoadViewerList, 80); }
+  else                        body.innerHTML = fbHtmlViewer();
+}
+
+function fbHtmlLogin() {
+  return '<div style="padding:20px 16px">'
+    + '<p style="font-size:12px;color:#6b7280;text-align:center;margin-bottom:18px">Sync your data across phone, tablet & laptop</p>'
+    + '<div style="margin-bottom:10px">'
+    + '<label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">📧 Email</label>'
+    + '<input id="fb-email" type="email" placeholder="your@email.com" style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:9px 12px;font-size:13px;outline:none;box-sizing:border-box"></div>'
+    + '<div style="margin-bottom:20px">'
+    + '<label style="font-size:11px;font-weight:700;color:#374151;display:block;margin-bottom:4px">🔑 Password</label>'
+    + '<input id="fb-pass" type="password" placeholder="Min 6 characters" style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:9px 12px;font-size:13px;outline:none;box-sizing:border-box"></div>'
+    + '<button onclick="fbDoLogin()" style="width:100%;padding:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:11px;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px">🔐 Sign In</button>'
+    + '<button onclick="fbDoRegisterAdmin()" style="width:100%;padding:11px;background:linear-gradient(135deg,#059669,#047857);color:white;border:none;border-radius:11px;font-weight:700;font-size:14px;cursor:pointer">👑 Register as Admin</button>'
+    + '<p style="font-size:10px;color:#9ca3af;text-align:center;margin-top:14px;line-height:1.5">Admin = full access + creates viewers<br>Viewer = read-only access to selected tabs</p>'
+    + '</div>';
+}
+
+function fbHtmlAdmin() {
+  var syncText = FB_SYNCING ? '🔄 Syncing...' : (FB_LAST_SYNC ? '✅ Synced at ' + FB_LAST_SYNC.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '⚠️ Not synced yet');
+  return '<div style="padding:16px">'
+    + '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:12px 14px;margin-bottom:14px">'
+    + '<p style="font-size:12px;font-weight:800;color:#059669;margin:0 0 2px">👑 Admin — Full Access</p>'
+    + '<p style="font-size:11px;color:#374151;margin:0 0 2px">' + (FB_USER ? FB_USER.email : '') + '</p>'
+    + '<p style="font-size:10px;color:#6b7280;margin:0">' + syncText + '</p>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
+    + '<button onclick="fbPull(function(){toast(\'Pulled from cloud\',\'ok\');})" style="padding:9px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer">📥 Pull from Cloud</button>'
+    + '<button onclick="fbPushNow(function(){toast(\'Pushed to cloud\',\'ok\');})" style="padding:9px;background:#d1fae5;color:#059669;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer">📤 Push to Cloud</button>'
+    + '</div>'
+    + '<div style="border-top:1.5px solid #f3f4f6;padding-top:14px">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    + '<p style="font-size:13px;font-weight:800;color:#374151;margin:0">👥 Viewer Accounts</p>'
+    + '<button onclick="fbShowCreateViewer()" style="padding:5px 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer">＋ Create</button>'
+    + '</div>'
+    + '<div id="cloud-vcreate-wrap" style="display:none;margin-bottom:12px"></div>'
+    + '<div id="cloud-viewer-list"><p style="font-size:11px;color:#9ca3af;text-align:center;padding:8px">Loading...</p></div>'
+    + '</div>'
+    + '<button onclick="fbDoLogout()" style="width:100%;padding:9px;background:#fee2e2;color:#dc2626;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;margin-top:16px">🚪 Sign Out</button>'
+    + '</div>';
+}
+
+function fbHtmlViewer() {
+  var tabs = FB_TABS || [];
+  var tabChips = tabs.map(function(t) {
+    var found = ALL_TABS.find(function(x){return x.id===t;});
+    return found ? '<span style="background:#e0e7ff;color:#4f46e5;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700">' + found.label + '</span>' : '';
+  }).join(' ');
+  return '<div style="padding:16px">'
+    + '<div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px">'
+    + '<p style="font-size:12px;font-weight:800;color:#3b82f6;margin:0 0 2px">👁️ Viewer — Read Only</p>'
+    + '<p style="font-size:11px;color:#374151;margin:0 0 4px">' + (FB_USER ? FB_USER.email : '') + '</p>'
+    + '<p style="font-size:10px;color:#6b7280;margin:0 0 8px">Auto-syncs with Admin data in real time</p>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:4px">' + (tabChips || '<span style="font-size:10px;color:#9ca3af">No tabs assigned yet</span>') + '</div>'
+    + '</div>'
+    + '<button onclick="fbPull(function(){toast(\'Refreshed\',\'ok\');})" style="width:100%;padding:9px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;margin-bottom:8px">🔄 Refresh Data</button>'
+    + '<button onclick="fbDoLogout()" style="width:100%;padding:9px;background:#fee2e2;color:#dc2626;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer">🚪 Sign Out</button>'
+    + '</div>';
+}
+
+function fbLoadViewerList() {
+  var div = document.getElementById('cloud-viewer-list');
+  if (!div || !FB_ADMIN_UID || !fb_db) return;
+  fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('viewers').get()
+    .then(function(snap) {
+      if (snap.empty) { div.innerHTML = '<p style="font-size:11px;color:#9ca3af;text-align:center;padding:8px">No viewers yet — create one above</p>'; return; }
+      div.innerHTML = snap.docs.map(function(doc) {
+        var v = doc.data();
+        var chips = (v.allowedTabs||[]).map(function(t) {
+          var found = ALL_TABS.find(function(x){return x.id===t;});
+          return found ? '<span style="background:#e0e7ff;color:#4f46e5;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700">' + found.label + '</span>' : '';
+        }).join(' ');
+        return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:11px;padding:11px;margin-bottom:8px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+          + '<div><p style="font-size:12px;font-weight:700;color:#374151;margin:0">' + (v.email||doc.id) + '</p>'
+          + '<p style="font-size:10px;color:#9ca3af;margin:0">👁️ Viewer</p></div>'
+          + '<button onclick="fbDeleteViewer(\'' + doc.id + '\')" style="padding:3px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:10px;cursor:pointer;font-weight:700">🗑 Del</button>'
+          + '</div>'
+          + '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px">' + (chips||'<span style="font-size:10px;color:#9ca3af">No tabs</span>') + '</div>'
+          + '<button onclick="fbToggleEditTabs(\'' + doc.id + '\')" style="font-size:10px;padding:4px 10px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:7px;cursor:pointer;font-weight:700">✏️ Edit Tabs</button>'
+          + '<div id="etabs-' + doc.id + '" style="display:none;margin-top:8px"></div>'
+          + '</div>';
+      }).join('');
+    })
+    .catch(function(e) { if(div) div.innerHTML = '<p style="color:#dc2626;font-size:11px;padding:8px">Error loading viewers</p>'; });
+}
+
+function fbShowCreateViewer() {
+  var wrap = document.getElementById('cloud-vcreate-wrap');
+  if (!wrap) return;
+  var isOpen = wrap.style.display !== 'none';
+  if (isOpen) { wrap.style.display = 'none'; return; }
+  var tabCheckboxes = ALL_TABS.map(function(t) {
+    return '<label style="display:flex;align-items:center;gap:5px;font-size:11px;padding:4px 8px;background:#eff6ff;border-radius:7px;cursor:pointer;font-weight:600">'
+      + '<input type="checkbox" value="' + t.id + '" checked style="accent-color:#4f46e5">' + t.label + '</label>';
+  }).join('');
+  wrap.innerHTML = '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:12px;padding:12px">'
+    + '<p style="font-size:12px;font-weight:800;color:#4f46e5;margin:0 0 10px">Create Viewer Account</p>'
+    + '<input id="nv-email" type="email" placeholder="viewer@email.com" style="width:100%;border:1.5px solid #e5e7eb;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:6px;outline:none;box-sizing:border-box">'
+    + '<input id="nv-pass" type="password" placeholder="Password (min 6 chars)" style="width:100%;border:1.5px solid #e5e7eb;border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px;outline:none;box-sizing:border-box">'
+    + '<p style="font-size:11px;font-weight:700;color:#374151;margin:0 0 6px">Which tabs can they see?</p>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px" id="nv-tabs">' + tabCheckboxes + '</div>'
+    + '<div style="display:flex;gap:6px">'
+    + '<button onclick="fbCreateViewer()" style="flex:1;padding:9px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer">✓ Create Viewer</button>'
+    + '<button onclick="document.getElementById(\'cloud-vcreate-wrap\').style.display=\'none\'" style="padding:9px 12px;background:#f3f4f6;color:#374151;border:none;border-radius:9px;font-size:12px;cursor:pointer">✕</button>'
+    + '</div></div>';
+  wrap.style.display = 'block';
+}
+
+function fbToggleEditTabs(viewerUID) {
+  var div = document.getElementById('etabs-' + viewerUID);
+  if (!div) return;
+  if (div.style.display !== 'none') { div.style.display = 'none'; return; }
+  fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('viewers').doc(viewerUID).get()
+    .then(function(doc) {
+      if (!doc.exists) return;
+      var cur = doc.data().allowedTabs || [];
+      var checkboxes = ALL_TABS.map(function(t) {
+        var chk = cur.indexOf(t.id) >= 0 ? ' checked' : '';
+        return '<label style="display:flex;align-items:center;gap:5px;font-size:11px;padding:3px 7px;background:#fef9c3;border-radius:6px;cursor:pointer">'
+          + '<input type="checkbox" value="' + t.id + '"' + chk + ' style="accent-color:#4f46e5">' + t.label + '</label>';
+      }).join('');
+      div.innerHTML = '<div style="background:#fef9c3;border:1.5px solid #fcd34d;border-radius:9px;padding:10px">'
+        + '<p style="font-size:11px;font-weight:700;margin:0 0 7px">Select allowed tabs:</p>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:9px" id="ev-' + viewerUID + '">' + checkboxes + '</div>'
+        + '<button onclick="fbSaveViewerTabs(\'' + viewerUID + '\')" style="padding:7px 14px;background:linear-gradient(135deg,#059669,#047857);color:white;border:none;border-radius:8px;font-weight:700;font-size:11px;cursor:pointer">💾 Save</button>'
+        + '</div>';
+      div.style.display = 'block';
+    });
+}
+
+function fbSaveViewerTabs(viewerUID) {
+  var container = document.getElementById('ev-' + viewerUID);
+  if (!container) return;
+  var selected = Array.from(container.querySelectorAll('input:checked')).map(function(i){return i.value;});
+  fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('viewers').doc(viewerUID).update({allowedTabs: selected})
+    .then(function() {
+      toast('Tabs updated ✓', 'ok');
+      var div = document.getElementById('etabs-' + viewerUID);
+      if (div) div.style.display = 'none';
+      fbLoadViewerList();
+    })
+    .catch(function(e) { toast('Save error: ' + e.message, 'err'); });
+}
+
+function fbDeleteViewer(viewerUID) {
+  if (!confirm('Remove this viewer account?')) return;
+  fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+    .collection('viewers').doc(viewerUID).delete()
+    .then(function() { toast('Viewer removed', 'ok'); fbLoadViewerList(); })
+    .catch(function(e) { toast('Delete error: ' + e.message, 'err'); });
+}
+
+function fbCreateViewer() {
+  var email = (document.getElementById('nv-email')||{}).value || '';
+  var pass  = (document.getElementById('nv-pass')||{}).value  || '';
+  email = email.trim();
+  if (!email || pass.length < 6) { toast('Enter a valid email and password (6+ chars)', 'err'); return; }
+  var tabInputs = document.querySelectorAll('#nv-tabs input:checked');
+  var allowedTabs = Array.from(tabInputs).map(function(i){return i.value;});
+  toast('Creating viewer account...', 'ok');
+  // Secondary app trick — create user without signing out admin
+  var tempName = 'sv_' + Date.now();
+  var tempApp = firebase.initializeApp(FB_CFG, tempName);
+  firebase.auth(tempApp).createUserWithEmailAndPassword(email, pass)
+    .then(function(cred) {
+      var viewerUID = cred.user.uid;
+      return firebase.auth(tempApp).signOut()
+        .then(function() { return tempApp.delete().catch(function(){}); })
+        .then(function() {
+          return fb_db.collection('sanjineer_projects').doc(FB_ADMIN_UID)
+            .collection('viewers').doc(viewerUID).set({
+              email: email,
+              allowedTabs: allowedTabs,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        })
+        .then(function() {
+          return fb_db.collection('sanjineer_usermap').doc(viewerUID).set({
+            adminUID: FB_ADMIN_UID,
+            role: 'viewer',
+            email: email
+          });
+        })
+        .then(function() {
+          toast('Viewer created: ' + email + ' ✓', 'ok');
+          var wrap = document.getElementById('cloud-vcreate-wrap');
+          if (wrap) wrap.style.display = 'none';
+          fbLoadViewerList();
+        });
+    })
+    .catch(function(e) {
+      try { tempApp.delete(); } catch(ex) {}
+      toast('Error: ' + e.message, 'err');
+    });
+}
+
+function fbDoLogin() {
+  var email = (document.getElementById('fb-email')||{}).value||'';
+  var pass  = (document.getElementById('fb-pass')||{}).value||'';
+  if (!email.trim() || !pass) { toast('Enter email and password', 'err'); return; }
+  fb_auth.signInWithEmailAndPassword(email.trim(), pass)
+    .then(function() { closeCloudModal(); })
+    .catch(function(e) { toast('Login failed: ' + e.message.replace('Firebase: ',''), 'err'); });
+}
+
+function fbDoRegisterAdmin() {
+  var email = (document.getElementById('fb-email')||{}).value||'';
+  var pass  = (document.getElementById('fb-pass')||{}).value||'';
+  if (!email.trim() || pass.length < 6) { toast('Valid email + 6-char password required', 'err'); return; }
+  fb_auth.createUserWithEmailAndPassword(email.trim(), pass)
+    .then(function() { closeCloudModal(); toast('Admin account created ☁️', 'ok'); })
+    .catch(function(e) { toast('Register failed: ' + e.message.replace('Firebase: ',''), 'err'); });
+}
+
+function fbDoLogout() {
+  fb_auth.signOut()
+    .then(function() { closeCloudModal(); toast('Signed out', 'ok'); })
+    .catch(function(e) { toast('Logout error: ' + e.message, 'err'); });
+}
+
+
 </script>
 
 </body>
