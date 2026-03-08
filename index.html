@@ -6,39 +6,200 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Sanjineer</title>
   <meta name="theme-color" content="#4f46e5">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" id="pwa-manifest">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style id="tw">
+/* RESET */
+*,::before,::after{box-sizing:border-box}
+html{line-height:1.5;-webkit-text-size-adjust:100%}
+body{margin:0}
+/* DISPLAY */
+.block{display:block}.inline-flex{display:inline-flex}.flex{display:flex}.grid{display:grid}.hidden{display:none!important}
+/* FLEX */
+.flex-1{flex:1 1 0%}.flex-col{flex-direction:column}.flex-shrink-0{flex-shrink:0}.flex-wrap{flex-wrap:wrap}
+.items-center{align-items:center}.items-start{align-items:flex-start}.self-end{align-self:flex-end}
+.justify-center{justify-content:center}.justify-between{justify-content:space-between}
+/* GRID */
+.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.col-span-2{grid-column:span 2/span 2}
+/* GAP */
+.gap-0\.5{gap:.125rem}.gap-1{gap:.25rem}.gap-1\.5{gap:.375rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}
+/* POSITION */
+.relative{position:relative}.fixed{position:fixed}.sticky{position:sticky}.absolute{position:absolute}
+.inset-0{inset:0}.top-0{top:0}.bottom-6{bottom:1.5rem}.left-1\/2{left:50%}
+.-translate-x-1\/2{transform:translateX(-50%)}
+/* SIZE */
+.w-full{width:100%}.h-full{height:100%}.min-h-screen{min-height:100vh}
+.min-w-0{min-width:0}.max-w-sm{max-width:24rem}.max-w-md{max-width:28rem}
+.max-w-\[130px\]{max-width:130px}.max-h-\[90vh\]{max-height:90vh}
+/* OVERFLOW */
+.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}
+/* Z-INDEX */
+.z-30{z-index:30}.z-50{z-index:50}.z-\[100\]{z-index:100}
+/* SPACING - PADDING */
+.p-2{padding:.5rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}
+.px-2{padding-left:.5rem;padding-right:.5rem}.px-3{padding-left:.75rem;padding-right:.75rem}
+.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}
+.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}
+.py-1\.5{padding-top:.375rem;padding-bottom:.375rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}
+.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}
+.py-4{padding-top:1rem;padding-bottom:1rem}.pb-6{padding-bottom:1.5rem}
+/* SPACING - MARGIN */
+.mb-1{margin-bottom:.25rem}.mb-1\.5{margin-bottom:.375rem}.mb-2{margin-bottom:.5rem}
+.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mt-0\.5{margin-top:.125rem}
+.mt-1{margin-top:.25rem}.mt-1\.5{margin-top:.375rem}.mt-2{margin-top:.5rem}.mt-4{margin-top:1rem}
+.space-y-2\.5>*+*{margin-top:.625rem}.space-y-3>*+*{margin-top:.75rem}.space-y-4>*+*{margin-top:1rem}
+/* TYPOGRAPHY */
+.text-xs{font-size:.75rem;line-height:1rem}.text-sm{font-size:.875rem;line-height:1.25rem}
+.text-base{font-size:1rem;line-height:1.5rem}.text-lg{font-size:1.125rem;line-height:1.75rem}
+.text-xl{font-size:1.25rem;line-height:1.75rem}.text-2xl{font-size:1.5rem;line-height:2rem}
+.text-5xl{font-size:3rem;line-height:1}
+.text-\[9px\]{font-size:9px}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}
+.font-normal{font-weight:400}.font-medium{font-weight:500}.font-semibold{font-weight:600}
+.font-bold{font-weight:700}.font-black{font-weight:900}
+.leading-none{line-height:1}.leading-tight{line-height:1.25}
+.tracking-wide{letter-spacing:.025em}.uppercase{text-transform:uppercase}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.whitespace-nowrap{white-space:nowrap}
+.text-left{text-align:left}.text-center{text-align:center}.text-right{text-align:right}
+/* TEXT COLORS */
+.text-white{color:#fff}.text-white\/50{color:rgba(255,255,255,.5)}.text-white\/60{color:rgba(255,255,255,.6)}
+.text-white\/70{color:rgba(255,255,255,.7)}.text-white\/80{color:rgba(255,255,255,.8)}
+.text-gray-400{color:#9ca3af}.text-gray-500{color:#6b7280}.text-gray-600{color:#4b5563}
+.text-gray-700{color:#374151}.text-gray-800{color:#1f2937}.text-gray-900{color:#111827}
+.text-amber-100{color:#fef3c7}.text-amber-200{color:#fde68a}.text-amber-300{color:#fcd34d}
+.text-amber-600{color:#d97706}.text-amber-700{color:#b45309}
+.text-blue-700{color:#1d4ed8}
+.text-cyan-100{color:#cffafe}
+.text-emerald-100{color:#d1fae5}.text-emerald-700{color:#047857}
+.text-green-100{color:#dcfce7}.text-green-500{color:#22c55e}.text-green-700{color:#15803d}
+.text-indigo-100{color:#e0e7ff}.text-indigo-200{color:#c7d2fe}.text-indigo-600{color:#4f46e5}.text-indigo-700{color:#4338ca}
+.text-purple-200{color:#e9d5ff}.text-purple-300{color:#d8b4fe}.text-purple-700{color:#7e22ce}
+.text-rose-100{color:#ffe4e6}.text-rose-200{color:#fecdd3}.text-rose-300{color:#fda4af}
+.text-rose-400{color:#fb7185}.text-rose-600{color:#e11d48}.text-rose-700{color:#be123c}
+.text-violet-100{color:#ede9fe}
+/* BG COLORS */
+.bg-white{background-color:#fff}
+.bg-white\/10{background-color:rgba(255,255,255,.1)}.bg-white\/20{background-color:rgba(255,255,255,.2)}
+.bg-black\/50{background-color:rgba(0,0,0,.5)}.bg-black\/90{background-color:rgba(0,0,0,.9)}
+.bg-gray-50{background-color:#f9fafb}.bg-gray-100{background-color:#f3f4f6}.bg-gray-900{background-color:#111827}
+.bg-amber-50{background-color:#fffbeb}
+.bg-blue-50{background-color:#eff6ff}
+.bg-emerald-50{background-color:#ecfdf5}
+.bg-green-50{background-color:#f0fdf4}
+.bg-indigo-50{background-color:#eef2ff}.bg-indigo-100{background-color:#e0e7ff}.bg-indigo-500{background-color:#6366f1}
+.bg-purple-50{background-color:#faf5ff}
+.bg-rose-50{background-color:#fff1f2}.bg-rose-600{background-color:#e11d48}
+/* BORDERS */
+.border{border-width:1px;border-style:solid}.border-0{border-width:0}
+.border-2{border-width:2px;border-style:solid}
+.border-b{border-bottom-width:1px;border-bottom-style:solid}
+.border-dashed{border-style:dashed}
+.border-gray-100{border-color:#f3f4f6}.border-gray-200{border-color:#e5e7eb}
+.border-amber-300{border-color:#fcd34d}
+.border-green-200{border-color:#bbf7d0}
+.border-indigo-300{border-color:#a5b4fc}
+.border-rose-300{border-color:#fda4af}
+.border-white\/10{border-color:rgba(255,255,255,.1)}
+/* RADIUS */
+.rounded-md{border-radius:.375rem}.rounded-lg{border-radius:.5rem}
+.rounded-xl{border-radius:.75rem}.rounded-2xl{border-radius:1rem}.rounded-full{border-radius:9999px}
+.rounded-l-lg{border-top-left-radius:.5rem;border-bottom-left-radius:.5rem}
+.rounded-r-lg{border-top-right-radius:.5rem;border-bottom-right-radius:.5rem}
+/* SHADOW */
+.shadow{box-shadow:0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1)}
+.shadow-lg{box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1)}
+.shadow-xl{box-shadow:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1)}
+.shadow-2xl{box-shadow:0 25px 50px -12px rgba(0,0,0,.25)}
+/* MISC */
+.cursor-pointer{cursor:pointer}.pointer-events-none{pointer-events:none}
+.resize-none{resize:none}.object-contain{object-fit:contain}
+.opacity-0{opacity:0}
+.transition-all{transition:all .15s ease}.duration-300{transition-duration:.3s}
+.backdrop-blur-sm{backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.backdrop-blur-lg{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:rgba(99,102,241,.4);border-radius:3px}
+
+/* COMPILED GRADIENTS — hardcoded linear-gradient, no CSS vars */
+.g-tobr-amber500-orange500{background-image:linear-gradient(to bottom right,#f59e0b,#f97316)}
+.g-tobr-amber500-orange600{background-image:linear-gradient(to bottom right,#f59e0b,#ea580c)}
+.g-tobr-cyan500-sky500{background-image:linear-gradient(to bottom right,#06b6d4,#0ea5e9)}
+.g-tobr-emerald500-teal500{background-image:linear-gradient(to bottom right,#10b981,#14b8a6)}
+.g-tobr-green500-emerald500{background-image:linear-gradient(to bottom right,#22c55e,#10b981)}
+.g-tobr-indigo500-violet500{background-image:linear-gradient(to bottom right,#6366f1,#8b5cf6)}
+.g-tobr-red500-rose600{background-image:linear-gradient(to bottom right,#ef4444,#e11d48)}
+.g-tobr-rose500-pink500{background-image:linear-gradient(to bottom right,#f43f5e,#ec4899)}
+.g-tobr-violet500-purple500{background-image:linear-gradient(to bottom right,#8b5cf6,#a855f7)}
+.g-tor-amber500-orange500{background-image:linear-gradient(to right,#f59e0b,#f97316)}
+.g-tor-cyan500-sky500{background-image:linear-gradient(to right,#06b6d4,#0ea5e9)}
+.g-tor-emerald500-teal500{background-image:linear-gradient(to right,#10b981,#14b8a6)}
+.g-tor-indigo500-blue500{background-image:linear-gradient(to right,#6366f1,#3b82f6)}
+.g-tor-indigo500-purple500{background-image:linear-gradient(to right,#6366f1,#a855f7)}
+.g-tor-indigo500-purple600{background-image:linear-gradient(to right,#6366f1,#9333ea)}
+.g-tor-indigo600-vpurple600-pink500{background-image:linear-gradient(to right,#4f46e5,#9333ea,#ec4899)}
+.g-tor-purple600-indigo600{background-image:linear-gradient(to right,#9333ea,#4f46e5)}
+.g-tor-rose500-pink500{background-image:linear-gradient(to right,#f43f5e,#ec4899)}
+.g-tor-violet500-purple500{background-image:linear-gradient(to right,#8b5cf6,#a855f7)}
+.g-tor-violet500-purple600{background-image:linear-gradient(to right,#8b5cf6,#9333ea)}
+</style>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <style>
-    *{font-family:'Outfit',sans-serif;box-sizing:border-box;}
+    *{font-family:'Outfit',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;box-sizing:border-box;}
     body{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%);min-height:100vh;}
     ::-webkit-scrollbar{width:5px;height:5px;}
     ::-webkit-scrollbar-thumb{background:rgba(99,102,241,.4);border-radius:3px;}
     @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
     .tab-content{animation:fadeIn .18s ease-out;}
-    .stat-card{transition:transform .12s;}
-    .stat-card:hover{transform:translateY(-2px);}
-    .tab-btn{transition:all .15s;}
-    .tab-btn.active{background:rgba(255,255,255,.2);box-shadow:0 3px 14px rgba(0,0,0,.25);}
+    /* Show dashboard by default if JS hasn't run yet */
+    body:not(.js-ready) #tab-dashboard{display:block!important;}
+    body.js-ready .tab-content{}
+    .stat-card{transition:transform .12s,box-shadow .12s;box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);}
+    .stat-card:active{transform:scale(0.97);}
+    .stat-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,0.45),0 4px 12px rgba(0,0,0,0.25);}
+    /* All colored gradient chips get shadow too */
+    [class*="g-tobr-"],[class*="g-tor-"]{box-shadow:0 6px 20px rgba(0,0,0,0.3),0 2px 6px rgba(0,0,0,0.15);}
+    [class*="g-tobr-"].stat-card,[class*="g-tor-"].stat-card{box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);}
+    .tab-btn{transition:all .15s;background:transparent;color:rgba(255,255,255,0.45);border:none;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;}
+    button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+    .tab-btn.active{background:rgba(255,255,255,0.18);color:#ffffff;box-shadow:0 2px 10px rgba(0,0,0,.2);font-weight:700;}
     .expand-content{max-height:0;overflow:hidden;transition:max-height .35s ease;}
     .expand-content.open{max-height:4000px;}
     .calendar-day{transition:.1s;cursor:pointer;}
     .calendar-day:hover{transform:scale(1.06);}
     .low-badge{animation:pulse 1.6s infinite;}
     input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+    /* Modal overlays - hidden by default */
+    .modal-overlay{display:none;align-items:center;justify-content:center;}
+    /* Modal show class — reliable on GitHub Pages */
+    .modal-show{display:flex!important;align-items:center;justify-content:center;}
+    #profile-modal,#att-modal,#ct-modal,#mat-purchase-modal,#mat-use-modal,#dept-add-modal{display:none;}
+    #bill-view-modal{display:none;}
     #apk-modal{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1rem;}
     #apk-modal.show{display:flex;}
+    /* Ensure fixed+inset+flex works for all modals */
+    [style*="display: flex"].fixed,[style*="display:flex"].fixed{display:flex!important;}
     .apk-card{background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:1.75rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
     #pwa-banner{position:fixed;bottom:0;left:0;right:0;z-index:200;background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:.75rem 1rem;display:none;align-items:center;justify-content:space-between;}
     .photo-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid rgba(99,102,241,.4);}
     .wbtn.selected{outline:3px solid #6366f1;background:#e0e7ff;}
     .month-chip{display:inline-flex;align-items:center;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:600;cursor:pointer;border:2px solid #e5e7eb;background:#ffffff;color:#374151;transition:background .15s,color .15s,border-color .15s;user-select:none;-webkit-user-select:none;}
+    .white-card,.bg-white{--card-shadow:0 4px 16px rgba(0,0,0,0.12),0 1px 4px rgba(0,0,0,0.08);}
+    .rounded-2xl.shadow-xl,.rounded-xl.shadow-xl{box-shadow:0 8px 32px rgba(0,0,0,0.18),0 2px 8px rgba(0,0,0,0.1)!important;}
     .month-chip.selected{background:#4f46e5 !important;color:#ffffff !important;border-color:#4f46e5 !important;}
     .month-chip:not(.selected){background:#ffffff !important;color:#374151 !important;border-color:#e5e7eb !important;}
+    /* Consistent card depth shadows */
+    .bg-white.rounded-2xl,.bg-white.rounded-xl{box-shadow:0 8px 28px rgba(0,0,0,0.22),0 3px 10px rgba(0,0,0,0.14)!important;}
+    .bg-gray-50.rounded-xl{box-shadow:0 6px 20px rgba(0,0,0,0.18),0 2px 7px rgba(0,0,0,0.12)!important;}
+    .stat-card{box-shadow:0 10px 30px rgba(0,0,0,0.32),0 3px 10px rgba(0,0,0,0.18)!important;}
   </style>
 </head>
 <body>
@@ -49,29 +210,27 @@
 
 <!-- HEADER -->
 
-<header class="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-3 shadow-2xl">
-  <div class="flex items-center justify-between gap-2">
-    <div class="flex items-center gap-2 flex-shrink-0">
-      <div class="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-xl text-xl">🏗️</div>
-      <div>
-        <h1 class="text-sm font-black text-white leading-tight">Sanjineer</h1>
-        <p class="text-purple-200 text-[9px] leading-tight">Construction Site Manager</p>
-        <p id="header-date" class="text-purple-300 text-[8px]"></p>
+<header class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:2px 8px">
+  <div class="flex items-center gap-1.5">
+    <!-- Left: icon + app name stacked tight -->
+    <div class="flex items-center gap-1 flex-shrink-0">
+      <div class="g-tobr-amber500-orange600 rounded-md flex items-center justify-center shadow" style="width:20px;height:20px;font-size:12px;line-height:1">🏗️</div>
+      <div style="line-height:1">
+        <p class="font-black text-white" style="font-size:13px;line-height:1">Sanjineer</p>
+        <p class="text-purple-200" style="font-size:10px;line-height:1">Site Manager</p>
       </div>
     </div>
-    <div class="flex-1 text-center px-1">
-      <p id="hdr-company" class="text-white font-black text-sm leading-tight truncate"></p>
-      <p id="hdr-engineer" class="text-amber-300 font-bold text-[11px] leading-tight truncate"></p>
-      <button onclick="openEditProfile()" class="text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full mt-0.5">✏️ Edit Profile</button>
+    <!-- Center: company + engineer + edit -->
+    <div class="flex-1 text-center min-w-0" style="line-height:1">
+      <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px;line-height:1"></p>
+      <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px;line-height:1"></p>
+      <button onclick="openEditProfile()" class="bg-white/20 text-white rounded-full font-semibold" style="font-size:10px;padding:1px 8px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none">✏️ Edit</button>
     </div>
-    <div class="flex items-center gap-1.5 flex-shrink-0">
-      <div class="text-right">
-        <p class="text-purple-200 text-[9px]">Total Spends</p>
-        <p id="header-spends" class="text-rose-300 font-bold text-lg leading-tight">₹0</p>
-      </div>
-      <button onclick="showApkModal()" class="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg active:scale-95">
-        <svg width="18" height="18" fill="none" stroke="white" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
-      </button>
+    <!-- Right: date + spends -->
+    <div class="text-right flex-shrink-0" style="line-height:1">
+      <p id="header-date" class="text-purple-300" style="font-size:10px;line-height:1"></p>
+      <p class="text-purple-200" style="font-size:8px;line-height:1">Total Spends</p>
+      <p id="header-spends" class="text-rose-300 font-bold" style="font-size:13px;line-height:1">₹0</p>
     </div>
   </div>
 </header>
@@ -79,16 +238,16 @@
 <!-- NAV -->
 
 <nav class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky top-0 z-30 px-2">
-  <div class="flex overflow-x-auto gap-1 py-1.5" style="scrollbar-width:none;">
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="dashboard">📊 Dashboard</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="daily">📋 Report</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="departmental">🏗️ Dept Work</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="attendance">📅 Attendance</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="expenses">💰 Expenses</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="materials">🧱 Materials</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="tools">🔧 Tools</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="rentals">📦 Rentals</button>
-    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="contractors">👥 Teams</button>
+  <div class="flex overflow-x-auto gap-0.5 py-1" style="scrollbar-width:none;">
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="daily" onclick="switchTab('daily')">📋 Report</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="departmental" onclick="switchTab('departmental')">🏗️ Dept Work</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="attendance" onclick="switchTab('attendance')">📅 Attendance</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="expenses" onclick="switchTab('expenses')">💰 Expenses</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="materials" onclick="switchTab('materials')">🧱 Materials</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="tools" onclick="switchTab('tools')">🔧 Tools</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="rentals" onclick="switchTab('rentals')">📦 Rentals</button>
+    <button class="tab-btn flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-white/70 rounded-lg" data-tab="contractors" onclick="switchTab('contractors')">👥 Teams</button>
   </div>
 </nav>
 
@@ -98,91 +257,91 @@
 
 <div id="tab-dashboard" class="tab-content" style="display:none">
   <div class="grid grid-cols-2 gap-2.5 mb-3">
-    <div class="stat-card bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-amber-100">Advances Given</p><p id="dash-advance" class="text-xl font-bold">₹0</p><p class="text-[10px] text-amber-200">This Month</p></div>
-    <div class="stat-card bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-rose-100">Remaining</p><p id="dash-remaining" class="text-xl font-bold">₹0</p><p class="text-[10px] text-rose-200">After Advances</p></div>
+    <div class="g-tobr-amber500-orange500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-amber-100">Advances Given</p><p id="dash-advance" class="text-sm font-bold leading-none">₹0</p><p class="text-[10px] text-amber-200">This Month</p></div>
+    <div class="g-tobr-rose500-pink500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-rose-100">Remaining</p><p id="dash-remaining" class="text-sm font-bold leading-none">₹0</p><p class="text-[10px] text-rose-200">After Advances</p></div>
   </div>
   <div class="grid grid-cols-3 gap-2.5 mb-3">
-    <div class="stat-card bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-emerald-100">Material</p><p id="dash-material" class="text-xl font-bold">₹0</p></div>
-    <div class="stat-card bg-gradient-to-br from-cyan-500 to-sky-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-cyan-100">Cash In</p><p id="dash-petty" class="text-xl font-bold">₹0</p></div>
-    <div class="stat-card bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-violet-100">Cash Left</p><p id="dash-petty-left" class="text-xl font-bold">₹0</p></div>
+    <div class="g-tobr-emerald500-teal500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-emerald-100">Material</p><p id="dash-material" class="text-sm font-bold leading-none">₹0</p></div>
+    <div class="g-tobr-cyan500-sky500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-cyan-100">Cash In</p><p id="dash-petty" class="text-sm font-bold leading-none">₹0</p></div>
+    <div class="g-tobr-violet500-purple500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-violet-100">Cash Left</p><p id="dash-petty-left" class="text-sm font-bold leading-none">₹0</p></div>
   </div>
   <div class="grid grid-cols-2 gap-2.5 mb-3">
-    <div class="stat-card bg-gradient-to-br from-indigo-500 to-violet-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-indigo-100">Rental Expense</p><p id="dash-rental-out" class="text-xl font-bold">₹0</p></div>
-    <div class="stat-card bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl p-3 text-white shadow-xl"><p class="text-[10px] text-green-100">Rental Income</p><p id="dash-rental-in" class="text-xl font-bold">₹0</p></div>
+    <div class="g-tobr-indigo500-violet500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-indigo-100">Rental Expense</p><p id="dash-rental-out" class="text-sm font-bold leading-none">₹0</p></div>
+    <div class="g-tobr-green500-emerald500 stat-card rounded-xl px-2 py-1 text-white shadow-xl"><p class="text-[10px] text-green-100">Rental Income</p><p id="dash-rental-in" class="text-sm font-bold leading-none">₹0</p></div>
   </div>
-  <div id="dash-low-stock" class="mb-3 hidden"><div class="bg-gradient-to-br from-red-500 to-rose-600 rounded-xl p-3 text-white shadow-xl"><p class="font-bold text-sm mb-1.5">⚠️ Low Stock Alert</p><div id="dash-low-list"></div></div></div>
+  <div id="dash-low-stock" class="mb-3 hidden"><div class="g-tobr-red500-rose600 rounded-xl p-3 text-white shadow-xl"><p class="font-bold text-sm mb-1.5">⚠️ Low Stock Alert</p><div id="dash-low-list"></div></div></div>
   <div class="bg-white rounded-xl p-3 shadow-xl"><h3 class="font-bold text-gray-800 mb-2">Teams This Month</h3><div id="team-details"><p class="text-gray-400 text-center py-4 text-sm">No teams yet</p></div></div>
 </div>
 
 <!-- ===== DAILY / REPORT TAB ===== -->
 
 <div id="tab-daily" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-lg font-bold text-gray-800">📋 Daily Report</h3>
-      <div class="flex items-center gap-2 flex-wrap">
-        <input type="date" id="daily-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <button onclick="loadDailyReport()" class="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-semibold active:scale-95">📂 Load</button>
-        <button onclick="printDailyReport()" class="px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+  <div class="bg-white rounded-xl mb-2 shadow-xl" style="padding:6px 10px">
+    <div class="flex items-center justify-between gap-2">
+      <p class="text-xs font-bold text-gray-700">📋 Daily Report</p>
+      <div class="flex items-center gap-1.5">
+        <input type="date" id="daily-date" class="border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" style="padding:3px 6px">
+        <button onclick="loadDailyReport()" class="g-tor-emerald500-teal500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:3px 8px">📂 Load</button>
+        <button onclick="printDailyReport()" class="g-tor-indigo500-purple600 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:3px 8px">🖨️ Print</button>
       </div>
     </div>
-    <p id="daily-label" class="text-xs text-gray-500 mt-2 font-medium"></p>
+    <p id="daily-label" class="text-gray-500 font-medium" style="font-size:9px;margin-top:1px"></p>
   </div>
 
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
-    <h3 class="text-sm font-bold text-gray-700 mb-3">🌤️ Site Status</h3>
-    <div class="flex gap-2 mb-3">
-      <button onclick="setWeather('☀️ Sunny')" id="wbtn-sunny" class="wbtn flex-1 py-2 rounded-xl text-sm font-bold border-2 border-gray-200 bg-amber-50 text-amber-700">☀️ Sunny</button>
-      <button onclick="setWeather('☁️ Cloudy')" id="wbtn-cloudy" class="wbtn flex-1 py-2 rounded-xl text-sm font-bold border-2 border-gray-200 bg-gray-100 text-gray-700">☁️ Cloudy</button>
-      <button onclick="setWeather('🌧️ Rainy')" id="wbtn-rainy" class="wbtn flex-1 py-2 rounded-xl text-sm font-bold border-2 border-gray-200 bg-blue-50 text-blue-700">🌧️ Rainy</button>
+  <div class="bg-white rounded-xl mb-2 shadow-xl" style="padding:6px 10px">
+    <p class="text-xs font-bold text-gray-700 mb-1.5">🌤️ Site Status</p>
+    <div class="flex gap-1.5 mb-1.5">
+      <button onclick="setWeather('☀️ Sunny')" id="wbtn-sunny" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-amber-50 text-amber-700" style="padding:3px 0">☀️ Sunny</button>
+      <button onclick="setWeather('☁️ Cloudy')" id="wbtn-cloudy" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-gray-100 text-gray-700" style="padding:3px 0">☁️ Cloudy</button>
+      <button onclick="setWeather('🌧️ Rainy')" id="wbtn-rainy" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-blue-50 text-blue-700" style="padding:3px 0">🌧️ Rainy</button>
     </div>
-    <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm mb-2 resize-none focus:outline-none focus:border-indigo-400"></textarea>
-    <button onclick="saveDailyMeta()" class="w-full py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-sm font-semibold active:scale-95">💾 Save Site Status</button>
+    <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full border border-gray-200 rounded-lg text-xs mb-1.5 resize-none focus:outline-none focus:border-indigo-400" style="padding:4px 8px"></textarea>
+    <button onclick="saveDailyMeta()" class="g-tor-indigo500-purple500 w-full text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:4px 0">💾 Save Site Status</button>
   </div>
 
-  <div class="grid grid-cols-2 gap-3 mb-3">
-    <div class="bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl p-3 text-white"><p class="text-xs text-rose-100">Advances Today</p><p id="daily-advances" class="text-xl font-bold">₹0</p></div>
-    <div class="bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl p-3 text-white"><p class="text-xs text-amber-100">Material Today</p><p id="daily-mat-cost" class="text-xl font-bold">₹0</p></div>
+  <div class="grid grid-cols-2 gap-2 mb-2">
+    <div class="g-tobr-rose500-pink500 rounded-xl text-white" style="padding:5px 10px"><p class="text-[9px] text-rose-100 leading-none">Advances Today</p><p id="daily-advances" class="text-base font-bold leading-none mt-0.5">₹0</p></div>
+    <div class="g-tobr-amber500-orange500 rounded-xl text-white" style="padding:5px 10px"><p class="text-[9px] text-amber-100 leading-none">Material Today</p><p id="daily-mat-cost" class="text-base font-bold leading-none mt-0.5">₹0</p></div>
   </div>
 
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <h3 class="font-bold text-gray-800 mb-3">👷 Labour Summary</h3>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
-        <thead><tr class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Type</th><th class="px-3 py-2 text-center">Count</th><th class="px-3 py-2 text-center">Hours</th><th class="px-3 py-2 text-left">Work Done</th><th class="px-3 py-2 text-center rounded-r-lg">✏️</th></tr></thead>
+        <thead><tr class="g-tor-indigo500-purple500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Type</th><th class="px-3 py-2 text-center">Count</th><th class="px-3 py-2 text-center">Hours</th><th class="px-3 py-2 text-left">Work Done</th><th class="px-3 py-2 text-center rounded-r-lg">✏️</th></tr></thead>
         <tbody id="daily-labour"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No attendance today</td></tr></tbody>
       </table>
     </div>
   </div>
 
-  <div id="daily-dept-section" class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+  <div id="daily-dept-section" class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <h3 class="font-bold text-gray-800 text-sm">🏗️ Departmental Work</h3>
       <button onclick="switchTab('departmental')" class="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-lg text-xs font-semibold active:scale-95">+ Add →</button>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-xs">
-        <thead><tr class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Category</th><th class="px-2 py-2 text-center">Workers</th><th class="px-2 py-2 text-center">Hours</th><th class="px-2 py-2 text-left">Work Done</th><th class="px-2 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
+        <thead><tr class="g-tor-purple600-indigo600 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Category</th><th class="px-2 py-2 text-center">Workers</th><th class="px-2 py-2 text-center">Hours</th><th class="px-2 py-2 text-left">Work Done</th><th class="px-2 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
         <tbody id="daily-dept-table"><tr><td colspan="5" class="px-3 py-3 text-center text-gray-400">No departmental work today</td></tr></tbody>
         <tfoot><tr id="daily-dept-foot" class="bg-purple-50 font-bold text-purple-700 text-xs" style="display:none"><td class="px-2 py-1.5 rounded-l-lg">Total</td><td id="daily-dept-foot-w" class="px-2 py-1.5 text-center">0</td><td id="daily-dept-foot-h" class="px-2 py-1.5 text-center">0h</td><td class="px-2 py-1.5"></td><td id="daily-dept-foot-a" class="px-2 py-1.5 text-right rounded-r-lg">₹0</td></tr></tfoot>
       </table>
     </div>
   </div>
 
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <h3 class="font-bold text-gray-800 mb-3">🧱 Materials Purchased Today</h3>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
-        <thead><tr class="bg-gradient-to-r from-amber-500 to-orange-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Material</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
+        <thead><tr class="g-tor-amber500-orange500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Material</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
         <tbody id="daily-mat-table"><tr><td colspan="3" class="px-3 py-4 text-center text-gray-400">None today</td></tr></tbody>
       </table>
     </div>
   </div>
 
-  <div class="bg-white rounded-2xl p-4 shadow-xl">
+  <div class="bg-white rounded-2xl p-3 shadow-xl">
     <h3 class="text-sm font-bold text-gray-700 mb-3">📷 Site Photos (max 4)</h3>
     <div class="flex gap-2 flex-wrap mb-3" id="photo-previews"><p class="text-gray-400 text-xs">No photos yet</p></div>
-    <label class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-sm font-semibold cursor-pointer active:scale-95 inline-flex items-center gap-2">
+    <label class="g-tor-amber500-orange500 px-4 py-2.5 text-white rounded-xl text-sm font-semibold cursor-pointer active:scale-95 inline-flex items-center gap-2">
       📷 Add Photo
       <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="addPhoto(event)">
     </label>
@@ -201,7 +360,7 @@
         <option value="">-- Select Worker --</option>
       </select>
       <select id="att-print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-      <button onclick="printWorkerAttendance()" class="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="printWorkerAttendance()" class="g-tor-violet500-purple600 flex-shrink-0 px-4 py-2 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -217,7 +376,7 @@
         <option value="">Select Team</option>
       </select>
       <input type="number" id="w-wage" placeholder="Hourly Wage (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addWorker()" class="col-span-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Worker</button>
+      <button onclick="addWorker()" class="g-tor-emerald500-teal500 col-span-2 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Worker</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 shadow-xl">
@@ -234,7 +393,7 @@
     <div class="grid grid-cols-3 gap-3">
       <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="date" id="petty-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addPettyCash()" class="bg-gradient-to-r from-cyan-500 to-sky-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💰 Deposit</button>
+      <button onclick="addPettyCash()" class="g-tor-cyan500-sky500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💰 Deposit</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -276,19 +435,19 @@
           </div>
         </div>
       </div>
-      <button onclick="addExpenseMaterial()" class="col-span-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Save Purchase</button>
+      <button onclick="addExpenseMaterial()" class="g-tor-amber500-orange500 col-span-2 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Save Purchase</button>
     </div>
   </div>
-  <div class="grid grid-cols-3 gap-3 mb-3">
-    <div class="bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl p-3 text-white"><p class="text-[10px] text-emerald-100">Material Cost</p><p id="exp-mat-total" class="text-xl font-bold">₹0</p></div>
-    <div class="bg-gradient-to-br from-cyan-500 to-sky-500 rounded-xl p-3 text-white"><p class="text-[10px] text-cyan-100">Cash In</p><p id="exp-petty-in" class="text-xl font-bold">₹0</p></div>
-    <div class="bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl p-3 text-white"><p class="text-[10px] text-violet-100">Remaining</p><p id="exp-petty-left" class="text-xl font-bold">₹0</p></div>
+  <div class="grid grid-cols-3 gap-2.5 mb-3">
+    <div class="g-tobr-emerald500-teal500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-emerald-100 leading-none">Material Cost</p><p id="exp-mat-total" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
+    <div class="g-tobr-cyan500-sky500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-cyan-100 leading-none">Cash In</p><p id="exp-petty-in" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
+    <div class="g-tobr-violet500-purple500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-violet-100 leading-none">Remaining</p><p id="exp-petty-left" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
   </div>
   <div class="bg-white rounded-2xl p-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">💰 Expense Ledger</p>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
-        <thead><tr class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Date</th><th class="px-3 py-2 text-left">Description</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
+        <thead><tr class="g-tor-emerald500-teal500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Date</th><th class="px-3 py-2 text-left">Description</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
         <tbody id="expenses-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No expenses yet</td></tr></tbody>
       </table>
     </div>
@@ -300,13 +459,13 @@
 <div id="tab-materials" class="tab-content" style="display:none">
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">🧱 Add Material / Stock Item <span class="font-normal text-gray-400">— set min alert level</span></p>
-    <div class="grid grid-cols-2 gap-3 mb-3">
+    <div class="grid grid-cols-2 gap-2.5 mb-3">
       <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
     </div>
-    <button onclick="addMaterialItem()" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
+    <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
   </div>
   <div id="materials-list" class="space-y-3">
     <p class="text-white/50 text-center py-4">No materials added yet</p>
@@ -323,8 +482,8 @@
         <input type="date" id="dept-tab-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       </div>
       <div class="flex gap-2 self-end">
-        <button onclick="loadDeptTab()" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
-        <button onclick="printDeptReport()" class="px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Day</button>
+        <button onclick="loadDeptTab()" class="g-tor-emerald500-teal500 px-3 py-2 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
+        <button onclick="printDeptReport()" class="g-tor-indigo500-purple600 px-3 py-2 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Day</button>
       </div>
     </div>
     <p id="dept-tab-label" class="text-xs text-indigo-600 font-semibold mt-1.5"></p>
@@ -335,18 +494,18 @@
       <span id="dept-total-amount" class="text-base font-black text-amber-600 truncate">₹0</span>
     </div>
     <select id="dept-print-month" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none flex-shrink-0 max-w-[130px]"></select>
-    <button onclick="printDeptMonthly()" class="px-3 py-1.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-lg text-xs font-bold active:scale-95 whitespace-nowrap flex-shrink-0">🖨️ Month</button>
+    <button onclick="printDeptMonthly()" class="g-tor-violet500-purple600 px-3 py-1.5 text-white rounded-lg text-xs font-bold active:scale-95 whitespace-nowrap flex-shrink-0">🖨️ Month</button>
   </div>
   <div style="display:none"><span id="dept-total-workers">0</span><span id="dept-total-hours">0</span></div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">📋 Departmental Work Records</p>
-      <button onclick="openAddDeptModal()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-xs font-bold active:scale-95">+ Add</button>
+      <button onclick="openAddDeptModal()" class="g-tor-indigo500-purple500 px-3 py-1.5 text-white rounded-xl text-xs font-bold active:scale-95">+ Add</button>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full" style="font-size:11px;">
         <thead>
-          <tr class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
+          <tr class="g-tor-purple600-indigo600 text-white">
             <th class="px-2 py-2 text-left rounded-l-lg">Category</th>
             <th class="px-2 py-2 text-center">Workers</th>
             <th class="px-2 py-2 text-center">Hours</th>
@@ -359,7 +518,7 @@
           <tr><td colspan="6" class="px-3 py-4 text-center text-gray-400 text-xs">No entries for this date</td></tr>
         </tbody>
         <tfoot>
-          <tr class="bg-indigo-50 font-bold text-indigo-700" style="font-size:11px;">
+          <tr id="dept-tab-foot" class="bg-indigo-50 font-bold text-indigo-700" style="font-size:11px;display:none">
             <td class="px-2 py-2 rounded-l-lg">Total</td>
             <td id="dept-foot-workers" class="px-2 py-2 text-center">0</td>
             <td id="dept-foot-hours" class="px-2 py-2 text-center">0h</td>
@@ -383,21 +542,21 @@
       <input type="number" id="tl-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="date" id="tl-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="tl-cost" placeholder="Cost (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addTool()" class="col-span-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Tool</button>
+      <button onclick="addTool()" class="g-tor-violet500-purple500 col-span-2 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Tool</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">🔧 Tools List</p>
-    <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-violet-500 to-purple-500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Tool</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-center">Date</th><th class="px-3 py-2 text-right">Cost</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
+    <table class="w-full text-sm"><thead><tr class="g-tor-violet500-purple500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Tool</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-center">Date</th><th class="px-3 py-2 text-right">Cost</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
     <tbody id="tools-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No tools</td></tr></tbody></table>
   </div>
   <div class="bg-white rounded-2xl p-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">📋 Assign Tool</p>
-    <div class="grid grid-cols-2 gap-3 mb-3">
+    <div class="grid grid-cols-2 gap-2.5 mb-3">
       <select id="as-tool" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Tool</option></select>
       <select id="as-worker" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Worker</option></select>
       <input type="date" id="as-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
-      <button onclick="assignTool()" class="bg-gradient-to-r from-indigo-500 to-blue-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Assign</button>
+      <button onclick="assignTool()" class="g-tor-indigo500-blue500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Assign</button>
     </div>
     <div id="tool-assignments"><p class="text-gray-400 text-center py-2 text-sm">No assignments</p></div>
   </div>
@@ -412,7 +571,6 @@
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print by Client <span class="font-normal text-gray-400">— filter client rental records by month</span></p>
 
-```
 <!-- Client selector -->
 <div class="mb-3">
   <label class="text-xs font-semibold text-gray-500 block mb-1">👤 Select Client</label>
@@ -432,8 +590,7 @@
 
 <p id="rental-client-no-data" class="text-xs text-rose-400 hidden mb-2">No rentals found for this client.</p>
 
-<button onclick="printRentalByClient()" class="w-full py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-bold active:scale-95">🖨️ Print Client Rental Report</button>
-```
+<button onclick="printRentalByClient()" class="g-tor-indigo500-purple600 w-full py-2 text-white rounded-xl text-sm font-bold active:scale-95">🖨️ Print Client Rental Report</button>
 
   </div>
 
@@ -449,9 +606,9 @@
   <!-- We Rented Section -->
 
   <div id="rsec-borrow">
-    <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-xs font-semibold text-gray-500 mb-2">📦 Equipment We Rented</p>
-      <div class="grid grid-cols-2 gap-3 mb-3">
+      <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="rb-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
         <input type="text" id="rb-client" placeholder="Owner / Party Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
         <input type="number" id="rb-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -483,9 +640,9 @@
           </div>
         </div>
       </div>
-      <button onclick="addRental('borrow')" class="w-full bg-gradient-to-r from-rose-500 to-pink-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Rental</button>
+      <button onclick="addRental('borrow')" class="g-tor-rose500-pink500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Rental</button>
       <div class="mt-4 overflow-x-auto">
-        <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-rose-500 to-pink-500 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Item</th><th class="px-2 py-2">Owner</th><th class="px-2 py-2">Qty</th><th class="px-2 py-2">From</th><th class="px-2 py-2">Days</th><th class="px-2 py-2 text-right">Total</th><th class="px-2 py-2 rounded-r-lg">Del</th></tr></thead>
+        <table class="w-full text-sm"><thead><tr class="g-tor-rose500-pink500 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Item</th><th class="px-2 py-2">Owner</th><th class="px-2 py-2">Qty</th><th class="px-2 py-2">From</th><th class="px-2 py-2">Days</th><th class="px-2 py-2 text-right">Total</th><th class="px-2 py-2 rounded-r-lg">Del</th></tr></thead>
         <tbody id="rtable-borrow"><tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">None yet</td></tr></tbody>
         <tfoot><tr class="bg-rose-50"><td colspan="5" class="px-3 py-2 font-bold text-rose-700">Total Expense</td><td id="rental-exp-total" class="px-3 py-2 text-right font-bold text-rose-700">₹0</td><td></td></tr></tfoot></table>
       </div>
@@ -495,9 +652,9 @@
   <!-- Given Out Section -->
 
   <div id="rsec-given" style="display:none">
-    <div class="bg-white rounded-2xl p-4 shadow-xl">
+    <div class="bg-white rounded-2xl p-3 shadow-xl">
       <p class="text-xs font-semibold text-gray-500 mb-2">💰 Given to Others</p>
-      <div class="grid grid-cols-2 gap-3 mb-3">
+      <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="rg-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
         <input type="text" id="rg-client" placeholder="Client Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
         <input type="number" id="rg-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -529,9 +686,9 @@
           </div>
         </div>
       </div>
-      <button onclick="addRental('given')" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
+      <button onclick="addRental('given')" class="g-tor-emerald500-teal500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
       <div class="mt-4 overflow-x-auto">
-        <table class="w-full text-sm"><thead><tr class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Item</th><th>Qty</th><th>Client</th><th>From</th><th>Days</th><th class="text-right">Total</th><th class="rounded-r-lg">Del</th></tr></thead>
+        <table class="w-full text-sm"><thead><tr class="g-tor-emerald500-teal500 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Item</th><th>Qty</th><th>Client</th><th>From</th><th>Days</th><th class="text-right">Total</th><th class="rounded-r-lg">Del</th></tr></thead>
         <tbody id="rtable-given"><tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">None yet</td></tr></tbody>
         <tfoot><tr class="bg-emerald-50"><td colspan="5" class="px-3 py-2 font-bold text-emerald-700">Total Income</td><td id="rental-inc-total" class="px-3 py-2 text-right font-bold text-emerald-700">₹0</td><td></td></tr></tfoot></table>
       </div>
@@ -542,11 +699,11 @@
 <!-- ===== TEAMS ===== -->
 
 <div id="tab-contractors" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-4 mb-3 shadow-xl">
+  <div class="bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
     <div class="flex items-center justify-between gap-2">
-      <button onclick="changeViewMonth(-1)" class="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-sm font-medium">← Prev</button>
-      <div class="text-center"><p class="text-xs text-gray-500">Period</p><p id="teams-period" class="font-bold text-gray-800"></p></div>
-      <button onclick="changeViewMonth(1)" class="px-4 py-2 bg-indigo-100 text-indigo-600 rounded-xl text-sm font-medium">Next →</button>
+      <button onclick="changeViewMonth(-1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:3px 10px">← Prev</button>
+      <div class="text-center"><p class="text-[9px] text-gray-500 leading-none">Period</p><p id="teams-period" class="text-sm font-bold text-gray-800 leading-none mt-0.5"></p></div>
+      <button onclick="changeViewMonth(1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:3px 10px">Next →</button>
     </div>
   </div>
   <!-- Monthly Payment Report Panel -->
@@ -557,7 +714,7 @@
       <select id="teams-print-filter" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
         <option value="all">All Teams</option>
       </select>
-      <button onclick="printMonthlyReport()" class="flex-shrink-0 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="printMonthlyReport()" class="g-tor-violet500-purple600 flex-shrink-0 px-4 py-2 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -568,7 +725,7 @@
         <option value="Team">Team/Contractor</option><option value="Staff">Staff</option>
       </select>
       <input type="number" id="ct-total" placeholder="Contract Amount (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
-      <button onclick="addContractor()" class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
+      <button onclick="addContractor()" class="g-tor-indigo500-purple500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
     </div>
   </div>
   <div id="contractors-list" class="space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
@@ -581,7 +738,7 @@
 
 <!-- Edit Profile -->
 
-<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1">
       <h3 class="font-bold text-gray-800">⚙️ Profile Settings</h3>
@@ -591,41 +748,41 @@
     <div class="space-y-3">
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company / Project Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Engineer / Owner Name</label><input id="edit-engineer" type="text" placeholder="e.g. Er. Sanjeev Kumar" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <button onclick="saveProfile()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold active:scale-95">💾 Save Profile</button>
+      <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-3 rounded-xl font-semibold active:scale-95">💾 Save Profile</button>
     </div>
   </div>
 </div>
 
 <!-- Attendance Modal -->
 
-<div id="att-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+<div id="att-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-4"><h3 id="att-modal-title" class="font-bold text-gray-800">Attendance</h3><button onclick="closeAttModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
       <div><label class="text-xs font-medium text-gray-600">Date</label><input type="date" id="att-date" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
       <div><label class="text-xs font-medium text-gray-600">Hours Worked</label><input type="number" id="att-hours" placeholder="Hours" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
       <div><label class="text-xs font-medium text-gray-600">Advance Payment (Optional)</label><input type="number" id="att-advance" placeholder="Amount" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-      <button onclick="saveAttendance()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
+      <button onclick="saveAttendance()" class="g-tor-indigo500-purple500 w-full text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
     </div>
   </div>
 </div>
 
 <!-- Contractor Payment Modal -->
 
-<div id="ct-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+<div id="ct-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-4"><h3 id="ct-modal-title" class="font-bold text-gray-800">Add Payment</h3><button onclick="closeCTModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
       <div><label class="text-xs font-medium text-gray-600">Date</label><input type="date" id="ct-pay-date" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
       <div><label class="text-xs font-medium text-gray-600">Amount (₹)</label><input type="number" id="ct-pay-amt" placeholder="Amount" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-      <button onclick="saveCTPayment()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
+      <button onclick="saveCTPayment()" class="g-tor-indigo500-purple500 w-full text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
     </div>
   </div>
 </div>
 
 <!-- Material Purchase Modal -->
 
-<div id="mat-purchase-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+<div id="mat-purchase-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
     <div class="flex items-center justify-between mb-4"><h3 id="mat-modal-title" class="font-bold text-gray-800 text-base">📦 Record Purchase</h3><button onclick="closeMatModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
@@ -666,28 +823,28 @@
           </div>
         </div>
       </div>
-      <button onclick="saveMatPurchase()" class="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-bold text-base active:scale-95">💾 Save Purchase</button>
+      <button onclick="saveMatPurchase()" class="g-tor-emerald500-teal500 w-full py-3 text-white rounded-xl font-bold text-base active:scale-95">💾 Save Purchase</button>
     </div>
   </div>
 </div>
 
 <!-- Material Use Modal -->
 
-<div id="mat-use-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+<div id="mat-use-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-4"><h3 id="mat-use-title" class="font-bold text-gray-800">🔨 Mark as Used</h3><button onclick="closeMatUseModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="mu-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity Used *</label><input type="number" id="mu-qty" placeholder="e.g. 10" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Note</label><input type="text" id="mu-note" placeholder="Where/how used..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <button onclick="saveMatUse()" class="w-full py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl font-bold text-base active:scale-95">🔨 Mark Used</button>
+      <button onclick="saveMatUse()" class="g-tor-rose500-pink500 w-full py-3 text-white rounded-xl font-bold text-base active:scale-95">🔨 Mark Used</button>
     </div>
   </div>
 </div>
 
 <!-- Bill Viewer Modal -->
 
-<div id="bill-view-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm hidden z-50 flex items-center justify-center p-3" onclick="closeBillViewer()">
+<div id="bill-view-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 items-center justify-center p-3" onclick="closeBillViewer()" style="display:none">
   <div class="w-full max-w-sm" style="max-height:92vh;display:flex;flex-direction:column;" onclick="event.stopPropagation()">
     <div class="flex justify-between items-center mb-2 flex-shrink-0">
       <div class="flex items-center gap-2">
@@ -719,7 +876,7 @@
 
 <!-- Departmental Work Add Modal -->
 
-<div id="dept-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+<div id="dept-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-4">
       <h3 class="font-bold text-gray-800">🏗️ Add Departmental Work</h3>
@@ -762,7 +919,7 @@
         <label class="text-xs font-semibold text-gray-500 block mb-1">Amount (₹)</label>
         <input type="number" id="da-amount" placeholder="Total payment for this work" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       </div>
-      <button onclick="saveDeptEntry()" class="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save Entry</button>
+      <button onclick="saveDeptEntry()" class="g-tor-indigo500-purple600 w-full py-3 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save Entry</button>
     </div>
   </div>
 </div>
@@ -809,18 +966,29 @@
 // STORAGE
 // ============================================================
 var DB='cm_data', META='cm_meta', MATS='cm_matstore', DEPT='cm_dept', PROF='cm_profile', PHKEYS='cm_phkeys';
-function ld(){try{return JSON.parse(localStorage.getItem(DB)||'[]');}catch(e){return [];}}
-function sd(d){localStorage.setItem(DB,JSON.stringify(d));}
-function lm(){try{return JSON.parse(localStorage.getItem(META)||'{}');}catch(e){return {};}}
-function sm(x){localStorage.setItem(META,JSON.stringify(x));}
-function lmat(){try{return JSON.parse(localStorage.getItem(MATS)||'[]');}catch(e){return [];}}
-function smat(x){localStorage.setItem(MATS,JSON.stringify(x));}
-function ldept(){try{return JSON.parse(localStorage.getItem(DEPT)||'{}');}catch(e){return {};}}
-function sdept(x){localStorage.setItem(DEPT,JSON.stringify(x));}
-function lprof(){try{return JSON.parse(localStorage.getItem(PROF)||'null');}catch(e){return null;}}
-function sprof(x){localStorage.setItem(PROF,JSON.stringify(x));}
-function lphkeys(){try{return JSON.parse(localStorage.getItem(PHKEYS)||'{}');}catch(e){return {};}}
-function sphkeys(x){localStorage.setItem(PHKEYS,JSON.stringify(x));}
+// Safe storage — falls back to in-memory when localStorage is blocked (incognito)
+var _memStore = {};
+var _ls = (function() {
+  try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); return localStorage; } catch(e) { return null; }
+})();
+var safeLS = {
+  getItem: function(k) { if (_ls) { try { return _ls.getItem(k); } catch(e) {} } return _memStore[k] !== undefined ? _memStore[k] : null; },
+  setItem: function(k, v) { if (_ls) { try { _ls.setItem(k, v); } catch(e) {} } _memStore[k] = v; },
+  removeItem: function(k) { if (_ls) { try { _ls.removeItem(k); } catch(e) {} } delete _memStore[k]; }
+};
+
+function ld(){try{return JSON.parse(safeLS.getItem(DB)||'[]');}catch(e){return [];}}
+function sd(d){safeLS.setItem(DB,JSON.stringify(d));}
+function lm(){try{return JSON.parse(safeLS.getItem(META)||'{}');}catch(e){return {};}}
+function sm(x){safeLS.setItem(META,JSON.stringify(x));}
+function lmat(){try{return JSON.parse(safeLS.getItem(MATS)||'[]');}catch(e){return [];}}
+function smat(x){safeLS.setItem(MATS,JSON.stringify(x));}
+function ldept(){try{return JSON.parse(safeLS.getItem(DEPT)||'{}');}catch(e){return {};}}
+function sdept(x){safeLS.setItem(DEPT,JSON.stringify(x));}
+function lprof(){try{return JSON.parse(safeLS.getItem(PROF)||'null');}catch(e){return null;}}
+function sprof(x){safeLS.setItem(PROF,JSON.stringify(x));}
+function lphkeys(){try{return JSON.parse(safeLS.getItem(PHKEYS)||'{}');}catch(e){return {};}}
+function sphkeys(x){safeLS.setItem(PHKEYS,JSON.stringify(x));}
 
 // ============================================================
 // INDEXEDDB
@@ -874,7 +1042,7 @@ function idbGetAll(keys, cb) {
 }
 function migrateOldPhotos() {
   var old = null;
-  try { old = JSON.parse(localStorage.getItem('cm_photos') || 'null'); } catch(e) {}
+  try { old = JSON.parse(safeLS.getItem('cm_photos') || 'null'); } catch(e) {}
   if (!old) return;
   var idx = lphkeys();
   Object.keys(old).forEach(function(date) {
@@ -889,7 +1057,7 @@ function migrateOldPhotos() {
     idx[date] = keys;
   });
   sphkeys(idx);
-  localStorage.removeItem('cm_photos');
+  safeLS.removeItem('cm_photos');
 }
 
 // ============================================================
@@ -898,8 +1066,10 @@ function migrateOldPhotos() {
 var CATS = ['Mason','Labour','Carpenter','Helper','Fitter','Fitter Helper','Supervisor'];
 
 function ist() {
-  var n = new Date();
-  return new Date(n.getTime() + 19800000).toISOString().split('T')[0];
+  return new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Kolkata'});
+}
+function istNow() {
+  return new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'});
 }
 function fc(n) {
   return '\u20b9' + (parseFloat(n)||0).toLocaleString('en-IN', {maximumFractionDigits:2});
@@ -911,7 +1081,7 @@ function fd(d) {
 }
 function fdl(d) {
   if (!d) return '';
-  return new Date(d+'T00:00:00').toLocaleDateString('en-IN', {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return new Date(d+'T00:00:00').toLocaleDateString('en-IN', {timeZone:'Asia/Kolkata',weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 function daysb(d1, d2) {
   var diff = new Date(d2+'T00:00:00') - new Date(d1+'T00:00:00');
@@ -940,11 +1110,11 @@ function dedup(list) {
 var AD = [], WID = null, CID = null, MID = null;
 var VM = new Date(), DD = ist(), DTD = ist();
 var PDEL = null, DTMR = null, PWA = null;
-var NID = parseInt(localStorage.getItem('cm_nid') || '1');
+var NID = parseInt(safeLS.getItem('cm_nid') || '1');
 
 function gid() {
   var id = 'r' + NID++;
-  localStorage.setItem('cm_nid', NID);
+  safeLS.setItem('cm_nid', NID);
   return id;
 }
 
@@ -1001,15 +1171,17 @@ function applyProfile() {
   var el2 = document.getElementById('hdr-engineer');
   if (el1) el1.textContent = p ? p.company : 'Tap Edit Profile';
   if (el2) el2.textContent = p ? p.engineer : 'Set your name';
+  var hdEl = document.getElementById('header-date');
+  if (hdEl) hdEl.textContent = new Date().toLocaleDateString('en-IN', {timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'});
 }
 function openEditProfile() {
   var p = lprof() || {};
   document.getElementById('edit-company').value = p.company || '';
   document.getElementById('edit-engineer').value = p.engineer || '';
-  document.getElementById('profile-modal').style.display = 'flex';
+  document.getElementById('profile-modal').classList.add('modal-show');
 }
 function closeProfileModal() {
-  document.getElementById('profile-modal').style.display = 'none';
+  document.getElementById('profile-modal').classList.remove('modal-show');
 }
 function saveProfile() {
   var co = document.getElementById('edit-company').value.trim();
@@ -1041,7 +1213,7 @@ function installPWA(){
 }
 function dismissPWA(){
   document.getElementById('pwa-banner').style.display = 'none';
-  localStorage.setItem('pwa_dismissed','1');
+  safeLS.setItem('pwa_dismissed','1');
 }
 
 // ============================================================
@@ -1058,41 +1230,38 @@ function switchTab(name) {
   if (el) el.style.display = 'block';
 
   document.querySelectorAll('.tab-btn').forEach(function(b) {
-    if (b.dataset.tab === name) {
-      b.style.background = 'rgba(255,255,255,0.22)';
-      b.style.color = '#ffffff';
-      b.style.boxShadow = '0 3px 14px rgba(0,0,0,0.25)';
-      b.style.fontWeight = '700';
-    } else {
-      b.style.background = '';
-      b.style.color = 'rgba(255,255,255,0.65)';
-      b.style.boxShadow = '';
-      b.style.fontWeight = '600';
-    }
+    b.classList.toggle('active', b.dataset.tab === name);
+    b.style.background = '';
+    b.style.color = '';
+    b.style.boxShadow = '';
+    b.style.fontWeight = '';
   });
 
-  AD = ld();
-  if      (name === 'dashboard')    updateDash();
-  else if (name === 'daily')        { loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); }
-  else if (name === 'departmental') loadDeptTab();
-  else if (name === 'attendance')   viewWorkers();
-  else if (name === 'expenses')     viewExpenses();
-  else if (name === 'materials')    viewMaterials();
-  else if (name === 'tools')        viewTools();
-  else if (name === 'rentals')      viewRentals();
-  else if (name === 'contractors')  viewContractors();
-  updateDropdowns();
+  try {
+    AD = ld();
+    if      (name === 'dashboard')    updateDash();
+    else if (name === 'daily')        { loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); }
+    else if (name === 'departmental') loadDeptTab();
+    else if (name === 'attendance')   viewWorkers();
+    else if (name === 'expenses')     viewExpenses();
+    else if (name === 'materials')    viewMaterials();
+    else if (name === 'tools')        viewTools();
+    else if (name === 'rentals')      viewRentals();
+    else if (name === 'contractors')  viewContractors();
+    updateDropdowns();
+  } catch(e) {
+    console.error('switchTab render error [' + name + ']', e);
+  }
 }
 
 // ============================================================
 // BOOT
 // ============================================================
 function boot() {
+  document.body.classList.add('js-ready');
   AD = ld();
 
-  document.querySelectorAll('.tab-btn').forEach(function(b) {
-    b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
-  });
+  // Tab switching handled via onclick in HTML (GitHub Pages compatible)
 
   var now = new Date();
   ['print-month','dept-print-month','att-print-month'].forEach(function(id) {
@@ -1113,12 +1282,12 @@ function boot() {
     var el = document.getElementById(id); if (el) el.value = t;
   });
 
-  var hd = new Date(new Date().getTime() + 19800000);
   var hdEl = document.getElementById('header-date');
-  if (hdEl) hdEl.textContent = hd.toLocaleDateString('en-IN', {weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  if (hdEl) hdEl.textContent = new Date().toLocaleDateString('en-IN', {timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'});
 
   setupRentalTabs();
   migrateOldPhotos();
+  _setupPWA();
   switchTab('dashboard');
 }
 
@@ -1340,9 +1509,9 @@ function renderDept() {
 }
 function openAddDeptModal() {
   ['da-cat','da-workers','da-hours','da-work','da-qty','da-unit','da-amount'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
-  document.getElementById('dept-add-modal').style.display = 'flex';
+  document.getElementById('dept-add-modal').classList.add('modal-show');
 }
-function closeDeptModal(){ document.getElementById('dept-add-modal').style.display = 'none'; }
+function closeDeptModal(){ document.getElementById('dept-add-modal').classList.remove('modal-show'); }
 function saveDeptEntry() {
   var cat = document.getElementById('da-cat').value;
   var workers = parseInt(document.getElementById('da-workers').value)||0;
@@ -1384,9 +1553,9 @@ function openAttModal(wid, date) {
   document.getElementById('att-date').value=d;
   document.getElementById('att-hours').value=att?att.hours:'';
   document.getElementById('att-advance').value=att?att.advance:'';
-  document.getElementById('att-modal').style.display='flex';
+  document.getElementById('att-modal').classList.add('modal-show');
 }
-function closeAttModal(){ document.getElementById('att-modal').style.display='none'; WID=null; }
+function closeAttModal(){ document.getElementById('att-modal').classList.remove('modal-show'); WID=null; }
 function saveAttendance() {
   var date=document.getElementById('att-date').value;
   var hours=parseFloat(document.getElementById('att-hours').value)||0;
@@ -1419,9 +1588,9 @@ function viewWorkers() {
             +'<div style="display:flex;align-items:center;gap:8px">'
             +'<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px">'+w.name[0].toUpperCase()+'</div>'
             +'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+w.name+'</p><p style="font-size:10px;color:#6b7280">'+fc(w.hourly_wage)+'/hr &middot; '+w.team_name+'</p></div></div>'
-            +'<div style="display:flex;gap:5px">'
-            +'<button onclick="toggleCal(\''+w.__id+'\')" style="font-size:11px;padding:3px 9px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:7px;cursor:pointer;">📅</button>'
-            +'<button onclick="delWorker(\''+w.__id+'\')" style="font-size:11px;padding:3px 9px;background:#fee2e2;color:#dc2626;border:none;border-radius:7px;cursor:pointer;">Del</button>'
+            +'<div style="display:flex;flex-direction:column;gap:5px;min-width:108px">'
+            +'<button onclick="toggleCal(\''+w.__id+'\')" style="font-size:12px;padding:7px 4px;width:100%;background:#e0e7ff;color:#4f46e5;border:none;border-radius:9px;cursor:pointer;font-weight:700;text-align:center;">📅 Calendar</button>'
+            +'<button onclick="delWorker(\''+w.__id+'\')" style="font-size:10px;padding:4px 4px;width:100%;background:#fee2e2;color:#dc2626;border:none;border-radius:7px;cursor:pointer;font-weight:600;text-align:center;">🗑 Del</button>'
             +'</div></div>'
             +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center;margin-bottom:6px">'
             +'<div style="background:white;border-radius:8px;padding:5px"><p style="font-size:9px;color:#9ca3af">Days</p><p style="font-weight:700;font-size:13px">'+days+'</p></div>'
@@ -1462,9 +1631,11 @@ function renderCal(w,vd){
     var a=mp[ds], isT=ds===today, isPast=ds<today;
     var bg=a?(parseFloat(a.hours)===0?'#fee2e2':'#10b981'):(isT?'#c7d2fe':isPast?'#fef2f2':'transparent');
     var col=a?(parseFloat(a.hours)===0?'#dc2626':'#ffffff'):(isT?'#4338ca':isPast?'#f87171':'#9ca3af');
-    return '<div onclick="openAttModal(\''+w.__id+'\',\''+ds+'\')" style="cursor:pointer;border-radius:6px;min-height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';color:'+col+';padding:2px">'
+    var advAmt=a?parseFloat(a.advance)||0:0;
+    return '<div onclick="openAttModal(\''+w.__id+'\',\''+ds+'\')" style="cursor:pointer;border-radius:6px;min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';color:'+col+';padding:2px">'
       +'<div style="font-size:10px;font-weight:700">'+day+'</div>'
-      +(a?'<div style="font-size:8px">'+parseFloat(a.hours).toFixed(1)+'h</div>':'')+'</div>';
+      +(a?'<div style="font-size:7px;line-height:1.1">'+parseFloat(a.hours).toFixed(1)+'h</div>':'')
+      +(advAmt>0?'<div style="font-size:7px;line-height:1.1;background:rgba(251,191,36,0.9);color:#92400e;border-radius:3px;padding:0 2px;font-weight:700">₹'+Math.round(advAmt)+'</div>':'')+'</div>';
   }).join('');
   return '<div style="background:white;border-radius:10px;padding:10px;margin-top:6px;border:1px solid #e5e7eb">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
@@ -1611,9 +1782,9 @@ function openMatPurchaseModal(id){
   document.getElementById('mp-unit').value=item.unit||''; document.getElementById('mp-cost').value='';
   document.getElementById('mp-supplier').value='';
   clearBill('mp');
-  document.getElementById('mat-purchase-modal').style.display='flex';
+  document.getElementById('mat-purchase-modal').classList.add('modal-show');
 }
-function closeMatModal(){ document.getElementById('mat-purchase-modal').style.display='none'; }
+function closeMatModal(){ document.getElementById('mat-purchase-modal').classList.remove('modal-show'); }
 function saveMatPurchase(){
   var date=document.getElementById('mp-date').value, qty=parseFloat(document.getElementById('mp-qty').value)||0;
   var unit=document.getElementById('mp-unit').value.trim(), cost=parseFloat(document.getElementById('mp-cost').value)||0;
@@ -1632,9 +1803,9 @@ function openMatUseModal(id){
   MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
   document.getElementById('mat-use-title').textContent='Mark Used — '+item.name+' ('+getbal(item)+' '+item.unit+' in stock)';
   document.getElementById('mu-date').value=ist(); document.getElementById('mu-qty').value=''; document.getElementById('mu-note').value='';
-  document.getElementById('mat-use-modal').style.display='flex';
+  document.getElementById('mat-use-modal').classList.add('modal-show');
 }
-function closeMatUseModal(){ document.getElementById('mat-use-modal').style.display='none'; }
+function closeMatUseModal(){ document.getElementById('mat-use-modal').classList.remove('modal-show'); }
 function saveMatUse(){
   var date=document.getElementById('mu-date').value, qty=parseFloat(document.getElementById('mu-qty').value)||0, note=document.getElementById('mu-note').value.trim();
   if(!date||!qty){ toast('Enter date and quantity','err'); return; }
@@ -1674,12 +1845,12 @@ function viewBill(ref){
       document.getElementById('bill-view-img').src=dataUrl;
       imgWrap.style.display='block';
     }
-    document.getElementById('bill-view-modal').classList.remove('hidden');
+    document.getElementById('bill-view-modal').classList.add('modal-show');
   }
   idbGet(ref, function(stored){ show(stored); });
 }
 function closeBillViewer(){
-  document.getElementById('bill-view-modal').classList.add('hidden');
+  document.getElementById('bill-view-modal').classList.remove('modal-show');
   var iframe=document.getElementById('bill-view-pdf');
   if(iframe&&iframe.src&&iframe.src.startsWith('blob:')){ URL.revokeObjectURL(iframe.src); iframe.src=''; }
 }
@@ -2069,9 +2240,7 @@ function printRentalByClient(){
     +'</tbody></table></div>';
 
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rental Report — '+client+'</title><style>'+pcs()+'</style></head><body>'
-
-```
-+'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Rental Report — '+client+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
+  +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Rental Report — '+client+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
 +'<div class="content">'+phdr('Client Rental Report', client)
 +'<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:11px">'
 +'<strong>Client:</strong> '+client+' &nbsp;|&nbsp; <strong>Period:</strong> '+monthsLabel+' &nbsp;|&nbsp; <strong>As of:</strong> '+fd(today)+'</div>'
@@ -2079,76 +2248,74 @@ function printRentalByClient(){
 + sections
 + grandTable
 + pftr()+'</div></body></html>';
-```
-
-opw(html);
+  opw(html);
 }
 
 // ============================================================
 // CONTRACTORS
 // ============================================================
 function addContractor(){
-var name=document.getElementById(‘ct-name’).value.trim(), type=document.getElementById(‘ct-type’).value, total=parseFloat(document.getElementById(‘ct-total’).value)||0;
-if (!name) { toast(‘Enter name’,‘err’); return; }
-ins({type:‘contractor’,contractor_name:name,contractor_type:type,total_contract:total});
-[‘ct-name’,‘ct-total’].forEach(function(id){ document.getElementById(id).value=’’; });
-AD=ld(); toast(‘Added’,‘ok’); viewContractors(); updateDropdowns();
+var name=document.getElementById('ct-name').value.trim(), type=document.getElementById('ct-type').value, total=parseFloat(document.getElementById('ct-total').value)||0;
+if (!name) { toast('Enter name','err'); return; }
+ins({type:'contractor',contractor_name:name,contractor_type:type,total_contract:total});
+['ct-name','ct-total'].forEach(function(id){ document.getElementById(id).value=''; });
+AD=ld(); toast('Added','ok'); viewContractors(); updateDropdowns();
 }
 function delContractor(id){
 var c=AD.find(function(d){ return d.__id===id; });
-askDel(‘Delete ‘+c.contractor_name+’?’, function(){ del(id); AD=ld(); toast(‘Deleted’,‘ok’); viewContractors(); });
+askDel('Delete '+c.contractor_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); });
 }
 function openCTModal(cid){
 CID=cid; var c=AD.find(function(d){ return d.__id===cid; }); if(!c) return;
-document.getElementById(‘ct-modal-title’).textContent=‘Add Advance — ‘+c.contractor_name;
-document.getElementById(‘ct-pay-date’).value=ist(); document.getElementById(‘ct-pay-amt’).value=’’;
-document.getElementById(‘ct-modal’).style.display=‘flex’;
+document.getElementById('ct-modal-title').textContent='Add Advance — '+c.contractor_name;
+document.getElementById('ct-pay-date').value=ist(); document.getElementById('ct-pay-amt').value='';
+document.getElementById('ct-modal').classList.add('modal-show');
 }
-function closeCTModal(){ document.getElementById(‘ct-modal’).style.display=‘none’; CID=null; }
+function closeCTModal(){ document.getElementById('ct-modal').classList.remove('modal-show'); CID=null; }
 function saveCTPayment(){
-var date=document.getElementById(‘ct-pay-date’).value, amt=parseFloat(document.getElementById(‘ct-pay-amt’).value)||0;
-if (!amt) { toast(‘Enter amount’,‘err’); return; }
+var date=document.getElementById('ct-pay-date').value, amt=parseFloat(document.getElementById('ct-pay-amt').value)||0;
+if (!amt) { toast('Enter amount','err'); return; }
 var c=AD.find(function(d){ return d.__id===CID; }); if(!c) return;
-ins({type:‘contractor_payment’,contractor_name:c.contractor_name,payment:amt,date:date});
-AD=ld(); closeCTModal(); toast(‘Saved’,‘ok’); viewContractors(); updateDash();
+ins({type:'contractor_payment',contractor_name:c.contractor_name,payment:amt,date:date});
+AD=ld(); closeCTModal(); toast('Saved','ok'); viewContractors(); updateDash();
 }
-function delCTPay(id){ askDel(‘Delete payment?’, function(){ del(id); AD=ld(); toast(‘Deleted’,‘ok’); viewContractors(); updateDash(); }); }
+function delCTPay(id){ askDel('Delete payment?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); updateDash(); }); }
 function viewContractors(){
 AD=ld(); var vms=mkey(VM);
-var tp=document.getElementById(‘teams-period’); if(tp) tp.textContent=mlabel(VM);
-var ctrs=AD.filter(function(d){ return d.type===‘contractor’; }), div=document.getElementById(‘contractors-list’);
+var tp=document.getElementById('teams-period'); if(tp) tp.textContent=mlabel(VM);
+var ctrs=AD.filter(function(d){ return d.type==='contractor'; }), div=document.getElementById('contractors-list');
 if (!div) return;
-if (!ctrs.length) { div.innerHTML=’<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No contractors yet</p>’; return; }
+if (!ctrs.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No contractors yet</p>'; return; }
 div.innerHTML=ctrs.map(function(c){
-var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
 var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
-var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(vms); });
+var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(vms); });
 var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP, bal=tp2-ta2;
-return ‘<div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 12px rgba(0,0,0,0.1);margin-bottom:12px">’
-+’<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">’
-+’<div style="display:flex;align-items:center;gap:8px">’
-+’<div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px">’+c.contractor_name[0].toUpperCase()+’</div>’
-+’<div><p style="font-weight:700;color:#1f2937;font-size:13px">’+c.contractor_name+’</p>’
-+’<p style="font-size:10px;color:#6b7280">’+(c.contractor_type||‘Team’)+’  |  Bal: <span style="font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">’+fc(bal)+’</span></p></div></div>’
-+’<div style="display:flex;gap:6px">’
-+’<button onclick="openCTModal(\''+c.__id+'\')" style="padding:5px 12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">+Advance</button>’
-+’<button onclick="delContractor(\''+c.__id+'\')" style="padding:5px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:10px;font-size:12px;cursor:pointer">Del</button>’
-+’</div></div>’
-+’<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">’
-+’<div style="background:#eff6ff;border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:#3b82f6">Payment</p><p style="font-size:13px;font-weight:700;color:#1d4ed8">’+fc(tp2)+’</p></div>’
-+’<div style="background:#fffbeb;border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:#d97706">Advances</p><p style="font-size:13px;font-weight:700;color:#b45309">’+fc(ta2)+’</p></div>’
-+’<div style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+';border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:'+(bal>=0?'#059669':'#dc2626')+'">Balance</p><p style="font-size:13px;font-weight:700;color:'+(bal>=0?'#047857':'#be123c')+'">’+fc(bal)+’</p></div>’
-+’</div>’
-+(tw.length ? ‘<div style="background:#f9fafb;border-radius:10px;padding:8px;margin-bottom:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Team (’+tw.length+’)</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">’+tw.map(function(w){ return ‘<div style="background:white;border-radius:8px;padding:6px"><p style="font-weight:600;color:#374151;font-size:12px">’+w.name+’</p><p style="font-size:9px;color:#9ca3af">’+w.category+’ · ‘+fc(w.hourly_wage)+’/hr</p></div>’; }).join(’’)+’</div></div>’ : ‘’)
-+(pays.length ? ‘<div style="background:#f9fafb;border-radius:10px;padding:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Advances (’+mlabel(VM)+’)</p><table style="width:100%;font-size:11px;border-collapse:collapse"><tbody>’
-+pays.sort(function(a,b){ return (a.date||’’).localeCompare(b.date||’’); }).map(function(p){ return ‘<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:4px 6px;color:#6b7280">’+fd(p.date)+’</td><td style="padding:4px 6px;text-align:right;font-weight:600">’+fc(p.payment)+’</td><td style="padding:4px 6px;text-align:center"><button onclick="delCTPay(\''+p.__id+'\')" style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>’; }).join(’’)
-+’</tbody><tfoot><tr style="background:#fefce8"><td style="padding:5px 6px;font-weight:700;color:#b45309">Total</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#b45309">’+fc(cP)+’</td><td></td></tr></tfoot></table></div>’
-: ‘<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:6px">No advances this month</p>’)
-+’</div>’;
-}).join(’’);
+return '<div style="background:white;border-radius:16px;padding:14px;box-shadow:0 2px 12px rgba(0,0,0,0.1);margin-bottom:12px">'
++'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
++'<div style="display:flex;align-items:center;gap:8px">'
++'<div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px">'+c.contractor_name[0].toUpperCase()+'</div>'
++'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+c.contractor_name+'</p>'
++'<p style="font-size:10px;color:#6b7280">'+(c.contractor_type||'Team')+'  |  Bal: <span style="font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</span></p></div></div>'
++'<div style="display:flex;gap:6px">'
++'<button onclick="openCTModal(\''+c.__id+'\')" style="padding:5px 12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">+Advance</button>'
++'<button onclick="delContractor(\''+c.__id+'\')" style="padding:5px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:10px;font-size:12px;cursor:pointer">Del</button>'
++'</div></div>'
++'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
++'<div style="background:#eff6ff;border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:#3b82f6">Payment</p><p style="font-size:13px;font-weight:700;color:#1d4ed8">'+fc(tp2)+'</p></div>'
++'<div style="background:#fffbeb;border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:#d97706">Advances</p><p style="font-size:13px;font-weight:700;color:#b45309">'+fc(ta2)+'</p></div>'
++'<div style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+';border-radius:10px;padding:8px;text-align:center"><p style="font-size:9px;color:'+(bal>=0?'#059669':'#dc2626')+'">Balance</p><p style="font-size:13px;font-weight:700;color:'+(bal>=0?'#047857':'#be123c')+'">'+fc(bal)+'</p></div>'
++'</div>'
++(tw.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px;margin-bottom:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Team ('+tw.length+')</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'+tw.map(function(w){ return '<div style="background:white;border-radius:8px;padding:6px"><p style="font-weight:600;color:#374151;font-size:12px">'+w.name+'</p><p style="font-size:9px;color:#9ca3af">'+w.category+' · '+fc(w.hourly_wage)+'/hr</p></div>'; }).join('')+'</div></div>' : '')
++(pays.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Advances ('+mlabel(VM)+')</p><table style="width:100%;font-size:11px;border-collapse:collapse"><tbody>'
++pays.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(p){ return '<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:4px 6px;color:#6b7280">'+fd(p.date)+'</td><td style="padding:4px 6px;text-align:right;font-weight:600">'+fc(p.payment)+'</td><td style="padding:4px 6px;text-align:center"><button onclick="delCTPay(\''+p.__id+'\')" style="font-size:10px;padding:1px 6px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
++'</tbody><tfoot><tr style="background:#fefce8"><td style="padding:5px 6px;font-weight:700;color:#b45309">Total</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#b45309">'+fc(cP)+'</td><td></td></tr></tfoot></table></div>'
+: '<p style="text-align:center;font-size:12px;color:#9ca3af;margin-top:6px">No advances this month</p>')
++'</div>';
+}).join('');
 }
 function changeViewMonth(d){ VM=new Date(VM.getFullYear(),VM.getMonth()+d,1); viewContractors(); }
 
@@ -2156,116 +2323,116 @@ function changeViewMonth(d){ VM=new Date(VM.getFullYear(),VM.getMonth()+d,1); vi
 // DROPDOWNS & DASHBOARD
 // ============================================================
 function updateDropdowns(){
-var at=document.getElementById(‘as-tool’);
-if(at) at.innerHTML=’<option value="">Select Tool</option>’+AD.filter(function(d){ return d.type===‘tool’; }).map(function(t){ return ‘<option value="'+t.__id+'">’+t.tool_name+’</option>’; }).join(’’);
-var aw=document.getElementById(‘as-worker’);
-if(aw) aw.innerHTML=’<option value="">Select Worker</option>’+AD.filter(function(d){ return d.type===‘worker’; }).map(function(w){ return ‘<option value="'+w.__id+'">’+w.name+’ (’+w.category+’)</option>’; }).join(’’);
-var wt=document.getElementById(‘w-team’);
-if(wt) wt.innerHTML=’<option value="">Select Team</option>’+AD.filter(function(d){ return d.type===‘contractor’; }).map(function(t){ return ‘<option value="'+t.contractor_name+'">’+t.contractor_name+’</option>’; }).join(’’);
+var at=document.getElementById('as-tool');
+if(at) at.innerHTML='<option value="">Select Tool</option>'+AD.filter(function(d){ return d.type==='tool'; }).map(function(t){ return '<option value="'+t.__id+'">'+t.tool_name+'</option>'; }).join('');
+var aw=document.getElementById('as-worker');
+if(aw) aw.innerHTML='<option value="">Select Worker</option>'+AD.filter(function(d){ return d.type==='worker'; }).map(function(w){ return '<option value="'+w.__id+'">'+w.name+' ('+w.category+')</option>'; }).join('');
+var wt=document.getElementById('w-team');
+if(wt) wt.innerHTML='<option value="">Select Team</option>'+AD.filter(function(d){ return d.type==='contractor'; }).map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join('');
 // Attendance print worker dropdown
-var apw=document.getElementById(‘att-print-worker’);
-if(apw){ var workers=AD.filter(function(d){ return d.type===‘worker’; }); apw.innerHTML=’<option value="">– Select Worker –</option>’+workers.map(function(w){ return ‘<option value="'+w.__id+'">’+w.name+’ — ‘+w.category+(w.team_name?’ (’+w.team_name+’)’:’’)+’</option>’; }).join(’’); }
+var apw=document.getElementById('att-print-worker');
+if(apw){ var workers=AD.filter(function(d){ return d.type==='worker'; }); apw.innerHTML='<option value="">– Select Worker –</option>'+workers.map(function(w){ return '<option value="'+w.__id+'">'+w.name+' — '+w.category+(w.team_name?' ('+w.team_name+')':'')+'</option>'; }).join(''); }
 // Teams print filter dropdown
-var tpf=document.getElementById(‘teams-print-filter’);
-if(tpf){ var teams=AD.filter(function(d){ return d.type===‘contractor’; }); tpf.innerHTML=’<option value="all">All Teams</option>’+teams.map(function(t){ return ‘<option value="'+t.contractor_name+'">’+t.contractor_name+’</option>’; }).join(’’); }
+var tpf=document.getElementById('teams-print-filter');
+if(tpf){ var teams=AD.filter(function(d){ return d.type==='contractor'; }); tpf.innerHTML='<option value="all">All Teams</option>'+teams.map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join(''); }
 }
 function getLowStock(){ return lmat().filter(function(i){ return i.minQty>0&&getbal(i)<=i.minQty; }); }
 function updateDash(){
 AD=ld(); var cums=mkey(new Date()), today=ist();
-var att=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(cums); }));
+var att=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums); }));
 var wAdv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
-var ctPays=AD.filter(function(d){ return d.type===‘contractor_payment’&&(d.date||’’).startsWith(cums); }).reduce(function(s,d){ return s+(parseFloat(d.payment)||0); },0);
+var ctPays=AD.filter(function(d){ return d.type==='contractor_payment'&&(d.date||'').startsWith(cums); }).reduce(function(s,d){ return s+(parseFloat(d.payment)||0); },0);
 var totalAdv=wAdv+ctPays;
 var wPay=att.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
-var ctContr=AD.filter(function(d){ return d.type===‘contractor’; }).reduce(function(s,c){ return s+(parseFloat(c.total_contract)||0); },0);
-var mats=AD.filter(function(d){ return d.type===‘material’&&!d.is_petty_cash; });
-var pIn=AD.filter(function(d){ return d.type===‘material’&&d.is_petty_cash; }).reduce(function(s,d){ return s+(parseFloat(d.cost)||0); },0);
+var ctContr=AD.filter(function(d){ return d.type==='contractor'; }).reduce(function(s,c){ return s+(parseFloat(c.total_contract)||0); },0);
+var mats=AD.filter(function(d){ return d.type==='material'&&!d.is_petty_cash; });
+var pIn=AD.filter(function(d){ return d.type==='material'&&d.is_petty_cash; }).reduce(function(s,d){ return s+(parseFloat(d.cost)||0); },0);
 var pOut=mats.reduce(function(s,d){ return s+(parseFloat(d.cost)||0); },0);
-var matMonth=mats.filter(function(m){ return (m.date||’’).startsWith(cums); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
-var rExp=AD.filter(function(d){ return d.type===‘rental’&&!d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
-var rInc=AD.filter(function(d){ return d.type===‘rental’&&d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
-var allPay=dedup(AD.filter(function(d){ return d.type===‘attendance’; })).reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+var matMonth=mats.filter(function(m){ return (m.date||'').startsWith(cums); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
+var rExp=AD.filter(function(d){ return d.type==='rental'&&!d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
+var rInc=AD.filter(function(d){ return d.type==='rental'&&d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
+var allPay=dedup(AD.filter(function(d){ return d.type==='attendance'; })).reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 function se(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
-se(‘dash-advance’,fc(totalAdv)); se(‘dash-remaining’,fc(Math.max(0,wPay+ctContr-totalAdv)));
-se(‘dash-material’,fc(matMonth)); se(‘dash-petty’,fc(pIn)); se(‘dash-petty-left’,fc(pIn-pOut));
-se(‘dash-rental-out’,fc(rExp)); se(‘dash-rental-in’,fc(rInc));
-se(‘header-spends’,fc(allPay+pOut+rExp));
-var low=getLowStock(), lsDiv=document.getElementById(‘dash-low-stock’);
-if (low.length) { lsDiv.classList.remove(‘hidden’); document.getElementById(‘dash-low-list’).innerHTML=low.map(function(i){ return ‘<p style="color:white;font-size:12px">• ‘+i.name+’: ‘+getbal(i)+’ ‘+i.unit+’ (min ‘+i.minQty+’)</p>’; }).join(’’); }
-else lsDiv.classList.add(‘hidden’);
-var ctrs=AD.filter(function(d){ return d.type===‘contractor’; });
-var td=document.getElementById(‘team-details’);
+se('dash-advance',fc(totalAdv)); se('dash-remaining',fc(Math.max(0,wPay+ctContr-totalAdv)));
+se('dash-material',fc(matMonth)); se('dash-petty',fc(pIn)); se('dash-petty-left',fc(pIn-pOut));
+se('dash-rental-out',fc(rExp)); se('dash-rental-in',fc(rInc));
+se('header-spends',fc(allPay+pOut+rExp));
+var low=getLowStock(), lsDiv=document.getElementById('dash-low-stock');
+if (low.length) { lsDiv.classList.remove('hidden'); document.getElementById('dash-low-list').innerHTML=low.map(function(i){ return '<p style="color:white;font-size:12px">• '+i.name+': '+getbal(i)+' '+i.unit+' (min '+i.minQty+')</p>'; }).join(''); }
+else lsDiv.classList.add('hidden');
+var ctrs=AD.filter(function(d){ return d.type==='contractor'; });
+var td=document.getElementById('team-details');
 if (!td) return;
 td.innerHTML=ctrs.length ? ctrs.map(function(c){
-var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(cums)&&tw.some(function(w){ return w.name===d.name; }); }));
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums)&&tw.some(function(w){ return w.name===d.name; }); }));
 var pay=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0)+(parseFloat(c.total_contract)||0);
-var adv=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(cums); }).reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
+var adv=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(cums); }).reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var bal=pay-adv;
-return ‘<div style="background:#eff6ff;border-radius:10px;padding:10px;margin-bottom:8px">’
-+’<div style="display:flex;justify-content:space-between;margin-bottom:6px">’
-+’<div><p style="font-weight:700;color:#1f2937;font-size:13px">’+c.contractor_name+’</p><p style="font-size:10px;color:#6b7280">’+tw.length+’ workers</p></div>’
-+’<div style="text-align:right"><p style="font-size:10px;color:#6b7280">Balance</p><p style="font-weight:700;font-size:13px;color:'+(bal>=0?'#059669':'#dc2626')+'">’+fc(bal)+’</p></div></div>’
-+’<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">’
-+’<div style="background:white;border-radius:8px;padding:6px;text-align:center"><p style="font-size:9px;color:#3b82f6">Payment</p><p style="font-weight:700;font-size:13px;color:#1d4ed8">’+fc(pay)+’</p></div>’
-+’<div style="background:white;border-radius:8px;padding:6px;text-align:center"><p style="font-size:9px;color:#d97706">Advances</p><p style="font-weight:700;font-size:13px;color:#b45309">’+fc(adv)+’</p></div>’
-+’</div></div>’;
-}).join(’’) : ‘<p style="text-align:center;color:#9ca3af;padding:12px;font-size:13px">No teams yet</p>’;
+return '<div style="background:#eff6ff;border-radius:10px;padding:10px;margin-bottom:8px">'
++'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
++'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+c.contractor_name+'</p><p style="font-size:10px;color:#6b7280">'+tw.length+' workers</p></div>'
++'<div style="text-align:right"><p style="font-size:10px;color:#6b7280">Balance</p><p style="font-weight:700;font-size:13px;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</p></div></div>'
++'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
++'<div style="background:white;border-radius:8px;padding:6px;text-align:center"><p style="font-size:9px;color:#3b82f6">Payment</p><p style="font-weight:700;font-size:13px;color:#1d4ed8">'+fc(pay)+'</p></div>'
++'<div style="background:white;border-radius:8px;padding:6px;text-align:center"><p style="font-size:9px;color:#d97706">Advances</p><p style="font-weight:700;font-size:13px;color:#b45309">'+fc(adv)+'</p></div>'
++'</div></div>';
+}).join('') : '<p style="text-align:center;color:#9ca3af;padding:12px;font-size:13px">No teams yet</p>';
 }
 
 // ============================================================
 // PRINT HELPERS
 // ============================================================
-function pp(){ return lprof()||{company:’’,engineer:’’}; }
+function pp(){ return lprof()||{company:'',engineer:''}; }
 function pcs(){
-return ‘*{margin:0;padding:0;box-sizing:border-box;font-family:“Segoe UI”,Arial,sans-serif}’
-+‘body{background:#fff;color:#1f2937;font-size:12px;padding:20px 24px}’
-+’.bar{position:fixed;top:0;left:0;right:0;background:#4f46e5;color:white;display:flex;align-items:center;gap:12px;padding:10px 16px;z-index:9999}’
-+’.bar button{padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700}’
-+’.bb{background:rgba(255,255,255,.2);color:white}.bp{background:#f59e0b;color:#1f2937}’
-+’.content{margin-top:52px}’
-+’.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #4f46e5;padding-bottom:12px;margin-bottom:16px}’
-+’.logo{width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px}’
-+’.cn{font-size:18px;font-weight:900;color:#4f46e5}.csub{font-size:9px;color:#7c3aed;font-weight:700}’
-+’.hcname{font-size:16px;font-weight:900;color:#1e1b4b;text-align:center}.hceng{font-size:11px;font-weight:700;color:#7c3aed;text-align:center}’
-+’.rt{font-size:14px;font-weight:800;color:#1e1b4b;text-align:right}.rd{font-size:12px;font-weight:700;text-align:right;margin-top:3px}’
-+’.rp{font-size:8px;color:#9ca3af;text-align:right;margin-top:2px}’
-+’.sumrow{display:flex;gap:10px;margin-bottom:16px}’
-+’.sc{flex:1;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 12px}’
-+’.scl{font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase}’
-+’.scv{font-size:18px;font-weight:900;margin-top:2px}’
-+’.sec{margin-bottom:16px}’
-+’.st{font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;padding:4px 10px;border-left:3px solid #9ca3af;margin-bottom:0}’
-+‘table{width:100%;border-collapse:collapse;font-size:11px}’
-+‘thead tr{background:#f3f4f6;color:#374151}’
-+‘thead th{padding:5px 10px;text-align:left;font-weight:700;font-size:10px;border-bottom:1.5px solid #d1d5db}’
-+‘tbody tr{border-bottom:1px solid #f3f4f6}’
-+‘tbody tr:nth-child(even){background:#f9fafb}’
-+‘tbody td{padding:6px 10px;color:#374151}’
-+‘tfoot tr{background:#f3f4f6;font-weight:700}’
-+‘tfoot td{padding:5px 10px;color:#374151}’
-+’.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}’
-+’.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}’
-+’.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}’
-+’@media print{.bar{display:none!important}.content{margin-top:0}body{padding:8px 12px}@page{margin:6mm;size:A4}}’;
+return '*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}'
++'body{background:#fff;color:#1f2937;font-size:12px;padding:20px 24px}'
++'.bar{position:fixed;top:0;left:0;right:0;background:#4f46e5;color:white;display:flex;align-items:center;gap:12px;padding:10px 16px;z-index:9999}'
++'.bar button{padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700}'
++'.bb{background:rgba(255,255,255,.2);color:white}.bp{background:#f59e0b;color:#1f2937}'
++'.content{margin-top:52px}'
++'.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #4f46e5;padding-bottom:12px;margin-bottom:16px}'
++'.logo{width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px}'
++'.cn{font-size:18px;font-weight:900;color:#4f46e5}.csub{font-size:9px;color:#7c3aed;font-weight:700}'
++'.hcname{font-size:16px;font-weight:900;color:#1e1b4b;text-align:center}.hceng{font-size:11px;font-weight:700;color:#7c3aed;text-align:center}'
++'.rt{font-size:14px;font-weight:800;color:#1e1b4b;text-align:right}.rd{font-size:12px;font-weight:700;text-align:right;margin-top:3px}'
++'.rp{font-size:8px;color:#9ca3af;text-align:right;margin-top:2px}'
++'.sumrow{display:flex;gap:10px;margin-bottom:16px}'
++'.sc{flex:1;border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 12px}'
++'.scl{font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase}'
++'.scv{font-size:18px;font-weight:900;margin-top:2px}'
++'.sec{margin-bottom:16px}'
++'.st{font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;padding:4px 10px;border-left:3px solid #9ca3af;margin-bottom:0}'
++'table{width:100%;border-collapse:collapse;font-size:11px}'
++'thead tr{background:#f3f4f6;color:#374151}'
++'thead th{padding:5px 10px;text-align:left;font-weight:700;font-size:10px;border-bottom:1.5px solid #d1d5db}'
++'tbody tr{border-bottom:1px solid #f3f4f6}'
++'tbody tr:nth-child(even){background:#f9fafb}'
++'tbody td{padding:6px 10px;color:#374151}'
++'tfoot tr{background:#f3f4f6;font-weight:700}'
++'tfoot td{padding:5px 10px;color:#374151}'
++'.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}'
++'.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}'
++'.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}'
++'@media print{.bar{display:none!important}.content{margin-top:0}body{padding:8px 12px}@page{margin:6mm;size:A4}}';
 }
 function phdr(title, sub){
-var p=pp(), now=new Date(new Date().getTime()+19800000);
-return ‘<div class="hdr"><div style="display:flex;align-items:center;gap:12px"><div class="logo">🏗</div><div><div class="cn">Sanjineer</div><div class="csub">Construction Manager</div></div></div>’
-+’<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">’+p.company+’</div><div class="hceng">’+p.engineer+’</div></div>’
-+’<div><div class="rt">’+title+’</div><div class="rd">’+sub+’</div><div class="rp">’+now.toLocaleString(‘en-IN’)+’</div></div></div>’;
+var p=pp(), now=new Date();
+return '<div class="hdr"><div style="display:flex;align-items:center;gap:12px"><div class="logo">🏗</div><div><div class="cn">Sanjineer</div><div class="csub">Construction Manager</div></div></div>'
++'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+p.company+'</div><div class="hceng">'+p.engineer+'</div></div>'
++'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})+'</div></div></div>';
 }
 function pftr(){
-return ‘<div class="footer">’
-+’<div class="sig"><div class="sl"></div><div class="slb">Site Supervisor</div></div>’
-+’<div class="sig" style="text-align:center"><div class="sl" style="margin:0 auto"></div><div class="slb">Prepared By</div></div>’
-+’<div class="sig" style="text-align:right"><div class="sl" style="margin-left:auto"></div><div class="slb">Authorized</div></div>’
-+’</div><div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">Generated by Sanjineer App</div>’;
+return '<div class="footer">'
++'<div class="sig"><div class="sl"></div><div class="slb">Site Supervisor</div></div>'
++'<div class="sig" style="text-align:center"><div class="sl" style="margin:0 auto"></div><div class="slb">Prepared By</div></div>'
++'<div class="sig" style="text-align:right"><div class="sl" style="margin-left:auto"></div><div class="slb">Authorized</div></div>'
++'</div><div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">Generated by Sanjineer App</div>';
 }
 function opw(html){
-var pw=window.open(’’,’_blank’,‘width=900,height=700’);
+var pw=window.open('','_blank','width=900,height=700');
 if (pw) { pw.document.write(html); pw.document.close(); }
-else toast(‘Allow popups to print’,‘err’);
+else toast('Allow popups to print','err');
 }
 
 // ============================================================
@@ -2281,9 +2448,9 @@ _printDailyReportInner(photos);
 }
 function _printDailyReportInner(photos){
 AD=ld(); var d=DD, dl=fdl(d), meta=lm()[d]||{};
-var att=dedup(AD.filter(function(a){ return a.type===‘attendance’&&a.date===d; }));
-var mats=AD.filter(function(a){ return a.type===‘material’&&a.date===d&&!a.is_petty_cash; });
-var adv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(a){ return a.type===‘contractor_payment’&&a.date===d; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); },0);
+var att=dedup(AD.filter(function(a){ return a.type==='attendance'&&a.date===d; }));
+var mats=AD.filter(function(a){ return a.type==='material'&&a.date===d&&!a.is_petty_cash; });
+var adv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(a){ return a.type==='contractor_payment'&&a.date===d; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); },0);
 var mc=mats.reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
 var grp={}; att.forEach(function(a){ if(!grp[a.category]) grp[a.category]=[]; grp[a.category].push(a); });
 var cats=Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
@@ -2292,24 +2459,24 @@ var dW=dept.reduce(function(s,e){ return s+parseInt(e.workers||0); },0);
 var dH=dept.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
 var dA=dept.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
 var low=getLowStock();
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Daily Report — ‘+dl+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Daily Report’,dl)
-+(meta.weather||meta.status ? ‘<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">’+(meta.weather?’<strong>’+meta.weather+’</strong> — ‘:’’)+meta.status+’</div></div>’ : ‘’)
-+’<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Advances</div><div class="scv" style="color:#dc2626">’+fc(adv)+’</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material</div><div class="scv" style="color:#d97706">’+fc(mc)+’</div></div></div>’
-+(low.length ? ‘<div style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px"><strong>⚠ Low Stock:</strong> ‘+low.map(function(i){ return i.name+’ (’+getbal(i)+’ left)’; }).join(’, ‘)+’</div>’ : ‘’)
-+’<div class="sec"><div class="st">👷 Labour Summary</div>’
-+(cats.length ? ‘<table><thead><tr><th>Category</th><th style="text-align:center">Count</th><th style="text-align:center">Hours</th><th>Work Done</th></tr></thead><tbody>’
-+cats.map(function(cat){ var wks=grp[cat],hrs=wks.reduce(function(s,w){ return s+(parseFloat(w.hours)||0); },0),wd=(wks.find(function(w){ return w.work_done; })||{}).work_done||’–’; return ‘<tr><td style="font-weight:700;padding:6px 10px">’+cat+’</td><td style="text-align:center;padding:6px 10px;font-weight:700;color:#4f46e5">’+wks.length+’</td><td style="text-align:center;padding:6px 10px">’+hrs.toFixed(1)+‘h</td><td style="padding:6px 10px">’+wd+’</td></tr>’; }).join(’’)
-+’</tbody></table>’ : ‘<p style="padding:10px;color:#9ca3af">No attendance.</p>’)+’</div>’
-+(dept.length ? ‘<div class="sec"><div class="st" style="border-left-color:#7c3aed">🏗 Departmental Work</div><table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>’
-+dept.map(function(e){ return ‘<tr><td style="font-weight:700;padding:6px 10px">’+e.cat+’</td><td style="text-align:center;padding:6px 10px;color:#7c3aed;font-weight:700">’+e.workers+’</td><td style="text-align:center;padding:6px 10px">’+(e.hours||’–’)+‘h</td><td style="padding:6px 10px">’+(e.work||’–’)+’</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">’+(e.amount?fc(e.amount):’–’)+’</td></tr>’; }).join(’’)
-+’</tbody><tfoot><tr><td style="padding:7px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:7px 10px;font-weight:900">’+dW+’</td><td style="text-align:center;padding:7px 10px;font-weight:900">’+dH+‘h</td><td></td><td style="text-align:right;padding:7px 10px;font-weight:900">’+fc(dA)+’</td></tr></tfoot></table></div>’ : ‘’)
-+(mats.length ? ‘<div class="sec"><div class="st" style="border-left-color:#059669">🪰 Materials</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>’
-+mats.map(function(m){ return ‘<tr><td style="font-weight:600;padding:6px 10px">’+m.material_name+’</td><td style="text-align:center;padding:6px 10px">’+(m.quantity||’–’)+’</td><td style="text-align:right;padding:6px 10px;font-weight:700">’+fc(m.cost)+’</td></tr>’; }).join(’’)
-+’</tbody><tfoot><tr><td colspan="2" style="padding:7px 10px;font-weight:900">Total</td><td style="text-align:right;padding:7px 10px;font-weight:900">’+fc(mc)+’</td></tr></tfoot></table></div>’ : ‘’)
-+(photos.length ? ‘<div class="sec"><div class="st">📷 Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">’+photos.map(function(p){ return ‘<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">’; }).join(’’)+’</div></div>’ : ‘’)
-+pftr()+’</div></body></html>’;
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</title><style>'+pcs()+'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Daily Report — '+dl+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Daily Report',dl)
++(meta.weather||meta.status ? '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">'+(meta.weather?'<strong>'+meta.weather+'</strong> — ':'')+meta.status+'</div></div>' : '')
++'<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Advances</div><div class="scv" style="color:#dc2626">'+fc(adv)+'</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material</div><div class="scv" style="color:#d97706">'+fc(mc)+'</div></div></div>'
++(low.length ? '<div style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px"><strong>⚠ Low Stock:</strong> '+low.map(function(i){ return i.name+' ('+getbal(i)+' left)'; }).join(', ')+'</div>' : '')
++'<div class="sec"><div class="st">👷 Labour Summary</div>'
++(cats.length ? '<table><thead><tr><th>Category</th><th style="text-align:center">Count</th><th style="text-align:center">Hours</th><th>Work Done</th></tr></thead><tbody>'
++cats.map(function(cat){ var wks=grp[cat],hrs=wks.reduce(function(s,w){ return s+(parseFloat(w.hours)||0); },0),wd=(wks.find(function(w){ return w.work_done; })||{}).work_done||'–'; return '<tr><td style="font-weight:700;padding:6px 10px">'+cat+'</td><td style="text-align:center;padding:6px 10px;font-weight:700;color:#4f46e5">'+wks.length+'</td><td style="text-align:center;padding:6px 10px">'+hrs.toFixed(1)+'h</td><td style="padding:6px 10px">'+wd+'</td></tr>'; }).join('')
++'</tbody></table>' : '<p style="padding:10px;color:#9ca3af">No attendance.</p>')+'</div>'
++(dept.length ? '<div class="sec"><div class="st" style="border-left-color:#7c3aed">🏗 Departmental Work</div><table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++dept.map(function(e){ return '<tr><td style="font-weight:700;padding:6px 10px">'+e.cat+'</td><td style="text-align:center;padding:6px 10px;color:#7c3aed;font-weight:700">'+e.workers+'</td><td style="text-align:center;padding:6px 10px">'+(e.hours||'–')+'h</td><td style="padding:6px 10px">'+(e.work||'–')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+(e.amount?fc(e.amount):'–')+'</td></tr>'; }).join('')
++'</tbody><tfoot><tr><td style="padding:7px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dW+'</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dH+'h</td><td></td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(dA)+'</td></tr></tfoot></table></div>' : '')
++(mats.length ? '<div class="sec"><div class="st" style="border-left-color:#059669">🪰 Materials</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++mats.map(function(m){ return '<tr><td style="font-weight:600;padding:6px 10px">'+m.material_name+'</td><td style="text-align:center;padding:6px 10px">'+(m.quantity||'–')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(m.cost)+'</td></tr>'; }).join('')
++'</tbody><tfoot><tr><td colspan="2" style="padding:7px 10px;font-weight:900">Total</td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(mc)+'</td></tr></tfoot></table></div>' : '')
++(photos.length ? '<div class="sec"><div class="st">📷 Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -2321,17 +2488,17 @@ opw(html);
 // ============================================================
 function printWorkerAttendance(){
 AD=ld();
-var workerSel=document.getElementById(‘att-print-worker’);
-var wid=workerSel?workerSel.value:’’;
-if(!wid){ toast(‘Please select a worker’,‘err’); return; }
-var monthSel=document.getElementById(‘att-print-month’);
+var workerSel=document.getElementById('att-print-worker');
+var wid=workerSel?workerSel.value:'';
+if(!wid){ toast('Please select a worker','err'); return; }
+var monthSel=document.getElementById('att-print-month');
 var selMs=monthSel?monthSel.value:mkey(VM);
-var mL=mlabel(new Date(selMs+’-01T00:00:00’));
-var worker=AD.find(function(d){ return d.__id===wid&&d.type===‘worker’; });
-if(!worker){ toast(‘Worker not found’,‘err’); return; }
+var mL=mlabel(new Date(selMs+'-01T00:00:00'));
+var worker=AD.find(function(d){ return d.__id===wid&&d.type==='worker'; });
+if(!worker){ toast('Worker not found','err'); return; }
 
-var allAtt=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(selMs)&&d.name===worker.name; }));
-allAtt.sort(function(a,b){ return (a.date||’’).localeCompare(b.date||’’); });
+var allAtt=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&d.name===worker.name; }));
+allAtt.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
 var totalHrs=0, totalAdv=0, totalPay=0;
 var rows=allAtt.map(function(a){
@@ -2339,60 +2506,60 @@ var hrs=parseFloat(a.hours)||0;
 var adv=parseFloat(a.advance)||0;
 var pay=hrs*(parseFloat(a.hourly_wage||worker.hourly_wage)||0);
 totalHrs+=hrs; totalAdv+=adv; totalPay+=pay;
-return ‘<tr>’
-+’<td style="padding:7px 10px;font-weight:600">’+fdl(a.date)+’</td>’
-+’<td style="text-align:center;padding:7px 10px">’+hrs+‘h</td>’
-+’<td style="text-align:right;padding:7px 10px;color:#059669;font-weight:700">’+fc(pay)+’</td>’
-+’<td style="text-align:right;padding:7px 10px;color:#dc2626">’+fc(adv)+’</td>’
-+’</tr>’;
-}).join(’’);
+return '<tr>'
++'<td style="padding:7px 10px;font-weight:600">'+fdl(a.date)+'</td>'
++'<td style="text-align:center;padding:7px 10px">'+hrs+'h</td>'
++'<td style="text-align:right;padding:7px 10px;color:#059669;font-weight:700">'+fc(pay)+'</td>'
++'<td style="text-align:right;padding:7px 10px;color:#dc2626">'+fc(adv)+'</td>'
++'</tr>';
+}).join('');
 
 var bal=totalPay-totalAdv;
 var profData=lprof()||{};
-var company=profData.company||‘Sanjineer’;
-var engineer=profData.engineer||’’;
+var company=profData.company||'Sanjineer';
+var engineer=profData.engineer||'';
 
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance — ‘+worker.name+’</title><style>’+pcs()+’\n’
-+’.worker-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e5e7eb}’
-+’.wh-left{} .wh-right{text-align:right}’
-+’.wh-name{font-size:18px;font-weight:900;color:#1e1b4b}’
-+’.wh-sub{font-size:11px;color:#6b7280;margin-top:2px}’
-+’.wh-pay{font-size:22px;font-weight:900;color:#059669}’
-+’.wh-paylbl{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase}’
-+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance — ‘+worker.name+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’
-+’<div class="worker-header">’
-+’<div class="wh-left">’
-+’<div class="wh-name">’+worker.name+’</div>’
-+’<div class="wh-sub">’+worker.category+(worker.team_name?’  ·  Team: ‘+worker.team_name:’’)+’</div>’
-+’<div class="wh-sub" style="margin-top:4px">Period: <strong>’+mL+’</strong></div>’
-+’</div>’
-+’<div class="wh-right">’
-+’<div class="wh-paylbl">Final Payment</div>’
-+’<div class="wh-pay">’+fc(bal)+’</div>’
-+’<div style="font-size:10px;color:#6b7280;margin-top:2px">Pay ‘+fc(totalPay)+’ − Adv ‘+fc(totalAdv)+’</div>’
-+’</div>’
-+’</div>’
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance — '+worker.name+'</title><style>'+pcs()+'\n'
++'.worker-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #e5e7eb}'
++'.wh-left{} .wh-right{text-align:right}'
++'.wh-name{font-size:18px;font-weight:900;color:#1e1b4b}'
++'.wh-sub{font-size:11px;color:#6b7280;margin-top:2px}'
++'.wh-pay{font-size:22px;font-weight:900;color:#059669}'
++'.wh-paylbl{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase}'
++'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance — '+worker.name+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'
++'<div class="worker-header">'
++'<div class="wh-left">'
++'<div class="wh-name">'+worker.name+'</div>'
++'<div class="wh-sub">'+worker.category+(worker.team_name?'  ·  Team: '+worker.team_name:'')+'</div>'
++'<div class="wh-sub" style="margin-top:4px">Period: <strong>'+mL+'</strong></div>'
++'</div>'
++'<div class="wh-right">'
++'<div class="wh-paylbl">Final Payment</div>'
++'<div class="wh-pay">'+fc(bal)+'</div>'
++'<div style="font-size:10px;color:#6b7280;margin-top:2px">Pay '+fc(totalPay)+' − Adv '+fc(totalAdv)+'</div>'
++'</div>'
++'</div>'
 +(allAtt.length
-? ‘<table><thead><tr>’
-+’<th>Date</th>’
-+’<th style="text-align:center">Hours</th>’
-+’<th style="text-align:right">Daily Pay</th>’
-+’<th style="text-align:right">Advance</th>’
-+’</tr></thead><tbody>’+rows+’</tbody>’
-+’<tfoot><tr style="background:#f0f4ff">’
-+’<td style="padding:8px 10px;font-weight:900">TOTAL</td>’
-+’<td style="text-align:center;padding:8px 10px;font-weight:900">’+totalHrs.toFixed(1)+‘h</td>’
-+’<td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">’+fc(totalPay)+’</td>’
-+’<td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">’+fc(totalAdv)+’</td>’
-+’</tr>’
-+’<tr style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+'">’
-+’<td colspan="3" style="padding:8px 10px;font-weight:900;font-size:13px">NET PAYABLE</td>’
-+’<td style="text-align:right;padding:8px 10px;font-weight:900;font-size:16px;color:'+(bal>=0?'#059669':'#dc2626')+'">’+fc(bal)+’</td>’
-+’</tr></tfoot></table>’
-: ‘<p style="padding:16px;color:#9ca3af;text-align:center">No attendance records for ‘+mL+’</p>’)
-+pftr()+’</div></body></html>’;
+? '<table><thead><tr>'
++'<th>Date</th>'
++'<th style="text-align:center">Hours</th>'
++'<th style="text-align:right">Daily Pay</th>'
++'<th style="text-align:right">Advance</th>'
++'</tr></thead><tbody>'+rows+'</tbody>'
++'<tfoot><tr style="background:#f0f4ff">'
++'<td style="padding:8px 10px;font-weight:900">TOTAL</td>'
++'<td style="text-align:center;padding:8px 10px;font-weight:900">'+totalHrs.toFixed(1)+'h</td>'
++'<td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">'+fc(totalPay)+'</td>'
++'<td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">'+fc(totalAdv)+'</td>'
++'</tr>'
++'<tr style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+'">'
++'<td colspan="3" style="padding:8px 10px;font-weight:900;font-size:13px">NET PAYABLE</td>'
++'<td style="text-align:right;padding:8px 10px;font-weight:900;font-size:16px;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</td>'
++'</tr></tfoot></table>'
+: '<p style="padding:16px;color:#9ca3af;text-align:center">No attendance records for '+mL+'</p>')
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -2401,22 +2568,22 @@ opw(html);
 // ============================================================
 function printMonthlyReport(){
 AD=ld();
-var selEl=document.getElementById(‘print-month’), selMs=selEl?selEl.value:mkey(VM);
-var mL=mlabel(new Date(selMs+’-01T00:00:00’));
-var teamFilter=document.getElementById(‘teams-print-filter’);
-var selTeam=teamFilter?teamFilter.value:‘all’;
-var ctrs=AD.filter(function(d){ return d.type===‘contractor’; });
-if(selTeam!==‘all’) ctrs=ctrs.filter(function(c){ return c.contractor_name===selTeam; });
-if (!ctrs.length) { toast(‘No teams found’,‘err’); return; }
-var gTP=0, gTA=0, sectionsHtml=’’;
+var selEl=document.getElementById('print-month'), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+'-01T00:00:00'));
+var teamFilter=document.getElementById('teams-print-filter');
+var selTeam=teamFilter?teamFilter.value:'all';
+var ctrs=AD.filter(function(d){ return d.type==='contractor'; });
+if(selTeam!=='all') ctrs=ctrs.filter(function(c){ return c.contractor_name===selTeam; });
+if (!ctrs.length) { toast('No teams found','err'); return; }
+var gTP=0, gTA=0, sectionsHtml='';
 ctrs.forEach(function(c){
-var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
-var allAtt=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); }));
-var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(selMs); });
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+var allAtt=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); }));
+var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(selMs); });
 var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var contractAmt=parseFloat(c.total_contract)||0;
 var tTeamPay=0, tTeamAdv=0;
-var workerRows=’’;
+var workerRows='';
 tw.forEach(function(w){
 var wa=allAtt.filter(function(a){ return a.name===w.name; });
 var days=wa.filter(function(a){ return parseFloat(a.hours)>0; }).length;
@@ -2425,56 +2592,56 @@ var pay=wa.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a
 var adv=wa.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
 var bal=pay-adv;
 tTeamPay+=pay; tTeamAdv+=adv;
-workerRows+=’<tr>’
-+’<td style="padding:6px 10px;font-weight:600">’+w.name+’</td>’
-+’<td style="padding:6px 10px;color:#6b7280;font-size:10px">’+w.category+’</td>’
-+’<td style="text-align:center;padding:6px 10px">’+days+’</td>’
-+’<td style="text-align:center;padding:6px 10px">’+hrs.toFixed(1)+‘h</td>’
-+’<td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">’+fc(pay)+’</td>’
-+’<td style="text-align:right;padding:6px 10px;color:#dc2626">’+fc(adv)+’</td>’
-+’<td style="text-align:right;padding:6px 10px;font-weight:700;color:'+(bal>=0?'#1d4ed8':'#dc2626')+'">’+fc(bal)+’</td>’
-+’</tr>’;
+workerRows+='<tr>'
++'<td style="padding:6px 10px;font-weight:600">'+w.name+'</td>'
++'<td style="padding:6px 10px;color:#6b7280;font-size:10px">'+w.category+'</td>'
++'<td style="text-align:center;padding:6px 10px">'+days+'</td>'
++'<td style="text-align:center;padding:6px 10px">'+hrs.toFixed(1)+'h</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+fc(pay)+'</td>'
++'<td style="text-align:right;padding:6px 10px;color:#dc2626">'+fc(adv)+'</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700;color:'+(bal>=0?'#1d4ed8':'#dc2626')+'">'+fc(bal)+'</td>'
++'</tr>';
 });
 if (contractAmt>0) {
 tTeamPay+=contractAmt;
-workerRows+=’<tr style="background:#fef9c3">’
-+’<td colspan="4" style="padding:6px 10px;font-style:italic;color:#92400e">Contract Amount</td>’
-+’<td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">’+fc(contractAmt)+’</td>’
-+’<td style="text-align:right;padding:6px 10px;color:#dc2626">’+fc(cP)+’</td>’
-+’<td style="text-align:right;padding:6px 10px;font-weight:700">’+fc(contractAmt-cP)+’</td>’
-+’</tr>’;
+workerRows+='<tr style="background:#fef9c3">'
++'<td colspan="4" style="padding:6px 10px;font-style:italic;color:#92400e">Contract Amount</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+fc(contractAmt)+'</td>'
++'<td style="text-align:right;padding:6px 10px;color:#dc2626">'+fc(cP)+'</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(contractAmt-cP)+'</td>'
++'</tr>';
 tTeamAdv+=cP;
 }
 var tBal=tTeamPay-tTeamAdv;
 gTP+=tTeamPay; gTA+=tTeamAdv;
-sectionsHtml+=’<div class="sec">’
-+’<div class="st" style="border-left-color:#6366f1;display:flex;justify-content:space-between;align-items:center">’
-+’<span>👥 ‘+c.contractor_name+’ <span style="font-size:10px;font-weight:400;color:#6b7280">(’+( c.contractor_type||‘Team’)+’)</span></span>’
-+’<span style="font-size:11px;font-weight:800;color:'+(tBal>=0?'#059669':'#dc2626')+'">Balance: ‘+fc(tBal)+’</span>’
-+’</div>’
+sectionsHtml+='<div class="sec">'
++'<div class="st" style="border-left-color:#6366f1;display:flex;justify-content:space-between;align-items:center">'
++'<span>👥 '+c.contractor_name+' <span style="font-size:10px;font-weight:400;color:#6b7280">('+( c.contractor_type||'Team')+')</span></span>'
++'<span style="font-size:11px;font-weight:800;color:'+(tBal>=0?'#059669':'#dc2626')+'">Balance: '+fc(tBal)+'</span>'
++'</div>'
 +(tw.length||contractAmt>0
-? ‘<table><thead><tr><th>Worker</th><th>Role</th><th style="text-align:center">Days</th><th style="text-align:center">Hours</th><th style="text-align:right">Total Pay</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead>’
-+’<tbody>’+workerRows+’</tbody>’
-+’<tfoot><tr style="background:#f0f4ff">’
-+’<td colspan="4" style="padding:7px 10px;font-weight:900">Team Total</td>’
-+’<td style="text-align:right;padding:7px 10px;font-weight:900;color:#059669">’+fc(tTeamPay)+’</td>’
-+’<td style="text-align:right;padding:7px 10px;font-weight:900;color:#dc2626">’+fc(tTeamAdv)+’</td>’
-+’<td style="text-align:right;padding:7px 10px;font-weight:900;color:'+(tBal>=0?'#059669':'#dc2626')+'">’+fc(tBal)+’</td>’
-+’</tr></tfoot></table>’
-: ‘<p style="padding:10px;color:#9ca3af">No workers / attendance this month.</p>’)
-+’</div>’;
+? '<table><thead><tr><th>Worker</th><th>Role</th><th style="text-align:center">Days</th><th style="text-align:center">Hours</th><th style="text-align:right">Total Pay</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead>'
++'<tbody>'+workerRows+'</tbody>'
++'<tfoot><tr style="background:#f0f4ff">'
++'<td colspan="4" style="padding:7px 10px;font-weight:900">Team Total</td>'
++'<td style="text-align:right;padding:7px 10px;font-weight:900;color:#059669">'+fc(tTeamPay)+'</td>'
++'<td style="text-align:right;padding:7px 10px;font-weight:900;color:#dc2626">'+fc(tTeamAdv)+'</td>'
++'<td style="text-align:right;padding:7px 10px;font-weight:900;color:'+(tBal>=0?'#059669':'#dc2626')+'">'+fc(tBal)+'</td>'
++'</tr></tfoot></table>'
+: '<p style="padding:10px;color:#9ca3af">No workers / attendance this month.</p>')
++'</div>';
 });
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Details</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Payment Report — ‘+mL+(selTeam!==‘all’?’ · ‘+selTeam:’’)+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Monthly Payment Report’, mL+(selTeam!==‘all’?’ — ‘+selTeam:’’))
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Details</title><style>'+pcs()+'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Payment Report — '+mL+(selTeam!=='all'?' · '+selTeam:'')+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Monthly Payment Report', mL+(selTeam!=='all'?' — '+selTeam:''))
 +sectionsHtml
-+’<div style="margin-top:16px;padding:10px 14px;background:#f0f4ff;border:2px solid #c7d2fe;border-radius:10px;display:flex;justify-content:space-between;align-items:center">’
-+’<span style="font-weight:900;font-size:13px;color:#1e1b4b">GRAND TOTAL</span>’
-+’<span style="font-size:12px;color:#059669;font-weight:800">Pay: ‘+fc(gTP)+’</span>’
-+’<span style="font-size:12px;color:#dc2626;font-weight:800">Adv: ‘+fc(gTA)+’</span>’
-+’<span style="font-size:12px;font-weight:900;color:'+(gTP-gTA>=0?'#1d4ed8':'#dc2626')+'">Bal: ‘+fc(gTP-gTA)+’</span>’
-+’</div>’
-+pftr()+’</div></body></html>’;
++'<div style="margin-top:16px;padding:10px 14px;background:#f0f4ff;border:2px solid #c7d2fe;border-radius:10px;display:flex;justify-content:space-between;align-items:center">'
++'<span style="font-weight:900;font-size:13px;color:#1e1b4b">GRAND TOTAL</span>'
++'<span style="font-size:12px;color:#059669;font-weight:800">Pay: '+fc(gTP)+'</span>'
++'<span style="font-size:12px;color:#dc2626;font-weight:800">Adv: '+fc(gTA)+'</span>'
++'<span style="font-size:12px;font-weight:900;color:'+(gTP-gTA>=0?'#1d4ed8':'#dc2626')+'">Bal: '+fc(gTP-gTA)+'</span>'
++'</div>'
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -2486,15 +2653,15 @@ var entries=ldept()[DTD]||[], dl=fdl(DTD);
 var tW=entries.reduce(function(s,e){ return s+parseInt(e.workers||0); },0);
 var tH=entries.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
 var tA=entries.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dept Work</title><style>’+pcs()+’</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Dept Work — ‘+dl+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Departmental Work’,dl)
-+’<div class="sumrow"><div class="sc" style="border-color:#a5b4fc"><div class="scl">Workers</div><div class="scv" style="color:#4f46e5">’+tW+’</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Hours</div><div class="scv" style="color:#059669">’+tH+‘h</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Amount</div><div class="scv" style="color:#dc2626">’+fc(tA)+’</div></div></div>’
-+(entries.length ? ‘<table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>’
-+entries.map(function(e){ return ‘<tr><td style="font-weight:700;padding:7px 10px">’+e.cat+’</td><td style="text-align:center;padding:7px 10px;font-weight:700;color:#7c3aed">’+e.workers+’</td><td style="text-align:center;padding:7px 10px">’+(e.hours||’–’)+‘h</td><td style="padding:7px 10px">’+(e.work||’–’)+(e.qty?’ (’+e.qty+’ ‘+(e.unit||’’)+’)’:’’)+’</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">’+(e.amount?fc(e.amount):’–’)+’</td></tr>’; }).join(’’)
-+’</tbody><tfoot><tr><td style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:8px 10px;font-weight:900">’+tW+’</td><td style="text-align:center;padding:8px 10px;font-weight:900">’+tH+‘h</td><td></td><td style="text-align:right;padding:8px 10px;font-weight:900">’+fc(tA)+’</td></tr></tfoot></table>’
-: ‘<p style="padding:10px;color:#9ca3af">No entries.</p>’)
-+pftr()+’</div></body></html>’;
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dept Work</title><style>'+pcs()+'</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Dept Work — '+dl+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Departmental Work',dl)
++'<div class="sumrow"><div class="sc" style="border-color:#a5b4fc"><div class="scl">Workers</div><div class="scv" style="color:#4f46e5">'+tW+'</div></div><div class="sc" style="border-color:#86efac"><div class="scl">Hours</div><div class="scv" style="color:#059669">'+tH+'h</div></div><div class="sc" style="border-color:#fca5a5"><div class="scl">Amount</div><div class="scv" style="color:#dc2626">'+fc(tA)+'</div></div></div>'
++(entries.length ? '<table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++entries.map(function(e){ return '<tr><td style="font-weight:700;padding:7px 10px">'+e.cat+'</td><td style="text-align:center;padding:7px 10px;font-weight:700;color:#7c3aed">'+e.workers+'</td><td style="text-align:center;padding:7px 10px">'+(e.hours||'–')+'h</td><td style="padding:7px 10px">'+(e.work||'–')+(e.qty?' ('+e.qty+' '+(e.unit||'')+')':'')+'</td><td style="text-align:right;padding:7px 10px;font-weight:700;color:#059669">'+(e.amount?fc(e.amount):'–')+'</td></tr>'; }).join('')
++'</tbody><tfoot><tr><td style="padding:8px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:8px 10px;font-weight:900">'+tW+'</td><td style="text-align:center;padding:8px 10px;font-weight:900">'+tH+'h</td><td></td><td style="text-align:right;padding:8px 10px;font-weight:900">'+fc(tA)+'</td></tr></tfoot></table>'
+: '<p style="padding:10px;color:#9ca3af">No entries.</p>')
++pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -2502,10 +2669,10 @@ opw(html);
 // PRINT: DEPT MONTHLY
 // ============================================================
 function printDeptMonthly(){
-var selEl=document.getElementById(‘dept-print-month’), selMs=selEl?selEl.value:mkey(VM);
-var mL=mlabel(new Date(selMs+’-01’));
+var selEl=document.getElementById('dept-print-month'), selMs=selEl?selEl.value:mkey(VM);
+var mL=mlabel(new Date(selMs+'-01'));
 var store=ldept(), dates=Object.keys(store).filter(function(d){ return d.startsWith(selMs); }).sort();
-if (!dates.length) { toast(‘No dept data for ‘+mL,‘err’); return; }
+if (!dates.length) { toast('No dept data for '+mL,'err'); return; }
 var catSet={};
 dates.forEach(function(d){ (store[d]||[]).forEach(function(e){ catSet[e.cat]=1; }); });
 var cats=CATS.filter(function(c){ return catSet[c]; });
@@ -2513,25 +2680,25 @@ Object.keys(catSet).forEach(function(c){ if(cats.indexOf(c)<0) cats.push(c); });
 var totW={}, totH={};
 cats.forEach(function(c){ totW[c]=0; totH[c]=0; });
 var rows=dates.map(function(d){
-var ents=store[d]||[], day=d.split(’-’)[2];
-var cells=’<td style="font-weight:700;text-align:center;background:#f5f3ff;border:1px solid #e5e7eb;padding:5px">’+day+’</td>’;
+var ents=store[d]||[], day=d.split('-')[2];
+var cells='<td style="font-weight:700;text-align:center;background:#f5f3ff;border:1px solid #e5e7eb;padding:5px">'+day+'</td>';
 cats.forEach(function(cat){
 var e=ents.find(function(x){ return x.cat===cat; });
-if (e) { totW[cat]+=parseInt(e.workers||0); totH[cat]+=parseFloat(e.hours||0); cells+=’<td style="text-align:center;border:1px solid #e5e7eb;padding:5px"><strong>’+e.workers+’</strong><br><span style="font-size:9px;color:#6b7280">(’+e.hours+‘h)</span></td>’; }
-else cells+=’<td style="text-align:center;border:1px solid #e5e7eb;padding:5px;color:#d1d5db">—</td>’;
+if (e) { totW[cat]+=parseInt(e.workers||0); totH[cat]+=parseFloat(e.hours||0); cells+='<td style="text-align:center;border:1px solid #e5e7eb;padding:5px"><strong>'+e.workers+'</strong><br><span style="font-size:9px;color:#6b7280">('+e.hours+'h)</span></td>'; }
+else cells+='<td style="text-align:center;border:1px solid #e5e7eb;padding:5px;color:#d1d5db">—</td>';
 });
-return ‘<tr>’+cells+’</tr>’;
-}).join(’’);
-var html=’<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Dept</title><style>’+pcs()+‘table{border-collapse:collapse}</style></head><body>’
-+’<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Dept — ‘+mL+’</span><button class="bp" onclick="window.print()">🖶 Print</button></div>’
-+’<div class="content">’+phdr(‘Monthly Dept Work’,mL)
-+’<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>’
-+’<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151">Date</th>’
-+cats.map(function(c){ return ‘<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151;min-width:80px">’+c+’</th>’; }).join(’’)
-+’</tr></thead><tbody>’+rows+’</tbody><tfoot><tr>’
-+’<td style="background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">TOTAL</td>’
-+cats.map(function(c){ return ‘<td style="text-align:center;background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">’+totW[c]+’<br><span style="font-size:9px;font-weight:400">(’+totH[c]+‘h)</span></td>’; }).join(’’)
-+’</tr></tfoot></table></div>’+pftr()+’</div></body></html>’;
+return '<tr>'+cells+'</tr>';
+}).join('');
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Dept</title><style>'+pcs()+'table{border-collapse:collapse}</style></head><body>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Dept — '+mL+'</span><button class="bp" onclick="window.print()">🖶 Print</button></div>'
++'<div class="content">'+phdr('Monthly Dept Work',mL)
++'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>'
++'<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151">Date</th>'
++cats.map(function(c){ return '<th style="background:#1e1b4b;color:white;padding:7px 10px;border:1px solid #374151;min-width:80px">'+c+'</th>'; }).join('')
++'</tr></thead><tbody>'+rows+'</tbody><tfoot><tr>'
++'<td style="background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">TOTAL</td>'
++cats.map(function(c){ return '<td style="text-align:center;background:#1e1b4b;color:white;border:1px solid #374151;padding:6px 8px;font-weight:900">'+totW[c]+'<br><span style="font-size:9px;font-weight:400">('+totH[c]+'h)</span></td>'; }).join('')
++'</tr></tfoot></table></div>'+pftr()+'</div></body></html>';
 opw(html);
 }
 
@@ -2539,48 +2706,72 @@ opw(html);
 // EXCEL EXPORT
 // ============================================================
 function exportExcel(){
-AD=ld(); var vms=mkey(VM), ctrs=AD.filter(function(d){ return d.type===‘contractor’; });
-if (!ctrs.length) { toast(‘No teams to export’,‘err’); return; }
+AD=ld(); var vms=mkey(VM), ctrs=AD.filter(function(d){ return d.type==='contractor'; });
+if (!ctrs.length) { toast('No teams to export','err'); return; }
+function *doExport() {
 var wb=XLSX.utils.book_new();
-var data=[[‘Sanjineer — Payment Report’],[‘Month: ‘+mlabel(VM)],[‘Company: ‘+pp().company],[‘Generated: ‘+new Date().toLocaleDateString(‘en-IN’)],[],[‘Team’,‘Type’,‘Workers’,‘Payment (₹)’,‘Advances (₹)’,‘Balance (₹)’]];
+var data=[['Sanjineer — Payment Report'],['Month: '+mlabel(VM)],['Company: '+pp().company],['Generated: '+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'})],[],['Team','Type','Workers','Payment (₹)','Advances (₹)','Balance (₹)']];
 ctrs.forEach(function(c){
-var tw=AD.filter(function(d){ return d.type===‘worker’&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type===‘attendance’&&(d.date||’’).startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
+var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
 var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
-var pays=AD.filter(function(d){ return d.type===‘contractor_payment’&&d.contractor_name===c.contractor_name&&(d.date||’’).startsWith(vms); });
+var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(vms); });
 var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var tp2=wP+(parseFloat(c.total_contract)||0), ta2=wA+cP;
-data.push([c.contractor_name, c.contractor_type||‘Team’, tw.length, tp2, ta2, tp2-ta2]);
+data.push([c.contractor_name, c.contractor_type||'Team', tw.length, tp2, ta2, tp2-ta2]);
 });
 var ws=XLSX.utils.aoa_to_sheet(data);
-ws[’!cols’]=[{wch:22},{wch:14},{wch:10},{wch:16},{wch:16},{wch:14}];
-XLSX.utils.book_append_sheet(wb,ws,‘Summary’);
-XLSX.writeFile(wb,‘Sanjineer_’+vms+’.xlsx’);
-toast(‘Excel exported!’,‘ok’);
+ws['!cols']=[{wch:22},{wch:14},{wch:10},{wch:16},{wch:16},{wch:14}];
+XLSX.utils.book_append_sheet(wb,ws,'Summary');
+XLSX.writeFile(wb,'Sanjineer*'+vms+'.xlsx');
+toast('Excel exported!','ok');
+}
+if (typeof XLSX !== 'undefined') { _doExport(); return; }
+toast('Loading Excel…','ok');
+var s = document.createElement('script');
+s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+s.onload = _doExport;
+s.onerror = function(){ toast('Export failed - check internet','err'); };
+document.head.appendChild(s);
 }
 
 // ============================================================
 // PWA MANIFEST
 // ============================================================
-(function(){
-var m={name:‘Sanjineer’,short_name:‘Sanjineer’,start_url:’.’,display:‘standalone’,background_color:’#0f172a’,theme_color:’#4f46e5’,
-icons:[{src:‘data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="%234f46e5"/><text x="96" y="130" font-size="100" text-anchor="middle">%F0%9F%8F%97</text></svg>’,sizes:‘192x192’,type:‘image/svg+xml’}]};
-var el=document.getElementById(‘pwa-manifest’);
-if (el) el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:‘application/json’}));
-})();
-window.addEventListener(‘beforeinstallprompt’,function(e){
+// PWA setup runs after DOM ready (inside boot)
+function _setupPWA() {
+try {
+var m={name:'Sanjineer',short_name:'Sanjineer',start_url:'.',display:'standalone',background_color:'#0f172a',theme_color:'#4f46e5',
+icons:[{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="%234f46e5"/><text x="96" y="130" font-size="100" text-anchor="middle">%F0%9F%8F%97</text></svg>',sizes:'192x192',type:'image/svg+xml'}]};
+var el=document.getElementById('pwa-manifest');
+if (el) el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
+} catch(e) {}
+window.addEventListener('beforeinstallprompt',function(e){
 e.preventDefault(); PWA=e;
-if (!localStorage.getItem(‘pwa_dismissed’)) document.getElementById(‘pwa-banner’).style.display=‘flex’;
+if (!safeLS.getItem('pwa_dismissed')) { var b=document.getElementById('pwa-banner'); if(b) b.style.display='flex'; }
 });
+}
 
 // ============================================================
 // INIT
 // ============================================================
-document.addEventListener(‘DOMContentLoaded’, function() {
-applyProfile();
-boot();
-});
+// ── BULLETPROOF BOOT for GitHub Pages ──────────────────────
+// Runs immediately if DOM ready, otherwise waits for it
+(function() {
+var done = false;
+function run() {
+if (done) return; done = true;
+try { applyProfile(); } catch(e) {}
+try { boot(); } catch(e) { console.error('boot:', e); }
+}
+if (document.readyState === 'loading') {
+document.addEventListener('DOMContentLoaded', run);
+} else {
+run(); // DOM already ready (GitHub Pages cached page scenario)
+}
+window.addEventListener('load', run); // final safety net
+})();
 </script>
 
 </body>
