@@ -369,7 +369,7 @@ body{margin:0}
       <select id="att-print-worker" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
         <option value="">-- Select Worker --</option>
       </select>
-      <select id="att-print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
+      <select id="att-print-month" onchange="viewWorkers()" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
       <button onclick="printWorkerAttendance()" class="g-tor-violet500-purple600 flex-shrink-0 px-4 py-2 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
@@ -1271,7 +1271,7 @@ function saveProfile() {
   sprof({company: co, engineer: en});
   applyProfile();
   closeProfileModal();
-  toast('Profile saved!', 'ok');
+  toast('Profile saved!', 'ok'); applyProfile(); updateDash();
 }
 
 // ============================================================
@@ -1428,7 +1428,7 @@ function saveDailyMeta() {
   var sw = ['sunny','cloudy','rainy'].find(function(k) { var e=document.getElementById('wbtn-'+k); return e&&e.classList.contains('selected'); });
   if (sw) m[DD].weather = document.getElementById('wbtn-' + sw).textContent.trim();
   m[DD].status = document.getElementById('daily-status').value.trim();
-  sm(m); toast('Status saved', 'ok');
+  sm(m); toast('Status saved', 'ok'); AD=ld(); viewDaily(); updateDash();
 }
 function loadPhotos() {
   var div = document.getElementById('photo-previews');
@@ -1524,7 +1524,7 @@ function viewDaily() {
     : '<tr><td colspan="3" class="py-3 text-center text-gray-400 text-xs">None today</td></tr>';
   var grp = {};
   att.forEach(function(a){ if (!grp[a.category]) grp[a.category]=[]; grp[a.category].push(a); });
-  var cats = Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
+  var cats = CATS.filter(function(c){ return grp[c]&&grp[c].length>0; });
   var dl = document.getElementById('daily-labour');
   if (dl) dl.innerHTML = cats.length
     ? cats.map(function(cat){
@@ -1601,13 +1601,13 @@ function saveDeptEntry() {
   var entry = { cat:cat, workers:workers, hours:parseFloat(document.getElementById('da-hours').value)||0, work:document.getElementById('da-work').value.trim(), qty:document.getElementById('da-qty').value, unit:document.getElementById('da-unit').value.trim(), amount:parseFloat(document.getElementById('da-amount').value)||0 };
   var store = ldept(); if (!store[DTD]) store[DTD]=[];
   store[DTD].push(entry); sdept(store);
-  closeDeptModal(); toast('Entry saved','ok'); renderDept();
+  closeDeptModal(); toast('Entry saved','ok'); renderDept(); updateDash(); AD=ld(); viewDeptSummary();
 }
 function delDeptEntry(i) {
   askDel('Delete this entry?', function(){
     var store = ldept(); if (!store[DTD]) return;
     store[DTD].splice(i,1); if (!store[DTD].length) delete store[DTD];
-    sdept(store); toast('Deleted','ok'); renderDept();
+    sdept(store); toast('Deleted','ok'); renderDept(); updateDash(); AD=ld(); viewDeptSummary();
   });
 }
 
@@ -1654,7 +1654,8 @@ function saveAttendance() {
 }
 function refreshWorkerCard(wid) {
   AD=ld(); var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
-  var cums=mkey(new Date());
+  var pmSel=document.getElementById('att-print-month');
+  var cums=(pmSel&&pmSel.value)?pmSel.value:mkey(new Date());
   var ma=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); }));
   var days=ma.filter(function(a){ return parseFloat(a.hours)>0; }).length;
   var hrs=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
@@ -1675,11 +1676,15 @@ function refreshWorkerCard(wid) {
 }
 function viewWorkers() {
   AD=ld(); var workers=AD.filter(function(d){ return d.type==='worker'; });
-  var div=document.getElementById('workers-list'); var cums=mkey(new Date());
+  var div=document.getElementById('workers-list');
+  var pmSel=document.getElementById('att-print-month');
+  var cums=(pmSel&&pmSel.value)?pmSel.value:mkey(new Date());
+  var cumsLabel=mlabel(new Date(cums+'-01T00:00:00'));
   if (!workers.length) { div.innerHTML='<p class="text-gray-400 text-center py-4">No workers yet</p>'; return; }
   var grp={};
   workers.forEach(function(w){ if(!grp[w.category]) grp[w.category]=[]; grp[w.category].push(w); });
-  var cats=Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
+  // Only show categories that are in the CATS list (dropdown list), in same order
+  var cats=CATS.filter(function(c){ return grp[c]&&grp[c].length>0; });
   div.innerHTML=cats.map(function(cat){
     return '<div class="mb-4"><h4 class="text-xs font-bold mb-2 uppercase" style="color:#6366f1">'+cat+' ('+grp[cat].length+')</h4>'
       + grp[cat].map(function(w){
@@ -1697,6 +1702,7 @@ function viewWorkers() {
             +'<button onclick="toggleCal(\''+w.__id+'\')" style="font-size:11px;padding:5px 0;width:90px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:8px;cursor:pointer;font-weight:700;text-align:center;">📅 Calendar</button>'
             +'<button onclick="delWorker(\''+w.__id+'\')" style="font-size:10px;padding:5px 0;width:30px;background:#fee2e2;color:#dc2626;border:none;border-radius:7px;cursor:pointer;font-weight:600;text-align:center;">🗑</button>'
             +'</div></div>'
+            +'<p style="font-size:9px;color:#6b7280;margin-bottom:4px;text-align:center">📅 '+cumsLabel+'</p>'
             +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center;margin-bottom:6px">'
             +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#9ca3af">Days</p><p id="wcd-'+w.__id+'" style="font-weight:700;font-size:13px">'+days+'</p></div>'
             +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#9ca3af">Hrs</p><p id="wch-'+w.__id+'" style="font-weight:700;font-size:13px">'+hrs.toFixed(1)+'</p></div>'
@@ -2032,7 +2038,7 @@ function addTool(){
 }
 function delTool(id){
   var t=AD.find(function(d){ return d.__id===id; });
-  askDel('Delete '+t.tool_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewTools(); });
+  askDel('Delete '+t.tool_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewTools(); updateDash(); });
 }
 function assignTool(){
   var tid=document.getElementById('as-tool').value, wid=document.getElementById('as-worker').value, date=document.getElementById('as-date').value;
@@ -2048,7 +2054,7 @@ function assignTool(){
 function returnTool(id){
   askDel('Mark this tool as returned?', function(){
     upd(id,{returned:true,return_date:ist()});
-    AD=ld(); toast('Returned ✓','ok'); viewTools();
+    AD=ld(); toast('Returned ✓','ok'); viewTools(); updateDash();
   });
 }
 function getToolStock(){
@@ -2431,11 +2437,11 @@ var name=document.getElementById('ct-name').value.trim(), type=document.getEleme
 if (!name) { toast('Enter name','err'); return; }
 ins({type:'contractor',contractor_name:name,contractor_type:type,total_contract:total});
 ['ct-name','ct-total'].forEach(function(id){ document.getElementById(id).value=''; });
-AD=ld(); toast('Added','ok'); viewContractors(); updateDropdowns();
+AD=ld(); toast('Added','ok'); viewContractors(); updateDropdowns(); updateDash();
 }
 function delContractor(id){
 var c=AD.find(function(d){ return d.__id===id; });
-askDel('Delete '+c.contractor_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); });
+askDel('Delete '+c.contractor_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); updateDash(); });
 }
 function openCTModal(cid){
 CID=cid; var c=AD.find(function(d){ return d.__id===cid; }); if(!c) return;
@@ -2625,7 +2631,7 @@ var mats=AD.filter(function(a){ return a.type==='material'&&a.date===d&&!a.is_pe
 var adv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(a){ return a.type==='contractor_payment'&&a.date===d; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); },0);
 var mc=mats.reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
 var grp={}; att.forEach(function(a){ if(!grp[a.category]) grp[a.category]=[]; grp[a.category].push(a); });
-var cats=Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
+var cats=CATS.filter(function(cat){ return grp[cat]&&grp[cat].length>0; });
 var dept=ldept()[d]||[];
 var dW=dept.reduce(function(s,e){ return s+parseInt(e.workers||0); },0);
 var dH=dept.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
@@ -3000,6 +3006,8 @@ function fbPatchStorage() {
   smat  = function(x) { _origSmat(x);  fbSchedulePush(); };
   sdept = function(x) { _origSdept(x); fbSchedulePush(); };
   sprof = function(x) { _origSprof(x); fbSchedulePush(); };
+  var _origSm = sm;
+  sm    = function(x) { _origSm(x);    fbSchedulePush(); };
 }
 
 function fbInit() {
