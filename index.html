@@ -1569,11 +1569,11 @@ function addWorker() {
   if (!name||!cat||!team) { toast('Fill all fields','err'); return; }
   ins({type:'worker',name:name,category:cat,team_name:team,hourly_wage:wage});
   document.getElementById('w-name').value=''; document.getElementById('w-wage').value='';
-  toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers();
+  toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers(); updateDash();
 }
 function delWorker(id) {
   var w=AD.find(function(d){ return d.__id===id; });
-  askDel('Delete '+w.name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewWorkers(); });
+  askDel('Delete '+w.name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewWorkers(); updateDash(); });
 }
 function openAttModal(wid, date) {
   WID=wid; var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
@@ -1596,8 +1596,35 @@ function saveAttendance() {
   var ex=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&d.date===date; }));
   if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,payment:hours*w.hourly_wage});
   else ins({type:'attendance',name:w.name,category:w.category,date:date,hours:hours,advance:advance,payment:hours*w.hourly_wage,hourly_wage:w.hourly_wage});
-  AD=ld(); closeAttModal(); toast('Saved','ok');
-  if (date===DD) viewDaily(); viewWorkers();
+  AD=ld(); var _wid=WID; closeAttModal(); toast('Saved','ok');
+  if (date===DD) viewDaily();
+  refreshWorkerCard(_wid);
+  updateDash();
+}
+function refreshWorkerCard(wid) {
+  var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
+  var cums=mkey(new Date());
+  var ma=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); }));
+  var days=ma.filter(function(a){ return parseFloat(a.hours)>0; }).length;
+  var hrs=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
+  var adv=ma.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+  var pay=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+  var e;
+  e=document.getElementById('wcd-'+wid); if(e) e.textContent=days;
+  e=document.getElementById('wch-'+wid); if(e) e.textContent=hrs.toFixed(1);
+  e=document.getElementById('wca-'+wid); if(e) e.textContent=fc(adv);
+  e=document.getElementById('wcp-'+wid); if(e) e.textContent=fc(pay);
+  var calC=document.getElementById('cal-c-'+wid);
+  if(calC) {
+    var yr=new Date().getFullYear(), mo=new Date().getMonth();
+    var btns=calC.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      var oc=btns[i].getAttribute('onclick')||'';
+      var m=oc.match(/changeCal\('.*?',1,(\d+),(\d+)\)/);
+      if(m){ yr=parseInt(m[1]); mo=parseInt(m[2]); break; }
+    }
+    calC.innerHTML=renderCal(w,new Date(yr,mo,1));
+  }
 }
 function viewWorkers() {
   AD=ld(); var workers=AD.filter(function(d){ return d.type==='worker'; });
@@ -1624,10 +1651,10 @@ function viewWorkers() {
             +'<button onclick="delWorker(\''+w.__id+'\')" style="font-size:10px;padding:5px 0;width:30px;background:#fee2e2;color:#dc2626;border:none;border-radius:7px;cursor:pointer;font-weight:600;text-align:center;">🗑</button>'
             +'</div></div>'
             +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center;margin-bottom:6px">'
-            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#9ca3af">Days</p><p style="font-weight:700;font-size:13px">'+days+'</p></div>'
-            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#9ca3af">Hrs</p><p style="font-weight:700;font-size:13px">'+hrs.toFixed(1)+'</p></div>'
-            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(217,119,6,0.25)"><p style="font-size:9px;color:#d97706">Adv</p><p style="font-weight:700;font-size:13px;color:#d97706">'+fc(adv)+'</p></div>'
-            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(5,150,105,0.22)"><p style="font-size:9px;color:#059669">Pay</p><p style="font-weight:700;font-size:13px;color:#059669">'+fc(pay)+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#9ca3af">Days</p><p id="wcd-'+w.__id+'" style="font-weight:700;font-size:13px">'+days+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#9ca3af">Hrs</p><p id="wch-'+w.__id+'" style="font-weight:700;font-size:13px">'+hrs.toFixed(1)+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(217,119,6,0.25)"><p style="font-size:9px;color:#d97706">Adv</p><p id="wca-'+w.__id+'" style="font-weight:700;font-size:13px;color:#d97706">'+fc(adv)+'</p></div>'
+            +'<div style="background:white;border-radius:8px;padding:5px;box-shadow:0 3px 10px rgba(5,150,105,0.22)"><p style="font-size:9px;color:#059669">Pay</p><p id="wcp-'+w.__id+'" style="font-weight:700;font-size:13px;color:#059669">'+fc(pay)+'</p></div>'
             +'</div>'
             +'<div id="cal-'+w.__id+'" style="max-height:0;overflow:hidden;transition:max-height 0.35s ease"><div id="cal-c-'+w.__id+'">'+renderCal(w,new Date())+'</div></div>'
             +'</div>';
@@ -1946,7 +1973,7 @@ function addTool(){
   if (!name) { toast('Enter tool name','err'); return; }
   ins({type:'tool',tool_name:name,tool_qty:qty,purchase_date:date,purchase_cost:cost});
   ['tl-name','tl-qty','tl-cost'].forEach(function(id){ document.getElementById(id).value=''; });
-  AD=ld(); toast('Added','ok'); viewTools(); updateDropdowns();
+  AD=ld(); toast('Added','ok'); viewTools(); updateDropdowns(); updateDash();
 }
 function delTool(id){
   var t=AD.find(function(d){ return d.__id===id; });
