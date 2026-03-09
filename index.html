@@ -2666,10 +2666,13 @@ var pamt=parseFloat(p.payment)||0;
 if(!pamt) return;
 tTeamAdv+=pamt;
 workerRows+='<tr style="background:#fff1f2">'
-+'<td colspan="4" style="padding:5px 10px;color:#b91c1c;font-size:11px">&#x1F4B8; Team Advance — '+fd(p.date)+'</td>'
-+'<td style="text-align:right;padding:5px 10px;color:#9ca3af">—</td>'
-+'<td style="text-align:right;padding:5px 10px;font-weight:700;color:#dc2626">'+fc(pamt)+'</td>'
-+'<td style="text-align:right;padding:5px 10px;font-weight:700;color:#dc2626">−'+fc(pamt)+'</td>'
++'<td style="padding:6px 10px;font-weight:700;color:#b91c1c">&#x1F4B8; Team Advance</td>'
++'<td style="padding:6px 10px;color:#6b7280"></td>'
++'<td style="text-align:center;padding:6px 10px;color:#6b7280">—</td>'
++'<td style="text-align:center;padding:6px 10px;font-weight:700;color:#b91c1c">'+fd(p.date)+'</td>'
++'<td style="text-align:right;padding:6px 10px;color:#9ca3af">—</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700;color:#dc2626">'+fc(pamt)+'</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700;color:#dc2626">−'+fc(pamt)+'</td>'
 +'</tr>';
 });
 var tBal=tTeamPay-tTeamAdv;
