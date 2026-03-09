@@ -2650,25 +2650,37 @@ workerRows+='<tr>'
 +'<td style="text-align:right;padding:6px 10px;font-weight:700;color:'+(bal>=0?'#1d4ed8':'#dc2626')+'">'+fc(bal)+'</td>'
 +'</tr>';
 });
+// Contract amount row (only if >0)
 if (contractAmt>0) {
 tTeamPay+=contractAmt;
 workerRows+='<tr style="background:#fef9c3">'
 +'<td colspan="4" style="padding:6px 10px;font-style:italic;color:#92400e">Contract Amount</td>'
 +'<td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+fc(contractAmt)+'</td>'
-+'<td style="text-align:right;padding:6px 10px;color:#dc2626">'+fc(cP)+'</td>'
-+'<td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(contractAmt-cP)+'</td>'
++'<td style="text-align:right;padding:6px 10px;color:#6b7280">—</td>'
++'<td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(contractAmt)+'</td>'
 +'</tr>';
-tTeamAdv+=cP;
 }
+// Team advances (contractor_payment) -- ALWAYS shown date-wise, ALWAYS deducted
+pays.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).forEach(function(p){
+var pamt=parseFloat(p.payment)||0;
+if(!pamt) return;
+tTeamAdv+=pamt;
+workerRows+='<tr style="background:#fff1f2">'
++'<td colspan="4" style="padding:5px 10px;color:#b91c1c;font-size:11px">&#x1F4B8; Team Advance — '+fd(p.date)+'</td>'
++'<td style="text-align:right;padding:5px 10px;color:#9ca3af">—</td>'
++'<td style="text-align:right;padding:5px 10px;font-weight:700;color:#dc2626">'+fc(pamt)+'</td>'
++'<td style="text-align:right;padding:5px 10px;font-weight:700;color:#dc2626">−'+fc(pamt)+'</td>'
++'</tr>';
+});
 var tBal=tTeamPay-tTeamAdv;
 gTP+=tTeamPay; gTA+=tTeamAdv;
 sectionsHtml+='<div class="sec">'
 +'<div class="st" style="border-left-color:#6366f1;display:flex;justify-content:space-between;align-items:center">'
-+'<span>👥 '+c.contractor_name+' <span style="font-size:10px;font-weight:400;color:#6b7280">('+( c.contractor_type||'Team')+')</span></span>'
++'<span>&#x1F465; '+c.contractor_name+' <span style="font-size:10px;font-weight:400;color:#6b7280">('+( c.contractor_type||'Team')+')</span></span>'
 +'<span style="font-size:11px;font-weight:800;color:'+(tBal>=0?'#059669':'#dc2626')+'">Balance: '+fc(tBal)+'</span>'
 +'</div>'
-+(tw.length||contractAmt>0
-? '<table><thead><tr><th>Worker</th><th>Role</th><th style="text-align:center">Days</th><th style="text-align:center">Hours</th><th style="text-align:right">Total Pay</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead>'
++(tw.length||contractAmt>0||pays.length
+? '<table><thead><tr><th>Worker / Entry</th><th>Role</th><th style="text-align:center">Days</th><th style="text-align:center">Hours</th><th style="text-align:right">Pay</th><th style="text-align:right">Advances</th><th style="text-align:right">Balance</th></tr></thead>'
 +'<tbody>'+workerRows+'</tbody>'
 +'<tfoot><tr style="background:#f0f4ff">'
 +'<td colspan="4" style="padding:7px 10px;font-weight:900">Team Total</td>'
@@ -2676,7 +2688,7 @@ sectionsHtml+='<div class="sec">'
 +'<td style="text-align:right;padding:7px 10px;font-weight:900;color:#dc2626">'+fc(tTeamAdv)+'</td>'
 +'<td style="text-align:right;padding:7px 10px;font-weight:900;color:'+(tBal>=0?'#059669':'#dc2626')+'">'+fc(tBal)+'</td>'
 +'</tr></tfoot></table>'
-: '<p style="padding:10px;color:#9ca3af">No workers / attendance this month.</p>')
+: '<p style="padding:10px;color:#9ca3af">No workers / attendance / advances this month.</p>')
 +'</div>';
 });
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Details</title><style>'+pcs()+'</style></head><body>'
