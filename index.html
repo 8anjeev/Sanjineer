@@ -545,31 +545,78 @@ body{margin:0}
 <!-- ===== TOOLS ===== -->
 
 <div id="tab-tools" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl viewer-hide">
-    <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Tool / Equipment</p>
-    <div class="grid grid-cols-2 gap-3">
-      <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="number" id="tl-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="date" id="tl-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="number" id="tl-cost" placeholder="Cost (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addTool()" class="viewer-hide g-tor-violet500-purple500 col-span-2 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Tool</button>
-    </div>
-  </div>
+
+  <!-- Stock summary — always visible -->
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-xs font-semibold text-gray-500 mb-2">🔧 Tools List</p>
-    <table class="w-full text-sm"><thead><tr class="g-tor-violet500-purple500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Tool</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-center">Date</th><th class="px-3 py-2 text-right">Cost</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
-    <tbody id="tools-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No tools</td></tr></tbody></table>
-  </div>
-  <div class="bg-white rounded-2xl p-3 shadow-xl viewer-hide">
-    <p class="text-xs font-semibold text-gray-500 mb-2">📋 Assign Tool</p>
-    <div class="grid grid-cols-2 gap-2.5 mb-3">
-      <select id="as-tool" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Tool</option></select>
-      <select id="as-worker" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Worker</option></select>
-      <input type="date" id="as-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
-      <button onclick="assignTool()" class="viewer-hide g-tor-indigo500-blue500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Assign</button>
+    <p class="text-xs font-semibold text-gray-500 mb-2">📦 Tool Stock</p>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="g-tor-violet500-purple500 text-white">
+          <th class="px-3 py-2 text-left rounded-l-lg">Tool</th>
+          <th class="px-3 py-2 text-center">Total</th>
+          <th class="px-3 py-2 text-center">Assigned</th>
+          <th class="px-3 py-2 text-center rounded-r-lg">Available</th>
+        </tr></thead>
+        <tbody id="tool-stock-table"><tr><td colspan="4" style="text-align:center;padding:14px;color:#9ca3af;font-size:12px">No tools yet</td></tr></tbody>
+      </table>
     </div>
-    <div id="tool-assignments"><p class="text-gray-400 text-center py-2 text-sm">No assignments</p></div>
   </div>
+
+  <!-- Sub-tabs -->
+  <div class="bg-white/10 rounded-2xl p-2 mb-3">
+    <div class="flex gap-2">
+      <button id="ttab-add" onclick="switchToolTab('add')" class="flex-1 px-4 py-2 text-sm font-semibold rounded-xl" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff">🔧 Add Tools</button>
+      <button id="ttab-assign" onclick="switchToolTab('assign')" class="flex-1 px-4 py-2 text-sm font-semibold rounded-xl" style="background:rgba(255,255,255,0.15);color:#374151">📋 Assign Tools</button>
+    </div>
+  </div>
+
+  <!-- Add Tools Section -->
+  <div id="tsec-add">
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl viewer-hide">
+      <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Tool / Equipment</p>
+      <div class="grid grid-cols-2 gap-3">
+        <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="number" id="tl-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="date" id="tl-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="number" id="tl-cost" placeholder="Cost (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <button onclick="addTool()" class="viewer-hide g-tor-violet500-purple500 col-span-2 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Tool</button>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl p-3 shadow-xl">
+      <p class="text-xs font-semibold text-gray-500 mb-2">🔧 All Tool Records</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="g-tor-violet500-purple500 text-white">
+            <th class="px-3 py-2 text-left rounded-l-lg">Tool</th>
+            <th class="px-3 py-2 text-center">Qty</th>
+            <th class="px-3 py-2 text-center">Date</th>
+            <th class="px-3 py-2 text-right">Cost</th>
+            <th class="px-3 py-2 text-center rounded-r-lg">Del</th>
+          </tr></thead>
+          <tbody id="tools-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No tools</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign Tools Section -->
+  <div id="tsec-assign" style="display:none">
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl viewer-hide">
+      <p class="text-xs font-semibold text-gray-500 mb-2">📋 Assign Tool to Worker</p>
+      <div class="grid grid-cols-2 gap-2.5">
+        <select id="as-tool" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Tool</option></select>
+        <select id="as-worker" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none"><option value="">Select Worker</option></select>
+        <input type="number" id="as-qty" placeholder="Qty" step="any" min="1" value="1" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <input type="date" id="as-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <button onclick="assignTool()" class="viewer-hide g-tor-indigo500-blue500 col-span-2 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Assign Tool</button>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl p-3 shadow-xl">
+      <p class="text-xs font-semibold text-gray-500 mb-2">📋 Assignment Records</p>
+      <div id="tool-assignments"><p class="text-gray-400 text-center py-4 text-sm">No assignments yet</p></div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ===== RENTALS ===== -->
@@ -1594,7 +1641,7 @@ function saveAttendance() {
   if (!WID) { toast('Error','err'); return; }
   var w=AD.find(function(d){ return d.__id===WID; }); if(!w) return;
   var ex=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&d.date===date; }));
-  if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,payment:hours*w.hourly_wage});
+  if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,payment:hours*w.hourly_wage,hourly_wage:w.hourly_wage});
   else ins({type:'attendance',name:w.name,category:w.category,date:date,hours:hours,advance:advance,payment:hours*w.hourly_wage,hourly_wage:w.hourly_wage});
   AD=ld(); var _wid=WID; closeAttModal(); toast('Saved','ok');
   if (date===DD) viewDaily();
@@ -1602,7 +1649,7 @@ function saveAttendance() {
   updateDash();
 }
 function refreshWorkerCard(wid) {
-  var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
+  AD=ld(); var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
   var cums=mkey(new Date());
   var ma=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); }));
   var days=ma.filter(function(a){ return parseFloat(a.hours)>0; }).length;
@@ -1616,13 +1663,9 @@ function refreshWorkerCard(wid) {
   e=document.getElementById('wcp-'+wid); if(e) e.textContent=fc(pay);
   var calC=document.getElementById('cal-c-'+wid);
   if(calC) {
-    var yr=new Date().getFullYear(), mo=new Date().getMonth();
-    var btns=calC.querySelectorAll('button');
-    for(var i=0;i<btns.length;i++){
-      var oc=btns[i].getAttribute('onclick')||'';
-      var m=oc.match(/changeCal\('.*?',1,(\d+),(\d+)\)/);
-      if(m){ yr=parseInt(m[1]); mo=parseInt(m[2]); break; }
-    }
+    var inner=calC.querySelector('[data-yr]');
+    var yr=inner?parseInt(inner.getAttribute('data-yr')):new Date().getFullYear();
+    var mo=inner?parseInt(inner.getAttribute('data-mo')):new Date().getMonth();
     calC.innerHTML=renderCal(w,new Date(yr,mo,1));
   }
 }
@@ -1695,7 +1738,7 @@ function renderCal(w,vd){
       +(a?'<div style="font-size:7px;line-height:1.1">'+parseFloat(a.hours).toFixed(1)+'h</div>':'')
       +(advAmt>0?'<div style="font-size:7px;line-height:1.1;background:rgba(251,191,36,0.9);color:#92400e;border-radius:3px;padding:0 2px;font-weight:700">₹'+Math.round(advAmt)+'</div>':'')+'</div>';
   }).join('');
-  return '<div style="background:white;border-radius:10px;padding:10px;margin-top:6px;border:1px solid #e5e7eb">'
+  return '<div data-yr="'+yr+'" data-mo="'+mo+'" style="background:white;border-radius:10px;padding:10px;margin-top:6px;border:1px solid #e5e7eb">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
     +'<button onclick="changeCal(\''+w.__id+'\',-1,'+yr+','+mo+')" style="padding:3px 10px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:6px;cursor:pointer;font-size:12px">&#8592;</button>'
     +'<span style="font-weight:700;font-size:12px;color:#374151">'+MN[mo]+' '+yr+'</span>'
@@ -1967,6 +2010,14 @@ function toggleMatHistory(id){
 // ============================================================
 // TOOLS
 // ============================================================
+function switchToolTab(tab){
+  var isAdd=(tab==='add');
+  document.getElementById('tsec-add').style.display=isAdd?'block':'none';
+  document.getElementById('tsec-assign').style.display=isAdd?'none':'block';
+  var btnA=document.getElementById('ttab-add'), btnB=document.getElementById('ttab-assign');
+  if(btnA){ btnA.style.background=isAdd?'linear-gradient(135deg,#8b5cf6,#7c3aed)':'rgba(255,255,255,0.15)'; btnA.style.color=isAdd?'#fff':'#374151'; }
+  if(btnB){ btnB.style.background=isAdd?'rgba(255,255,255,0.15)':'linear-gradient(135deg,#4f46e5,#6366f1)'; btnB.style.color=isAdd?'#374151':'#fff'; }
+}
 function addTool(){
   var name=document.getElementById('tl-name').value.trim(), qty=parseFloat(document.getElementById('tl-qty').value)||1;
   var date=document.getElementById('tl-date').value, cost=parseFloat(document.getElementById('tl-cost').value)||0;
@@ -1981,23 +2032,65 @@ function delTool(id){
 }
 function assignTool(){
   var tid=document.getElementById('as-tool').value, wid=document.getElementById('as-worker').value, date=document.getElementById('as-date').value;
+  var qty=parseFloat(document.getElementById('as-qty').value)||1;
   if (!tid||!wid) { toast('Select tool and worker','err'); return; }
   var t=AD.find(function(d){ return d.__id===tid; }), w=AD.find(function(d){ return d.__id===wid; });
-  ins({type:'tool_assign',tool_name:t.tool_name,worker_name:w.name,date:date});
+  var totalQty=AD.filter(function(d){ return d.type==='tool'&&d.tool_name===t.tool_name; }).reduce(function(s,d){ return s+(parseFloat(d.tool_qty)||1); },0);
+  var assignedQty=AD.filter(function(d){ return d.type==='tool_assign'&&d.tool_name===t.tool_name&&!d.returned; }).reduce(function(s,d){ return s+(parseFloat(d.assign_qty)||1); },0);
+  if(qty>totalQty-assignedQty){ toast('Only '+(totalQty-assignedQty)+' available','err'); return; }
+  ins({type:'tool_assign',tool_name:t.tool_name,worker_name:w.name,date:date,assign_qty:qty,returned:false});
   AD=ld(); toast('Assigned','ok'); viewTools();
+}
+function returnTool(id){
+  askDel('Mark this tool as returned?', function(){
+    upd(id,{returned:true,return_date:ist()});
+    AD=ld(); toast('Returned ✓','ok'); viewTools();
+  });
+}
+function getToolStock(){
+  var stock={};
+  AD.filter(function(d){ return d.type==='tool'; }).forEach(function(t){
+    if(!stock[t.tool_name]) stock[t.tool_name]={name:t.tool_name,total:0,assigned:0};
+    stock[t.tool_name].total+=(parseFloat(t.tool_qty)||1);
+  });
+  AD.filter(function(d){ return d.type==='tool_assign'&&!d.returned; }).forEach(function(a){
+    if(stock[a.tool_name]) stock[a.tool_name].assigned+=(parseFloat(a.assign_qty)||1);
+  });
+  return Object.values(stock);
 }
 function viewTools(){
   AD=ld();
+  var stock=getToolStock();
+  var st=document.getElementById('tool-stock-table');
+  if(st) st.innerHTML=stock.length ? stock.map(function(s){
+    var avail=s.total-s.assigned;
+    return '<tr style="border-bottom:1px solid #f3f4f6">'
+      +'<td class="px-3 py-2 text-xs font-semibold">'+s.name+'</td>'
+      +'<td class="px-3 py-2 text-xs text-center font-bold" style="color:#7c3aed">'+s.total+'</td>'
+      +'<td class="px-3 py-2 text-xs text-center" style="color:#d97706">'+s.assigned+'</td>'
+      +'<td class="px-3 py-2 text-xs text-center font-bold" style="color:'+(avail>0?'#059669':'#dc2626')+'">'+avail+'</td>'
+      +'</tr>';
+  }).join('') : '<tr><td colspan="4" style="text-align:center;padding:14px;color:#9ca3af;font-size:12px">No tools yet</td></tr>';
   var tools=AD.filter(function(d){ return d.type==='tool'; });
   var tt=document.getElementById('tools-table');
-  if (tt) tt.innerHTML=tools.length
-    ? tools.map(function(t){ return '<tr style="border-bottom:1px solid #f3f4f6"><td class="px-2 py-2 text-xs font-medium">'+t.tool_name+'</td><td class="px-2 py-2 text-xs text-center">'+(t.tool_qty||1)+'</td><td class="px-2 py-2 text-xs text-center" style="color:#6b7280">'+fd(t.purchase_date)+'</td><td class="px-2 py-2 text-xs text-right">'+(t.purchase_cost?fc(t.purchase_cost):'--')+'</td><td class="px-2 py-2 text-center"><button onclick="delTool(\''+t.__id+'\')" style="font-size:10px;padding:1px 7px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
+  if(tt) tt.innerHTML=tools.length
+    ? tools.map(function(t){ return '<tr style="border-bottom:1px solid #f3f4f6"><td class="px-2 py-2 text-xs font-medium">'+t.tool_name+'</td><td class="px-2 py-2 text-xs text-center">'+(t.tool_qty||1)+'</td><td class="px-2 py-2 text-xs text-center" style="color:#6b7280">'+fd(t.purchase_date)+'</td><td class="px-2 py-2 text-xs text-right">'+(t.purchase_cost?fc(t.purchase_cost):'--')+'</td><td class="px-2 py-2 text-center viewer-hide"><button onclick="delTool(\''+t.__id+'\')" style="font-size:10px;padding:1px 7px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
     : '<tr><td colspan="5" style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">No tools yet</td></tr>';
-  var asgn=AD.filter(function(d){ return d.type==='tool_assign'; });
+  var asgn=AD.filter(function(d){ return d.type==='tool_assign'; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   var ta=document.getElementById('tool-assignments');
-  if (ta) ta.innerHTML=asgn.length
-    ? asgn.map(function(a){ return '<div style="padding:8px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;margin-bottom:4px"><p style="font-weight:600;color:#374151;font-size:12px">'+a.tool_name+'</p><p style="font-size:10px;color:#9ca3af">&#8594; '+a.worker_name+' &middot; '+fd(a.date)+'</p></div>'; }).join('')
-    : '<p style="text-align:center;color:#9ca3af;font-size:12px;padding:8px">No assignments</p>';
+  if(ta) ta.innerHTML=asgn.length ? asgn.map(function(a){
+    var isRet=a.returned;
+    return '<div style="padding:10px 12px;background:'+(isRet?'#f0fdf4':'#f9fafb')+';border-radius:12px;border:1px solid '+(isRet?'#86efac':'#e5e7eb')+';margin-bottom:8px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<p style="font-weight:700;color:#1f2937;font-size:12px">'+a.tool_name+' <span style="font-size:10px;font-weight:400;color:#6b7280">x'+(parseFloat(a.assign_qty)||1)+'</span></p>'
+      +'<p style="font-size:10px;color:#6b7280;margin-top:1px">&#8594; '+a.worker_name+' &middot; '+fd(a.date)+(isRet?' &middot; <span style="color:#059669;font-weight:600">Returned '+fd(a.return_date)+'</span>':'')+'</p>'
+      +'</div>'
+      +(isRet
+        ? '<span style="background:#dcfce7;color:#059669;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;flex-shrink:0">&#x2713; Returned</span>'
+        : '<button onclick="returnTool(\''+a.__id+'\')" style="padding:4px 10px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">&#x21A9; Return</button>')
+      +'</div></div>';
+  }).join('') : '<p style="text-align:center;color:#9ca3af;font-size:12px;padding:16px">No assignments yet</p>';
 }
 
 // ============================================================
