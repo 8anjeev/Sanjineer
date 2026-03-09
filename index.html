@@ -838,7 +838,7 @@ body{margin:0}
       <div><label class="text-xs font-medium text-gray-600">Date</label><input type="date" id="att-date" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
       <div><label class="text-xs font-medium text-gray-600">Hours Worked</label><input type="number" id="att-hours" placeholder="Hours" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
       <div><label class="text-xs font-medium text-gray-600">Advance Payment (Optional)</label><input type="number" id="att-advance" placeholder="Amount" step="any" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-      <button onclick="saveAttendance()" class="g-tor-indigo500-purple500 w-full text-white py-3 rounded-xl font-semibold active:scale-95">Save</button>
+      <button onclick="saveAttendance()" class="g-tor-indigo500-purple500 w-full text-white py-3 rounded-xl font-semibold active:scale-95">💾 Save</button>
     </div>
   </div>
 </div>
@@ -1182,6 +1182,13 @@ function dedup(list) {
   return Object.values(m);
 }
 
+// Active attendance rule:
+//   hours>0              → worked day: counts in days, hours, payment AND advance
+//   hours=0 & advance>0  → advance-only day: counts in advance ONLY, not days/hours/payment
+//   hours=0 & advance=0  → nothing happened: record is deleted, never stored
+function activeAtt(list) {
+  return list.filter(function(a){ return (parseFloat(a.hours)||0)>0 || (parseFloat(a.advance)||0)>0; });
+}
 // ============================================================
 // STATE
 // ============================================================
@@ -1511,7 +1518,7 @@ function removePhoto(i) {
 }
 function viewDaily() {
   var lbl = document.getElementById('daily-label'); if (lbl) lbl.textContent = fdl(DD);
-  var att = dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD; }));
+  var att = activeAtt(dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD; })));
   var adv = att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); }, 0)
            + AD.filter(function(a){ return a.type==='contractor_payment' && a.date===DD; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); }, 0);
   var da = document.getElementById('daily-advances'); if (da) da.textContent = fc(adv);
@@ -1544,7 +1551,7 @@ function editWD(cat) {
 function saveWD(cat) {
   var safe = cat.replace(/\s/g,'_'), val = (document.getElementById('wd-'+safe)||{}).value || '';
   dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD && a.category===cat; })).forEach(function(a){ upd(a.__id,{work_done:val}); });
-  AD = ld(); toast('Saved','ok'); viewDaily();
+  AD = ld(); toast('Saved','ok'); viewDaily(); viewDeptSummary(); updateDash();
 }
 function viewDeptSummary() {
   var entries = ldept()[DD] || [];
@@ -1620,11 +1627,11 @@ function addWorker() {
   if (!name||!cat||!team) { toast('Fill all fields','err'); return; }
   ins({type:'worker',name:name,category:cat,team_name:team,hourly_wage:wage});
   document.getElementById('w-name').value=''; document.getElementById('w-wage').value='';
-  toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers(); updateDash();
+  toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers(); viewDaily(); viewContractors(); updateDash();
 }
 function delWorker(id) {
   var w=AD.find(function(d){ return d.__id===id; });
-  askDel('Delete '+w.name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewWorkers(); updateDash(); });
+  askDel('Delete '+w.name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewWorkers(); viewDaily(); viewContractors(); updateDash(); });
 }
 function openAttModal(wid, date) {
   WID=wid; var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
@@ -1645,18 +1652,23 @@ function saveAttendance() {
   if (!WID) { toast('Error','err'); return; }
   var w=AD.find(function(d){ return d.__id===WID; }); if(!w) return;
   var ex=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&d.date===date; }));
+  var _wid=WID;
+  // Both zero = nothing to record — delete any existing record and exit
+  if (hours===0 && advance===0) {
+    if (ex.length) { ex.forEach(function(r){ del(r.__id); }); }
+    AD=ld(); closeAttModal(); toast('Entry removed','ok');
+    viewDaily(); viewContractors(); refreshWorkerCard(_wid); updateDash(); return;
+  }
   if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,payment:hours*w.hourly_wage,hourly_wage:w.hourly_wage});
   else ins({type:'attendance',name:w.name,category:w.category,date:date,hours:hours,advance:advance,payment:hours*w.hourly_wage,hourly_wage:w.hourly_wage});
-  AD=ld(); var _wid=WID; closeAttModal(); toast('Saved','ok');
-  if (date===DD) viewDaily();
-  refreshWorkerCard(_wid);
-  updateDash();
+  AD=ld(); closeAttModal(); toast('Saved','ok');
+  viewDaily(); viewContractors(); refreshWorkerCard(_wid); updateDash();
 }
 function refreshWorkerCard(wid) {
   AD=ld(); var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
   var pmSel=document.getElementById('att-print-month');
   var cums=(pmSel&&pmSel.value)?pmSel.value:mkey(new Date());
-  var ma=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); }));
+  var ma=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); })));
   var days=ma.filter(function(a){ return parseFloat(a.hours)>0; }).length;
   var hrs=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
   var adv=ma.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
@@ -1688,7 +1700,7 @@ function viewWorkers() {
   div.innerHTML=cats.map(function(cat){
     return '<div class="mb-4"><h4 class="text-xs font-bold mb-2 uppercase" style="color:#6366f1">'+cat+' ('+grp[cat].length+')</h4>'
       + grp[cat].map(function(w){
-          var ma=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); }));
+          var ma=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(cums); })));
           var days=ma.filter(function(a){ return parseFloat(a.hours)>0; }).length;
           var hrs=ma.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
           var adv=ma.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
@@ -1728,9 +1740,9 @@ function renderCal(w,vd){
   var fd2=new Date(yr,mo,1).getDay(), days=new Date(yr,mo+1,0).getDate();
   var msStr=yr+'-'+('0'+(mo+1)).slice(-2), today=ist();
   var mp={};
-  AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(msStr); })
+  activeAtt(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(msStr); }))
     .forEach(function(a){ if(!mp[a.date]||a.__id>mp[a.date].__id) mp[a.date]=a; });
-  var uniq=Object.values(mp);
+  var uniq=activeAtt(Object.values(mp));
   var tD=uniq.filter(function(a){ return parseFloat(a.hours)>0; }).length;
   var tH=uniq.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
   var tA=uniq.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
@@ -1739,7 +1751,7 @@ function renderCal(w,vd){
   var blanks=Array(fd2).fill('<div></div>').join('');
   var cells=Array.from({length:days},function(_,i){
     var day=i+1, ds=yr+'-'+('0'+(mo+1)).slice(-2)+'-'+('0'+day).slice(-2);
-    var a=mp[ds], isT=ds===today, isPast=ds<today;
+    var _r=mp[ds]; var a=(_r&&((parseFloat(_r.hours)||0)>0||(parseFloat(_r.advance)||0)>0))?_r:null; var isT=ds===today, isPast=ds<today;
     var bg=a?(parseFloat(a.hours)===0?'#fee2e2':'#10b981'):(isT?'#c7d2fe':isPast?'#fef2f2':'transparent');
     var col=a?(parseFloat(a.hours)===0?'#dc2626':'#ffffff'):(isT?'#4338ca':isPast?'#f87171':'#9ca3af');
     var advAmt=a?parseFloat(a.advance)||0:0;
@@ -1772,11 +1784,11 @@ function addPettyCash(){
   var amt=parseFloat(document.getElementById('petty-amount').value)||0, date=document.getElementById('petty-date').value;
   if (!amt||!date) { toast('Enter amount and date','err'); return; }
   ins({type:'material',material_name:'Petty Cash Deposit',quantity:0,cost:amt,date:date,is_petty_cash:true});
-  document.getElementById('petty-amount').value=''; AD=ld(); toast('Cash deposited','ok'); viewExpenses(); updateDash();
+  document.getElementById('petty-amount').value=''; AD=ld(); toast('Cash deposited','ok'); viewExpenses(); viewDaily(); updateDash();
 }
 function delExpense(id){
   var m=AD.find(function(d){ return d.__id===id; });
-  askDel('Delete '+m.material_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewExpenses(); updateDash(); });
+  askDel('Delete '+m.material_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewExpenses(); viewDaily(); updateDash(); });
 }
 function addExpenseMaterial(){
   var name=document.getElementById('exp-mat-name').value.trim();
@@ -1791,7 +1803,7 @@ function addExpenseMaterial(){
     ins({type:'material',material_name:name,quantity:qty||undefined,cost:cost,date:date,supplier:supplier||undefined,is_petty_cash:false,bill_id:billKey||undefined});
     ['exp-mat-name','exp-mat-qty','exp-mat-cost','exp-mat-supplier'].forEach(function(id){ document.getElementById(id).value=''; });
     clearBill('exp');
-    AD=ld(); toast('Purchase recorded!','ok'); viewExpenses(); updateDash();
+    AD=ld(); toast('Purchase recorded!','ok'); viewExpenses(); viewDaily(); updateDash();
   });
 }
 function viewExpenses(){
@@ -1824,10 +1836,10 @@ function addMaterialItem(){
   var mats=lmat();
   mats.push({id:'mat'+Date.now(),name:name,unit:unit,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0}]:[],created:Date.now()});
   smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty'].forEach(function(id){ document.getElementById(id).value=''; });
-  toast('Material added','ok'); viewMaterials(); updateDash();
+  toast('Material added','ok'); viewMaterials(); viewExpenses(); viewDaily(); updateDash();
 }
 function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
-function delMaterialItem(id){ askDel('Delete material?', function(){ smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); updateDash(); }); }
+function delMaterialItem(id){ askDel('Delete material?', function(){ smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); viewExpenses(); viewDaily(); updateDash(); }); }
 // ── BILL / RECEIPT — unified handler (image + PDF, all contexts) ──────────────
 // ctx = 'mp' (mat purchase modal), 'exp' (expenses tab), 'rb' (rental borrow), 'rg' (rental given)
 var BILLS = {};
@@ -1907,7 +1919,7 @@ function saveMatPurchase(){
     txn.bill_id = key;
     item.transactions.push(txn); smat(mats);
     if(cost>0){ ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false}); AD=ld(); }
-    closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); updateDash();
+    closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); viewDaily(); updateDash();
   });
 }
 function openMatUseModal(id){
@@ -1923,7 +1935,7 @@ function saveMatUse(){
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
   if(qty>getbal(item)){ toast('Only '+getbal(item)+' '+item.unit+' in stock!','err'); return; }
   item.transactions.push({type:'use',qty:qty,date:date,note:note}); smat(mats);
-  closeMatUseModal(); toast('Usage recorded','ok'); viewMaterials(); updateDash();
+  closeMatUseModal(); toast('Usage recorded','ok'); viewMaterials(); viewExpenses(); viewDaily(); updateDash();
 }
 
 // ── Bill Viewer ────────────────────────────────────────────────────────────────
@@ -1970,7 +1982,7 @@ function downloadBillFile(){
   var a=document.createElement('a'); a.href=_billViewDataUrl; a.download=_billViewFilename||'bill'; a.click();
 }
 function delMatTxn(matId,idx){
-  askDel('Delete transaction?', function(){ var mats=lmat(), item=mats.find(function(m){ return m.id===matId; }); if(!item) return; item.transactions.splice(idx,1); smat(mats); toast('Deleted','ok'); viewMaterials(); });
+  askDel('Delete transaction?', function(){ var mats=lmat(), item=mats.find(function(m){ return m.id===matId; }); if(!item) return; item.transactions.splice(idx,1); smat(mats); toast('Deleted','ok'); viewMaterials(); viewExpenses(); updateDash(); });
 }
 function viewMaterials(){
   var mats=lmat(), div=document.getElementById('materials-list');
@@ -2049,7 +2061,7 @@ function assignTool(){
   var assignedQty=AD.filter(function(d){ return d.type==='tool_assign'&&d.tool_name===t.tool_name&&!d.returned; }).reduce(function(s,d){ return s+(parseFloat(d.assign_qty)||1); },0);
   if(qty>totalQty-assignedQty){ toast('Only '+(totalQty-assignedQty)+' available','err'); return; }
   ins({type:'tool_assign',tool_name:t.tool_name,worker_name:w.name,date:date,assign_qty:qty,returned:false});
-  AD=ld(); toast('Assigned','ok'); viewTools();
+  AD=ld(); toast('Assigned','ok'); viewTools(); updateDash();
 }
 function returnTool(id){
   askDel('Mark this tool as returned?', function(){
@@ -2135,7 +2147,7 @@ function addRental(mode){
     });
   }
 }
-function delRental(id){ askDel('Delete rental?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewRentals(); updateDash(); }); }
+function delRental(id){ askDel('Delete rental?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewRentals(); viewDaily(); updateDash(); }); }
 
 function viewRentals(){
   AD=ld();
@@ -2437,11 +2449,11 @@ var name=document.getElementById('ct-name').value.trim(), type=document.getEleme
 if (!name) { toast('Enter name','err'); return; }
 ins({type:'contractor',contractor_name:name,contractor_type:type,total_contract:total});
 ['ct-name','ct-total'].forEach(function(id){ document.getElementById(id).value=''; });
-AD=ld(); toast('Added','ok'); viewContractors(); updateDropdowns(); updateDash();
+AD=ld(); toast('Added','ok'); viewContractors(); viewDaily(); updateDropdowns(); updateDash();
 }
 function delContractor(id){
 var c=AD.find(function(d){ return d.__id===id; });
-askDel('Delete '+c.contractor_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); updateDash(); });
+askDel('Delete '+c.contractor_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); viewDaily(); updateDash(); });
 }
 function openCTModal(cid){
 CID=cid; var c=AD.find(function(d){ return d.__id===cid; }); if(!c) return;
@@ -2455,9 +2467,9 @@ var date=document.getElementById('ct-pay-date').value, amt=parseFloat(document.g
 if (!amt) { toast('Enter amount','err'); return; }
 var c=AD.find(function(d){ return d.__id===CID; }); if(!c) return;
 ins({type:'contractor_payment',contractor_name:c.contractor_name,payment:amt,date:date});
-AD=ld(); closeCTModal(); toast('Saved','ok'); viewContractors(); updateDash();
+AD=ld(); closeCTModal(); toast('Saved','ok'); viewContractors(); viewDaily(); updateDash();
 }
-function delCTPay(id){ askDel('Delete payment?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); updateDash(); }); }
+function delCTPay(id){ askDel('Delete payment?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); viewDaily(); updateDash(); }); }
 function viewContractors(){
 AD=ld(); var vms=mkey(VM);
 var tp=document.getElementById('teams-period'); if(tp) tp.textContent=mlabel(VM);
@@ -2466,7 +2478,7 @@ if (!div) return;
 if (!ctrs.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No contractors yet</p>'; return; }
 div.innerHTML=ctrs.map(function(c){
 var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+var ta=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); })));
 var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
 var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(vms); });
@@ -2517,7 +2529,7 @@ if(tpf){ var teams=AD.filter(function(d){ return d.type==='contractor'; }); tpf.
 function getLowStock(){ return lmat().filter(function(i){ return i.minQty>0&&getbal(i)<=i.minQty; }); }
 function updateDash(){
 AD=ld(); var cums=mkey(new Date()), today=ist();
-var att=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums); }));
+var att=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums); })));
 var wAdv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
 var ctPays=AD.filter(function(d){ return d.type==='contractor_payment'&&(d.date||'').startsWith(cums); }).reduce(function(s,d){ return s+(parseFloat(d.payment)||0); },0);
 var totalAdv=wAdv+ctPays;
@@ -2529,7 +2541,7 @@ var pOut=mats.reduce(function(s,d){ return s+(parseFloat(d.cost)||0); },0);
 var matMonth=mats.filter(function(m){ return (m.date||'').startsWith(cums); }).reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
 var rExp=AD.filter(function(d){ return d.type==='rental'&&!d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
 var rInc=AD.filter(function(d){ return d.type==='rental'&&d.is_given; }).reduce(function(s,r){ return s+daysb(r.borrowed_date,today)*(parseFloat(r.rate)||0)*(parseFloat(r.qty)||1); },0);
-var allPay=dedup(AD.filter(function(d){ return d.type==='attendance'; })).reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
+var allPay=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'; }))).reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 function se(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
 se('dash-advance',fc(totalAdv)); se('dash-remaining',fc(Math.max(0,wPay+ctContr-totalAdv)));
 se('dash-material',fc(matMonth)); se('dash-petty',fc(pIn)); se('dash-petty-left',fc(pIn-pOut));
@@ -2543,7 +2555,7 @@ var td=document.getElementById('team-details');
 if (!td) return;
 td.innerHTML=ctrs.length ? ctrs.map(function(c){
 var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums)&&tw.some(function(w){ return w.name===d.name; }); }));
+var ta=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(cums)&&tw.some(function(w){ return w.name===d.name; }); })));
 var pay=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0)+(parseFloat(c.total_contract)||0);
 var adv=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(cums); }).reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var bal=pay-adv;
@@ -2626,7 +2638,7 @@ _printDailyReportInner(photos);
 }
 function _printDailyReportInner(photos){
 AD=ld(); var d=DD, dl=fdl(d), meta=lm()[d]||{};
-var att=dedup(AD.filter(function(a){ return a.type==='attendance'&&a.date===d; }));
+var att=activeAtt(dedup(AD.filter(function(a){ return a.type==='attendance'&&a.date===d; })));
 var mats=AD.filter(function(a){ return a.type==='material'&&a.date===d&&!a.is_petty_cash; });
 var adv=att.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(a){ return a.type==='contractor_payment'&&a.date===d; }).reduce(function(s,a){ return s+(parseFloat(a.payment)||0); },0);
 var mc=mats.reduce(function(s,m){ return s+(parseFloat(m.cost)||0); },0);
@@ -2675,7 +2687,7 @@ var mL=mlabel(new Date(selMs+'-01T00:00:00'));
 var worker=AD.find(function(d){ return d.__id===wid&&d.type==='worker'; });
 if(!worker){ toast('Worker not found','err'); return; }
 
-var allAtt=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&d.name===worker.name; }));
+var allAtt=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&d.name===worker.name; })));
 allAtt.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
 var totalHrs=0, totalAdv=0, totalPay=0;
@@ -2756,7 +2768,7 @@ if (!ctrs.length) { toast('No teams found','err'); return; }
 var gTP=0, gTA=0, sectionsHtml='';
 ctrs.forEach(function(c){
 var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
-var allAtt=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); }));
+var allAtt=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&tw.some(function(w){ return w.name===d.name; }); })));
 var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(selMs); });
 var cP=pays.reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var contractAmt=parseFloat(c.total_contract)||0;
@@ -2906,7 +2918,7 @@ var wb=XLSX.utils.book_new();
 var data=[['Sanjineer — Payment Report'],['Month: '+mlabel(VM)],['Company: '+pp().company],['Generated: '+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'})],[],['Team','Type','Workers','Payment (₹)','Advances (₹)','Balance (₹)']];
 ctrs.forEach(function(c){
 var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
-var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
+var ta=activeAtt(dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); })));
 var wP=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0);
 var wA=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
 var pays=AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(vms); });
