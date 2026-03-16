@@ -1937,6 +1937,7 @@ body{margin:0}
         <div>
           <p style="font-size:11px;font-weight:700;color:#c7d2fe">👤 Logged in as Admin</p>
           <p id="cloud-admin-email" style="font-size:10px;color:#a78bfa">—</p>
+          <p id="cloud-sub-expiry" style="font-size:9px;color:#86efac;margin-top:1px">—</p>
         </div>
         <button onclick="doAdminLogout()" style="font-size:10px;padding:4px 10px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;cursor:pointer;">Logout</button>
       </div>
@@ -5786,14 +5787,25 @@ function doAdminLogin() {
         // Check subscription in Firestore
         var db = m.getFirestore(app);
         return m.getDoc(m.doc(db, 'admins', uc.user.uid)).then(function(snap) {
-          if (snap.exists() && snap.data().subscribed) {
+          var data = snap.exists() ? snap.data() : {};
+          var now = Date.now();
+          var endDate = data.subscriptionEndDate || 0;
+          var isActive = data.subscribed && endDate > now;
+          if (isActive) {
             onAdminLoginSuccess(email, uc.user, app);
           } else {
-            // Not subscribed — show payment landing
+            // Not subscribed or expired — show payment landing
             closeAuthModal();
             _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
+            // Show expiry message if was subscribed before
+            if (data.subscribed && endDate <= now) {
+              toast('⚠️ Subscription expired! Please renew to continue.', 'err');
+            }
             openPayLanding(true);
           }
+        }).catch(function(e) {
+          btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
+          showAuthErr('login', 'Subscription check failed — Internet check karo aur retry karo');
         });
       })
       .catch(function(e) {
@@ -5868,6 +5880,30 @@ function onAdminLoginSuccess(email, user, app) {
   // Update cloud admin bar
   var emailEl = document.getElementById('cloud-admin-email');
   if (emailEl) emailEl.textContent = email;
+  // Fetch and show subscription expiry
+  try {
+    var m = window._fbModules;
+    var db = m.getFirestore(app);
+    m.getDoc(m.doc(db, 'admins', user.uid)).then(function(snap) {
+      if (snap.exists()) {
+        var endDate = snap.data().subscriptionEndDate;
+        var expiryEl = document.getElementById('cloud-sub-expiry');
+        if (expiryEl && endDate) {
+          var d = new Date(endDate);
+          var dd = d.getDate().toString().padStart(2,'0');
+          var mm = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+          var yy = d.getFullYear();
+          expiryEl.textContent = '✅ Valid till ' + dd + ' ' + mm + ' ' + yy;
+          // Warn if expiring in 5 days
+          if (endDate - Date.now() < 5 * 24 * 60 * 60 * 1000) {
+            expiryEl.style.color = '#fbbf24';
+            expiryEl.textContent = '⚠️ Expires ' + dd + ' ' + mm + ' ' + yy + ' — Renew soon!';
+          }
+          safeLS.setItem('cm_sub_end', endDate);
+        }
+      }
+    }).catch(function(){});
+  } catch(e) {}
   toast('✅ Login successful! Welcome, Admin', 'ok');
   // Make sure cloud is activated & syncing
   if (!isCloudActivated()) {
@@ -5881,6 +5917,7 @@ function doAdminLogout() {
   _adminUser = null; _adminApp = null;
   safeLS.removeItem(ADMIN_ROLE_KEY);
   safeLS.removeItem(ADMIN_EMAIL_KEY);
+  safeLS.removeItem('cm_sub_end');
   toast('Logged out', 'ok');
   closeCloudModal();
   updateCloudBtn();
@@ -5890,9 +5927,28 @@ function doAdminLogout() {
 function restoreAdminSession() {
   var role  = safeLS.getItem(ADMIN_ROLE_KEY);
   var email = safeLS.getItem(ADMIN_EMAIL_KEY);
+  var subEnd = parseInt(safeLS.getItem('cm_sub_end') || '0');
   if (role === 'admin' && email) {
     var emailEl = document.getElementById('cloud-admin-email');
     if (emailEl) emailEl.textContent = email;
+    // Show expiry from cached value
+    var expiryEl = document.getElementById('cloud-sub-expiry');
+    if (expiryEl && subEnd) {
+      var d = new Date(subEnd);
+      var dd = d.getDate().toString().padStart(2,'0');
+      var mm = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+      var yy = d.getFullYear();
+      if (subEnd < Date.now()) {
+        expiryEl.style.color = '#fca5a5';
+        expiryEl.textContent = '❌ Subscription expired — please renew';
+      } else if (subEnd - Date.now() < 5 * 24 * 60 * 60 * 1000) {
+        expiryEl.style.color = '#fbbf24';
+        expiryEl.textContent = '⚠️ Expires ' + dd + ' ' + mm + ' ' + yy + ' — Renew soon!';
+      } else {
+        expiryEl.style.color = '#86efac';
+        expiryEl.textContent = '✅ Valid till ' + dd + ' ' + mm + ' ' + yy;
+      }
+    }
   }
 }
 
@@ -6366,12 +6422,17 @@ function onSubscriptionPaymentSuccess(response) {
     var m = window._fbModules;
     try {
       var db = m.getFirestore(_pendingAuthApp);
+      var subEnd = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 days from now
       m.setDoc(m.doc(db, 'admins', _pendingAuthUser.uid), {
-        subscribed: true, subscribedAt: Date.now(), lastPaymentId: payId
+        subscribed: true,
+        subscribedAt: Date.now(),
+        subscriptionEndDate: subEnd,
+        lastPaymentId: payId
       }, { merge: true }).catch(function() {});
     } catch(e) {}
-    onAdminLoginSuccess(_pendingAuthEmail, _pendingAuthUser, _pendingAuthApp);
-    _pendingAuthUser = null; _pendingAuthEmail = null;
+    var _app = _pendingAuthApp, _user = _pendingAuthUser, _email = _pendingAuthEmail;
+    _pendingAuthApp = null; _pendingAuthUser = null; _pendingAuthEmail = null;
+    onAdminLoginSuccess(_email, _user, _app);
   } else {
     toast('✅ Subscription activated! Cloud ready.', 'ok');
     refreshCloudModalState();
