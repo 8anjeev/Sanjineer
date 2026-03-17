@@ -501,6 +501,31 @@ body{margin:0}
     #cloud-modal.show{display:flex!important;}
     .cloud-feature-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);}
     .cloud-feature-row:last-child{border-bottom:none;}
+    /* CLOUD STEP STEPPER */
+    .cloud-step-bar{display:flex;align-items:center;gap:0;margin-bottom:1.1rem;}
+    .cloud-step-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;transition:all .2s;}
+    .cloud-step-dot.done{background:linear-gradient(135deg,#059669,#10b981);color:white;box-shadow:0 2px 8px rgba(16,185,129,0.4);}
+    .cloud-step-dot.active{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;box-shadow:0 2px 8px rgba(99,102,241,0.4);}
+    .cloud-step-dot.idle{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border:1.5px solid rgba(255,255,255,0.15);}
+    .cloud-step-line{flex:1;height:2px;background:rgba(255,255,255,0.12);margin:0 2px;border-radius:2px;}
+    .cloud-step-line.done{background:linear-gradient(to right,#059669,#10b981);}
+    .cloud-step-label{font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);text-align:center;line-height:1.2;margin-top:3px;}
+    .cloud-step-label.active{color:#c4b5fd;}
+    .cloud-step-label.done{color:#86efac;}
+    .cloud-setup-card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:.875rem;padding:.875rem;margin-bottom:.875rem;}
+    .cloud-input{width:100%;padding:9px 11px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.18);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box;transition:border-color .15s;}
+    .cloud-input::placeholder{color:rgba(255,255,255,0.35);}
+    .cloud-input:focus{border-color:#818cf8;}
+    .cloud-label{font-size:9.5px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;margin-top:8px;}
+    .cloud-label:first-child{margin-top:0;}
+    .cloud-action-btn{width:100%;padding:.8rem;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;transition:opacity .15s,transform .1s;}
+    .cloud-action-btn:active{transform:scale(0.97);}
+    .cloud-action-btn.primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;}
+    .cloud-action-btn.success{background:linear-gradient(135deg,#059669,#10b981);color:white;}
+    .cloud-action-btn.amber{background:linear-gradient(135deg,#d97706,#f59e0b);color:white;}
+    .cloud-action-btn.danger{background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;}
+    .cloud-action-btn.ghost{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#c4b5fd;}
+    .cloud-action-btn + .cloud-action-btn{margin-top:.5rem;}
     /* VIEWER SHARE */
     #viewer-modal{display:none;}
     #viewer-modal.show{display:flex!important;}
@@ -1846,120 +1871,220 @@ body{margin:0}
 
 <!-- ====== CLOUD MODAL ====== -->
 <div id="cloud-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
-  <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;">
+  <div style="background:linear-gradient(160deg,#0f172a 0%,#1e1b4b 55%,#2e1d4b 100%);border:1px solid rgba(139,92,246,.25);border-radius:1.5rem;padding:1.25rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(0,0,0,0.7),0 0 0 1px rgba(139,92,246,0.15);">
+
     <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-2">
-        <span style="font-size:24px">☁️</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:40px;height:40px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(99,102,241,0.4);">☁️</div>
         <div>
-          <p class="font-black text-white" style="font-size:16px;line-height:1">Sanjineer Cloud</p>
-          <p style="font-size:10px;color:#c4b5fd;line-height:1">Sync · Backup · Multi-Device</p>
+          <p style="font-size:16px;font-weight:900;color:white;line-height:1;margin:0">Sanjineer Cloud</p>
+          <p style="font-size:10px;color:#a78bfa;line-height:1;margin:2px 0 0">Sync · Backup · Multi-Device</p>
         </div>
       </div>
-      <button onclick="closeCloudModal()" class="text-white/60 text-2xl leading-none">✕</button>
+      <button onclick="closeCloudModal()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);width:30px;height:30px;border-radius:8px;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
     </div>
 
     <!-- Status Banner -->
-    <div id="cloud-status-banner" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:.875rem;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.6rem;">
-      <span id="cloud-status-icon" style="font-size:20px">🔒</span>
-      <div>
-        <p id="cloud-status-title" class="text-white font-bold" style="font-size:13px;line-height:1">Not Activated</p>
-        <p id="cloud-status-sub" style="font-size:10px;color:#a78bfa;line-height:1.3;margin-top:2px"></p>
+    <div id="cloud-status-banner" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:.875rem;padding:.65rem .875rem;margin-bottom:1rem;display:flex;align-items:center;gap:.6rem;">
+      <span id="cloud-status-icon" style="font-size:18px;flex-shrink:0">🔒</span>
+      <div style="min-width:0">
+        <p id="cloud-status-title" style="color:white;font-weight:700;font-size:12px;line-height:1;margin:0">Not Activated</p>
+        <p id="cloud-status-sub" style="font-size:10px;color:#a78bfa;line-height:1.3;margin:2px 0 0"></p>
       </div>
     </div>
 
-    <!-- Features List -->
-    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.875rem;padding:.75rem 1rem;margin-bottom:1rem;">
-      <p style="color:#fbbf24;font-size:11px;font-weight:700;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.04em">What You Get</p>
-      <div class="cloud-feature-row"><span style="font-size:16px">🔄</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Multi-Device Sync</p><p style="font-size:10px;color:#a78bfa">Same data on all your devices, real-time</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:16px">💾</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Auto Cloud Backup</p><p style="font-size:10px;color:#a78bfa">Never lose data — backed up to Firebase</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:16px">👥</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Multi-User Viewer</p><p style="font-size:10px;color:#a78bfa">Share a read-only link with clients/owners</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:16px">📱</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Any Browser, Any Phone</p><p style="font-size:10px;color:#a78bfa">Access from anywhere, no app install needed</p></div></div>
-    </div>
-
-    <!-- Payment / Activated Section -->
+    <!-- ===== NOT ACTIVATED STATE ===== -->
     <div id="cloud-pay-section">
-      <div style="text-align:center;margin-bottom:.75rem;">
-        <p style="color:white;font-size:22px;font-weight:900;line-height:1">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>
-        <p style="font-size:10px;color:#7c3aed">Auto-renews monthly · Cancel anytime</p>
+
+      <!-- Step indicator -->
+      <div style="margin-bottom:.875rem;">
+        <div style="display:flex;align-items:center;gap:0;margin-bottom:6px;" id="cloud-step-bar">
+          <div class="cloud-step-dot active" id="cstep-1">1</div>
+          <div class="cloud-step-line" id="cline-1"></div>
+          <div class="cloud-step-dot idle" id="cstep-2">2</div>
+          <div class="cloud-step-line" id="cline-2"></div>
+          <div class="cloud-step-dot idle" id="cstep-3">3</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:0 4px;">
+          <span class="cloud-step-label active" id="cslabel-1" style="width:26px">Firebase</span>
+          <span class="cloud-step-label" id="cslabel-2" style="width:26px;text-align:center">Pay</span>
+          <span class="cloud-step-label" id="cslabel-3" style="width:26px;text-align:right">Account</span>
+        </div>
       </div>
-      <button onclick="openAuthModal()" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.5rem;">
-        🔑 Login / Create Admin Account
-      </button>
-      <button onclick="openViewerLoginModal()" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:700;font-size:.85rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;">
-        👁️ Viewer Login — No Subscription Needed
-      </button>
-      <p style="text-align:center;font-size:9px;color:#7c3aed;margin-top:.4rem">Viewers are created by subscribed admins · Free access</p>
+
+      <!-- Step 1: Firebase Setup -->
+      <div id="cloud-step-1-panel">
+        <div class="cloud-setup-card">
+          <p style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.04em;">🔥 Step 1 — Firebase Setup</p>
+          <p style="font-size:10px;color:#a78bfa;margin-bottom:.6rem;line-height:1.5">Connect your Firebase project to enable cloud sync. This powers real-time data backup across your devices.</p>
+          <label class="cloud-label">Firebase API Key *</label>
+          <input id="fb-api-key" type="text" class="cloud-input" placeholder="AIza...">
+          <label class="cloud-label">Auth Domain *</label>
+          <input id="fb-auth-domain" type="text" class="cloud-input" placeholder="your-app.firebaseapp.com">
+          <label class="cloud-label">Project ID *</label>
+          <input id="fb-project-id" type="text" class="cloud-input" placeholder="your-project-id">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+            <div>
+              <label class="cloud-label" style="margin-top:0">App ID *</label>
+              <input id="fb-app-id" type="text" class="cloud-input" placeholder="1:xxx:web:xxx">
+            </div>
+            <div>
+              <label class="cloud-label" style="margin-top:0">Storage Bucket</label>
+              <input id="fb-bucket" type="text" class="cloud-input" placeholder="your-app.appspot.com">
+            </div>
+          </div>
+          <label class="cloud-label">Cloud Site ID *</label>
+          <input id="fb-site-id" type="text" class="cloud-input" placeholder="e.g. rampur-site-001">
+          <p style="font-size:9px;color:#7c3aed;margin-top:3px;">This ID links all devices viewing the same site</p>
+        </div>
+        <button onclick="cloudStep1Next()" class="cloud-action-btn primary">
+          ▶ Next — Proceed to Payment
+        </button>
+        <div style="margin-top:.75rem;border-top:1px solid rgba(255,255,255,0.07);padding-top:.75rem;">
+          <button onclick="openViewerLoginModal();closeCloudModal();" class="cloud-action-btn amber" style="padding:.65rem;font-size:.8rem;">
+            👁️ Viewer Login — No Subscription Needed
+          </button>
+          <p style="text-align:center;font-size:9px;color:#7c3aed;margin-top:.35rem">Viewers are created by subscribed admins · Free access</p>
+        </div>
+      </div>
+
+      <!-- Step 2: Payment -->
+      <div id="cloud-step-2-panel" style="display:none">
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
+          <p style="font-size:11px;font-weight:700;color:#86efac;margin-bottom:2px">✅ Firebase config saved!</p>
+          <p style="font-size:10px;color:#6ee7b7;">Now subscribe to activate cloud sync.</p>
+        </div>
+        <div style="text-align:center;padding:.875rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:.875rem;margin-bottom:.875rem;">
+          <p style="color:white;font-size:28px;font-weight:900;line-height:1;margin:0">₹30<span style="font-size:13px;font-weight:400;color:#a78bfa">/month</span></p>
+          <p style="font-size:10px;color:#7c3aed;margin-top:4px;">Cancel anytime · Secured by Razorpay</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:.75rem;">
+            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">🔄 Real-time Sync</span>
+            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">💾 Auto Backup</span>
+            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">👥 Viewer Accounts</span>
+            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">📱 Any Device</span>
+          </div>
+        </div>
+        <button onclick="startRazorpay()" id="pay-btn" class="cloud-action-btn primary">
+          💳 Pay ₹30 & Activate Cloud
+        </button>
+        <button onclick="cloudGoToStep(1)" class="cloud-action-btn ghost" style="margin-top:.5rem;padding:.6rem;font-size:.8rem;">
+          ← Back to Firebase Setup
+        </button>
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:.6rem;">
+          <img src="https://razorpay.com/assets/razorpay-glyph.svg" onerror="this.style.display='none'" style="height:14px;opacity:0.5">
+          <span style="font-size:9px;color:rgba(255,255,255,0.35)">Secured by Razorpay · UPI / Card / NetBanking</span>
+        </div>
+      </div>
+
+      <!-- Step 3: Account -->
+      <div id="cloud-step-3-panel" style="display:none">
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
+          <p style="font-size:11px;font-weight:700;color:#86efac;margin-bottom:2px">✅ Payment Successful!</p>
+          <p style="font-size:10px;color:#6ee7b7;">Now log in or create your admin account to complete setup.</p>
+        </div>
+        <div style="display:flex;gap:4px;background:rgba(255,255,255,0.07);border-radius:12px;padding:4px;margin-bottom:.875rem;">
+          <button id="cloud-tab-login" onclick="cloudSwitchAuthTab('login')" style="flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:rgba(255,255,255,0.18);color:#fff;">🔑 Login</button>
+          <button id="cloud-tab-signup" onclick="cloudSwitchAuthTab('signup')" style="flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);">✨ Sign Up</button>
+        </div>
+        <!-- Login form -->
+        <div id="cloud-login-form">
+          <label class="cloud-label">Email</label>
+          <input id="cloud-login-email" type="email" class="cloud-input" placeholder="admin@example.com">
+          <label class="cloud-label">Password</label>
+          <input id="cloud-login-pass" type="password" class="cloud-input" placeholder="Your password">
+          <button onclick="doCloudAdminLogin()" id="cloud-login-btn" class="cloud-action-btn success" style="margin-top:.75rem;">🔑 Login as Admin</button>
+          <p id="cloud-login-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
+        </div>
+        <!-- Signup form -->
+        <div id="cloud-signup-form" style="display:none">
+          <label class="cloud-label">Your Name</label>
+          <input id="cloud-signup-name" type="text" class="cloud-input" placeholder="Site Engineer / Admin Name">
+          <label class="cloud-label">Email</label>
+          <input id="cloud-signup-email" type="email" class="cloud-input" placeholder="admin@example.com">
+          <label class="cloud-label">Password (min 6 chars)</label>
+          <input id="cloud-signup-pass" type="password" class="cloud-input" placeholder="Create a strong password">
+          <button onclick="doCloudAdminSignup()" id="cloud-signup-btn" class="cloud-action-btn success" style="margin-top:.75rem;">✨ Create Admin Account</button>
+          <p id="cloud-signup-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
+        </div>
+        <button onclick="cloudGoToStep(2)" class="cloud-action-btn ghost" style="margin-top:.5rem;padding:.6rem;font-size:.8rem;">
+          ← Back
+        </button>
+      </div>
+
     </div>
 
-    <!-- Firebase Config Section (shown after payment) -->
+    <!-- ===== FIREBASE CONFIG SETUP (after payment, before account — legacy path) ===== -->
     <div id="cloud-firebase-section" style="display:none">
       <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
-        <p class="text-white font-bold" style="font-size:13px;margin-bottom:.3rem">✅ Payment Successful!</p>
+        <p style="color:white;font-weight:700;font-size:13px;margin-bottom:.3rem">✅ Payment Successful!</p>
         <p style="font-size:10px;color:#86efac;">Now connect your Firebase project to enable cloud sync.</p>
       </div>
       <div style="margin-bottom:.6rem">
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Firebase API Key *</label>
-        <input id="fb-api-key" type="text" placeholder="AIza..." style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box">
+        <label class="cloud-label">Firebase API Key *</label>
+        <input id="fb-api-key-legacy" type="text" class="cloud-input" placeholder="AIza...">
       </div>
       <div style="margin-bottom:.6rem">
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Auth Domain *</label>
-        <input id="fb-auth-domain" type="text" placeholder="your-app.firebaseapp.com" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box">
+        <label class="cloud-label">Auth Domain *</label>
+        <input id="fb-auth-domain-legacy" type="text" class="cloud-input" placeholder="your-app.firebaseapp.com">
       </div>
       <div style="margin-bottom:.6rem">
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Project ID *</label>
-        <input id="fb-project-id" type="text" placeholder="your-project-id" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box">
+        <label class="cloud-label">Project ID *</label>
+        <input id="fb-project-id-legacy" type="text" class="cloud-input" placeholder="your-project-id">
       </div>
       <div class="grid grid-cols-2 gap-2" style="margin-bottom:.75rem;">
         <div>
-          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">App ID *</label>
-          <input id="fb-app-id" type="text" placeholder="1:xxx:web:xxx" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box">
+          <label class="cloud-label" style="margin-top:0">App ID *</label>
+          <input id="fb-app-id-legacy" type="text" class="cloud-input" placeholder="1:xxx:web:xxx">
         </div>
         <div>
-          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Storage Bucket</label>
-          <input id="fb-bucket" type="text" placeholder="your-app.appspot.com" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box">
+          <label class="cloud-label" style="margin-top:0">Storage Bucket</label>
+          <input id="fb-bucket-legacy" type="text" class="cloud-input" placeholder="your-app.appspot.com">
         </div>
       </div>
       <div style="margin-bottom:.75rem">
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Cloud Site ID (unique name for your site)</label>
-        <input id="fb-site-id" type="text" placeholder="e.g. rampur-site-001" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box">
-        <p style="font-size:9px;color:#7c3aed;margin-top:3px">This ID links all devices viewing the same site</p>
+        <label class="cloud-label">Cloud Site ID *</label>
+        <input id="fb-site-id-legacy" type="text" class="cloud-input" placeholder="e.g. rampur-site-001">
+        <p style="font-size:9px;color:#7c3aed;margin-top:3px;">This ID links all devices viewing the same site</p>
       </div>
-      <button onclick="saveFirebaseConfig()" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;">
-        🔥 Connect Firebase & Start Sync
-      </button>
+      <button onclick="saveFirebaseConfig()" class="cloud-action-btn success">🔥 Connect Firebase & Start Sync</button>
     </div>
 
-    <!-- Activated Section -->
+    <!-- ===== ACTIVATED STATE ===== -->
     <div id="cloud-active-section" style="display:none">
-      <!-- Admin user info bar -->
-      <div id="cloud-admin-bar" style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:.875rem;padding:.65rem 1rem;margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between;">
-        <div>
-          <p style="font-size:11px;font-weight:700;color:#c7d2fe">👤 Logged in as Admin</p>
-          <p id="cloud-admin-email" style="font-size:10px;color:#a78bfa">—</p>
-          <p id="cloud-sub-expiry" style="font-size:9px;color:#86efac;margin-top:1px">—</p>
+
+      <!-- Admin bar -->
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(124,58,237,.1));border:1px solid rgba(99,102,241,.3);border-radius:.875rem;padding:.65rem .875rem;margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="min-width:0">
+          <p style="font-size:10px;font-weight:700;color:#c7d2fe;margin:0;line-height:1">👤 Admin</p>
+          <p id="cloud-admin-email" style="font-size:11px;color:#a78bfa;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</p>
+          <p id="cloud-sub-expiry" style="font-size:9px;color:#86efac;margin:1px 0 0">—</p>
         </div>
-        <button onclick="doAdminLogout()" style="font-size:10px;padding:4px 10px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;cursor:pointer;">Logout</button>
+        <button onclick="doAdminLogout()" style="flex-shrink:0;font-size:10px;padding:5px 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;cursor:pointer;font-weight:700;">Logout</button>
       </div>
-      <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
-        <p class="text-white font-bold" style="font-size:13px;margin-bottom:.3rem">☁️ Cloud Active</p>
-        <p id="cloud-site-id-display" style="font-size:10px;color:#86efac;">Site ID: —</p>
-        <p id="cloud-sync-time" style="font-size:10px;color:#86efac;margin-top:2px">Last sync: —</p>
+
+      <!-- Cloud status -->
+      <div style="background:linear-gradient(135deg,rgba(5,150,105,.12),rgba(16,185,129,.08));border:1px solid rgba(34,197,94,.3);border-radius:.875rem;padding:.75rem .875rem;margin-bottom:.75rem;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span style="font-size:16px">☁️</span>
+          <p style="color:white;font-weight:700;font-size:13px;margin:0">Cloud Active & Syncing</p>
+        </div>
+        <p id="cloud-site-id-display" style="font-size:10px;color:#86efac;margin:0">Site ID: —</p>
+        <p id="cloud-sync-time" style="font-size:10px;color:#6ee7b7;margin-top:2px">Last sync: —</p>
       </div>
-      <div class="grid grid-cols-2 gap-2" style="margin-bottom:.75rem;">
-        <button onclick="cloudBackupNow()" style="padding:.65rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.78rem;cursor:pointer;">⬆ Backup Now</button>
-        <button onclick="cloudRestoreNow()" style="padding:.65rem;background:linear-gradient(135deg,#0891b2,#0ea5e9);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.78rem;cursor:pointer;">⬇ Restore Cloud</button>
+
+      <!-- Quick actions -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem;">
+        <button onclick="cloudBackupNow()" style="padding:.65rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">⬆ Backup Now</button>
+        <button onclick="cloudRestoreNow()" style="padding:.65rem;background:linear-gradient(135deg,#0891b2,#0ea5e9);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">⬇ Restore</button>
       </div>
-      <button onclick="openViewerMgmt()" style="width:100%;padding:.7rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:700;font-size:.85rem;cursor:pointer;margin-bottom:.5rem;">
-        👁️ Manage Viewer Accounts
-      </button>
-      <button onclick="openViewerModal()" style="width:100%;padding:.65rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#c4b5fd;border-radius:.875rem;font-weight:700;font-size:.8rem;cursor:pointer;margin-bottom:.5rem;">
-        🔗 Share Viewer Link (Legacy)
-      </button>
-      <button onclick="disconnectCloud()" style="width:100%;padding:.55rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:.875rem;font-size:.75rem;font-weight:600;cursor:pointer;">
-        🔌 Disconnect Cloud
-      </button>
+
+      <!-- Manage viewers -->
+      <button onclick="openViewerMgmt()" class="cloud-action-btn amber" style="margin-bottom:.5rem;padding:.7rem;">👁️ Manage Viewer Accounts</button>
+      <button onclick="openViewerModal()" class="cloud-action-btn ghost" style="margin-bottom:.5rem;padding:.65rem;font-size:.8rem;">🔗 Share Viewer Link</button>
+      <button onclick="disconnectCloud()" class="cloud-action-btn danger" style="padding:.55rem;font-size:.8rem;font-weight:600;">🔌 Disconnect Cloud</button>
     </div>
+
   </div>
 </div>
 
@@ -5174,6 +5299,19 @@ function updateCloudBtn() {
 // -- Open / Close Cloud Modal --
 function openCloudModal() {
   refreshCloudModalState();
+  // Pre-fill Firebase inputs if config already exists
+  var cfg = getFbConfig();
+  var siteId = getSiteId();
+  if (cfg) {
+    var ids = ['fb-api-key','fb-auth-domain','fb-project-id','fb-app-id','fb-bucket'];
+    var vals = [cfg.apiKey||'', cfg.authDomain||'', cfg.projectId||'', cfg.appId||'', cfg.storageBucket||''];
+    for (var i=0; i<ids.length; i++) {
+      var el = document.getElementById(ids[i]); if (el && !el.value) el.value = vals[i];
+      var el2 = document.getElementById(ids[i]+'-legacy'); if (el2 && !el2.value) el2.value = vals[i];
+    }
+    var sid = document.getElementById('fb-site-id'); if (sid && !sid.value) sid.value = siteId||'';
+    var sid2 = document.getElementById('fb-site-id-legacy'); if (sid2 && !sid2.value) sid2.value = siteId||'';
+  }
   document.getElementById('cloud-modal').classList.add('show');
 }
 function closeCloudModal() { document.getElementById('cloud-modal').classList.remove('show'); }
@@ -5185,39 +5323,198 @@ function refreshCloudModalState() {
   var paySection = document.getElementById('cloud-pay-section');
   var fbSection = document.getElementById('cloud-firebase-section');
   var activeSection = document.getElementById('cloud-active-section');
-  var banner = document.getElementById('cloud-status-banner');
   var bannerIcon = document.getElementById('cloud-status-icon');
   var bannerTitle = document.getElementById('cloud-status-title');
   var bannerSub = document.getElementById('cloud-status-sub');
 
   if (activated && cfg && siteId) {
     // Fully active
-    paySection.style.display = 'none';
-    fbSection.style.display = 'none';
-    activeSection.style.display = 'block';
-    bannerIcon.textContent = '✅';
-    bannerTitle.textContent = 'Cloud Active & Syncing';
-    bannerTitle.style.color = '#86efac';
-    bannerSub.textContent = 'Your data syncs across devices in real time.';
-    document.getElementById('cloud-site-id-display').textContent = 'Site ID: ' + siteId;
+    if (paySection) paySection.style.display = 'none';
+    if (fbSection) fbSection.style.display = 'none';
+    if (activeSection) activeSection.style.display = 'block';
+    if (bannerIcon) bannerIcon.textContent = '✅';
+    if (bannerTitle) { bannerTitle.textContent = 'Cloud Active & Syncing'; bannerTitle.style.color = '#86efac'; }
+    if (bannerSub) bannerSub.textContent = 'Your data syncs across devices in real time.';
+    var siteDsp = document.getElementById('cloud-site-id-display');
+    if (siteDsp) siteDsp.textContent = 'Site ID: ' + siteId;
   } else if (activated && !cfg) {
-    // Paid but Firebase not configured
-    paySection.style.display = 'none';
-    fbSection.style.display = 'block';
-    activeSection.style.display = 'none';
-    bannerIcon.textContent = '⚙️';
-    bannerTitle.textContent = 'Payment Done — Setup Firebase';
-    bannerTitle.style.color = '#fbbf24';
-    bannerSub.textContent = 'Enter your Firebase config to start syncing.';
+    // Paid but Firebase not configured — show legacy firebase section
+    if (paySection) paySection.style.display = 'none';
+    if (fbSection) fbSection.style.display = 'block';
+    if (activeSection) activeSection.style.display = 'none';
+    if (bannerIcon) bannerIcon.textContent = '⚙️';
+    if (bannerTitle) { bannerTitle.textContent = 'Payment Done — Setup Firebase'; bannerTitle.style.color = '#fbbf24'; }
+    if (bannerSub) bannerSub.textContent = 'Enter your Firebase config to start syncing.';
   } else {
-    // Not activated
-    paySection.style.display = 'block';
-    fbSection.style.display = 'none';
-    activeSection.style.display = 'none';
-    bannerIcon.textContent = '🔒';
-    bannerTitle.textContent = 'Not Activated';
-    bannerTitle.style.color = '#f9a8d4';
-    bannerSub.textContent = '';
+    // Not activated — show step wizard starting at step 1
+    if (paySection) paySection.style.display = 'block';
+    if (fbSection) fbSection.style.display = 'none';
+    if (activeSection) activeSection.style.display = 'none';
+    if (bannerIcon) bannerIcon.textContent = '🔒';
+    if (bannerTitle) { bannerTitle.textContent = 'Not Activated'; bannerTitle.style.color = '#f9a8d4'; }
+    if (bannerSub) bannerSub.textContent = '';
+    // Reset to step 1
+    cloudGoToStep(1);
+  }
+}
+
+// -- Cloud step wizard navigation --
+function cloudGoToStep(step) {
+  var panels = [null,
+    document.getElementById('cloud-step-1-panel'),
+    document.getElementById('cloud-step-2-panel'),
+    document.getElementById('cloud-step-3-panel')
+  ];
+  for (var i = 1; i <= 3; i++) {
+    if (panels[i]) panels[i].style.display = (i === step) ? 'block' : 'none';
+    var dot = document.getElementById('cstep-' + i);
+    var lbl = document.getElementById('cslabel-' + i);
+    if (dot) {
+      dot.className = 'cloud-step-dot ' + (i < step ? 'done' : i === step ? 'active' : 'idle');
+      dot.textContent = i < step ? '✓' : i;
+    }
+    if (lbl) {
+      lbl.className = 'cloud-step-label ' + (i < step ? 'done' : i === step ? 'active' : '');
+    }
+    if (i < 3) {
+      var line = document.getElementById('cline-' + i);
+      if (line) line.className = 'cloud-step-line' + (i < step ? ' done' : '');
+    }
+  }
+}
+
+// -- Step 1: Validate Firebase fields and advance to step 2 --
+function cloudStep1Next() {
+  var apiKey = (document.getElementById('fb-api-key')||{}).value||'';
+  var authDomain = (document.getElementById('fb-auth-domain')||{}).value||'';
+  var projectId = (document.getElementById('fb-project-id')||{}).value||'';
+  var appId = (document.getElementById('fb-app-id')||{}).value||'';
+  var bucket = (document.getElementById('fb-bucket')||{}).value||'';
+  var siteId = (document.getElementById('fb-site-id')||{}).value||'';
+  apiKey = apiKey.trim(); authDomain = authDomain.trim(); projectId = projectId.trim(); appId = appId.trim(); siteId = siteId.trim().replace(/\s+/g,'-').toLowerCase();
+
+  // If using hardcoded/pre-configured Firebase, allow through with defaults
+  if (!apiKey && !authDomain && !projectId) {
+    var existing = getFbConfig();
+    if (existing) {
+      // Already configured — just advance
+      cloudGoToStep(2);
+      return;
+    }
+  }
+  if (!apiKey || !authDomain || !projectId || !appId) { toast('Firebase aur Site ID fields bharo (*)', 'err'); return; }
+  if (!siteId) { toast('Cloud Site ID required', 'err'); return; }
+
+  // Save Firebase config
+  var cfg = { apiKey: apiKey, authDomain: authDomain, projectId: projectId, appId: appId, storageBucket: bucket };
+  safeLS.setItem(CLOUD_FB_CFG, JSON.stringify(cfg));
+  safeLS.setItem(CLOUD_SITE_ID, siteId);
+  toast('Firebase config saved!', 'ok');
+  cloudGoToStep(2);
+}
+
+// -- New auth tab switch inside cloud modal step 3 --
+function cloudSwitchAuthTab(tab) {
+  var loginForm = document.getElementById('cloud-login-form');
+  var signupForm = document.getElementById('cloud-signup-form');
+  var loginTab = document.getElementById('cloud-tab-login');
+  var signupTab = document.getElementById('cloud-tab-signup');
+  if (loginForm) loginForm.style.display = tab === 'login' ? 'block' : 'none';
+  if (signupForm) signupForm.style.display = tab === 'signup' ? 'block' : 'none';
+  var activeStyle = 'flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:rgba(255,255,255,0.18);color:#fff;';
+  var idleStyle   = 'flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);';
+  if (loginTab) loginTab.setAttribute('style', tab === 'login' ? activeStyle : idleStyle);
+  if (signupTab) signupTab.setAttribute('style', tab === 'signup' ? activeStyle : idleStyle);
+}
+
+// -- New admin login (inline in cloud step 3) --
+function doCloudAdminLogin() {
+  var email = (document.getElementById('cloud-login-email')||{}).value||'';
+  var pass  = (document.getElementById('cloud-login-pass')||{}).value||'';
+  var errEl = document.getElementById('cloud-login-err');
+  var btn   = document.getElementById('cloud-login-btn');
+  if (errEl) errEl.style.display = 'none';
+  email = email.trim();
+  if (!email || !pass) { if(errEl){errEl.textContent='⚠️ Email aur password bharo';errEl.style.display='block';} return; }
+  var m = window._fbModules;
+  if (!m) { if(errEl){errEl.textContent='⚠️ Firebase load nahi hua, reload karo';errEl.style.display='block';} return; }
+  var cfg = getFbConfig();
+  if (!cfg) { if(errEl){errEl.textContent='⚠️ Firebase config missing — Step 1 pehle karo';errEl.style.display='block';} return; }
+  if (btn) { btn.textContent = '⏳ Logging in…'; btn.disabled = true; }
+  try {
+    var app;
+    try { app = m.initializeApp(cfg, 'admin-auth-' + Date.now()); }
+    catch(e) { app = m.initializeApp(cfg, 'admin-auth'); }
+    var auth = m.getAuth(app);
+    m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
+      _adminUser = uc.user;
+      var db = m.getFirestore(app);
+      return m.getDoc(m.doc(db,'admins',uc.user.uid)).then(function(snap){
+        var data = snap.exists() ? snap.data() : {};
+        var now = Date.now();
+        var endDate = data.subscriptionEndDate || 0;
+        var isActive = data.subscribed && endDate > now;
+        if (isActive) {
+          onAdminLoginSuccess(email, uc.user, app);
+          closeCloudModal();
+          openCloudModal();
+        } else {
+          if(btn){btn.textContent='🔑 Login as Admin';btn.disabled=false;}
+          if (data.subscribed && endDate <= now) {
+            if(errEl){errEl.textContent='⚠️ Subscription expired! Please renew.';errEl.style.display='block';}
+            toast('⚠️ Subscription expired! Please renew.','err');
+          } else {
+            if(errEl){errEl.textContent='⚠️ No active subscription — please pay first.';errEl.style.display='block';}
+          }
+        }
+      });
+    }).catch(function(e){
+      if(btn){btn.textContent='🔑 Login as Admin';btn.disabled=false;}
+      var msg = e.code==='auth/wrong-password'?'Galat password':e.code==='auth/user-not-found'?'Email registered nahi hai':e.code==='auth/invalid-email'?'Valid email enter karo':e.message;
+      if(errEl){errEl.textContent='⚠️ '+msg;errEl.style.display='block';}
+    });
+  } catch(e) {
+    if(btn){btn.textContent='🔑 Login as Admin';btn.disabled=false;}
+    if(errEl){errEl.textContent='⚠️ '+e.message;errEl.style.display='block';}
+  }
+}
+
+// -- New admin signup (inline in cloud step 3) --
+function doCloudAdminSignup() {
+  var name  = (document.getElementById('cloud-signup-name')||{}).value||'';
+  var email = (document.getElementById('cloud-signup-email')||{}).value||'';
+  var pass  = (document.getElementById('cloud-signup-pass')||{}).value||'';
+  var btn   = document.getElementById('cloud-signup-btn');
+  var errEl = document.getElementById('cloud-signup-err');
+  if (errEl) errEl.style.display = 'none';
+  name = name.trim(); email = email.trim();
+  if (!name || !email || !pass) { if(errEl){errEl.textContent='⚠️ Sab fields bharo';errEl.style.display='block';} return; }
+  if (pass.length < 6) { if(errEl){errEl.textContent='⚠️ Password min 6 chars';errEl.style.display='block';} return; }
+  var m = window._fbModules;
+  if (!m) { if(errEl){errEl.textContent='⚠️ Firebase load nahi hua';errEl.style.display='block';} return; }
+  var cfg = getFbConfig();
+  if (!cfg) { if(errEl){errEl.textContent='⚠️ Firebase config missing — Step 1 karo pehle';errEl.style.display='block';} return; }
+  if (btn) { btn.textContent = '⏳ Creating…'; btn.disabled = true; }
+  try {
+    var app;
+    try { app = m.initializeApp(cfg, 'admin-signup-' + Date.now()); }
+    catch(e) { app = m.initializeApp(cfg, 'admin-signup'); }
+    var auth = m.getAuth(app);
+    m.createUserWithEmailAndPassword(auth, email, pass).then(function(uc){
+      var db = m.getFirestore(app);
+      return m.setDoc(m.doc(db,'admins',uc.user.uid),{name:name,email:email,subscribed:false,createdAt:Date.now()}).then(function(){
+        _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
+        closeCloudModal();
+        openPayLanding(true);
+      });
+    }).catch(function(e){
+      if(btn){btn.textContent='✨ Create Admin Account';btn.disabled=false;}
+      var msg = e.code==='auth/email-already-in-use'?'Email already registered — Login karo':e.code==='auth/invalid-email'?'Valid email enter karo':e.message;
+      if(errEl){errEl.textContent='⚠️ '+msg;errEl.style.display='block';}
+    });
+  } catch(e) {
+    if(btn){btn.textContent='✨ Create Admin Account';btn.disabled=false;}
+    if(errEl){errEl.textContent='⚠️ '+e.message;errEl.style.display='block';}
   }
 }
 
@@ -5252,7 +5549,7 @@ function _openRazorpay() {
     },
     modal: {
       ondismiss: function() {
-        if (btn) { btn.textContent = '💳 Pay & Activate Cloud'; btn.disabled = false; }
+        if (btn) { btn.textContent = '💳 Pay ₹30 & Activate Cloud'; btn.disabled = false; }
       }
     }
   };
@@ -5260,38 +5557,53 @@ function _openRazorpay() {
     var rzp = new Razorpay(options);
     rzp.on('payment.failed', function(resp) {
       toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err');
-      if (btn) { btn.textContent = '💳 Pay & Activate Cloud'; btn.disabled = false; }
+      if (btn) { btn.textContent = '💳 Pay ₹30 & Activate Cloud'; btn.disabled = false; }
     });
     rzp.open();
   } catch(e) {
     toast('Payment error: ' + e.message, 'err');
-    if (btn) { btn.textContent = '💳 Pay & Activate Cloud'; btn.disabled = false; }
+    if (btn) { btn.textContent = '💳 Pay ₹30 & Activate Cloud'; btn.disabled = false; }
   }
 }
 
 function onPaymentSuccess(response) {
   safeLS.setItem(CLOUD_KEY, '1');
   safeLS.setItem('cm_rzp_payment_id', response.razorpay_payment_id || 'TEST_' + Date.now());
-  toast('✅ Payment successful! Now connect Firebase.', 'ok');
-  refreshCloudModalState();
+  toast('✅ Payment successful! Now create your account.', 'ok');
+  // Advance to step 3 (account creation) in the new wizard
+  var step3panel = document.getElementById('cloud-step-3-panel');
+  if (step3panel) {
+    cloudGoToStep(3);
+    // Update banner
+    var bannerIcon = document.getElementById('cloud-status-icon');
+    var bannerTitle = document.getElementById('cloud-status-title');
+    var bannerSub = document.getElementById('cloud-status-sub');
+    if (bannerIcon) bannerIcon.textContent = '✅';
+    if (bannerTitle) { bannerTitle.textContent = 'Payment Done!'; bannerTitle.style.color = '#86efac'; }
+    if (bannerSub) bannerSub.textContent = 'Create or login to your admin account.';
+  } else {
+    refreshCloudModalState();
+  }
   updateCloudBtn();
 }
 
-// -- Firebase Config Save --
+// -- Firebase Config Save (legacy path — for old activation flow) --
 function saveFirebaseConfig() {
-  var apiKey = document.getElementById('fb-api-key').value.trim();
-  var authDomain = document.getElementById('fb-auth-domain').value.trim();
-  var projectId = document.getElementById('fb-project-id').value.trim();
-  var appId = document.getElementById('fb-app-id').value.trim();
-  var bucket = document.getElementById('fb-bucket').value.trim();
-  var siteId = document.getElementById('fb-site-id').value.trim().replace(/\s+/g, '-').toLowerCase();
+  // Support both old IDs and new legacy-suffix IDs
+  function gv(id) { var el = document.getElementById(id)||document.getElementById(id+'-legacy'); return el ? el.value.trim() : ''; }
+  var apiKey     = gv('fb-api-key');
+  var authDomain = gv('fb-auth-domain');
+  var projectId  = gv('fb-project-id');
+  var appId      = gv('fb-app-id');
+  var bucket     = gv('fb-bucket');
+  var siteId     = gv('fb-site-id').replace(/\s+/g, '-').toLowerCase();
 
   if (!apiKey || !authDomain || !projectId || !appId) {
     toast('Please fill all required fields (*)', 'err'); return;
   }
   if (!siteId) { toast('Site ID is required', 'err'); return; }
 
-  var cfg = { apiKey, authDomain, projectId, appId, storageBucket: bucket };
+  var cfg = { apiKey: apiKey, authDomain: authDomain, projectId: projectId, appId: appId, storageBucket: bucket };
   safeLS.setItem(CLOUD_FB_CFG, JSON.stringify(cfg));
   safeLS.setItem(CLOUD_SITE_ID, siteId);
   toast('Firebase config saved! Connecting…', 'ok');
