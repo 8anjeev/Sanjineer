@@ -151,12 +151,45 @@ body{margin:0}
 
   <!-- Razorpay -->
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    window._fbModules = { initializeApp, getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc, getAuth, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut };
+  <!-- Firebase compat SDKs — works on GitHub Pages, local file, Edge, Chrome, all browsers -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    function _normSnap(snap) {
+      if (typeof snap.exists !== 'function') {
+        var _e = snap.exists; var _d = snap.data ? snap.data.bind(snap) : function(){ return {}; };
+        snap.exists = function(){ return _e; }; snap.data = _d;
+      }
+      return snap;
+    }
+    // Lazy _fbModules — firebase global accessed at call-time, not definition-time
+    window._fbModules = {
+      initializeApp: function(cfg, name) {
+        if (!window.firebase) throw new Error('Firebase SDK not loaded');
+        try { return firebase.app(name); } catch(e) {}
+        return firebase.initializeApp(cfg, name);
+      },
+      getFirestore: function(app) { return app.firestore(); },
+      getAuth:      function(app) { return app.auth(); },
+      doc:          function(db, col, id) { return db.collection(col).doc(id); },
+      setDoc:       function(ref, data, opts) {
+        return opts && opts.merge ? ref.set(data, {merge:true}) : ref.set(data);
+      },
+      getDoc: function(ref) {
+        return ref.get().then(function(snap) { return _normSnap(snap); });
+      },
+      onSnapshot: function(ref, cb) {
+        return ref.onSnapshot(function(snap) { cb(_normSnap(snap)); });
+      },
+      collection: function(db, col) { return db.collection(col); },
+      deleteDoc:  function(ref)     { return ref.delete(); },
+      signInAnonymously:              function(auth)       { return auth.signInAnonymously(); },
+      signInWithEmailAndPassword:     function(auth, e, p) { return auth.signInWithEmailAndPassword(e, p); },
+      createUserWithEmailAndPassword: function(auth, e, p) { return auth.createUserWithEmailAndPassword(e, p); },
+      signOut:            function(auth)     { return auth.signOut(); },
+      onAuthStateChanged: function(auth, cb) { return auth.onAuthStateChanged(cb); }
+    };
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -401,8 +434,6 @@ body{margin:0}
     #tab-dashboard .grid.grid-cols-3.gap-2 { gap: 6px !important; }
     #tab-dashboard .mb-2 { margin-bottom: 5px !important; }
 
-    /* ── 14. Safety stats chips ── */
-    #tab-safety .bg-white.rounded-2xl.shadow-xl.text-center { padding-top: 7px !important; padding-bottom: 7px !important; }
 
     /* ── 15. Machinery form — clean grid layout ── */
     #tab-machinery .bg-white.rounded-2xl.p-3 { padding: 8px 10px !important; }
@@ -501,31 +532,6 @@ body{margin:0}
     #cloud-modal.show{display:flex!important;}
     .cloud-feature-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08);}
     .cloud-feature-row:last-child{border-bottom:none;}
-    /* CLOUD STEP STEPPER */
-    .cloud-step-bar{display:flex;align-items:center;gap:0;margin-bottom:1.1rem;}
-    .cloud-step-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;transition:all .2s;}
-    .cloud-step-dot.done{background:linear-gradient(135deg,#059669,#10b981);color:white;box-shadow:0 2px 8px rgba(16,185,129,0.4);}
-    .cloud-step-dot.active{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;box-shadow:0 2px 8px rgba(99,102,241,0.4);}
-    .cloud-step-dot.idle{background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.4);border:1.5px solid rgba(255,255,255,0.15);}
-    .cloud-step-line{flex:1;height:2px;background:rgba(255,255,255,0.12);margin:0 2px;border-radius:2px;}
-    .cloud-step-line.done{background:linear-gradient(to right,#059669,#10b981);}
-    .cloud-step-label{font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);text-align:center;line-height:1.2;margin-top:3px;}
-    .cloud-step-label.active{color:#c4b5fd;}
-    .cloud-step-label.done{color:#86efac;}
-    .cloud-setup-card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:.875rem;padding:.875rem;margin-bottom:.875rem;}
-    .cloud-input{width:100%;padding:9px 11px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.18);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box;transition:border-color .15s;}
-    .cloud-input::placeholder{color:rgba(255,255,255,0.35);}
-    .cloud-input:focus{border-color:#818cf8;}
-    .cloud-label{font-size:9.5px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;margin-top:8px;}
-    .cloud-label:first-child{margin-top:0;}
-    .cloud-action-btn{width:100%;padding:.8rem;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;transition:opacity .15s,transform .1s;}
-    .cloud-action-btn:active{transform:scale(0.97);}
-    .cloud-action-btn.primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;}
-    .cloud-action-btn.success{background:linear-gradient(135deg,#059669,#10b981);color:white;}
-    .cloud-action-btn.amber{background:linear-gradient(135deg,#d97706,#f59e0b);color:white;}
-    .cloud-action-btn.danger{background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;}
-    .cloud-action-btn.ghost{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#c4b5fd;}
-    .cloud-action-btn + .cloud-action-btn{margin-top:.5rem;}
     /* VIEWER SHARE */
     #viewer-modal{display:none;}
     #viewer-modal.show{display:flex!important;}
@@ -537,8 +543,8 @@ body{margin:0}
     .auth-input{width:100%;padding:10px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;}
     .auth-input::placeholder{color:rgba(255,255,255,0.4);}
     .auth-input:focus{border-color:#818cf8;}
-    .perm-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.6);margin:3px 2px;transition:all .15s;}
-    .perm-chip.on{background:rgba(99,102,241,0.35);border-color:#818cf8;color:#c7d2fe;}
+    .perm-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45);margin:3px 2px;transition:all .18s;box-shadow:0 2px 6px rgba(0,0,0,.2);}
+    .perm-chip.on{background:linear-gradient(135deg,rgba(99,102,241,0.35),rgba(139,92,246,0.25));border-color:#818cf8;color:#c7d2fe;box-shadow:0 3px 10px rgba(99,102,241,.35);}
     /* VIEWER ACCOUNTS MODAL */
     #viewer-mgmt-modal{display:none;}
     #viewer-mgmt-modal.show{display:flex!important;}
@@ -608,9 +614,8 @@ body{margin:0}
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="contractors" onclick="switchTab('contractors')">👥 Teams</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="budget" onclick="switchTab('budget')">📊 Budget</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="schedule" onclick="switchTab('schedule')">📅 Schedule</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="rfi" onclick="switchTab('rfi')">📝 RFI</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="punchlist" onclick="switchTab('punchlist')">📋 Punch List</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="safety" onclick="switchTab('safety')">🦺 Safety</button>
+
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="bill" onclick="switchTab('bill')">🧾 Bill</button>
   </div>
 </nav>
@@ -636,45 +641,29 @@ body{margin:0}
     <div class="g-tobr-indigo500-violet500 stat-card rounded-xl px-2 py-1.5 text-white"><p class="text-[10px] text-indigo-100 font-semibold">Rental Expense</p><p id="dash-rental-out" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
     <div class="g-tobr-green500-emerald500 stat-card rounded-xl px-2 py-1.5 text-white"><p class="text-[10px] text-green-100 font-semibold">Rental Income</p><p id="dash-rental-in" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
   </div>
-  <!-- Row 4: Tools on Site | CIRCULAR CLOCK | Workers Listed (swapped from row 6) -->
-  <div class="grid grid-cols-3 gap-2 mb-2 items-center">
-    <!-- Tools chip (was row 6, now left of clock) -->
-    <div class="g-tobr-violet500-purple500 stat-card rounded-xl px-2 py-2 text-white cursor-pointer" onclick="switchTab('tools')">
-      <p class="text-[9px] text-purple-200 font-semibold">🔧 Tools on Site</p>
-      <p id="dash-tools-count" class="text-xl font-black leading-none mt-0.5">0</p>
-      <p class="text-[9px] text-purple-200">Total items</p>
+  <!-- Row 4: Punch List | CIRCULAR CLOCK | Workers Listed -->
+  <div class="grid grid-cols-3 gap-2 mb-2" style="align-items:stretch">
+    <!-- Punch List chip (violet — Tools colour) -->
+    <div class="g-tobr-violet500-purple500 stat-card rounded-xl px-2 py-2 text-white cursor-pointer flex flex-col justify-center" onclick="switchTab('punchlist')">
+      <p class="text-[9px] text-purple-200 font-semibold">📋 Punch List</p>
+      <p id="dash-open-punches" class="text-xl font-black leading-none mt-0.5">0</p>
+      <p class="text-[9px] text-purple-200 mt-0.5">Open items</p>
+      <p id="dash-punch-prog" class="text-[9px] text-purple-300 font-semibold leading-none mt-0.5">0 in progress</p>
     </div>
     <!-- CIRCULAR LIVE CLOCK (center) -->
     <div class="flex items-center justify-center">
-      <div id="dash-clock-circle" style="width:82px;height:82px;border-radius:50%;background:linear-gradient(135deg,#1e1b4b,#4f46e5);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(79,70,229,0.45),0 0 0 3px rgba(255,255,255,0.12);border:2px solid rgba(255,255,255,0.2)">
-        <p id="dash-clock-date" class="text-white font-bold" style="font-size:9px;line-height:1;opacity:.8"></p>
-        <p id="dash-clock-weekday" class="text-white font-black" style="font-size:11px;line-height:1.2;margin-top:1px"></p>
-        <p id="dash-clock-time" class="font-black" style="font-size:10px;line-height:1;color:#a5b4fc;margin-top:2px"></p>
+      <div id="dash-clock-circle" style="width:107px;height:107px;border-radius:50%;background:linear-gradient(135deg,#1e1b4b,#4f46e5);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(79,70,229,0.5),0 0 0 4px rgba(255,255,255,0.13);border:2px solid rgba(255,255,255,0.2)">
+        <p id="dash-clock-date" class="text-white font-bold" style="font-size:12px;line-height:1;opacity:.8"></p>
+        <p id="dash-clock-weekday" class="text-white font-black" style="font-size:14px;line-height:1.2;margin-top:2px"></p>
+        <p id="dash-clock-time" class="font-black" style="font-size:13px;line-height:1;color:#a5b4fc;margin-top:3px"></p>
       </div>
     </div>
-    <!-- Workers chip (was row 6, now right of clock) -->
-    <div class="stat-card rounded-xl px-2 py-2 text-white cursor-pointer" onclick="switchTab('attendance')" style="background:linear-gradient(135deg,#2563eb,#4f46e5)">
+    <!-- Workers chip (right of clock) -->
+    <div class="stat-card rounded-xl px-2 py-2 text-white cursor-pointer flex flex-col justify-center" onclick="switchTab('attendance')" style="background:linear-gradient(135deg,#2563eb,#4f46e5)">
       <p class="text-[9px] text-indigo-200 font-semibold">👷 Workers Listed</p>
       <p id="dash-workers-count" class="text-xl font-black leading-none mt-0.5">0</p>
-      <p class="text-[9px] text-indigo-200">Registered</p>
-    </div>
-  </div>
-  <!-- Row 5: Open Punches | Open RFIs | Safety Logs -->
-  <div class="grid grid-cols-3 gap-2 mb-2">
-    <div class="bg-white stat-card rounded-xl p-2 text-center cursor-pointer" onclick="switchTab('punchlist')" style="box-shadow:0 6px 18px rgba(0,0,0,0.14)">
-      <div style="font-size:18px;line-height:1">📋</div>
-      <p id="dash-open-punches" class="text-lg font-black text-rose-500 leading-none mt-0.5">0</p>
-      <p class="text-[9px] text-gray-500 font-semibold mt-0.5">Open Punches</p>
-    </div>
-    <div class="bg-white stat-card rounded-xl p-2 text-center cursor-pointer" onclick="switchTab('rfi')" style="box-shadow:0 6px 18px rgba(0,0,0,0.14)">
-      <div style="font-size:18px;line-height:1">📝</div>
-      <p id="dash-open-rfis" class="text-lg font-black text-amber-500 leading-none mt-0.5">0</p>
-      <p class="text-[9px] text-gray-500 font-semibold mt-0.5">Open RFIs</p>
-    </div>
-    <div class="bg-white stat-card rounded-xl p-2 text-center cursor-pointer" onclick="switchTab('safety')" style="box-shadow:0 6px 18px rgba(0,0,0,0.14)">
-      <div style="font-size:18px;line-height:1">🦺</div>
-      <p id="dash-safety-logs" class="text-lg font-black text-indigo-500 leading-none mt-0.5">0</p>
-      <p class="text-[9px] text-gray-500 font-semibold mt-0.5">Safety Logs</p>
+      <p class="text-[9px] text-indigo-200 mt-0.5">Registered</p>
+      <p id="dash-workers-att" class="text-[9px] text-indigo-300 font-semibold leading-none mt-0.5">0 today</p>
     </div>
   </div>
   <!-- Row 6: Budget % | Schedule % (swapped from row 4 — now wider cards for chart space) -->
@@ -1406,40 +1395,6 @@ body{margin:0}
   </div>
 </div>
 
-<!-- ===== RFI ===== -->
-<div id="tab-rfi" class="tab-content" style="display:none">
-  <!-- Stats -->
-  <div class="grid grid-cols-3 gap-2 mb-3">
-    <div class="bg-white rounded-2xl shadow-xl text-center py-3"><p id="rfi-open-ct" class="text-2xl font-black text-rose-600">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Open</p></div>
-    <div class="bg-white rounded-2xl shadow-xl text-center py-3"><p id="rfi-review-ct" class="text-2xl font-black text-amber-500">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">In Review</p></div>
-    <div class="bg-white rounded-2xl shadow-xl text-center py-3"><p id="rfi-closed-ct" class="text-2xl font-black text-green-600">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Closed</p></div>
-  </div>
-  <!-- Form -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-sm font-bold text-gray-700 mb-3">+ Create New RFI</p>
-    <input type="text" id="rfi-subject" placeholder="RFI Subject / Title" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2">
-    <textarea id="rfi-desc" rows="3" placeholder="Detailed question / issue description..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2 resize-none"></textarea>
-    <div class="grid grid-cols-2 gap-2 mb-2">
-      <select id="rfi-priority" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
-        <option>🟡 Normal Priority</option><option>🔴 High Priority</option><option>🟢 Low Priority</option><option>🔥 Urgent</option>
-      </select>
-      <input type="text" id="rfi-location" placeholder="Location / Area" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-    </div>
-    <div class="grid grid-cols-2 gap-2 mb-3">
-      <input type="date" id="rfi-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="text" id="rfi-assigned" placeholder="Assigned To (optional)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-    </div>
-    <button onclick="submitRFI()" class="g-tobr-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">📧 Submit RFI</button>
-  </div>
-  <!-- Filter + List -->
-  <div class="flex gap-2 mb-3 flex-wrap">
-    <button onclick="filterRFI('all')" id="rfi-f-all" class="px-3 py-1.5 rounded-xl text-xs font-bold text-white active:scale-95" style="background:#f97316">All</button>
-    <button onclick="filterRFI('open')" id="rfi-f-open" class="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 border-2" style="border-color:#ef4444;color:#ef4444;background:#fff">🔴 Open</button>
-    <button onclick="filterRFI('review')" id="rfi-f-review" class="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 border-2" style="border-color:#f59e0b;color:#f59e0b;background:#fff">🟡 In Review</button>
-    <button onclick="filterRFI('closed')" id="rfi-f-closed" class="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 border-2" style="border-color:#22c55e;color:#22c55e;background:#fff">✅ Closed</button>
-  </div>
-  <div id="rfi-list"><div class="text-center py-10"><span style="font-size:40px">📝</span><p class="text-gray-400 mt-2">No RFIs found</p></div></div>
-</div>
 
 <!-- ===== PUNCH LIST ===== -->
 <div id="tab-punchlist" class="tab-content" style="display:none">
@@ -1481,53 +1436,6 @@ body{margin:0}
   <div id="punchlist-list"><div class="text-center py-10"><span style="font-size:40px">✅</span><p class="text-gray-400 mt-2">No punch items</p></div></div>
 </div>
 
-<!-- ===== SAFETY ===== -->
-<div id="tab-safety" class="tab-content" style="display:none">
-  <!-- Safety Status Banner -->
-  <div class="rounded-2xl p-3 mb-3 shadow-xl" style="background:linear-gradient(135deg,#1e293b,#334155)">
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-gray-400 uppercase text-[10px] font-bold tracking-wide">Safety Status</p>
-        <div class="flex items-center gap-2 mt-1">
-          <span style="font-size:22px">♾️</span>
-          <p id="safety-days" class="text-white font-black text-xl">0 Days Safe</p>
-        </div>
-      </div>
-      <div class="text-right">
-        <span style="font-size:32px">🦺</span>
-        <p id="safety-incident-count" class="text-gray-400 text-xs mt-1">0 incidents</p>
-      </div>
-    </div>
-  </div>
-  <!-- Stats -->
-  <div class="grid grid-cols-3 gap-2 mb-3">
-    <div class="bg-white rounded-2xl shadow-xl text-center py-2"><p id="sf-inc-ct" class="text-xl font-black text-rose-600">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Incidents</p></div>
-    <div class="bg-white rounded-2xl shadow-xl text-center py-2"><p id="sf-near-ct" class="text-xl font-black text-amber-500">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Near Miss</p></div>
-    <div class="bg-white rounded-2xl shadow-xl text-center py-2"><p id="sf-obs-ct" class="text-xl font-black text-indigo-600">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Observations</p></div>
-  </div>
-  <!-- Log Form -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-sm font-bold text-gray-700 mb-3">🚨 Log Safety Event</p>
-    <div class="grid grid-cols-2 gap-2 mb-2">
-      <select id="sf-type" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
-        <option>👁️ Safety Observation</option><option>⚠️ Near Miss</option><option>🚨 Incident</option><option>🏥 Injury</option><option>🔥 Fire/Hazard</option>
-      </select>
-      <input type="date" id="sf-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-    </div>
-    <div class="grid grid-cols-2 gap-2 mb-2">
-      <input type="text" id="sf-location" placeholder="Location / Area" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="text" id="sf-person" placeholder="Person Involved (if any)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-    </div>
-    <textarea id="sf-desc" rows="2" placeholder="Describe the event / observation in detail..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2 resize-none"></textarea>
-    <textarea id="sf-action" rows="2" placeholder="Corrective action taken / recommended..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-3 resize-none"></textarea>
-    <button onclick="logSafetyEvent()" style="width:100%;padding:8px;background:linear-gradient(135deg,#e11d48,#f43f5e);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.75rem;cursor:pointer;">🦺 Log Safety Event</button>
-  </div>
-  <!-- Safety Log -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
-    <p class="text-sm font-bold text-gray-700 mb-3">🗂️ Safety Log</p>
-    <div id="safety-log-list"><div class="text-center py-10"><span style="font-size:40px">🦺</span><p class="text-gray-500 font-semibold mt-2">No safety events logged</p></div></div>
-  </div>
-</div>
 
 <!-- ===== BILL ===== -->
 <div id="tab-bill" class="tab-content" style="display:none">
@@ -1871,353 +1779,263 @@ body{margin:0}
 
 <!-- ====== CLOUD MODAL ====== -->
 <div id="cloud-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
-  <div style="background:linear-gradient(160deg,#0f172a 0%,#1e1b4b 55%,#2e1d4b 100%);border:1px solid rgba(139,92,246,.25);border-radius:1.5rem;padding:1.25rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 32px 80px rgba(0,0,0,0.7),0 0 0 1px rgba(139,92,246,0.15);">
+  <div style="background:linear-gradient(160deg,#0f0c29,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.14);border-radius:1.75rem;padding:0;width:100%;max-width:420px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.75);">
 
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <!-- HEADER -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;">
       <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:40px;height:40px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(99,102,241,0.4);">☁️</div>
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(99,102,241,.5);">☁️</div>
         <div>
-          <p style="font-size:16px;font-weight:900;color:white;line-height:1;margin:0">Sanjineer Cloud</p>
-          <p style="font-size:10px;color:#a78bfa;line-height:1;margin:2px 0 0">Sync · Backup · Multi-Device</p>
+          <p style="font-size:14px;font-weight:900;color:#fff;line-height:1;">Sanjineer Cloud</p>
+          <p style="font-size:10px;color:#a78bfa;line-height:1.3;">Backup · Sync · Viewers</p>
         </div>
       </div>
-      <button onclick="closeCloudModal()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);width:30px;height:30px;border-radius:8px;font-size:16px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
+      <button onclick="closeCloudModal()" style="width:34px;height:34px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.6);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
     </div>
 
-    <!-- Status Banner -->
-    <div id="cloud-status-banner" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:.875rem;padding:.65rem .875rem;margin-bottom:1rem;display:flex;align-items:center;gap:.6rem;">
-      <span id="cloud-status-icon" style="font-size:18px;flex-shrink:0">🔒</span>
-      <div style="min-width:0">
-        <p id="cloud-status-title" style="color:white;font-weight:700;font-size:12px;line-height:1;margin:0">Not Activated</p>
-        <p id="cloud-status-sub" style="font-size:10px;color:#a78bfa;line-height:1.3;margin:2px 0 0"></p>
+    <!-- POST-LOGIN BAR (hidden until admin logs in) -->
+    <div id="cloud-admin-bar" style="display:none;flex-shrink:0;padding:.75rem 1.2rem;background:linear-gradient(135deg,rgba(99,102,241,.18),rgba(139,92,246,.12));border-bottom:1px solid rgba(99,102,241,.2);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:30px;height:30px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 3px 8px rgba(79,70,229,.5);">👤</div>
+          <div>
+            <p style="font-size:11px;font-weight:800;color:#c7d2fe;line-height:1;">Admin</p>
+            <p id="cloud-admin-email" style="font-size:10px;color:#a78bfa;line-height:1.4;">—</p>
+          </div>
+        </div>
+        <button onclick="doAdminLogout()" style="padding:5px 13px;background:linear-gradient(135deg,rgba(239,68,68,.25),rgba(220,38,38,.2));border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(239,68,68,.2);">Logout</button>
       </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <p id="cloud-sub-expiry" style="font-size:10px;color:#86efac;font-weight:600;">—</p>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span id="cloud-sync-dot" style="width:7px;height:7px;background:#22c55e;border-radius:50%;display:inline-block;box-shadow:0 0 6px #22c55e;"></span>
+          <p id="cloud-sync-time" style="font-size:9px;color:#86efac;">Syncing…</p>
+        </div>
+      </div>
+      <!-- Manage Viewers chip — only shows post-login -->
+      <button onclick="openViewerMgmt()" style="width:100%;margin-top:8px;padding:.65rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.82rem;cursor:pointer;box-shadow:0 4px 12px rgba(217,119,6,.45);display:flex;align-items:center;justify-content:center;gap:6px;">
+        👥 Manage Viewer Accounts
+      </button>
     </div>
 
-    <!-- ===== NOT ACTIVATED STATE ===== -->
-    <div id="cloud-pay-section">
+    <!-- TAB SWITCHER (3 tabs — always visible) -->
+    <div id="cloud-tab-switcher" style="display:flex;gap:6px;padding:.8rem 1.2rem .6rem;background:rgba(0,0,0,.18);flex-shrink:0;">
+      <button id="ctab-admin-btn" onclick="switchCloudTab('admin')" style="flex:1;padding:9px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;transition:all .2s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.5);">
+        🔑 Admin
+      </button>
+      <button id="ctab-create-btn" onclick="switchCloudTab('create')" style="flex:1;padding:9px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">
+        ✨ Create
+      </button>
+      <button id="ctab-viewer-btn" onclick="switchCloudTab('viewer')" style="flex:1;padding:9px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">
+        👁️ Viewer
+      </button>
+    </div>
 
-      <!-- Step indicator -->
-      <div style="margin-bottom:.875rem;">
-        <div style="display:flex;align-items:center;gap:0;margin-bottom:6px;" id="cloud-step-bar">
-          <div class="cloud-step-dot active" id="cstep-1">1</div>
-          <div class="cloud-step-line" id="cline-1"></div>
-          <div class="cloud-step-dot idle" id="cstep-2">2</div>
-          <div class="cloud-step-line" id="cline-2"></div>
-          <div class="cloud-step-dot idle" id="cstep-3">3</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:0 4px;">
-          <span class="cloud-step-label active" id="cslabel-1" style="width:26px">Firebase</span>
-          <span class="cloud-step-label" id="cslabel-2" style="width:26px;text-align:center">Pay</span>
-          <span class="cloud-step-label" id="cslabel-3" style="width:26px;text-align:right">Account</span>
-        </div>
-      </div>
+    <!-- SCROLLABLE CONTENT AREA -->
+    <div style="overflow-y:auto;flex:1;padding:0 1.2rem 1.2rem;">
 
-      <!-- Step 1: Firebase Setup -->
-      <div id="cloud-step-1-panel">
-        <div class="cloud-setup-card">
-          <p style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.04em;">🔥 Step 1 — Firebase Setup</p>
-          <p style="font-size:10px;color:#a78bfa;margin-bottom:.6rem;line-height:1.5">Connect your Firebase project to enable cloud sync. This powers real-time data backup across your devices.</p>
-          <label class="cloud-label">Firebase API Key *</label>
-          <input id="fb-api-key" type="text" class="cloud-input" placeholder="AIza...">
-          <label class="cloud-label">Auth Domain *</label>
-          <input id="fb-auth-domain" type="text" class="cloud-input" placeholder="your-app.firebaseapp.com">
-          <label class="cloud-label">Project ID *</label>
-          <input id="fb-project-id" type="text" class="cloud-input" placeholder="your-project-id">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-            <div>
-              <label class="cloud-label" style="margin-top:0">App ID *</label>
-              <input id="fb-app-id" type="text" class="cloud-input" placeholder="1:xxx:web:xxx">
-            </div>
-            <div>
-              <label class="cloud-label" style="margin-top:0">Storage Bucket</label>
-              <input id="fb-bucket" type="text" class="cloud-input" placeholder="your-app.appspot.com">
+      <!-- ═══ ADMIN TAB ═══ -->
+      <div id="ctab-admin" style="display:block;">
+        <!-- Before login -->
+        <div id="ctab-admin-prelogin">
+          <!-- Login form only -->
+          <div style="background:rgba(79,70,229,.1);border:1px solid rgba(99,102,241,.22);border-radius:1rem;padding:.9rem;margin:.8rem 0 0;">
+            <p style="font-size:12px;font-weight:800;color:#c7d2fe;margin-bottom:.7rem;">🔑 Admin Login</p>
+            <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Email</label>
+            <input id="auth-login-email" type="email" class="auth-input" placeholder="admin@example.com">
+            <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Password</label>
+            <input id="auth-login-pass" type="password" class="auth-input" placeholder="Your password">
+            <button onclick="doAdminLogin()" id="auth-login-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.45);margin-top:2px;">
+              🔑 Login as Admin
+            </button>
+            <p id="auth-login-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
+          </div>
+        </div>
+
+        <!-- After login: cloud controls -->
+        <div id="ctab-admin-postlogin" style="display:none;">
+          <!-- Cloud status card -->
+          <div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(16,185,129,.07));border:1px solid rgba(34,197,94,.22);border-radius:1rem;padding:.8rem .9rem;margin:.8rem 0 .7rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <p style="font-size:12px;font-weight:800;color:#86efac;line-height:1">☁️ Cloud Active & Syncing</p>
+                <p id="cloud-site-id-display" style="font-size:10px;color:#6ee7b7;margin-top:3px">Site ID: —</p>
+              </div>
+              <div style="width:36px;height:36px;background:rgba(34,197,94,.18);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px rgba(34,197,94,.3);">✅</div>
             </div>
           </div>
-          <label class="cloud-label">Cloud Site ID *</label>
-          <input id="fb-site-id" type="text" class="cloud-input" placeholder="e.g. rampur-site-001">
-          <p style="font-size:9px;color:#7c3aed;margin-top:3px;">This ID links all devices viewing the same site</p>
-        </div>
-        <button onclick="cloudStep1Next()" class="cloud-action-btn primary">
-          ▶ Next — Proceed to Payment
-        </button>
-        <div style="margin-top:.75rem;border-top:1px solid rgba(255,255,255,0.07);padding-top:.75rem;">
-          <button onclick="openViewerLoginModal();closeCloudModal();" class="cloud-action-btn amber" style="padding:.65rem;font-size:.8rem;">
-            👁️ Viewer Login — No Subscription Needed
+          <!-- Backup / Restore -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <button onclick="cloudBackupNow()" style="padding:.72rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.875rem;font-weight:700;font-size:.78rem;cursor:pointer;box-shadow:0 4px 12px rgba(79,70,229,.4);">⬆️ Backup Now</button>
+            <button onclick="cloudRestoreNow()" style="padding:.72rem;background:linear-gradient(135deg,#0891b2,#0ea5e9);color:white;border:none;border-radius:.875rem;font-weight:700;font-size:.78rem;cursor:pointer;box-shadow:0 4px 12px rgba(14,165,233,.35);">⬇️ Restore</button>
+          </div>
+          <!-- Share viewer link -->
+          <button onclick="openViewerModal()" style="width:100%;padding:.72rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#c4b5fd;border-radius:.875rem;font-weight:700;font-size:.82rem;cursor:pointer;margin-bottom:8px;">
+            🔗 Share Viewer Link
           </button>
-          <p style="text-align:center;font-size:9px;color:#7c3aed;margin-top:.35rem">Viewers are created by subscribed admins · Free access</p>
+          <!-- Firebase setup section -->
+          <div id="cloud-firebase-section" style="display:none;margin-top:.5rem;">
+            <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
+              <p style="font-size:12px;font-weight:800;color:#86efac;margin-bottom:.25rem">✅ Payment Successful!</p>
+              <p style="font-size:10px;color:#86efac;">Now connect your Firebase project to enable sync.</p>
+            </div>
+            <div style="margin-bottom:.6rem"><label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Firebase API Key *</label><input id="fb-api-key" type="text" placeholder="AIza..." style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box"></div>
+            <div style="margin-bottom:.6rem"><label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Auth Domain *</label><input id="fb-auth-domain" type="text" placeholder="your-app.firebaseapp.com" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box"></div>
+            <div style="margin-bottom:.6rem"><label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Project ID *</label><input id="fb-project-id" type="text" placeholder="your-project-id" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem;">
+              <div><label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">App ID *</label><input id="fb-app-id" type="text" placeholder="1:xxx:web:xxx" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box"></div>
+              <div><label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Storage Bucket</label><input id="fb-bucket" type="text" placeholder="your-app.appspot.com" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box"></div>
+            </div>
+            <div style="margin-bottom:.75rem"><label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Cloud Site ID *</label><input id="fb-site-id" type="text" placeholder="e.g. rampur-site-001" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:12px;outline:none;box-sizing:border-box"><p style="font-size:9px;color:#7c3aed;margin-top:3px">Unique ID — links all devices to same site</p></div>
+            <button onclick="saveFirebaseConfig()" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);">🔥 Connect Firebase & Start Sync</button>
+          </div>
+          <!-- Disconnect -->
+          <button onclick="disconnectCloudWithBackup()" style="width:100%;padding:.65rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;border-radius:.875rem;font-size:.78rem;font-weight:700;cursor:pointer;margin-top:4px;">
+            🔌 Disconnect Cloud
+          </button>
         </div>
       </div>
 
-      <!-- Step 2: Payment -->
-      <div id="cloud-step-2-panel" style="display:none">
-        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
-          <p style="font-size:11px;font-weight:700;color:#86efac;margin-bottom:2px">✅ Firebase config saved!</p>
-          <p style="font-size:10px;color:#6ee7b7;">Now subscribe to activate cloud sync.</p>
-        </div>
-        <div style="text-align:center;padding:.875rem;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:.875rem;margin-bottom:.875rem;">
-          <p style="color:white;font-size:28px;font-weight:900;line-height:1;margin:0">₹30<span style="font-size:13px;font-weight:400;color:#a78bfa">/month</span></p>
-          <p style="font-size:10px;color:#7c3aed;margin-top:4px;">Cancel anytime · Secured by Razorpay</p>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:.75rem;">
-            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">🔄 Real-time Sync</span>
-            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">💾 Auto Backup</span>
-            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">👥 Viewer Accounts</span>
-            <span style="font-size:10px;color:#c4b5fd;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:3px 9px;">📱 Any Device</span>
+      <!-- ═══ CREATE ACCOUNT TAB ═══ -->
+      <div id="ctab-create" style="display:none;">
+        <!-- Subscription info card -->
+        <div style="background:linear-gradient(135deg,rgba(5,150,105,.15),rgba(16,185,129,.08));border:1px solid rgba(5,150,105,.3);border-radius:1rem;padding:.8rem .9rem;margin:.8rem 0 .7rem;">
+          <p style="font-size:11px;font-weight:800;color:#86efac;margin-bottom:.4rem;">📋 Admin Account Includes:</p>
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <p style="font-size:10px;color:#6ee7b7;">☁️ Cloud Backup & Sync — <strong style="color:#fbbf24;">₹30/month</strong></p>
+            <p style="font-size:10px;color:#6ee7b7;">👥 Unlimited Viewer accounts — <strong style="color:#86efac;">Free</strong></p>
+            <p style="font-size:10px;color:#6ee7b7;">📲 Multi-device real-time sync</p>
+            <p style="font-size:10px;color:#6ee7b7;">🔒 Tab-level viewer permissions</p>
           </div>
         </div>
-        <button onclick="startRazorpay()" id="pay-btn" class="cloud-action-btn primary">
-          💳 Pay ₹30 & Activate Cloud
-        </button>
-        <button onclick="cloudGoToStep(1)" class="cloud-action-btn ghost" style="margin-top:.5rem;padding:.6rem;font-size:.8rem;">
-          ← Back to Firebase Setup
-        </button>
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:.6rem;">
-          <img src="https://razorpay.com/assets/razorpay-glyph.svg" onerror="this.style.display='none'" style="height:14px;opacity:0.5">
-          <span style="font-size:9px;color:rgba(255,255,255,0.35)">Secured by Razorpay · UPI / Card / NetBanking</span>
+        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1rem;padding:.9rem;">
+          <p style="font-size:12px;font-weight:800;color:#c7d2fe;margin-bottom:.7rem;">✨ Create Admin Account</p>
+          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Your Name</label>
+          <input id="auth-signup-name" type="text" class="auth-input" placeholder="Site Engineer / Admin Name">
+          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Email</label>
+          <input id="auth-signup-email" type="email" class="auth-input" placeholder="admin@example.com">
+          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Password (min 6 chars)</label>
+          <input id="auth-signup-pass" type="password" class="auth-input" placeholder="Create a strong password">
+          <button onclick="doAdminSignup()" id="auth-signup-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(5,150,105,.4);margin-top:2px;">
+            ✨ Create Admin Account
+          </button>
+          <p id="auth-signup-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
+          <p style="font-size:10px;color:#7c3aed;text-align:center;margin-top:.4rem">Account creation requires ₹30/month subscription</p>
         </div>
       </div>
 
-      <!-- Step 3: Account -->
-      <div id="cloud-step-3-panel" style="display:none">
-        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
-          <p style="font-size:11px;font-weight:700;color:#86efac;margin-bottom:2px">✅ Payment Successful!</p>
-          <p style="font-size:10px;color:#6ee7b7;">Now log in or create your admin account to complete setup.</p>
+      <!-- ═══ VIEWER LOGIN TAB ═══ -->
+      <div id="ctab-viewer" style="display:none;">
+        <div style="background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.22);border-radius:1rem;padding:.75rem .9rem;margin:.8rem 0 .75rem;">
+          <p style="font-size:11px;font-weight:800;color:#fbbf24;margin-bottom:3px">👁️ Viewer Access</p>
+          <p style="font-size:10px;color:#fde68a;line-height:1.5">Read-only access · No subscription needed · Login with credentials given by your admin</p>
         </div>
-        <div style="display:flex;gap:4px;background:rgba(255,255,255,0.07);border-radius:12px;padding:4px;margin-bottom:.875rem;">
-          <button id="cloud-tab-login" onclick="cloudSwitchAuthTab('login')" style="flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:rgba(255,255,255,0.18);color:#fff;">🔑 Login</button>
-          <button id="cloud-tab-signup" onclick="cloudSwitchAuthTab('signup')" style="flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);">✨ Sign Up</button>
-        </div>
-        <!-- Login form -->
-        <div id="cloud-login-form">
-          <label class="cloud-label">Email</label>
-          <input id="cloud-login-email" type="email" class="cloud-input" placeholder="admin@example.com">
-          <label class="cloud-label">Password</label>
-          <input id="cloud-login-pass" type="password" class="cloud-input" placeholder="Your password">
-          <button onclick="doCloudAdminLogin()" id="cloud-login-btn" class="cloud-action-btn success" style="margin-top:.75rem;">🔑 Login as Admin</button>
-          <p id="cloud-login-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
-        </div>
-        <!-- Signup form -->
-        <div id="cloud-signup-form" style="display:none">
-          <label class="cloud-label">Your Name</label>
-          <input id="cloud-signup-name" type="text" class="cloud-input" placeholder="Site Engineer / Admin Name">
-          <label class="cloud-label">Email</label>
-          <input id="cloud-signup-email" type="email" class="cloud-input" placeholder="admin@example.com">
-          <label class="cloud-label">Password (min 6 chars)</label>
-          <input id="cloud-signup-pass" type="password" class="cloud-input" placeholder="Create a strong password">
-          <button onclick="doCloudAdminSignup()" id="cloud-signup-btn" class="cloud-action-btn success" style="margin-top:.75rem;">✨ Create Admin Account</button>
-          <p id="cloud-signup-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
-        </div>
-        <button onclick="cloudGoToStep(2)" class="cloud-action-btn ghost" style="margin-top:.5rem;padding:.6rem;font-size:.8rem;">
-          ← Back
-        </button>
-      </div>
-
-    </div>
-
-    <!-- ===== FIREBASE CONFIG SETUP (after payment, before account — legacy path) ===== -->
-    <div id="cloud-firebase-section" style="display:none">
-      <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:.875rem;padding:.75rem;margin-bottom:.75rem;">
-        <p style="color:white;font-weight:700;font-size:13px;margin-bottom:.3rem">✅ Payment Successful!</p>
-        <p style="font-size:10px;color:#86efac;">Now connect your Firebase project to enable cloud sync.</p>
-      </div>
-      <div style="margin-bottom:.6rem">
-        <label class="cloud-label">Firebase API Key *</label>
-        <input id="fb-api-key-legacy" type="text" class="cloud-input" placeholder="AIza...">
-      </div>
-      <div style="margin-bottom:.6rem">
-        <label class="cloud-label">Auth Domain *</label>
-        <input id="fb-auth-domain-legacy" type="text" class="cloud-input" placeholder="your-app.firebaseapp.com">
-      </div>
-      <div style="margin-bottom:.6rem">
-        <label class="cloud-label">Project ID *</label>
-        <input id="fb-project-id-legacy" type="text" class="cloud-input" placeholder="your-project-id">
-      </div>
-      <div class="grid grid-cols-2 gap-2" style="margin-bottom:.75rem;">
-        <div>
-          <label class="cloud-label" style="margin-top:0">App ID *</label>
-          <input id="fb-app-id-legacy" type="text" class="cloud-input" placeholder="1:xxx:web:xxx">
-        </div>
-        <div>
-          <label class="cloud-label" style="margin-top:0">Storage Bucket</label>
-          <input id="fb-bucket-legacy" type="text" class="cloud-input" placeholder="your-app.appspot.com">
+        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1rem;padding:.9rem;">
+          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Email</label>
+          <input id="vl-inline-email" type="email" class="auth-input" placeholder="viewer@example.com">
+          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Password</label>
+          <input id="vl-inline-pass" type="password" class="auth-input" placeholder="Your password">
+          <button onclick="doViewerLoginInline()" id="vl-inline-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(217,119,6,.4);margin-top:2px;">
+            👁️ View Site Data
+          </button>
+          <p id="vl-inline-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;margin-top:.5rem">Access granted by site admin · Free</p>
         </div>
       </div>
-      <div style="margin-bottom:.75rem">
-        <label class="cloud-label">Cloud Site ID *</label>
-        <input id="fb-site-id-legacy" type="text" class="cloud-input" placeholder="e.g. rampur-site-001">
-        <p style="font-size:9px;color:#7c3aed;margin-top:3px;">This ID links all devices viewing the same site</p>
-      </div>
-      <button onclick="saveFirebaseConfig()" class="cloud-action-btn success">🔥 Connect Firebase & Start Sync</button>
-    </div>
 
-    <!-- ===== ACTIVATED STATE ===== -->
-    <div id="cloud-active-section" style="display:none">
-
-      <!-- Admin bar -->
-      <div style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(124,58,237,.1));border:1px solid rgba(99,102,241,.3);border-radius:.875rem;padding:.65rem .875rem;margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div style="min-width:0">
-          <p style="font-size:10px;font-weight:700;color:#c7d2fe;margin:0;line-height:1">👤 Admin</p>
-          <p id="cloud-admin-email" style="font-size:11px;color:#a78bfa;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</p>
-          <p id="cloud-sub-expiry" style="font-size:9px;color:#86efac;margin:1px 0 0">—</p>
-        </div>
-        <button onclick="doAdminLogout()" style="flex-shrink:0;font-size:10px;padding:5px 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;cursor:pointer;font-weight:700;">Logout</button>
-      </div>
-
-      <!-- Cloud status -->
-      <div style="background:linear-gradient(135deg,rgba(5,150,105,.12),rgba(16,185,129,.08));border:1px solid rgba(34,197,94,.3);border-radius:.875rem;padding:.75rem .875rem;margin-bottom:.75rem;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <span style="font-size:16px">☁️</span>
-          <p style="color:white;font-weight:700;font-size:13px;margin:0">Cloud Active & Syncing</p>
-        </div>
-        <p id="cloud-site-id-display" style="font-size:10px;color:#86efac;margin:0">Site ID: —</p>
-        <p id="cloud-sync-time" style="font-size:10px;color:#6ee7b7;margin-top:2px">Last sync: —</p>
-      </div>
-
-      <!-- Quick actions -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem;">
-        <button onclick="cloudBackupNow()" style="padding:.65rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">⬆ Backup Now</button>
-        <button onclick="cloudRestoreNow()" style="padding:.65rem;background:linear-gradient(135deg,#0891b2,#0ea5e9);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.78rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">⬇ Restore</button>
-      </div>
-
-      <!-- Manage viewers -->
-      <button onclick="openViewerMgmt()" class="cloud-action-btn amber" style="margin-bottom:.5rem;padding:.7rem;">👁️ Manage Viewer Accounts</button>
-      <button onclick="openViewerModal()" class="cloud-action-btn ghost" style="margin-bottom:.5rem;padding:.65rem;font-size:.8rem;">🔗 Share Viewer Link</button>
-      <button onclick="disconnectCloud()" class="cloud-action-btn danger" style="padding:.55rem;font-size:.8rem;font-weight:600;">🔌 Disconnect Cloud</button>
-    </div>
-
+    </div><!-- end scrollable -->
   </div>
 </div>
 
-<!-- ====== VIEWER MODAL ====== -->
+<!-- ====== VIEWER LINK MODAL ====== -->
 <div id="viewer-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:380px;">
-    <div class="flex items-center justify-between mb-4">
-      <p class="text-white font-black" style="font-size:15px">👥 Multi-User Viewer</p>
-      <button onclick="closeViewerModal()" class="text-white/60 text-2xl leading-none">✕</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <p style="font-size:15px;font-weight:900;color:white;">🔗 Viewer Link</p>
+      <button onclick="closeViewerModal()" style="background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.6);font-size:20px;width:32px;height:32px;border-radius:8px;cursor:pointer;">✕</button>
     </div>
     <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:.875rem;padding:.875rem;margin-bottom:.875rem;">
       <p style="font-size:10px;color:#a78bfa;margin-bottom:.4rem;font-weight:600">VIEWER LINK (Read-only)</p>
       <p id="viewer-link-text" style="font-size:11px;color:white;word-break:break-all;background:rgba(0,0,0,.3);padding:8px;border-radius:.5rem;line-height:1.5">—</p>
     </div>
-    <div class="grid grid-cols-2 gap-2 mb-3">
-      <button onclick="copyViewerLink()" style="padding:.65rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer;">📋 Copy Link</button>
-      <button onclick="shareViewerLink()" style="padding:.65rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer;">📤 Share</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <button onclick="copyViewerLink()" style="padding:.65rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer;box-shadow:0 4px 10px rgba(79,70,229,.4);">📋 Copy Link</button>
+      <button onclick="shareViewerLink()" style="padding:.65rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer;box-shadow:0 4px 10px rgba(5,150,105,.35);">📤 Share</button>
     </div>
     <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:.75rem;padding:.65rem;">
       <p style="font-size:10px;color:#fbbf24;font-weight:600;margin-bottom:.25rem">ℹ️ How it works</p>
-      <p style="font-size:10px;color:#fde68a;line-height:1.45">Share this link with site owners, clients, or your team. They can view all live data — attendance, expenses, materials — without editing anything.</p>
-    </div>
-  </div>
-</div>
-
-<!-- ====== AUTH MODAL (Login / Signup) ====== -->
-<div id="auth-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] items-center justify-center p-4" style="display:none">
-  <div style="background:linear-gradient(135deg,#0f172a,#1e1b4b);border:1px solid rgba(255,255,255,.18);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-2">
-        <span style="font-size:22px">🔐</span>
-        <div>
-          <p class="font-black text-white" style="font-size:15px;line-height:1">Sanjineer Cloud</p>
-          <p style="font-size:10px;color:#c4b5fd">Admin Account</p>
-        </div>
-      </div>
-      <button onclick="closeAuthModal()" class="text-white/60 text-2xl leading-none">✕</button>
-    </div>
-
-    <!-- Tabs: Login | Signup -->
-    <div style="display:flex;gap:4px;background:rgba(255,255,255,0.07);border-radius:12px;padding:4px;margin-bottom:1rem;">
-      <button id="auth-tab-login" class="auth-tab-btn active" onclick="switchAuthTab('login')">🔑 Login</button>
-      <button id="auth-tab-signup" class="auth-tab-btn" onclick="switchAuthTab('signup')">✨ Create Account</button>
-    </div>
-
-    <!-- Login Form -->
-    <div id="auth-form-login">
-      <div style="margin-bottom:.75rem">
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Email</label>
-        <input id="auth-login-email" type="email" class="auth-input" placeholder="admin@example.com">
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Password</label>
-        <input id="auth-login-pass" type="password" class="auth-input" placeholder="Your password">
-      </div>
-      <button onclick="doAdminLogin()" id="auth-login-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.95rem;cursor:pointer;">
-        🔑 Login as Admin
-      </button>
-      <p id="auth-login-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.5rem;display:none"></p>
-    </div>
-
-    <!-- Signup Form -->
-    <div id="auth-form-signup" style="display:none">
-      <div style="background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:.75rem;padding:.65rem;margin-bottom:.75rem;">
-        <p style="font-size:11px;color:#c7d2fe;font-weight:600">📋 Admin Account includes:</p>
-        <p style="font-size:10px;color:#a78bfa;margin-top:3px;line-height:1.5">• Cloud Backup & Sync (₹30/month)<br>• Create viewer accounts with tab permissions<br>• Multi-device real-time sync</p>
-      </div>
-      <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Your Name</label>
-      <input id="auth-signup-name" type="text" class="auth-input" placeholder="Site Engineer / Admin Name">
-      <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Email</label>
-      <input id="auth-signup-email" type="email" class="auth-input" placeholder="admin@example.com">
-      <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Password (min 6 chars)</label>
-      <input id="auth-signup-pass" type="password" class="auth-input" placeholder="Create a strong password">
-      <button onclick="doAdminSignup()" id="auth-signup-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.95rem;cursor:pointer;">
-        ✨ Create Admin Account
-      </button>
-      <p id="auth-signup-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.5rem;display:none"></p>
-      <p style="font-size:10px;color:#7c3aed;text-align:center;margin-top:.4rem">Account creation requires ₹30/month subscription</p>
+      <p style="font-size:10px;color:#fde68a;line-height:1.45">Share this link with clients or team. They can view all permitted data without editing anything.</p>
     </div>
   </div>
 </div>
 
 <!-- ====== VIEWER ACCOUNT MANAGEMENT MODAL ====== -->
 <div id="viewer-mgmt-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] items-center justify-center p-4" style="display:none">
-  <div style="background:linear-gradient(135deg,#0f172a,#1e1b4b);border:1px solid rgba(255,255,255,.18);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:400px;max-height:90vh;overflow-y:auto;">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <p class="font-black text-white" style="font-size:15px;line-height:1">👁️ Viewer Accounts</p>
-        <p style="font-size:10px;color:#c4b5fd">Create & manage read-only users</p>
+  <div style="background:linear-gradient(160deg,#0f0c29,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.15);border-radius:1.75rem;padding:0;width:100%;max-width:420px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(217,119,6,.5);">👥</div>
+        <div>
+          <p style="font-size:14px;font-weight:900;color:#fff;line-height:1;">Viewer Accounts</p>
+          <p style="font-size:10px;color:#fbbf24;line-height:1.3;">Create & manage read-only users</p>
+        </div>
       </div>
-      <button onclick="closeViewerMgmt()" class="text-white/60 text-2xl leading-none">✕</button>
+      <button onclick="closeViewerMgmt()" style="width:34px;height:34px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.6);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
     </div>
 
-    <!-- Create viewer account -->
-    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.875rem;padding:.875rem;margin-bottom:1rem;">
-      <p style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:.6rem">➕ Create New Viewer</p>
-      <input id="vw-email" type="email" class="auth-input" placeholder="viewer@example.com (their email)">
-      <input id="vw-pass" type="password" class="auth-input" placeholder="Set a password for them">
-      <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Tab Permissions (select what they can see):</label>
-     <div id="perm-chips-container" style="margin-bottom:.75rem;display:flex;flex-wrap:wrap;">
-        <span class="perm-chip on" data-tab="dashboard">📊 Dashboard</span>
-        <span class="perm-chip on" data-tab="daily">📋 Report</span>
-        <span class="perm-chip on" data-tab="departmental">🏗️ Dept Work</span>
-        <span class="perm-chip on" data-tab="attendance">📅 Attendance</span>
-        <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
-        <span class="perm-chip on" data-tab="expenses">💰 Expenses</span>
-        <span class="perm-chip on" data-tab="materials">🧱 Materials</span>
-        <span class="perm-chip on" data-tab="tools">🔧 Tools</span>
-        <span class="perm-chip on" data-tab="drawings">📐 Drawings</span>
-        <span class="perm-chip on" data-tab="rentals">📦 Rentals</span>
-        <span class="perm-chip on" data-tab="contractors">👥 Teams</span>
-        <span class="perm-chip on" data-tab="budget">📊 Budget</span>
-        <span class="perm-chip on" data-tab="schedule">📅 Schedule</span>
-        <span class="perm-chip on" data-tab="rfi">📝 RFI</span>
-        <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
-        <span class="perm-chip on" data-tab="safety">🦺 Safety</span>
-        <span class="perm-chip on" data-tab="bill">🧾 Bill</span>
+    <!-- Scrollable body -->
+    <div style="overflow-y:auto;flex:1;padding:1rem 1.2rem 1.2rem;">
+
+      <!-- Create new viewer -->
+      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;padding:.9rem;margin-bottom:1rem;">
+        <p style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:.7rem;">➕ Create New Viewer</p>
+        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Email</label>
+        <input id="vw-email" type="email" class="auth-input" placeholder="viewer@example.com">
+        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Password (min 6 chars)</label>
+        <input id="vw-pass" type="password" class="auth-input" placeholder="Set a password for them">
+
+        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:6px;">Tab Permissions — tap to toggle:</label>
+        <div id="perm-chips-container" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.75rem;">
+          <span class="perm-chip on" data-tab="dashboard">📊 Dashboard</span>
+          <span class="perm-chip on" data-tab="attendance">📋 Attendance</span>
+          <span class="perm-chip on" data-tab="expenses">💰 Expenses</span>
+          <span class="perm-chip on" data-tab="materials">🧱 Materials</span>
+          <span class="perm-chip on" data-tab="daily">📝 Daily Report</span>
+          <span class="perm-chip on" data-tab="contractors">👷 Contractors</span>
+          <span class="perm-chip on" data-tab="drawings">📐 Drawings</span>
+          <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
+          <span class="perm-chip on" data-tab="tools">🔧 Tools</span>
+          <span class="perm-chip on" data-tab="rentals">🚜 Rentals</span>
+          <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">
+          <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:15px;height:15px;">
+          <label for="vw-can-print" style="font-size:11px;color:#c4b5fd;font-weight:600;">Allow Print / Export on permitted tabs</label>
+        </div>
+        <button onclick="createViewerAccount()" id="create-viewer-btn" style="width:100%;padding:.78rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.875rem;cursor:pointer;box-shadow:0 4px 14px rgba(217,119,6,.45);">
+          ➕ Create Viewer Account
+        </button>
+        <p id="vw-create-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
       </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:.5rem">
-        <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:14px;height:14px">
-        <label for="vw-can-print" style="font-size:11px;color:#c4b5fd;font-weight:600">Allow Print / Export on permitted tabs</label>
-      </div>
-      <button onclick="createViewerAccount()" id="create-viewer-btn" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.875rem;cursor:pointer;">
-        ➕ Create Viewer Account
+
+      <!-- Viewer link shortcut -->
+      <button onclick="closeViewerMgmt();openViewerModal();" style="width:100%;padding:.72rem;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#c4b5fd;border-radius:.875rem;font-weight:700;font-size:.82rem;cursor:pointer;margin-bottom:1rem;">
+        🔗 Copy / Share Viewer Link
       </button>
-      <p id="vw-create-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
-    </div>
 
-    <!-- Existing viewers -->
-    <div>
-      <p style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:.5rem">Existing Viewer Accounts</p>
-      <div id="viewer-accounts-list" style="min-height:40px">
-        <p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Loading…</p>
+      <!-- Existing viewers list -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;">
+          <p style="font-size:11px;font-weight:800;color:#a78bfa;">Existing Viewers</p>
+          <button onclick="loadViewerAccounts()" style="font-size:10px;padding:3px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#c4b5fd;border-radius:7px;cursor:pointer;">🔄 Refresh</button>
+        </div>
+        <div id="viewer-accounts-list" style="min-height:40px;">
+          <p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px;">Loading…</p>
+        </div>
       </div>
+
     </div>
   </div>
 </div>
@@ -2225,35 +2043,27 @@ body{margin:0}
 <!-- ====== PAYMENT LANDING MODAL ====== -->
 <div id="pay-landing-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] items-center justify-center p-4" style="display:none">
   <div style="background:linear-gradient(135deg,#0f172a,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.18);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:400px;max-height:90vh;overflow-y:auto;">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2">
-        <div style="width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px">🏗️</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 14px rgba(245,158,11,.4);">🏗️</div>
         <div>
-          <p class="font-black text-white" style="font-size:17px;line-height:1">Sanjineer Cloud</p>
-          <p style="font-size:10px;color:#c4b5fd">Pro Subscription</p>
+          <p style="font-size:17px;font-weight:900;color:white;line-height:1;">Sanjineer Cloud</p>
+          <p style="font-size:10px;color:#c4b5fd;">Pro Subscription</p>
         </div>
       </div>
-      <button onclick="closePayLanding()" class="text-white/60 text-2xl leading-none">✕</button>
+      <button onclick="closePayLanding()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.6);font-size:20px;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
     </div>
-
-    <!-- Price highlight -->
     <div style="text-align:center;padding:1rem 0;margin-bottom:1rem;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);">
-      <p style="color:white;font-size:36px;font-weight:900;line-height:1">₹30<span style="font-size:14px;font-weight:400;color:#a78bfa">/month</span></p>
+      <p style="color:white;font-size:36px;font-weight:900;line-height:1;">₹30<span style="font-size:14px;font-weight:400;color:#a78bfa">/month</span></p>
       <p style="font-size:11px;color:#7c3aed;margin-top:4px">Cancel anytime · Secured by Razorpay</p>
     </div>
-
-    <!-- Features -->
     <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.875rem;padding:.875rem;margin-bottom:1rem;">
       <div class="cloud-feature-row"><span style="font-size:16px">🔄</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Real-time Cloud Sync</p><p style="font-size:10px;color:#a78bfa">All devices stay in sync automatically</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:16px">👁️</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Viewer Accounts (Free)</p><p style="font-size:10px;color:#a78bfa">Create unlimited read-only users at no extra cost</p></div></div>
+      <div class="cloud-feature-row"><span style="font-size:16px">👁️</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Viewer Accounts (Free)</p><p style="font-size:10px;color:#a78bfa">Create unlimited read-only users</p></div></div>
       <div class="cloud-feature-row"><span style="font-size:16px">🔒</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Tab-level Permissions</p><p style="font-size:10px;color:#a78bfa">Control what each viewer can see & print</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:16px">💾</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Auto Backup</p><p style="font-size:10px;color:#a78bfa">Never lose a day's data — backed up to Firebase</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:16px">📱</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Any Device, Any Browser</p><p style="font-size:10px;color:#a78bfa">Works on Android, iPhone, tablet, laptop</p></div></div>
+      <div class="cloud-feature-row"><span style="font-size:16px">💾</span><div><p class="text-white font-semibold" style="font-size:12px;line-height:1">Auto Backup</p><p style="font-size:10px;color:#a78bfa">Never lose a day's data</p></div></div>
     </div>
-
-    <!-- Pay Button -->
-    <button onclick="startSubscriptionPayment()" id="sub-pay-btn" style="width:100%;padding:1rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.5rem;">
+    <button onclick="startSubscriptionPayment()" id="sub-pay-btn" style="width:100%;padding:1rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.5rem;box-shadow:0 4px 18px rgba(79,70,229,.5);">
       💳 Subscribe ₹30/month
     </button>
     <p style="text-align:center;font-size:10px;color:#7c3aed">🔒 Powered by Razorpay · UPI / Card / NetBanking accepted</p>
@@ -2586,9 +2396,9 @@ function dismissPWA(){
 // ============================================================
 // TABS
 // ============================================================
-var TABS = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','rfi','punchlist','safety','bill'];
+var TABS = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill'];
 
-var _rfiFilter='all', _plFilter='all';
+var _plFilter='all';
 
 function switchTab(name) {
   TABS.forEach(function(t) {
@@ -2621,9 +2431,7 @@ function switchTab(name) {
     else if (name === 'contractors')  viewContractors();
     else if (name === 'budget')       loadBudgetTab();
     else if (name === 'schedule')     loadScheduleTab();
-    else if (name === 'rfi')          loadRFITab();
     else if (name === 'punchlist')    loadPunchTab();
-    else if (name === 'safety')       loadSafetyTab();
     else if (name === 'bill')         initBillTab();
     updateDropdowns();
   } catch(e) {
@@ -2667,10 +2475,6 @@ function boot() {
   if(machSel){machSel.innerHTML='';var now2=new Date();for(var j=0;j<12;j++){var d2=new Date(now2.getFullYear(),now2.getMonth()-j,1);var o2=document.createElement('option');o2.value=mkey(d2);o2.textContent=mlabel(d2);if(!j)o2.selected=true;machSel.appendChild(o2);}}
   // Init machinery date
   var machDate=document.getElementById('mach-date');if(machDate)machDate.value=ist();
-  // Init safety date
-  var sfDate=document.getElementById('sf-date');if(sfDate)sfDate.value=ist();
-  // Init safety safe-day counter if not set
-  if(!safeLS.getItem(SF_START_KEY))safeLS.setItem(SF_START_KEY,Date.now().toString());
   checkViewerMode();
   // ── HARDCODED FIREBASE CONFIG ──────────────────────────────
   // Pre-configure Firebase so cloud activates automatically
@@ -2683,13 +2487,15 @@ function boot() {
     appId: "1:929848215498:web:dc02a02d9d6cce21ec3133",
     measurementId: "G-03LEXXQR5D"
   };
-  // Save to storage if not already set (so user can still override)
-  if (!getFbConfig()) {
-    safeLS.setItem(CLOUD_FB_CFG, JSON.stringify(_HARDCODED_FB));
-  }
+  // Always keep Firebase config fresh (overwrite stale configs)
+  safeLS.setItem(CLOUD_FB_CFG, JSON.stringify(_HARDCODED_FB));
   // Default site ID if not set
   if (!getSiteId()) {
     safeLS.setItem(CLOUD_SITE_ID, 'sanjineer-main-site');
+  }
+  // Activate cloud flag if not set
+  if (!isCloudActivated()) {
+    safeLS.setItem(CLOUD_KEY, '1');
   }
   autoInitCloud();
   switchTab('dashboard');
@@ -3920,15 +3726,13 @@ se('dash-rental-out',fc(rExp)); se('dash-rental-in',fc(rInc));
 se('header-spends',fc(allPay+pOut+rExp));
 // New stats
 var openPunches=lpl().filter(function(p){return p.status==='open';}).length;
-var openRFIs=lrfi().filter(function(r){return r.status==='open';}).length;
-var safetyLogs=lsf().length;
-var toolsCount=AD.filter(function(d){return d.type==='tool';}).length;
+var inProgPunches=lpl().filter(function(p){return p.status==='progress';}).length;
 var workersCount=AD.filter(function(d){return d.type==='worker';}).length;
+var todayAtt=AD.filter(function(d){return d.type==='attendance'&&d.date===DD;}).length;
 se('dash-open-punches',openPunches);
-se('dash-open-rfis',openRFIs);
-se('dash-safety-logs',safetyLogs);
-se('dash-tools-count',toolsCount);
+var progEl=document.getElementById('dash-punch-prog');if(progEl)progEl.textContent=inProgPunches+' in progress';
 se('dash-workers-count',workersCount);
+var attEl=document.getElementById('dash-workers-att');if(attEl)attEl.textContent=todayAtt+' today';
 // Budget bar
 var bgt=lbgt();
 var bgtPlanned=bgt?bgt.total:0;
@@ -4779,55 +4583,11 @@ function markMsDone(id){
 function delMs(id){var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');}
 
 // ============================================================
-// RFI
+// RFI data helpers (kept for cloud backup/restore compatibility)
 // ============================================================
 var RFI_KEY='cm_rfi';
 function lrfi(){try{return JSON.parse(safeLS.getItem(RFI_KEY)||'[]');}catch(e){return [];}}
 function srfi(x){safeLS.setItem(RFI_KEY,JSON.stringify(x));}
-
-function loadRFITab(){renderRFI();}
-
-function submitRFI(){
-  var subj=document.getElementById('rfi-subject').value.trim();
-  if(!subj){toast('RFI subject required','err');return;}
-  var list=lrfi();
-  list.push({id:'rfi'+Date.now(),number:list.length+1,subject:subj,desc:document.getElementById('rfi-desc').value.trim(),priority:document.getElementById('rfi-priority').value,location:document.getElementById('rfi-location').value.trim(),date:document.getElementById('rfi-date').value||ist(),assigned:document.getElementById('rfi-assigned').value.trim(),status:'open',created:Date.now()});
-  srfi(list);
-  ['rfi-subject','rfi-desc','rfi-location','rfi-assigned'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  renderRFI();toast('RFI submitted!','ok');
-}
-
-function filterRFI(f){_rfiFilter=f;renderRFI();}
-
-function renderRFI(){
-  var list=lrfi();
-  var open=list.filter(function(r){return r.status==='open';}).length;
-  var review=list.filter(function(r){return r.status==='review';}).length;
-  var closed=list.filter(function(r){return r.status==='closed';}).length;
-  ['rfi-open-ct','rfi-review-ct','rfi-closed-ct'].forEach(function(id,i){var el=document.getElementById(id);if(el)el.textContent=[open,review,closed][i];});
-  var filtered=_rfiFilter==='all'?list:list.filter(function(r){return r.status===_rfiFilter;});
-  var el=document.getElementById('rfi-list');if(!el)return;
-  if(!filtered.length){el.innerHTML='<div class="text-center py-10"><span style="font-size:40px">📝</span><p class="text-gray-400 mt-2">No RFIs found</p></div>';return;}
-  var sc={'open':'#ef4444','review':'#f59e0b','closed':'#22c55e'};
-  var sl={'open':'🔴 Open','review':'🟡 In Review','closed':'✅ Closed'};
-  el.innerHTML=filtered.map(function(r){
-    var col=sc[r.status]||'#9ca3af';
-    return '<div class="bg-white rounded-2xl shadow p-3 mb-2">'+
-      '<div class="flex justify-between items-start mb-1">'+
-      '<span style="background:'+col+'20;color:'+col+';font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">'+sl[r.status]+'</span>'+
-      '<div class="flex gap-1">'+
-      (r.status!=='closed'?'<button onclick="updateRFIStatus(\''+r.id+'\',\''+(r.status==='open'?'review':'closed')+'\')" class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg active:scale-95">'+(r.status==='open'?'→ Review':'→ Close')+'</button>':'')+
-      '<button onclick="delRFI(\''+r.id+'\')" class="text-rose-400 text-lg leading-none ml-1">✕</button></div></div>'+
-      '<p class="font-bold text-gray-800">RFI #'+r.number+': '+r.subject+'</p>'+
-      (r.desc?'<p class="text-xs text-gray-500 mt-0.5">'+r.desc+'</p>':'')+
-      '<div class="flex gap-3 mt-1 text-xs text-gray-400">'+
-      '<span>📅 '+fd(r.date)+'</span>'+(r.location?'<span>📍 '+r.location+'</span>':'')+(r.assigned?'<span>👤 '+r.assigned+'</span>':'')+
-      '<span>'+r.priority+'</span></div></div>';
-  }).join('');
-}
-
-function updateRFIStatus(id,status){var list=lrfi(),r=list.find(function(x){return x.id===id;});if(r)r.status=status;srfi(list);renderRFI();toast('RFI updated','ok');}
-function delRFI(id){var list=lrfi().filter(function(r){return r.id!==id;});srfi(list);renderRFI();toast('Deleted','ok');}
 
 // ============================================================
 // PUNCH LIST
@@ -4885,63 +4645,11 @@ function renderPunchList(){
 function updatePunchStatus(id,status){var list=lpl(),p=list.find(function(x){return x.id===id;});if(p)p.status=status;spl(list);renderPunchList();toast('Updated','ok');}
 function delPunch(id){var list=lpl().filter(function(p){return p.id!==id;});spl(list);renderPunchList();toast('Deleted','ok');}
 
+// Safety data helpers (kept for cloud backup/restore compatibility)
 // ============================================================
-// SAFETY
-// ============================================================
-var SF_KEY='cm_safety',SF_START_KEY='cm_safety_start';
+var SF_KEY='cm_safety';
 function lsf(){try{return JSON.parse(safeLS.getItem(SF_KEY)||'[]');}catch(e){return [];}}
 function ssf(x){safeLS.setItem(SF_KEY,JSON.stringify(x));}
-
-function loadSafetyTab(){renderSafety();}
-
-function logSafetyEvent(){
-  var type=document.getElementById('sf-type').value;
-  var desc=document.getElementById('sf-desc').value.trim();
-  if(!desc){toast('Description required','err');return;}
-  var list=lsf();
-  list.push({id:'sf'+Date.now(),type:type,date:document.getElementById('sf-date').value||ist(),location:document.getElementById('sf-location').value.trim(),person:document.getElementById('sf-person').value.trim(),desc:desc,action:document.getElementById('sf-action').value.trim(),created:Date.now()});
-  ssf(list);
-  // Reset safe day counter if incident
-  if(type.includes('Incident')||type.includes('Injury')){safeLS.setItem(SF_START_KEY,Date.now().toString());toast('⚠️ Incident logged — safe day counter reset','err');}
-  else toast('Safety event logged!','ok');
-  ['sf-location','sf-person','sf-desc','sf-action'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  renderSafety();
-}
-
-function renderSafety(){
-  var list=lsf();
-  var inc=list.filter(function(s){return s.type.includes('Incident')||s.type.includes('Injury');}).length;
-  var near=list.filter(function(s){return s.type.includes('Near Miss');}).length;
-  var obs=list.filter(function(s){return !s.type.includes('Incident')&&!s.type.includes('Injury')&&!s.type.includes('Near Miss');}).length;
-  ['sf-inc-ct','sf-near-ct','sf-obs-ct'].forEach(function(id,i){var el=document.getElementById(id);if(el)el.textContent=[inc,near,obs][i];});
-  // Days Safe
-  var startStr=safeLS.getItem(SF_START_KEY);
-  var days=0;
-  if(startStr){days=Math.floor((Date.now()-parseInt(startStr))/86400000);}
-  else if(!inc){days=0;}
-  var daysEl=document.getElementById('safety-days');if(daysEl)daysEl.textContent=days+' Days Safe';
-  var incEl=document.getElementById('safety-incident-count');if(incEl)incEl.textContent=inc+' incident'+(inc!==1?'s':'');
-  // Log
-  var el=document.getElementById('safety-log-list');if(!el)return;
-  if(!list.length){el.innerHTML='<div class="text-center py-10"><span style="font-size:40px">🦺</span><p class="text-gray-500 font-semibold mt-2">No safety events logged</p></div>';return;}
-  var typeColor={'👁️ Safety Observation':'#4f46e5','⚠️ Near Miss':'#f59e0b','🚨 Incident':'#ef4444','🏥 Injury':'#dc2626','🔥 Fire/Hazard':'#ea580c'};
-  el.innerHTML=[...list].reverse().map(function(s){
-    var col=Object.values(typeColor)[0];
-    Object.keys(typeColor).forEach(function(k){if(s.type.includes(k.replace(/[👁️⚠️🚨🏥🔥]/g,'').trim()))col=typeColor[k];});
-    col=typeColor[s.type]||'#6b7280';
-    return '<div class="border border-gray-100 rounded-xl p-3 mb-2">'+
-      '<div class="flex justify-between items-start mb-1">'+
-      '<span style="background:'+col+'20;color:'+col+';font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">'+s.type+'</span>'+
-      '<div class="flex gap-1"><span class="text-xs text-gray-400">'+fd(s.date)+'</span><button onclick="delSF(\''+s.id+'\')" class="text-rose-400 text-lg leading-none ml-1">✕</button></div></div>'+
-      '<p class="text-sm font-semibold text-gray-800">'+s.desc+'</p>'+
-      (s.action?'<p class="text-xs text-gray-500 mt-0.5">✅ Action: '+s.action+'</p>':'')+
-      '<div class="flex gap-3 mt-1 text-xs text-gray-400">'+
-      (s.location?'<span>📍 '+s.location+'</span>':'')+(s.person?'<span>👤 '+s.person+'</span>':'')+
-      '</div></div>';
-  }).join('');
-}
-
-function delSF(id){var list=lsf().filter(function(s){return s.id!==id;});ssf(list);renderSafety();toast('Deleted','ok');}
 
 // ============================================================
 // BILL
@@ -5277,333 +4985,122 @@ function getSiteId() { return safeLS.getItem(CLOUD_SITE_ID) || ''; }
 
 // -- Header cloud button update --
 function updateCloudBtn() {
-  var btn = document.getElementById('cloud-hdr-btn');
+  var btn  = document.getElementById('cloud-hdr-btn');
   var icon = document.getElementById('cloud-hdr-icon');
-  var lbl = document.getElementById('cloud-hdr-label');
+  var lbl  = document.getElementById('cloud-hdr-label');
   if (!btn) return;
-  if (isCloudActivated() && getFbConfig()) {
+  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+  if (isAdmin && getFbConfig()) {
     btn.classList.add('active-cloud');
     if (icon) icon.textContent = '☁️';
-    if (lbl) { lbl.textContent = 'Synced'; lbl.style.color = '#86efac'; }
-  } else if (isCloudActivated()) {
+    if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = '#86efac'; }
+  } else if (isAdmin) {
     btn.classList.add('active-cloud');
-    if (icon) icon.textContent = '⚙️';
-    if (lbl) { lbl.textContent = 'Setup'; lbl.style.color = '#fbbf24'; }
+    if (icon) icon.textContent = '☁️';
+    if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = '#fbbf24'; }
   } else {
+    // Not logged in — show lock
     btn.classList.remove('active-cloud');
     if (icon) icon.textContent = '🔒';
-    if (lbl) { lbl.textContent = 'Cloud'; lbl.style.color = 'rgba(255,255,255,0.7)'; }
+    if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = 'rgba(255,255,255,0.6)'; }
   }
 }
 
 // -- Open / Close Cloud Modal --
 function openCloudModal() {
   refreshCloudModalState();
-  // Pre-fill Firebase inputs if config already exists
-  var cfg = getFbConfig();
-  var siteId = getSiteId();
-  if (cfg) {
-    var ids = ['fb-api-key','fb-auth-domain','fb-project-id','fb-app-id','fb-bucket'];
-    var vals = [cfg.apiKey||'', cfg.authDomain||'', cfg.projectId||'', cfg.appId||'', cfg.storageBucket||''];
-    for (var i=0; i<ids.length; i++) {
-      var el = document.getElementById(ids[i]); if (el && !el.value) el.value = vals[i];
-      var el2 = document.getElementById(ids[i]+'-legacy'); if (el2 && !el2.value) el2.value = vals[i];
-    }
-    var sid = document.getElementById('fb-site-id'); if (sid && !sid.value) sid.value = siteId||'';
-    var sid2 = document.getElementById('fb-site-id-legacy'); if (sid2 && !sid2.value) sid2.value = siteId||'';
-  }
   document.getElementById('cloud-modal').classList.add('show');
 }
 function closeCloudModal() { document.getElementById('cloud-modal').classList.remove('show'); }
 
+// ── Tab switcher ────────────────────────────────────────────────
+function switchCloudTab(tab) {
+  ['admin','create','viewer'].forEach(function(t) {
+    var panel = document.getElementById('ctab-' + t);
+    var btn   = document.getElementById('ctab-' + t + '-btn');
+    if (!panel || !btn) return;
+    var active = (t === tab);
+    panel.style.display = active ? 'block' : 'none';
+    if (active) {
+      btn.style.background = t === 'admin'
+        ? 'linear-gradient(135deg,#4f46e5,#7c3aed)'
+        : t === 'create'
+        ? 'linear-gradient(135deg,#059669,#10b981)'
+        : 'linear-gradient(135deg,#d97706,#f59e0b)';
+      btn.style.color = '#fff';
+      btn.style.boxShadow = t === 'admin'
+        ? '0 4px 14px rgba(79,70,229,.5)'
+        : t === 'create'
+        ? '0 4px 14px rgba(5,150,105,.4)'
+        : '0 4px 14px rgba(217,119,6,.45)';
+      btn.style.border = 'none';
+    } else {
+      btn.style.background = 'rgba(255,255,255,.07)';
+      btn.style.color = 'rgba(255,255,255,.45)';
+      btn.style.boxShadow = 'none';
+      btn.style.border = '1px solid rgba(255,255,255,.1)';
+    }
+  });
+}
+
 function refreshCloudModalState() {
-  var activated = isCloudActivated();
-  var cfg = getFbConfig();
-  var siteId = getSiteId();
-  var paySection = document.getElementById('cloud-pay-section');
-  var fbSection = document.getElementById('cloud-firebase-section');
-  var activeSection = document.getElementById('cloud-active-section');
-  var bannerIcon = document.getElementById('cloud-status-icon');
-  var bannerTitle = document.getElementById('cloud-status-title');
-  var bannerSub = document.getElementById('cloud-status-sub');
+  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+  var cfg     = getFbConfig();
+  var siteId  = getSiteId();
 
-  if (activated && cfg && siteId) {
-    // Fully active
-    if (paySection) paySection.style.display = 'none';
-    if (fbSection) fbSection.style.display = 'none';
-    if (activeSection) activeSection.style.display = 'block';
-    if (bannerIcon) bannerIcon.textContent = '✅';
-    if (bannerTitle) { bannerTitle.textContent = 'Cloud Active & Syncing'; bannerTitle.style.color = '#86efac'; }
-    if (bannerSub) bannerSub.textContent = 'Your data syncs across devices in real time.';
-    var siteDsp = document.getElementById('cloud-site-id-display');
-    if (siteDsp) siteDsp.textContent = 'Site ID: ' + siteId;
-  } else if (activated && !cfg) {
-    // Paid but Firebase not configured — show legacy firebase section
-    if (paySection) paySection.style.display = 'none';
-    if (fbSection) fbSection.style.display = 'block';
-    if (activeSection) activeSection.style.display = 'none';
-    if (bannerIcon) bannerIcon.textContent = '⚙️';
-    if (bannerTitle) { bannerTitle.textContent = 'Payment Done — Setup Firebase'; bannerTitle.style.color = '#fbbf24'; }
-    if (bannerSub) bannerSub.textContent = 'Enter your Firebase config to start syncing.';
+  // Admin bar (post-login strip) visibility
+  var adminBar = document.getElementById('cloud-admin-bar');
+  if (adminBar) adminBar.style.display = isAdmin ? 'block' : 'none';
+
+  // Tab switcher — hide when logged in as admin (show post-login panel instead)
+  var tabSwitcher = document.getElementById('cloud-tab-switcher');
+  if (tabSwitcher) tabSwitcher.style.display = isAdmin ? 'none' : 'flex';
+
+  if (isAdmin) {
+    // Show post-login content inside admin tab
+    var prelogin  = document.getElementById('ctab-admin-prelogin');
+    var postlogin = document.getElementById('ctab-admin-postlogin');
+    var adminPanel = document.getElementById('ctab-admin');
+    if (prelogin)  prelogin.style.display  = 'none';
+    if (postlogin) postlogin.style.display = 'block';
+    if (adminPanel) adminPanel.style.display = 'block';
+    // Firebase section inside postlogin
+    var fbSection = document.getElementById('cloud-firebase-section');
+    if (fbSection) fbSection.style.display = (cfg && siteId) ? 'none' : 'block';
+    // Site ID display
+    var siteEl = document.getElementById('cloud-site-id-display');
+    if (siteEl) siteEl.textContent = 'Site ID: ' + (siteId || '—');
+    // Sync dot
+    var syncDot = document.getElementById('cloud-sync-dot');
+    var syncTime = document.getElementById('cloud-sync-time');
+    if (syncDot) syncDot.style.background = (cfg && siteId) ? '#22c55e' : '#fbbf24';
+    if (syncTime) syncTime.textContent = (cfg && siteId) ? 'Syncing…' : 'Not connected';
   } else {
-    // Not activated — show step wizard starting at step 1
-    if (paySection) paySection.style.display = 'block';
-    if (fbSection) fbSection.style.display = 'none';
-    if (activeSection) activeSection.style.display = 'none';
-    if (bannerIcon) bannerIcon.textContent = '🔒';
-    if (bannerTitle) { bannerTitle.textContent = 'Not Activated'; bannerTitle.style.color = '#f9a8d4'; }
-    if (bannerSub) bannerSub.textContent = '';
-    // Reset to step 1
-    cloudGoToStep(1);
+    // Pre-login: show tabs, default to admin tab
+    var prelogin  = document.getElementById('ctab-admin-prelogin');
+    var postlogin = document.getElementById('ctab-admin-postlogin');
+    if (prelogin)  prelogin.style.display  = 'block';
+    if (postlogin) postlogin.style.display = 'none';
+    switchCloudTab('admin');
   }
 }
 
-// -- Cloud step wizard navigation --
-function cloudGoToStep(step) {
-  var panels = [null,
-    document.getElementById('cloud-step-1-panel'),
-    document.getElementById('cloud-step-2-panel'),
-    document.getElementById('cloud-step-3-panel')
-  ];
-  for (var i = 1; i <= 3; i++) {
-    if (panels[i]) panels[i].style.display = (i === step) ? 'block' : 'none';
-    var dot = document.getElementById('cstep-' + i);
-    var lbl = document.getElementById('cslabel-' + i);
-    if (dot) {
-      dot.className = 'cloud-step-dot ' + (i < step ? 'done' : i === step ? 'active' : 'idle');
-      dot.textContent = i < step ? '✓' : i;
-    }
-    if (lbl) {
-      lbl.className = 'cloud-step-label ' + (i < step ? 'done' : i === step ? 'active' : '');
-    }
-    if (i < 3) {
-      var line = document.getElementById('cline-' + i);
-      if (line) line.className = 'cloud-step-line' + (i < step ? ' done' : '');
-    }
-  }
-}
 
-// -- Step 1: Validate Firebase fields and advance to step 2 --
-function cloudStep1Next() {
-  var apiKey = (document.getElementById('fb-api-key')||{}).value||'';
-  var authDomain = (document.getElementById('fb-auth-domain')||{}).value||'';
-  var projectId = (document.getElementById('fb-project-id')||{}).value||'';
-  var appId = (document.getElementById('fb-app-id')||{}).value||'';
-  var bucket = (document.getElementById('fb-bucket')||{}).value||'';
-  var siteId = (document.getElementById('fb-site-id')||{}).value||'';
-  apiKey = apiKey.trim(); authDomain = authDomain.trim(); projectId = projectId.trim(); appId = appId.trim(); siteId = siteId.trim().replace(/\s+/g,'-').toLowerCase();
-
-  // If using hardcoded/pre-configured Firebase, allow through with defaults
-  if (!apiKey && !authDomain && !projectId) {
-    var existing = getFbConfig();
-    if (existing) {
-      // Already configured — just advance
-      cloudGoToStep(2);
-      return;
-    }
-  }
-  if (!apiKey || !authDomain || !projectId || !appId) { toast('Firebase aur Site ID fields bharo (*)', 'err'); return; }
-  if (!siteId) { toast('Cloud Site ID required', 'err'); return; }
-
-  // Save Firebase config
-  var cfg = { apiKey: apiKey, authDomain: authDomain, projectId: projectId, appId: appId, storageBucket: bucket };
-  safeLS.setItem(CLOUD_FB_CFG, JSON.stringify(cfg));
-  safeLS.setItem(CLOUD_SITE_ID, siteId);
-  toast('Firebase config saved!', 'ok');
-  cloudGoToStep(2);
-}
-
-// -- New auth tab switch inside cloud modal step 3 --
-function cloudSwitchAuthTab(tab) {
-  var loginForm = document.getElementById('cloud-login-form');
-  var signupForm = document.getElementById('cloud-signup-form');
-  var loginTab = document.getElementById('cloud-tab-login');
-  var signupTab = document.getElementById('cloud-tab-signup');
-  if (loginForm) loginForm.style.display = tab === 'login' ? 'block' : 'none';
-  if (signupForm) signupForm.style.display = tab === 'signup' ? 'block' : 'none';
-  var activeStyle = 'flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:rgba(255,255,255,0.18);color:#fff;';
-  var idleStyle   = 'flex:1;padding:7px 4px;font-size:12px;font-weight:700;border:none;border-radius:10px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);';
-  if (loginTab) loginTab.setAttribute('style', tab === 'login' ? activeStyle : idleStyle);
-  if (signupTab) signupTab.setAttribute('style', tab === 'signup' ? activeStyle : idleStyle);
-}
-
-// -- New admin login (inline in cloud step 3) --
-function doCloudAdminLogin() {
-  var email = (document.getElementById('cloud-login-email')||{}).value||'';
-  var pass  = (document.getElementById('cloud-login-pass')||{}).value||'';
-  var errEl = document.getElementById('cloud-login-err');
-  var btn   = document.getElementById('cloud-login-btn');
-  if (errEl) errEl.style.display = 'none';
-  email = email.trim();
-  if (!email || !pass) { if(errEl){errEl.textContent='⚠️ Email aur password bharo';errEl.style.display='block';} return; }
-  var m = window._fbModules;
-  if (!m) { if(errEl){errEl.textContent='⚠️ Firebase load nahi hua, reload karo';errEl.style.display='block';} return; }
-  var cfg = getFbConfig();
-  if (!cfg) { if(errEl){errEl.textContent='⚠️ Firebase config missing — Step 1 pehle karo';errEl.style.display='block';} return; }
-  if (btn) { btn.textContent = '⏳ Logging in…'; btn.disabled = true; }
-  try {
-    var app;
-    try { app = m.initializeApp(cfg, 'admin-auth-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'admin-auth'); }
-    var auth = m.getAuth(app);
-    m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
-      _adminUser = uc.user;
-      var db = m.getFirestore(app);
-      return m.getDoc(m.doc(db,'admins',uc.user.uid)).then(function(snap){
-        var data = snap.exists() ? snap.data() : {};
-        var now = Date.now();
-        var endDate = data.subscriptionEndDate || 0;
-        var isActive = data.subscribed && endDate > now;
-        if (isActive) {
-          onAdminLoginSuccess(email, uc.user, app);
-          closeCloudModal();
-          openCloudModal();
-        } else {
-          if(btn){btn.textContent='🔑 Login as Admin';btn.disabled=false;}
-          if (data.subscribed && endDate <= now) {
-            if(errEl){errEl.textContent='⚠️ Subscription expired! Please renew.';errEl.style.display='block';}
-            toast('⚠️ Subscription expired! Please renew.','err');
-          } else {
-            if(errEl){errEl.textContent='⚠️ No active subscription — please pay first.';errEl.style.display='block';}
-          }
-        }
-      });
-    }).catch(function(e){
-      if(btn){btn.textContent='🔑 Login as Admin';btn.disabled=false;}
-      var msg = e.code==='auth/wrong-password'?'Galat password':e.code==='auth/user-not-found'?'Email registered nahi hai':e.code==='auth/invalid-email'?'Valid email enter karo':e.message;
-      if(errEl){errEl.textContent='⚠️ '+msg;errEl.style.display='block';}
-    });
-  } catch(e) {
-    if(btn){btn.textContent='🔑 Login as Admin';btn.disabled=false;}
-    if(errEl){errEl.textContent='⚠️ '+e.message;errEl.style.display='block';}
-  }
-}
-
-// -- New admin signup (inline in cloud step 3) --
-function doCloudAdminSignup() {
-  var name  = (document.getElementById('cloud-signup-name')||{}).value||'';
-  var email = (document.getElementById('cloud-signup-email')||{}).value||'';
-  var pass  = (document.getElementById('cloud-signup-pass')||{}).value||'';
-  var btn   = document.getElementById('cloud-signup-btn');
-  var errEl = document.getElementById('cloud-signup-err');
-  if (errEl) errEl.style.display = 'none';
-  name = name.trim(); email = email.trim();
-  if (!name || !email || !pass) { if(errEl){errEl.textContent='⚠️ Sab fields bharo';errEl.style.display='block';} return; }
-  if (pass.length < 6) { if(errEl){errEl.textContent='⚠️ Password min 6 chars';errEl.style.display='block';} return; }
-  var m = window._fbModules;
-  if (!m) { if(errEl){errEl.textContent='⚠️ Firebase load nahi hua';errEl.style.display='block';} return; }
-  var cfg = getFbConfig();
-  if (!cfg) { if(errEl){errEl.textContent='⚠️ Firebase config missing — Step 1 karo pehle';errEl.style.display='block';} return; }
-  if (btn) { btn.textContent = '⏳ Creating…'; btn.disabled = true; }
-  try {
-    var app;
-    try { app = m.initializeApp(cfg, 'admin-signup-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'admin-signup'); }
-    var auth = m.getAuth(app);
-    m.createUserWithEmailAndPassword(auth, email, pass).then(function(uc){
-      var db = m.getFirestore(app);
-      return m.setDoc(m.doc(db,'admins',uc.user.uid),{name:name,email:email,subscribed:false,createdAt:Date.now()}).then(function(){
-        _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
-        closeCloudModal();
-        openPayLanding(true);
-      });
-    }).catch(function(e){
-      if(btn){btn.textContent='✨ Create Admin Account';btn.disabled=false;}
-      var msg = e.code==='auth/email-already-in-use'?'Email already registered — Login karo':e.code==='auth/invalid-email'?'Valid email enter karo':e.message;
-      if(errEl){errEl.textContent='⚠️ '+msg;errEl.style.display='block';}
-    });
-  } catch(e) {
-    if(btn){btn.textContent='✨ Create Admin Account';btn.disabled=false;}
-    if(errEl){errEl.textContent='⚠️ '+e.message;errEl.style.display='block';}
-  }
-}
-
-// -- Razorpay Payment --
-function startRazorpay() {
-  if (typeof Razorpay === 'undefined') {
-    toast('Loading payment gateway…', 'ok');
-    var s = document.createElement('script');
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    s.onload = function() { _openRazorpay(); };
-    s.onerror = function() { toast('Payment load failed. Check internet.', 'err'); };
-    document.head.appendChild(s);
-    return;
-  }
-  _openRazorpay();
-}
-
-function _openRazorpay() {
-  var btn = document.getElementById('pay-btn');
-  if (btn) { btn.textContent = '⏳ Opening payment…'; btn.disabled = true; }
-  var options = {
-    key: 'rzp_live_SRrnyG5XusYMpE',
-    amount: 3000,            // ₹30/month in paise
-    currency: 'INR',
-    name: 'Sanjineer',
-    description: 'Cloud Backup & Sync — ₹30/month',
-    image: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="%234f46e5"/><text x="40" y="55" font-size="36" text-anchor="middle">%F0%9F%8F%97</text></svg>',
-    prefill: { name: (lprof()||{}).engineer || '', email: '', contact: '' },
-    theme: { color: '#4f46e5' },
-    handler: function(response) {
-      onPaymentSuccess(response);
-    },
-    modal: {
-      ondismiss: function() {
-        if (btn) { btn.textContent = '💳 Pay ₹30 & Activate Cloud'; btn.disabled = false; }
-      }
-    }
-  };
-  try {
-    var rzp = new Razorpay(options);
-    rzp.on('payment.failed', function(resp) {
-      toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err');
-      if (btn) { btn.textContent = '💳 Pay ₹30 & Activate Cloud'; btn.disabled = false; }
-    });
-    rzp.open();
-  } catch(e) {
-    toast('Payment error: ' + e.message, 'err');
-    if (btn) { btn.textContent = '💳 Pay ₹30 & Activate Cloud'; btn.disabled = false; }
-  }
-}
-
-function onPaymentSuccess(response) {
-  safeLS.setItem(CLOUD_KEY, '1');
-  safeLS.setItem('cm_rzp_payment_id', response.razorpay_payment_id || 'TEST_' + Date.now());
-  toast('✅ Payment successful! Now create your account.', 'ok');
-  // Advance to step 3 (account creation) in the new wizard
-  var step3panel = document.getElementById('cloud-step-3-panel');
-  if (step3panel) {
-    cloudGoToStep(3);
-    // Update banner
-    var bannerIcon = document.getElementById('cloud-status-icon');
-    var bannerTitle = document.getElementById('cloud-status-title');
-    var bannerSub = document.getElementById('cloud-status-sub');
-    if (bannerIcon) bannerIcon.textContent = '✅';
-    if (bannerTitle) { bannerTitle.textContent = 'Payment Done!'; bannerTitle.style.color = '#86efac'; }
-    if (bannerSub) bannerSub.textContent = 'Create or login to your admin account.';
-  } else {
-    refreshCloudModalState();
-  }
-  updateCloudBtn();
-}
-
-// -- Firebase Config Save (legacy path — for old activation flow) --
+// -- Firebase Config Save --
 function saveFirebaseConfig() {
-  // Support both old IDs and new legacy-suffix IDs
-  function gv(id) { var el = document.getElementById(id)||document.getElementById(id+'-legacy'); return el ? el.value.trim() : ''; }
-  var apiKey     = gv('fb-api-key');
-  var authDomain = gv('fb-auth-domain');
-  var projectId  = gv('fb-project-id');
-  var appId      = gv('fb-app-id');
-  var bucket     = gv('fb-bucket');
-  var siteId     = gv('fb-site-id').replace(/\s+/g, '-').toLowerCase();
+  var apiKey = document.getElementById('fb-api-key').value.trim();
+  var authDomain = document.getElementById('fb-auth-domain').value.trim();
+  var projectId = document.getElementById('fb-project-id').value.trim();
+  var appId = document.getElementById('fb-app-id').value.trim();
+  var bucket = document.getElementById('fb-bucket').value.trim();
+  var siteId = document.getElementById('fb-site-id').value.trim().replace(/\s+/g, '-').toLowerCase();
 
   if (!apiKey || !authDomain || !projectId || !appId) {
     toast('Please fill all required fields (*)', 'err'); return;
   }
   if (!siteId) { toast('Site ID is required', 'err'); return; }
 
-  var cfg = { apiKey: apiKey, authDomain: authDomain, projectId: projectId, appId: appId, storageBucket: bucket };
+  var cfg = { apiKey, authDomain, projectId, appId, storageBucket: bucket };
   safeLS.setItem(CLOUD_FB_CFG, JSON.stringify(cfg));
   safeLS.setItem(CLOUD_SITE_ID, siteId);
   toast('Firebase config saved! Connecting…', 'ok');
@@ -5621,7 +5118,11 @@ function saveFirebaseConfig() {
 
 // -- Init Firebase --
 function initFirebase(cfg, cb) {
-  if (!window._fbModules) { setTimeout(function(){ initFirebase(cfg, cb); }, 600); return; }
+  // Wait for both _fbModules wrapper AND firebase global to be ready
+  if (!window._fbModules || !window.firebase) {
+    setTimeout(function(){ initFirebase(cfg, cb); }, 300);
+    return;
+  }
   try {
     var m = window._fbModules;
     if (!_fbApp) {
@@ -5647,11 +5148,14 @@ function initFirebase(cfg, cb) {
 function autoInitCloud() {
   var cfg = getFbConfig();
   var siteId = getSiteId();
-  if (isCloudActivated() && cfg && siteId) {
+  if (cfg && siteId) {
     initFirebase(cfg, function(ok) {
       if (ok) {
         updateCloudBtn();
-        startAutoSync();
+        // Only start auto-sync if admin is logged in
+        if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') {
+          startAutoSync();
+        }
       }
     });
   }
@@ -5930,6 +5434,8 @@ function run() {
 if (done) return; done = true;
 try { applyProfile(); } catch(e) {}
 try { boot(); } catch(e) { console.error('boot:', e); }
+try { restoreAdminSession(); } catch(e) {}
+try { checkViewerLoginMode(); } catch(e) {}
 }
 if (document.readyState === 'loading') {
 document.addEventListener('DOMContentLoaded', run);
@@ -6047,6 +5553,7 @@ window.addEventListener('load', run); // final safety net
 // ================================================================
 
 var _adminUser = null; // Firebase user object when logged in
+var _adminApp  = null; // Firebase app instance for admin session
 var ADMIN_ROLE_KEY = 'cm_admin_role';   // localStorage: 'admin' or ''
 var ADMIN_EMAIL_KEY = 'cm_admin_email';
 
@@ -6075,8 +5582,25 @@ function doAdminLogin() {
   errEl.style.display = 'none';
   if (!email || !pass) { showAuthErr('login','Email aur password dono bharo'); return; }
 
+  // If Firebase modules not yet loaded, wait and retry (module script is async)
+  if (!window._fbModules || !window.firebase) {
+    btn.textContent = '⏳ Loading…'; btn.disabled = true;
+    var tries = 0;
+    var wait = setInterval(function() {
+      tries++;
+      if (window._fbModules && window.firebase) {
+        clearInterval(wait);
+        btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
+        doAdminLogin();
+      } else if (tries > 20) {
+        clearInterval(wait);
+        btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
+        showAuthErr('login', 'Firebase load nahi hua — internet check karo aur reload karo');
+      }
+    }, 300);
+    return;
+  }
   var m = window._fbModules;
-  if (!m) { showAuthErr('login','Firebase load nahi hua, reload karo'); return; }
 
   btn.textContent = '⏳ Logging in…'; btn.disabled = true;
 
@@ -6139,8 +5663,25 @@ function doAdminSignup() {
   if (!name || !email || !pass) { showAuthErr('signup','Sab fields bharo'); return; }
   if (pass.length < 6) { showAuthErr('signup','Password kam se kam 6 characters ka hona chahiye'); return; }
 
+  // If Firebase modules not yet loaded, wait and retry
+  if (!window._fbModules || !window.firebase) {
+    btn.textContent = '⏳ Loading…'; btn.disabled = true;
+    var tries = 0;
+    var wait = setInterval(function() {
+      tries++;
+      if (window._fbModules && window.firebase) {
+        clearInterval(wait);
+        btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
+        doAdminSignup();
+      } else if (tries > 20) {
+        clearInterval(wait);
+        btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
+        showAuthErr('signup', 'Firebase load nahi hua — internet check karo aur reload karo');
+      }
+    }, 300);
+    return;
+  }
   var m = window._fbModules;
-  if (!m) { showAuthErr('signup','Firebase load nahi hua'); return; }
   var cfg = getFbConfig();
   if (!cfg) { showAuthErr('signup','Firebase config missing — Cloud Setup pehle karo'); return; }
 
@@ -6259,23 +5800,13 @@ function restoreAdminSession() {
       }
     }
   }
+  // Always sync header button and modal state on restore
+  updateCloudBtn();
+  refreshCloudModalState();
 }
 
-// Update refreshCloudModalState to show admin email bar
-var _origRefreshCloudModalState = refreshCloudModalState;
-refreshCloudModalState = function() {
-  _origRefreshCloudModalState();
-  var role = safeLS.getItem(ADMIN_ROLE_KEY);
-  var email = safeLS.getItem(ADMIN_EMAIL_KEY);
-  var adminBar = document.getElementById('cloud-admin-bar');
-  if (adminBar) {
-    adminBar.style.display = (role === 'admin' && email) ? 'flex' : 'none';
-    var emailEl = document.getElementById('cloud-admin-email');
-    if (emailEl && email) emailEl.textContent = email;
-  }
-};
+// (refreshCloudModalState now handles admin bar natively — no patch needed)
 
-var _adminApp = null;
 var _pendingAuthApp = null, _pendingAuthUser = null, _pendingAuthEmail = null;
 
 // ================================================================
@@ -6291,7 +5822,9 @@ var _TABS_LIST = [
   {id:'contractors',label:'👷 Contractors'},
   {id:'drawings',label:'📐 Drawings'},
   {id:'machinery',label:'⚙️ Machinery'},
-  {id:'safety',label:'🦺 Safety'}
+  {id:'tools',label:'🔧 Tools'},
+  {id:'rentals',label:'🚜 Rentals'},
+  {id:'punchlist',label:'📋 Punch List'}
 ];
 
 // Toggle permission chip
@@ -6413,20 +5946,29 @@ function loadViewerAccounts() {
   }
 }
 
+
 function renderViewerList(list) {
   var listEl = document.getElementById('viewer-accounts-list');
   if (!list || !list.length) {
-    listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
+    listEl.innerHTML = '<div style="text-align:center;padding:20px 0;"><div style="font-size:28px;margin-bottom:6px">\u{1F465}</div><p style="font-size:11px;color:rgba(255,255,255,0.35);">No viewers created yet</p></div>';
     return;
   }
+  var te = {dashboard:'\u{1F4CA}',attendance:'\u{1F4CB}',expenses:'\u{1F4B0}',materials:'\u{1F9F1}',daily:'\u{1F4DD}',contractors:'\u{1F477}',drawings:'\u{1F4D0}',machinery:'\u2699',safety:'\u{1F9BA}',tools:'\u{1F527}',rentals:'\u{1F69C}'};
   listEl.innerHTML = list.map(function(v, i) {
-    var perms = (v.permissions || []).join(', ') || 'none';
-    return '<div class="viewer-acc-row">'
-      + '<div style="flex:1;min-width:0">'
-      + '<p style="font-size:12px;font-weight:700;color:white;truncate">' + v.email + '</p>'
-      + '<p style="font-size:10px;color:#a78bfa;margin-top:2px">Tabs: ' + perms + (v.canPrint ? ' · Print: ✅' : '') + '</p>'
+    var perms = v.permissions || [];
+    var chips = perms.map(function(p){
+      return '<span style="padding:3px 8px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:12px;font-size:9px;font-weight:700;color:#c7d2fe;margin:2px;">' + (te[p]||'\u{1F4CC}') + ' ' + p + '</span>';
+    }).join('');
+    return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:1rem;padding:.75rem;margin-bottom:.6rem;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+      + '<div style="display:flex;align-items:center;gap:8px;">'
+      + '<div style="width:30px;height:30px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">\u{1F441}\uFE0F</div>'
+      + '<div><p style="font-size:12px;font-weight:700;color:white;line-height:1;">' + v.email + '</p>'
+      + '<p style="font-size:9px;color:#a78bfa;margin-top:2px;">' + (v.canPrint ? '\u2705 Print allowed' : '\u{1F6AB} No print') + '</p></div>'
       + '</div>'
-      + '<button onclick="deleteViewerAccount(\'' + v.uid + '\', ' + i + ')" style="font-size:10px;padding:3px 8px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;cursor:pointer;flex-shrink:0">🗑</button>'
+      + '<button onclick="deleteViewerAccount(\''+ v.uid +'\','+ i +')" style="padding:5px 10px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u{1F5D1} Delete</button>'
+      + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;">' + (chips || '<span style="font-size:10px;color:rgba(255,255,255,.3)">No tabs assigned</span>') + '</div>'
       + '</div>';
   }).join('');
 }
@@ -6634,10 +6176,7 @@ function _applyViewerPermissions(perms, canPrint, siteId) {
 // ── PAYMENT LANDING PAGE ───────────────────────────────────────
 // ================================================================
 
-var _payLandingAfterAuth = false;
-
 function openPayLanding(afterAuth) {
-  _payLandingAfterAuth = !!afterAuth;
   document.getElementById('pay-landing-modal').classList.add('show');
 }
 function closePayLanding() {
@@ -6751,22 +6290,6 @@ function onSubscriptionPaymentSuccess(response) {
   openCloudModal();
 }
 
-// ── Patch boot to also check viewer login mode ──
-(function() {
-  var _origBoot = window.boot;
-  if (_origBoot) {
-    window.boot = function() {
-      _origBoot.apply(this, arguments);
-      restoreAdminSession();
-      checkViewerLoginMode();
-    };
-  } else {
-    document.addEventListener('DOMContentLoaded', function() {
-      restoreAdminSession();
-      checkViewerLoginMode();
-    });
-  }
-})();
 
 </script>
 
