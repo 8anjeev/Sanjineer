@@ -5835,15 +5835,18 @@ function doAdminLogin() {
             // Not subscribed or expired — show payment landing
             closeAuthModal();
             _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
-            // Show expiry message if was subscribed before
             if (data.subscribed && endDate <= now) {
               toast('⚠️ Subscription expired! Please renew to continue.', 'err');
             }
             openPayLanding(true);
           }
         }).catch(function(e) {
+          // Firestore read failed (rules or network) — treat as not subscribed, show payment
+          console.warn('Subscription check error:', e.message);
           btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-          showAuthErr('login', 'Subscription check failed — Internet check karo aur retry karo');
+          closeAuthModal();
+          _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
+          openPayLanding(true);
         });
       })
       .catch(function(e) {
