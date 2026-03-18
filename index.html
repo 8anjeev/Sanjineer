@@ -5510,9 +5510,7 @@ function cloudRestoreNow() {
     if (d.drawings) sdrw(d.drawings);
     if (d.budget) sbgt(d.budget);
     if (d.milestones) sms(d.milestones);
-    if (d.rfi) srfi(d.rfi);
     if (d.punchlist) spl(d.punchlist);
-    if (d.safety) ssf(d.safety);
     if (d.nid) safeLS.setItem('cm_nid', d.nid);
     AD = ld();
     applyProfile();
@@ -5650,14 +5648,16 @@ function _viewerRefresh() {
 
 function _viewerLoadData(siteId, projId) {
   var params = new URLSearchParams(window.location.search);
-  var apiKey = params.get('ak') || '';
-  var appId = params.get('aid') || '';
-  var cfg = {
-    apiKey: apiKey,
-    authDomain: projId + '.firebaseapp.com',
-    projectId: projId,
-    appId: appId
-  };
+  // Use stored Firebase config first (inline viewer login), fall back to URL params (shared link)
+  var storedCfg = getFbConfig();
+  var cfg;
+  if (storedCfg && storedCfg.projectId) {
+    cfg = storedCfg;
+  } else {
+    var apiKey = params.get('ak') || '';
+    var appId  = params.get('aid') || '';
+    cfg = { apiKey: apiKey, authDomain: projId+'.firebaseapp.com', projectId: projId, appId: appId };
+  }
 
   function applyViewerData(d) {
     if (d.db) { sd(d.db); AD = ld(); }
@@ -5669,9 +5669,8 @@ function _viewerLoadData(siteId, projId) {
     if (d.drawings) sdrw(d.drawings);
     if (d.budget) sbgt(d.budget);
     if (d.milestones) sms(d.milestones);
-    if (d.rfi) srfi(d.rfi);
     if (d.punchlist) spl(d.punchlist);
-    if (d.safety) ssf(d.safety);
+    // srfi and ssf removed — skip silently
     applyProfile();
     updateDash();
     _disableViewerWrites();
@@ -6550,18 +6549,18 @@ function doViewerLoginInline() {
         closeAuthModal();
         _IS_VIEWER = true;
         _applyViewerPermissions(data.permissions || [], data.canPrint, data.siteId);
-        var params = new URLSearchParams(window.location.search);
-        var siteId = data.siteId || params.get('view') || '';
-        var projId = cfg.projectId || params.get('pid') || '';
-        if (siteId && projId) {
-          _viewerLoadData(siteId, projId);
-          document.body.insertAdjacentHTML('afterbegin',
-            '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-            +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ VIEWER — '+email+'</span>'
-            +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:8px;cursor:pointer">🔄 Refresh</button>'
-            +'</div>');
-          var main = document.getElementById('main-app');
-          if (main) main.style.marginTop = '32px';
+        var siteId = data.siteId || getSiteId();
+        if (siteId) {
+          _viewerLoadData(siteId, cfg.projectId || '');
+          if (!document.getElementById('viewer-top-bar')) {
+            document.body.insertAdjacentHTML('afterbegin',
+              '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
+              +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ VIEWER — '+email+'</span>'
+              +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:8px;cursor:pointer">🔄 Refresh</button>'
+              +'</div>');
+            var main = document.getElementById('main-app');
+            if (main) main.style.marginTop = '32px';
+          }
         }
         toast('✅ Welcome, '+email,'ok');
       });
@@ -6606,26 +6605,23 @@ function doViewerLogin() {
         sessionStorage.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
         sessionStorage.setItem('sj_viewer_site',  data.siteId  || '');
         sessionStorage.setItem('sj_viewer_email', email);
-        // Remove login overlay
         var ov = document.getElementById('viewer-login-overlay');
         if (ov) ov.remove();
-        // Set _IS_VIEWER mode and load data
         _IS_VIEWER = true;
         _applyViewerPermissions(data.permissions || [], data.canPrint, data.siteId);
-        // Load the site data
         var params = new URLSearchParams(window.location.search);
         var siteId = data.siteId || params.get('view') || '';
-        var projId = cfg.projectId || params.get('pid') || '';
-        if (siteId && projId) {
-          _viewerLoadData(siteId, projId);
-          // Add viewer bar
-          document.body.insertAdjacentHTML('afterbegin',
-            '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-            +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ VIEWER — '+email+'</span>'
-            +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:8px;cursor:pointer">🔄 Refresh</button>'
-            +'</div>');
-          var main = document.getElementById('main-app');
-          if (main) main.style.marginTop = '32px';
+        if (siteId) {
+          _viewerLoadData(siteId, cfg.projectId || params.get('pid') || '');
+          if (!document.getElementById('viewer-top-bar')) {
+            document.body.insertAdjacentHTML('afterbegin',
+              '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
+              +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ VIEWER — '+email+'</span>'
+              +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:8px;cursor:pointer">🔄 Refresh</button>'
+              +'</div>');
+            var main = document.getElementById('main-app');
+            if (main) main.style.marginTop = '32px';
+          }
         }
         toast('✅ Welcome, '+email,'ok');
       });
