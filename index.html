@@ -2038,16 +2038,20 @@ body{margin:0}
         <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:6px;">Tab Permissions — tap to toggle:</label>
         <div id="perm-chips-container" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.75rem;">
           <span class="perm-chip on" data-tab="dashboard">📊 Dashboard</span>
-          <span class="perm-chip on" data-tab="attendance">📋 Attendance</span>
+          <span class="perm-chip on" data-tab="daily">📋 Daily Report</span>
+          <span class="perm-chip on" data-tab="departmental">🏗️ Dept Work</span>
+          <span class="perm-chip on" data-tab="attendance">📅 Attendance</span>
+          <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
           <span class="perm-chip on" data-tab="expenses">💰 Expenses</span>
           <span class="perm-chip on" data-tab="materials">🧱 Materials</span>
-          <span class="perm-chip on" data-tab="daily">📝 Daily Report</span>
-          <span class="perm-chip on" data-tab="contractors">👷 Contractors</span>
-          <span class="perm-chip on" data-tab="drawings">📐 Drawings</span>
-          <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
-
           <span class="perm-chip on" data-tab="tools">🔧 Tools</span>
+          <span class="perm-chip on" data-tab="drawings">📐 Drawings</span>
           <span class="perm-chip on" data-tab="rentals">🚜 Rentals</span>
+          <span class="perm-chip on" data-tab="contractors">👥 Teams</span>
+          <span class="perm-chip on" data-tab="budget">📊 Budget</span>
+          <span class="perm-chip on" data-tab="schedule">📅 Schedule</span>
+          <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
+          <span class="perm-chip on" data-tab="bill">🧾 Bill</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">
           <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:15px;height:15px;">
@@ -2552,7 +2556,10 @@ function boot() {
     safeLS.setItem(CLOUD_KEY, '1');
   }
   autoInitCloud();
-  switchTab('dashboard');
+  // Don't switchTab here if viewer is already logged in (permissions would be overridden)
+  if (!sessionStorage.getItem('sj_viewer_email')) {
+    switchTab('dashboard');
+  }
 }
 
 function setupRentalTabs() {
@@ -5654,6 +5661,7 @@ function _viewerLogout() {
   sessionStorage.removeItem('sj_viewer_site');
   sessionStorage.removeItem('sj_viewer_email');
   _IS_VIEWER = false;
+  _viewerApp = null;
   var bar = document.getElementById('viewer-top-bar');
   if (bar) bar.remove();
   var main = document.getElementById('main-app');
@@ -5669,16 +5677,13 @@ function _viewerLogout() {
 
 function _viewerLoadData(siteId, projId) {
   var params = new URLSearchParams(window.location.search);
-  // Use stored Firebase config first (inline viewer login), fall back to URL params (shared link)
   var storedCfg = getFbConfig();
-  var cfg;
-  if (storedCfg && storedCfg.projectId) {
-    cfg = storedCfg;
-  } else {
-    var apiKey = params.get('ak') || '';
-    var appId  = params.get('aid') || '';
-    cfg = { apiKey: apiKey, authDomain: projId+'.firebaseapp.com', projectId: projId, appId: appId };
-  }
+  var cfg = (storedCfg && storedCfg.projectId) ? storedCfg : {
+    apiKey: params.get('ak') || '',
+    authDomain: projId + '.firebaseapp.com',
+    projectId: projId,
+    appId: params.get('aid') || ''
+  };
 
   function applyViewerData(d) {
     if (d.db) { sd(d.db); AD = ld(); }
@@ -5691,10 +5696,28 @@ function _viewerLoadData(siteId, projId) {
     if (d.budget) sbgt(d.budget);
     if (d.milestones) sms(d.milestones);
     if (d.punchlist) spl(d.punchlist);
-    // srfi and ssf removed — skip silently
     applyProfile();
     updateDash();
     _disableViewerWrites();
+    var rawPerms = sessionStorage.getItem('sj_viewer_perms');
+    if (rawPerms) {
+      try {
+        var perms = JSON.parse(rawPerms);
+        var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+        document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
+          btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
+        });
+        if (!canPrint) {
+          document.querySelectorAll('button').forEach(function(b) {
+            var t = b.textContent.trim();
+            if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF')) {
+              b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
+            }
+          });
+        }
+        if (perms.length > 0) { switchTab(perms[0]); }
+      } catch(ex) {}
+    }
     var syncEl = document.getElementById('viewer-sync-time');
     if (syncEl) syncEl.textContent = 'Updated: ' + new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
   }
@@ -5706,24 +5729,23 @@ function _viewerLoadData(siteId, projId) {
 
   try {
     var m = window._fbModules;
-    var tempApp;
-    try { tempApp = m.initializeApp(cfg, 'viewer-' + Date.now()); }
-    catch(e) { tempApp = m.initializeApp(cfg, 'viewer'); }
-    var db = m.getFirestore(tempApp);
-    var auth = m.getAuth(tempApp);
-    m.signInAnonymously(auth).then(function() {
-      // Live real-time listener
-      m.onSnapshot(m.doc(db, 'sites', siteId), function(snap) {
-        if (snapExists(snap)) {
-          applyViewerData(snapData(snap));
-        } else {
-          toast('No site data found for: ' + siteId, 'err');
-        }
-      }, function(err) {
-        toast('Viewer load error: ' + err.message, 'err');
-      });
-    }).catch(function(e) {
-      toast('Viewer auth error — check Firebase config', 'err');
+    // Use stored authenticated viewer app — NO anonymous auth needed at all
+    var app = _viewerApp;
+    if (!app) {
+      try { app = m.initializeApp(cfg, 'viewer-data'); }
+      catch(e) { app = m.initializeApp(cfg, 'viewer-data-' + Date.now()); }
+      _viewerApp = app;
+    }
+    var db = m.getFirestore(app);
+    // Viewer signed in with email/pass — read directly using their session
+    m.onSnapshot(m.doc(db, 'sites', siteId), function(snap) {
+      if (snapExists(snap)) {
+        applyViewerData(snapData(snap));
+      } else {
+        toast('No site data found for: ' + siteId, 'err');
+      }
+    }, function(err) {
+      toast('Data load error: ' + err.message, 'err');
     });
   } catch(e) {
     toast('Viewer init error: ' + e.message, 'err');
@@ -6135,6 +6157,7 @@ function restoreAdminSession() {
 // (refreshCloudModalState now handles admin bar natively — no patch needed)
 
 var _adminApp = null;
+var _viewerApp = null; // stores authenticated viewer Firebase app after login
 var _pendingAuthApp = null, _pendingAuthUser = null, _pendingAuthEmail = null;
 
 // ================================================================
@@ -6142,14 +6165,21 @@ var _pendingAuthApp = null, _pendingAuthUser = null, _pendingAuthEmail = null;
 // ================================================================
 
 var _TABS_LIST = [
-  {id:'dashboard',label:'📊 Dashboard'},
-  {id:'attendance',label:'📋 Attendance'},
-  {id:'expenses',label:'💰 Expenses'},
-  {id:'materials',label:'🧱 Materials'},
-  {id:'daily',label:'📝 Daily Report'},
-  {id:'contractors',label:'👷 Contractors'},
-  {id:'drawings',label:'📐 Drawings'},
-  {id:'machinery',label:'⚙️ Machinery'}
+  {id:'dashboard',   label:'📊 Dashboard'},
+  {id:'daily',       label:'📋 Daily Report'},
+  {id:'departmental',label:'🏗️ Dept Work'},
+  {id:'attendance',  label:'📅 Attendance'},
+  {id:'machinery',   label:'⚙️ Machinery'},
+  {id:'expenses',    label:'💰 Expenses'},
+  {id:'materials',   label:'🧱 Materials'},
+  {id:'tools',       label:'🔧 Tools'},
+  {id:'drawings',    label:'📐 Drawings'},
+  {id:'rentals',     label:'📦 Rentals'},
+  {id:'contractors', label:'👥 Teams'},
+  {id:'budget',      label:'📊 Budget'},
+  {id:'schedule',    label:'📅 Schedule'},
+  {id:'punchlist',   label:'📋 Punch List'},
+  {id:'bill',        label:'🧾 Bill'}
 ];
 
 // Toggle permission chip
@@ -6243,7 +6273,8 @@ function loadViewerAccountsInline() {
   var m = window._fbModules;
   var cfg = getFbConfig();
   if (!m || !cfg) {
-    listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Firebase not connected</p>';
+    // Retry after Firebase loads
+    setTimeout(loadViewerAccountsInline, 1000);
     return;
   }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
@@ -6251,15 +6282,18 @@ function loadViewerAccountsInline() {
     var app;
     try { app=m.initializeApp(cfg,'vi-inline-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vi-inline'); }
     var db=m.getFirestore(app);
+    var auth=m.getAuth(app);
     var siteId=getSiteId();
-    m.getDoc(m.doc(db,'sites',siteId+'_viewers')).then(function(snap) {
+
+    function doFetchInline() {
+      m.getDoc(m.doc(db,'sites',siteId+'_viewers')).then(function(snap) {
       var list = snapExists(snap) ? (snapData(snap).list||[]) : [];
       if (!list.length) {
         listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
         return;
       }
-      var te = {dashboard:'📊',attendance:'📋',expenses:'💰',materials:'🧱',daily:'📝',contractors:'👷',drawings:'📐',machinery:'⚙️',tools:'🔧',rentals:'🚜'};
-      var allTabs = ['dashboard','attendance','expenses','materials','daily','contractors','drawings','machinery','tools','rentals'];
+      var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾'};
+      var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill'];
       listEl.innerHTML = list.map(function(v,i) {
         var perms = v.permissions||[];
         var chips = perms.map(function(p){
@@ -6295,6 +6329,11 @@ function loadViewerAccountsInline() {
     }).catch(function(e) {
       listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+e.message+'</p>';
     });
+    }
+    if (auth.currentUser) { doFetchInline(); }
+    else { m.signInAnonymously(auth).then(doFetchInline).catch(function(e) {
+      listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Auth failed: '+e.message+'</p>';
+    }); }
   } catch(e) {
     listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">'+e.message+'</p>';
   }
@@ -6358,19 +6397,28 @@ function loadViewerAccounts() {
   }
   try {
     var app;
-    try { app = m.initializeApp(cfg, 'viewer-list-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'viewer-list'); }
+    try { app = m.initializeApp(cfg, 'va-list-' + Date.now()); }
+    catch(e) { app = m.initializeApp(cfg, 'va-list'); }
     var db = m.getFirestore(app);
+    var auth = m.getAuth(app);
     var siteId = getSiteId();
-    m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
-      if (snapExists(snap)) {
-        renderViewerList(snapData(snap).list || []);
-      } else {
-        listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
-      }
-    }).catch(function(e) {
-      listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Load failed: ' + e.message + '</p>';
-    });
+
+    function doFetch() {
+      m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
+        if (snapExists(snap)) {
+          renderViewerList(snapData(snap).list || []);
+        } else {
+          listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
+        }
+      }).catch(function(e) {
+        listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Load failed: ' + e.message + '</p>';
+      });
+    }
+
+    if (auth.currentUser) { doFetch(); }
+    else { m.signInAnonymously(auth).then(doFetch).catch(function(e) {
+      listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Auth error: ' + e.message + '</p>';
+    }); }
   } catch(e) {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + e.message + '</p>';
   }
@@ -6383,8 +6431,8 @@ function renderViewerList(list) {
     listEl.innerHTML = '<div style="text-align:center;padding:20px 0;"><div style="font-size:28px;margin-bottom:6px">\u{1F465}</div><p style="font-size:11px;color:rgba(255,255,255,0.35);">No viewers created yet</p></div>';
     return;
   }
-  var te = {dashboard:'\u{1F4CA}',attendance:'\u{1F4CB}',expenses:'\u{1F4B0}',materials:'\u{1F9F1}',daily:'\u{1F4DD}',contractors:'\u{1F477}',drawings:'\u{1F4D0}',machinery:'\u2699',safety:'\u{1F9BA}',tools:'\u{1F527}',rentals:'\u{1F69C}'};
-  var allTabs = ['dashboard','attendance','expenses','materials','daily','contractors','drawings','machinery','tools','rentals'];
+  var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾'};
+  var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill'];
   listEl.innerHTML = list.map(function(v, i) {
     var perms = v.permissions || [];
     var chips = perms.map(function(p){
@@ -6564,6 +6612,7 @@ function doViewerLoginInline() {
     try { app=m.initializeApp(cfg,'vl-inline-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vl-inline'); }
     var auth = m.getAuth(app);
     m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
+      _viewerApp = app; // store for reuse in _viewerLoadData — no anonymous auth needed
       var db = m.getFirestore(app);
       return m.getDoc(m.doc(db,'viewers',uc.user.uid)).then(function(snap) {
         if (!snapExists(snap)) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
@@ -6622,7 +6671,7 @@ function doViewerLogin() {
     try { app=m.initializeApp(cfg,'vl-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vl'); }
     var auth = m.getAuth(app);
     m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
-      // Fetch viewer permissions from Firestore
+      _viewerApp = app; // store authenticated app for _viewerLoadData
       var db = m.getFirestore(app);
       return m.getDoc(m.doc(db,'viewers',uc.user.uid)).then(function(snap) {
         if (!snapExists(snap)) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
@@ -6668,22 +6717,28 @@ function doViewerLogin() {
 }
 
 function _applyViewerPermissions(perms, canPrint, siteId) {
-  // Hide tabs not in perms
-  _TABS_LIST.forEach(function(t) {
-    var tabBtn = document.querySelector('[onclick*="switchTab(\''+t.id+'\'"]');
-    if (tabBtn && perms.indexOf(t.id) === -1) {
-      tabBtn.style.display = 'none';
+  // Hide all tab buttons not in perms using data-tab attribute (reliable selector)
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
+    var tabId = btn.getAttribute('data-tab');
+    if (perms.indexOf(tabId) === -1) {
+      btn.style.display = 'none';
     }
   });
   // Disable write actions
   _disableViewerWrites();
-  // If print not allowed, also disable Print buttons
+  // Disable print if not allowed
   if (!canPrint) {
     document.querySelectorAll('button').forEach(function(b) {
-      if (b.textContent.trim().includes('Print') || b.textContent.trim().includes('Export')) {
+      var txt = b.textContent.trim();
+      if (txt.includes('Print') || txt.includes('Export') || txt.includes('Save PDF')) {
         b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
       }
     });
+  }
+  // Navigate to first permitted tab (don't leave viewer on a tab they can't see)
+  if (perms.length > 0) {
+    // Wait for data to load first, then switch
+    setTimeout(function() { switchTab(perms[0]); }, 800);
   }
 }
 
