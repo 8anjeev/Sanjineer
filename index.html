@@ -1928,6 +1928,16 @@ body{margin:0}
           <button onclick="disconnectCloudWithBackup()" style="width:100%;padding:.65rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;border-radius:.875rem;font-size:.78rem;font-weight:700;cursor:pointer;margin-top:4px;">
             🔌 Disconnect Cloud
           </button>
+          <!-- Viewer Accounts List -->
+          <div style="margin-top:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <p style="font-size:11px;font-weight:800;color:#a78bfa;">👥 Viewer Accounts</p>
+              <button onclick="openViewerMgmt()" style="padding:4px 10px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);color:#c7d2fe;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;">+ Add / Manage</button>
+            </div>
+            <div id="viewer-accounts-inline" style="max-height:200px;overflow-y:auto;">
+              <p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">Loading viewers…</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -5327,6 +5337,8 @@ function refreshCloudModalState() {
     if (prelogin)  prelogin.style.display  = 'none';
     if (postlogin) postlogin.style.display = 'block';
     if (adminPanel) adminPanel.style.display = 'block';
+    // Load viewer list inline
+    loadViewerAccountsInline();
     // Firebase section inside postlogin
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = (cfg && siteId) ? 'none' : 'block';
@@ -5445,9 +5457,9 @@ function cloudBackupNow() {
     drawings: ldrw(),
     budget: lbgt(),
     milestones: lms(),
-    rfi: lrfi(),
+    rfi: [],
     punchlist: lpl(),
-    safety: lsf(),
+    safety: [],
     nid: parseInt(safeLS.getItem('cm_nid') || '1'),
     lastSync: Date.now(),
     syncedBy: _fbUid || 'anonymous',
@@ -5547,6 +5559,15 @@ function disconnectCloud() {
   updateCloudBtn();
   refreshCloudModalState();
   toast('Cloud disconnected', 'ok');
+}
+function disconnectCloudWithBackup() {
+  if (!confirm('Backup and disconnect cloud? Your local data stays safe.')) return;
+  if (_fbDb) {
+    cloudBackupNow();
+    setTimeout(function() { disconnectCloud(); }, 1500);
+  } else {
+    disconnectCloud();
+  }
 }
 
 // -- Viewer Modal --
@@ -5909,7 +5930,8 @@ function doAdminLogin() {
         btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
         var msg = e.code === 'auth/wrong-password' ? 'Galat password' :
                   e.code === 'auth/user-not-found' ? 'Email registered nahi hai' :
-                  e.code === 'auth/invalid-email'  ? 'Valid email enter karo' : e.message;
+                  e.code === 'auth/invalid-email'  ? 'Valid email enter karo' :
+                  e.code === 'auth/invalid-credential' ? 'Galat email ya password' : e.message;
         showAuthErr('login', msg);
       });
   } catch(e) {
@@ -6019,6 +6041,8 @@ function onAdminLoginSuccess(email, user, app) {
     }).catch(function(){});
   } catch(e) {}
   toast('✅ Login successful! Welcome, Admin', 'ok');
+  // Load viewer list in cloud modal inline panel
+  loadViewerAccountsInline();
   // Make sure cloud is activated & syncing
   if (!isCloudActivated()) {
     safeLS.setItem(CLOUD_KEY, '1');
@@ -6170,6 +6194,39 @@ function createViewerAccount() {
   } catch(e) {
     btn.textContent = '➕ Create Viewer Account'; btn.disabled = false;
     errEl.textContent = '⚠️ ' + e.message; errEl.style.display = 'block';
+  }
+}
+
+function loadViewerAccountsInline() {
+  var listEl = document.getElementById('viewer-accounts-inline');
+  if (!listEl) return;
+  var m = window._fbModules;
+  var cfg = getFbConfig();
+  if (!m || !cfg) { listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Firebase not connected</p>'; return; }
+  listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
+  try {
+    var app;
+    try { app=m.initializeApp(cfg,'vi-inline-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vi-inline'); }
+    var db=m.getFirestore(app);
+    var siteId=getSiteId();
+    m.getDoc(m.doc(db,'sites',siteId+'_viewers')).then(function(snap) {
+      var list = snap.exists() ? (snap.data().list||[]) : [];
+      if (!list.length) {
+        listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">No viewers created yet</p>';
+        return;
+      }
+      listEl.innerHTML = list.map(function(v) {
+        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:10px;margin-bottom:5px;">'
+          +'<div><p style="font-size:11px;font-weight:700;color:white;line-height:1;">'+v.email+'</p>'
+          +'<p style="font-size:9px;color:#a78bfa;margin-top:2px;">'+(v.canPrint?'✅ Print on':'🚫 No print')+'</p></div>'
+          +'<p style="font-size:9px;color:rgba(255,255,255,0.4);">'+(v.permissions||[]).length+' tabs</p>'
+          +'</div>';
+      }).join('');
+    }).catch(function() {
+      listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Could not load viewers</p>';
+    });
+  } catch(e) {
+    listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">'+e.message+'</p>';
   }
 }
 
@@ -6441,12 +6498,72 @@ function checkViewerLoginMode() {
   );
 }
 
+function doViewerLoginInline() {
+  var email = document.getElementById('vl-inline-email').value.trim();
+  var pass  = document.getElementById('vl-inline-pass').value;
+  var btn   = document.getElementById('vl-inline-btn');
+  var errEl = document.getElementById('vl-inline-err');
+  if (errEl) errEl.style.display = 'none';
+  if (!email || !pass) {
+    if (errEl) { errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; }
+    return;
+  }
+  var m = window._fbModules;
+  var cfg = getFbConfig();
+  if (!m || !cfg) {
+    if (errEl) { errEl.textContent='⚠️ App config load nahi hua, reload karo'; errEl.style.display='block'; }
+    return;
+  }
+  btn.textContent='⏳ Logging in…'; btn.disabled=true;
+  try {
+    var app;
+    try { app=m.initializeApp(cfg,'vl-inline-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vl-inline'); }
+    var auth = m.getAuth(app);
+    m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
+      var db = m.getFirestore(app);
+      return m.getDoc(m.doc(db,'viewers',uc.user.uid)).then(function(snap) {
+        if (!snap.exists()) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
+        var data = snap.data();
+        if (data.role !== 'viewer') { throw new Error('Yeh admin account hai — Admin login use karo.'); }
+        sessionStorage.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
+        sessionStorage.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
+        sessionStorage.setItem('sj_viewer_site',  data.siteId  || '');
+        sessionStorage.setItem('sj_viewer_email', email);
+        closeAuthModal();
+        _IS_VIEWER = true;
+        _applyViewerPermissions(data.permissions || [], data.canPrint, data.siteId);
+        var params = new URLSearchParams(window.location.search);
+        var siteId = data.siteId || params.get('view') || '';
+        var projId = cfg.projectId || params.get('pid') || '';
+        if (siteId && projId) {
+          _viewerLoadData(siteId, projId);
+          document.body.insertAdjacentHTML('afterbegin',
+            '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
+            +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ VIEWER — '+email+'</span>'
+            +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:8px;cursor:pointer">🔄 Refresh</button>'
+            +'</div>');
+          var main = document.getElementById('main-app');
+          if (main) main.style.marginTop = '32px';
+        }
+        toast('✅ Welcome, '+email,'ok');
+      });
+    }).catch(function(e) {
+      btn.textContent='👁️ View Site Data'; btn.disabled=false;
+      var msg = e.code==='auth/wrong-password'?'Galat password':
+                e.code==='auth/user-not-found'?'Email registered nahi hai':
+                e.code==='auth/invalid-credential'?'Galat email ya password':
+                (e.message || 'Login failed');
+      if (errEl) { errEl.textContent='⚠️ '+msg; errEl.style.display='block'; }
+    });
+  } catch(e) {
+    btn.textContent='👁️ View Site Data'; btn.disabled=false;
+    if (errEl) { errEl.textContent='⚠️ '+e.message; errEl.style.display='block'; }
+  }
+}
+
+
 function doViewerLogin() {
   var email = document.getElementById('vl-email').value.trim();
-  var pass  = document.getElementById('vl-pass').value;
-  var btn   = document.getElementById('vl-btn');
-  var errEl = document.getElementById('vl-err');
-  errEl.style.display = 'none';
   if (!email || !pass) { errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; return; }
 
   var m = window._fbModules;
