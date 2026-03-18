@@ -1928,13 +1928,16 @@ body{margin:0}
           <button onclick="disconnectCloudWithBackup()" style="width:100%;padding:.65rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;border-radius:.875rem;font-size:.78rem;font-weight:700;cursor:pointer;margin-top:4px;">
             🔌 Disconnect Cloud
           </button>
-          <!-- Viewer Accounts List -->
+          <!-- Viewer Accounts List — full editable, shown directly in admin panel -->
           <div style="margin-top:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
               <p style="font-size:11px;font-weight:800;color:#a78bfa;">👥 Viewer Accounts</p>
-              <button onclick="openViewerMgmt()" style="padding:4px 10px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);color:#c7d2fe;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;">+ Add / Manage</button>
+              <div style="display:flex;gap:6px;">
+                <button onclick="loadViewerAccountsInline()" style="padding:4px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#c4b5fd;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;">🔄</button>
+                <button onclick="openViewerMgmt()" style="padding:4px 10px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);color:#c7d2fe;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;">+ New</button>
+              </div>
             </div>
-            <div id="viewer-accounts-inline" style="max-height:200px;overflow-y:auto;">
+            <div id="viewer-accounts-inline" style="max-height:320px;overflow-y:auto;">
               <p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">Loading viewers…</p>
             </div>
           </div>
@@ -6219,7 +6222,10 @@ function loadViewerAccountsInline() {
   if (!listEl) return;
   var m = window._fbModules;
   var cfg = getFbConfig();
-  if (!m || !cfg) { listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Firebase not connected</p>'; return; }
+  if (!m || !cfg) {
+    listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Firebase not connected</p>';
+    return;
+  }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
   try {
     var app;
@@ -6229,59 +6235,121 @@ function loadViewerAccountsInline() {
     m.getDoc(m.doc(db,'sites',siteId+'_viewers')).then(function(snap) {
       var list = snapExists(snap) ? (snapData(snap).list||[]) : [];
       if (!list.length) {
-        listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">No viewers created yet</p>';
+        listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
         return;
       }
-      listEl.innerHTML = list.map(function(v) {
-        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:10px;margin-bottom:5px;">'
+      var te = {dashboard:'📊',attendance:'📋',expenses:'💰',materials:'🧱',daily:'📝',contractors:'👷',drawings:'📐',machinery:'⚙️',tools:'🔧',rentals:'🚜'};
+      var allTabs = ['dashboard','attendance','expenses','materials','daily','contractors','drawings','machinery','tools','rentals'];
+      listEl.innerHTML = list.map(function(v,i) {
+        var perms = v.permissions||[];
+        var chips = perms.map(function(p){
+          return '<span style="padding:2px 7px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:10px;font-size:9px;font-weight:700;color:#c7d2fe;margin:2px;">'+(te[p]||'📌')+' '+p+'</span>';
+        }).join('');
+        var editChips = allTabs.map(function(tab){
+          var isOn = perms.indexOf(tab)!==-1;
+          return '<span onclick="toggleInlineChip(this)" data-tab="'+tab+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">'+(te[tab]||'')+' '+tab+'</span>';
+        }).join('');
+        return '<div id="inline-viewer-card-'+i+'" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.6rem;margin-bottom:.5rem;">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">'
+          +'<div style="display:flex;align-items:center;gap:7px;">'
+          +'<div style="width:26px;height:26px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">👁️</div>'
           +'<div><p style="font-size:11px;font-weight:700;color:white;line-height:1;">'+v.email+'</p>'
-          +'<p style="font-size:9px;color:#a78bfa;margin-top:2px;">'+(v.canPrint?'✅ Print on':'🚫 No print')+'</p></div>'
-          +'<p style="font-size:9px;color:rgba(255,255,255,0.4);">'+(v.permissions||[]).length+' tabs</p>'
+          +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.canPrint?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs</p></div>'
+          +'</div>'
+          +'<div style="display:flex;gap:5px;">'
+          +'<button onclick="toggleInlineEdit(this,'+i+')" style="padding:4px 8px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
+          +'<button onclick="deleteViewerAccount(\''+v.uid+'\','+i+')" style="padding:4px 8px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🗑</button>'
+          +'</div></div>'
+          +'<div id="inline-chips-view-'+i+'" style="display:flex;flex-wrap:wrap;">'+(chips||'<span style="font-size:9px;color:rgba(255,255,255,.3)">No tabs</span>')+'</div>'
+          +'<div id="inline-edit-panel-'+i+'" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px;">'
+          +'<p style="font-size:9px;font-weight:700;color:#a78bfa;margin-bottom:5px;">Tabs — tap to toggle:</p>'
+          +'<div style="display:flex;flex-wrap:wrap;" id="inline-edit-chips-'+i+'">'+editChips+'</div>'
+          +'<div style="display:flex;align-items:center;gap:6px;margin:6px 0 8px;">'
+          +'<input type="checkbox" id="inline-print-'+i+'" '+(v.canPrint?'checked':'')+' style="accent-color:#818cf8;width:13px;height:13px;">'
+          +'<label for="inline-print-'+i+'" style="font-size:10px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
+          +'</div>'
+          +'<button onclick="saveInlineViewerPerms('+i+',\''+v.uid+'\')" style="width:100%;padding:6px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:8px;font-weight:800;font-size:10px;cursor:pointer;">💾 Save Permissions</button>'
+          +'</div>'
           +'</div>';
       }).join('');
-    }).catch(function() {
-      listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Could not load viewers</p>';
+    }).catch(function(e) {
+      listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+e.message+'</p>';
     });
   } catch(e) {
     listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">'+e.message+'</p>';
   }
 }
 
+function toggleInlineChip(el) {
+  var isOn = el.style.background.indexOf('99,102,241')!==-1;
+  el.style.background = isOn?'rgba(255,255,255,0.05)':'rgba(99,102,241,0.3)';
+  el.style.borderColor = isOn?'rgba(255,255,255,0.15)':'#818cf8';
+  el.style.color = isOn?'rgba(255,255,255,0.4)':'#c7d2fe';
+}
+
+function toggleInlineEdit(btn, idx) {
+  var panel = document.getElementById('inline-edit-panel-'+idx);
+  var view  = document.getElementById('inline-chips-view-'+idx);
+  if (!panel) return;
+  var isOpen = panel.style.display!=='none';
+  panel.style.display = isOpen?'none':'block';
+  view.style.display  = isOpen?'flex':'none';
+  btn.textContent = isOpen?'✏️ Edit':'✕ Cancel';
+}
+
+function saveInlineViewerPerms(idx, uid) {
+  var chipsEl = document.getElementById('inline-edit-chips-'+idx);
+  if (!chipsEl) return;
+  var newPerms=[];
+  chipsEl.querySelectorAll('span[data-tab]').forEach(function(c){
+    if(c.style.background.indexOf('99,102,241')!==-1) newPerms.push(c.getAttribute('data-tab'));
+  });
+  var canPrint = document.getElementById('inline-print-'+idx) ? document.getElementById('inline-print-'+idx).checked : false;
+  var m=window._fbModules, cfg=getFbConfig();
+  if(!m||!cfg){toast('Firebase error','err');return;}
+  try {
+    var app;
+    try{app=m.initializeApp(cfg,'vi-save-'+Date.now());}catch(e){app=m.initializeApp(cfg,'vi-save');}
+    var db=m.getFirestore(app), siteId=getSiteId();
+    m.setDoc(m.doc(db,'viewers',uid),{permissions:newPerms,canPrint:canPrint},{merge:true})
+      .then(function(){
+        var listRef=m.doc(db,'sites',siteId+'_viewers');
+        return m.getDoc(listRef).then(function(snap){
+          if(!snapExists(snap)) return;
+          var existing=snapData(snap).list||[];
+          existing=existing.map(function(v){return v.uid===uid?Object.assign({},v,{permissions:newPerms,canPrint:canPrint}):v;});
+          return m.setDoc(listRef,{list:existing},{merge:false});
+        });
+      })
+      .then(function(){toast('✅ Permissions saved!','ok');loadViewerAccountsInline();})
+      .catch(function(e){toast('Save failed: '+e.message,'err');});
+  } catch(e){toast(e.message,'err');}
+}
+
 function loadViewerAccounts() {
   var listEl = document.getElementById('viewer-accounts-list');
   if (!listEl) return;
   listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Loading…</p>';
-
   var m = window._fbModules;
   var cfg = getFbConfig();
   if (!m || !cfg) {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Firebase connected nahi hai</p>';
     return;
   }
-
   try {
     var app;
     try { app = m.initializeApp(cfg, 'viewer-list-' + Date.now()); }
     catch(e) { app = m.initializeApp(cfg, 'viewer-list'); }
-    var db  = m.getFirestore(app);
-    var adminEmail = safeLS.getItem(ADMIN_EMAIL_KEY) || '';
-    // Query all viewers created by this admin's site
+    var db = m.getFirestore(app);
     var siteId = getSiteId();
-    m.getDoc(m.doc(db, 'sites', siteId)).then(function() {
-      // Use collection query workaround — fetch from 'viewers' collection
-      // Since we can't do where() without extra import, fetch all viewers and filter client-side
-      return Promise.all([]).then(function() {
-        // Fallback: store viewer list in site document under 'viewerList' array
-        m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
-          if (snapExists(snap)) {
-            renderViewerList(snapData(snap).list || []);
-          } else {
-            listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
-          }
-        }).catch(function() {
-          listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
-        });
-      });
+    m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
+      if (snapExists(snap)) {
+        renderViewerList(snapData(snap).list || []);
+      } else {
+        listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
+      }
+    }).catch(function(e) {
+      listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Load failed: ' + e.message + '</p>';
     });
   } catch(e) {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + e.message + '</p>';
@@ -6423,23 +6491,7 @@ function deleteViewerAccount(uid, idx) {
   } catch(e) { toast(e.message, 'err'); }
 }
 
-// ── Save viewer to site's viewer list when creating ──
-// Patch createViewerAccount to also save in site viewers doc
-(function() {
-  var _origCreate = createViewerAccount;
-  // We patch via overriding the inner success handler above already;
-  // additionally save the viewer summary in site doc for listing
-  window._saveViewerToSiteDoc = function(db, siteId, m, viewerData) {
-    var vDocRef = m.doc(db, 'sites', siteId + '_viewers');
-    m.getDoc(vDocRef).then(function(snap) {
-      var list = snapExists(snap) ? (snapData(snap).list || []) : [];
-      // Remove duplicates
-      list = list.filter(function(v) { return v.email !== viewerData.email; });
-      list.push(viewerData);
-      m.setDoc(vDocRef, { list: list });
-    }).catch(function() {});
-  };
-})();
+// ── Viewer account management complete ──
 
 // Patch createViewerAccount's success to also write viewer summary
 (function() {
