@@ -2149,6 +2149,21 @@ var safeLS = {
   removeItem: function(k) { if (_ls) { try { _ls.removeItem(k); } catch(e) {} } delete _memStore[k]; }
 };
 
+// ── Firebase compat snap helpers ─────────────────────────────
+// Firebase compat SDK: snap.exists is a boolean.
+// Firebase modular SDK: snapExists(snap) is a function.
+// This helper handles both so all code works with either.
+function snapExists(snap) {
+  if (!snap) return false;
+  if (typeof snap.exists === 'function') return snap.exists();
+  return !!snap.exists;
+}
+function snapData(snap) {
+  if (!snap) return {};
+  if (typeof snap.data === 'function') return snap.data() || {};
+  return snap || {};
+}
+
 function ld(){try{return JSON.parse(safeLS.getItem(DB)||'[]');}catch(e){return [];}}
 function sd(d){safeLS.setItem(DB,JSON.stringify(d));}
 function lm(){try{return JSON.parse(safeLS.getItem(META)||'{}');}catch(e){return {};}}
@@ -5484,8 +5499,8 @@ function cloudRestoreNow() {
   if (!confirm('⚠️ This will replace ALL local data with cloud data. Continue?')) return;
   var m = window._fbModules;
   m.getDoc(m.doc(_fbDb, 'sites', siteId)).then(function(snap) {
-    if (!snap.exists()) { toast('No cloud data found for this Site ID', 'err'); return; }
-    var d = snap.data();
+    if (!snapExists(snap)) { toast('No cloud data found for this Site ID', 'err'); return; }
+    var d = snapData(snap);
     if (d.db) sd(d.db);
     if (d.meta) sm(d.meta);
     if (d.mats) smat(d.mats);
@@ -5679,8 +5694,8 @@ function _viewerLoadData(siteId, projId) {
     m.signInAnonymously(auth).then(function() {
       // Live real-time listener
       m.onSnapshot(m.doc(db, 'sites', siteId), function(snap) {
-        if (snap.exists()) {
-          applyViewerData(snap.data());
+        if (snapExists(snap)) {
+          applyViewerData(snapData(snap));
         } else {
           toast('No site data found for: ' + siteId, 'err');
         }
@@ -5905,7 +5920,7 @@ function doAdminLogin() {
         // Check subscription in Firestore
         var db = m.getFirestore(app);
         return m.getDoc(m.doc(db, 'admins', uc.user.uid)).then(function(snap) {
-          var data = snap.exists() ? snap.data() : {};
+          var data = snapExists(snap) ? snapData(snap) : {};
           var now = Date.now();
           var endDate = data.subscriptionEndDate || 0;
           var isActive = data.subscribed && endDate > now;
@@ -6021,8 +6036,8 @@ function onAdminLoginSuccess(email, user, app) {
     var m = window._fbModules;
     var db = m.getFirestore(app);
     m.getDoc(m.doc(db, 'admins', user.uid)).then(function(snap) {
-      if (snap.exists()) {
-        var endDate = snap.data().subscriptionEndDate;
+      if (snapExists(snap)) {
+        var endDate = snapData(snap).subscriptionEndDate;
         var expiryEl = document.getElementById('cloud-sub-expiry');
         if (expiryEl && endDate) {
           var d = new Date(endDate);
@@ -6171,7 +6186,7 @@ function createViewerAccount() {
             // Also append to sites/{siteId}_viewers list for easy listing
             var listRef = m.doc(db, 'sites', siteId + '_viewers');
             return m.getDoc(listRef).then(function(snap) {
-              var existing = snap.exists() ? (snap.data().list || []) : [];
+              var existing = snapExists(snap) ? (snapData(snap).list || []) : [];
               // Remove old entry for this email if exists, then add new
               existing = existing.filter(function(v){ return v.email !== email; });
               existing.push(vData);
@@ -6210,7 +6225,7 @@ function loadViewerAccountsInline() {
     var db=m.getFirestore(app);
     var siteId=getSiteId();
     m.getDoc(m.doc(db,'sites',siteId+'_viewers')).then(function(snap) {
-      var list = snap.exists() ? (snap.data().list||[]) : [];
+      var list = snapExists(snap) ? (snapData(snap).list||[]) : [];
       if (!list.length) {
         listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">No viewers created yet</p>';
         return;
@@ -6256,8 +6271,8 @@ function loadViewerAccounts() {
       return Promise.all([]).then(function() {
         // Fallback: store viewer list in site document under 'viewerList' array
         m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
-          if (snap.exists()) {
-            renderViewerList(snap.data().list || []);
+          if (snapExists(snap)) {
+            renderViewerList(snapData(snap).list || []);
           } else {
             listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
           }
@@ -6363,8 +6378,8 @@ function saveViewerPerms(idx, uid) {
         // Also update in sites list doc
         var listRef = m.doc(db, 'sites', siteId + '_viewers');
         return m.getDoc(listRef).then(function(snap) {
-          if (!snap.exists()) return;
-          var existing = snap.data().list || [];
+          if (!snapExists(snap)) return;
+          var existing = snapData(snap).list || [];
           existing = existing.map(function(v){ return v.uid === uid ? Object.assign({}, v, { permissions: newPerms, canPrint: canPrint }) : v; });
           return m.setDoc(listRef, { list: existing }, { merge: false });
         });
@@ -6394,8 +6409,8 @@ function deleteViewerAccount(uid, idx) {
     delProm.then(function() {
       // Also remove from sites list
       return m.getDoc(listRef).then(function(snap) {
-        if (!snap.exists()) return;
-        var existing = snap.data().list || [];
+        if (!snapExists(snap)) return;
+        var existing = snapData(snap).list || [];
         existing = existing.filter(function(v){ return v.uid !== uid; });
         return m.setDoc(listRef, { list: existing }, { merge: false });
       });
@@ -6415,7 +6430,7 @@ function deleteViewerAccount(uid, idx) {
   window._saveViewerToSiteDoc = function(db, siteId, m, viewerData) {
     var vDocRef = m.doc(db, 'sites', siteId + '_viewers');
     m.getDoc(vDocRef).then(function(snap) {
-      var list = snap.exists() ? (snap.data().list || []) : [];
+      var list = snapExists(snap) ? (snapData(snap).list || []) : [];
       // Remove duplicates
       list = list.filter(function(v) { return v.email !== viewerData.email; });
       list.push(viewerData);
@@ -6522,8 +6537,8 @@ function doViewerLoginInline() {
     m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
       var db = m.getFirestore(app);
       return m.getDoc(m.doc(db,'viewers',uc.user.uid)).then(function(snap) {
-        if (!snap.exists()) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
-        var data = snap.data();
+        if (!snapExists(snap)) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
+        var data = snapData(snap);
         if (data.role !== 'viewer') { throw new Error('Yeh admin account hai — Admin login use karo.'); }
         sessionStorage.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
         sessionStorage.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
@@ -6580,8 +6595,8 @@ function doViewerLogin() {
       // Fetch viewer permissions from Firestore
       var db = m.getFirestore(app);
       return m.getDoc(m.doc(db,'viewers',uc.user.uid)).then(function(snap) {
-        if (!snap.exists()) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
-        var data = snap.data();
+        if (!snapExists(snap)) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
+        var data = snapData(snap);
         if (data.role !== 'viewer') { throw new Error('Yeh admin account hai — Admin login use karo.'); }
         // Store permissions in sessionStorage
         sessionStorage.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
