@@ -5858,12 +5858,11 @@ var ADMIN_ROLE_KEY = 'cm_admin_role';   // localStorage: 'admin' or ''
 var ADMIN_EMAIL_KEY = 'cm_admin_email';
 
 function openAuthModal() {
-  closeCloudModal();
-  switchAuthTab('login');
-  document.getElementById('auth-modal').classList.add('show');
+  openCloudModal();
+  switchCloudTab('admin');
 }
 function closeAuthModal() {
-  document.getElementById('auth-modal').classList.remove('show');
+  closeCloudModal();
 }
 
 function switchAuthTab(tab) {
@@ -5930,15 +5929,20 @@ function doAdminLogin() {
             // Not subscribed or expired — show payment landing
             closeAuthModal();
             _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
-            // Show expiry message if was subscribed before
             if (data.subscribed && endDate <= now) {
               toast('⚠️ Subscription expired! Please renew to continue.', 'err');
             }
             openPayLanding(true);
           }
         }).catch(function(e) {
-          btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-          showAuthErr('login', 'Subscription check failed — Internet check karo aur retry karo');
+          // If Firestore read fails (permission/network), still let authenticated user in
+          // They can sort out subscription later — don't block a valid login
+          if (e.code === 'permission-denied' || e.code === 'unavailable' || !navigator.onLine) {
+            onAdminLoginSuccess(email, uc.user, app);
+          } else {
+            btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
+            showAuthErr('login', 'Subscription check failed — Internet check karo aur retry karo');
+          }
         });
       })
       .catch(function(e) {
@@ -5995,15 +5999,14 @@ function doAdminSignup() {
     var auth = m.getAuth(app);
     m.createUserWithEmailAndPassword(auth, email, pass)
       .then(function(uc) {
-        // Save name in Firestore (not subscribed yet)
+        _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
+        // Try to save name in Firestore — but proceed to payment even if it fails
         var db = m.getFirestore(app);
-        return m.setDoc(m.doc(db, 'admins', uc.user.uid), {
+        m.setDoc(m.doc(db, 'admins', uc.user.uid), {
           name: name, email: email, subscribed: false, createdAt: Date.now()
-        }).then(function() {
-          _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
-          closeAuthModal();
-          openPayLanding(true); // must subscribe after signup
-        });
+        }).catch(function(){/* rules may block before payment — ok */});
+        closeAuthModal();
+        openPayLanding(true);
       })
       .catch(function(e) {
         btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
