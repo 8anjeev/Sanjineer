@@ -6493,52 +6493,6 @@ function deleteViewerAccount(uid, idx) {
 
 // ── Viewer account management complete ──
 
-// Patch createViewerAccount's success to also write viewer summary
-(function() {
-  var _orig = window.createViewerAccount;
-  window.createViewerAccount = function() {
-    var email   = document.getElementById('vw-email').value.trim();
-    var pass    = document.getElementById('vw-pass').value;
-    var canPrint= document.getElementById('vw-can-print').checked;
-    var perms   = getSelectedPerms();
-    var errEl   = document.getElementById('vw-create-err');
-    var btn     = document.getElementById('create-viewer-btn');
-    errEl.style.display = 'none';
-    if (!email || !pass) { errEl.textContent='⚠️ Email aur password bharo'; errEl.style.display='block'; return; }
-    if (pass.length < 6) { errEl.textContent='⚠️ Password 6+ chars ka hona chahiye'; errEl.style.display='block'; return; }
-    var m = window._fbModules;
-    var cfg = getFbConfig();
-    if (!m || !cfg) { errEl.textContent='⚠️ Firebase connected nahi hai'; errEl.style.display='block'; return; }
-    btn.textContent='⏳ Creating…'; btn.disabled=true;
-    try {
-      var app;
-      try { app=m.initializeApp(cfg,'vc2-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vc2'); }
-      var auth = m.getAuth(app);
-      var db   = m.getFirestore(app);
-      var siteId = getSiteId();
-      m.createUserWithEmailAndPassword(auth, email, pass).then(function(uc) {
-        var vData = { uid: uc.user.uid, email:email, role:'viewer', permissions:perms, canPrint:canPrint, siteId:siteId, createdAt:Date.now() };
-        return m.setDoc(m.doc(db,'viewers',uc.user.uid), vData).then(function() {
-          // Also save summary to site viewers list doc
-          window._saveViewerToSiteDoc(db, siteId, m, vData);
-          toast('✅ Viewer created: '+email,'ok');
-          document.getElementById('vw-email').value='';
-          document.getElementById('vw-pass').value='';
-          btn.textContent='➕ Create Viewer Account'; btn.disabled=false;
-          loadViewerAccounts();
-        });
-      }).catch(function(e) {
-        btn.textContent='➕ Create Viewer Account'; btn.disabled=false;
-        var msg = e.code==='auth/email-already-in-use'?'Email already use mein hai':e.message;
-        errEl.textContent='⚠️ '+msg; errEl.style.display='block';
-      });
-    } catch(e) {
-      btn.textContent='➕ Create Viewer Account'; btn.disabled=false;
-      errEl.textContent='⚠️ '+e.message; errEl.style.display='block';
-    }
-  };
-})();
-
 // ================================================================
 // ── VIEWER LOGIN (from URL param ?vlogin=1) ────────────────────
 // ── Viewers login with email+pass, no payment needed ──────────
