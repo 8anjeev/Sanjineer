@@ -5480,6 +5480,10 @@ function initFirebase(cfg, cb) {
     m.signInAnonymously(_fbAuth).then(function(uc) {
       _fbUid = uc.user.uid;
       if (cb) cb(true);
+      // If admin is logged in, refresh viewer list now that auth is ready
+      if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') {
+        setTimeout(loadViewerAccountsInline, 300);
+      }
     }).catch(function(e) {
       console.error('Firebase auth error', e);
       if (cb) cb(false);
@@ -6436,18 +6440,30 @@ function loadViewerAccountsInline() {
   var m = window._fbModules;
   var cfg = getFbConfig();
   if (!m || !cfg) {
-    // Retry after Firebase loads
-    setTimeout(loadViewerAccountsInline, 1000);
+    setTimeout(loadViewerAccountsInline, 800);
     return;
   }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
   try {
-    // Use admin app (authenticated with email) for reading viewer list
-    var app = _adminApp || _fbApp;
-    if (!app) { try { app=m.initializeApp(cfg,'vi-inline'); } catch(e) {} }
-    if (!app) { listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Please login as admin first</p>'; return; }
-    var db=m.getFirestore(app);
-    var siteId=getSiteId();
+    // Prefer _fbDb (already initialised + anonymous auth complete) or _adminApp (email auth)
+    // If both are null or auth is still pending, retry shortly
+    var db = null;
+    if (_fbDb) {
+      // Check if anonymous auth completed
+      var auth = _fbAuth || (_fbApp ? m.getAuth(_fbApp) : null);
+      if (auth && auth.currentUser) {
+        db = _fbDb;
+      }
+    }
+    if (!db && _adminApp) {
+      db = m.getFirestore(_adminApp);
+    }
+    if (!db) {
+      // Auth still pending - retry in 800ms
+      setTimeout(loadViewerAccountsInline, 800);
+      return;
+    }
+    var siteId = getSiteId();
 
     function doFetchInline() {
       m.getDoc(m.doc(db,'sites',siteId+'_viewers')).then(function(snap) {
@@ -6491,7 +6507,13 @@ function loadViewerAccountsInline() {
           +'</div>';
       }).join('');
     }).catch(function(e) {
-      listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+e.message+'</p>';
+      // If permission denied, anonymous auth may not be done yet - retry once
+      if (e.code === 'permission-denied' || e.message.includes('permission')) {
+        listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Retrying…</p>';
+        setTimeout(loadViewerAccountsInline, 1500);
+      } else {
+        listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+e.message+'</p>';
+      }
     });
     }
     doFetchInline();
