@@ -179,8 +179,8 @@ body{margin:0}
       getDoc: function(ref) {
         return ref.get().then(function(snap) { return _normSnap(snap); });
       },
-      onSnapshot: function(ref, cb) {
-        return ref.onSnapshot(function(snap) { cb(_normSnap(snap)); });
+      onSnapshot: function(ref, cb, errCb) {
+        return ref.onSnapshot(function(snap) { cb(_normSnap(snap)); }, errCb || function(){});
       },
       collection: function(db, col) { return db.collection(col); },
       deleteDoc:  function(ref)     { return ref.delete(); },
