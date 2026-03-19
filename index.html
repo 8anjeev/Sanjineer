@@ -1956,6 +1956,7 @@ body{margin:0}
           <div style="display:flex;flex-direction:column;gap:5px;">
             <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#9729;&#65039;</span><p style="font-size:10px;color:#6ee7b7;">Cloud Backup &amp; Sync &mdash; <strong style="color:#fbbf24;">&#8377;30/month</strong></p></div>
             <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128101;</span><p style="font-size:10px;color:#6ee7b7;">Unlimited Viewer accounts &mdash; <strong style="color:#86efac;">Free</strong></p></div>
+            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);border-radius:8px;margin-top:1px;"><span style="font-size:11px;">🚧</span><p style="font-size:9px;color:#fbbf24;font-weight:700;">Viewer feature currently under progress</p></div>
             <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128242;</span><p style="font-size:10px;color:#6ee7b7;">Multi-device real-time sync</p></div>
             <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128274;</span><p style="font-size:10px;color:#6ee7b7;">Tab-level viewer permissions</p></div>
           </div>
@@ -2479,6 +2480,20 @@ function switchTab(name) {
   } catch(e) {
     console.error('switchTab render error [' + name + ']', e);
   }
+
+  // Re-apply viewer restrictions after every tab render
+  if (_IS_VIEWER) {
+    _disableViewerWrites();
+    var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+    if (canPrint) {
+      document.querySelectorAll('button').forEach(function(b) {
+        var t = b.textContent.trim();
+        if (t.includes('Print') || t.includes('Export') || t.includes('PDF')) {
+          b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
+        }
+      });
+    }
+  }
 }
 
 // ============================================================
@@ -2551,29 +2566,22 @@ function boot() {
     var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
     // Show viewer top bar
     if (!document.getElementById('viewer-top-bar')) {
-      document.body.insertAdjacentHTML('afterbegin',
-        '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-        +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+viewerEmail+'</span>'
-        +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
-        +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
-        +'</div>');
-      var main = document.getElementById('main-app');
-      if (main) main.style.marginTop = '32px';
+      _showViewerBar(viewerEmail);
     }
     // Apply permissions immediately (before data loads)
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
       btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
     });
+    if (perms.length > 0) { switchTab(perms[0]); }
     _disableViewerWrites();
-    if (!canPrint) {
+    if (canPrint) {
       document.querySelectorAll('button').forEach(function(b) {
         var t = b.textContent.trim();
-        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF')) {
-          b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
+        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
+          b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
         }
       });
     }
-    if (perms.length > 0) { switchTab(perms[0]); }
     // Load data (uses _fbApp via fallback in _viewerLoadData)
     setTimeout(function() { _viewerLoadData(viewerSite, ''); }, 1500);
     return;
@@ -4115,7 +4123,6 @@ opw(html);
 // ============================================================
 // PRINT: MONTHLY
 // ============================================================
-// ============================================================
 // PRINT: WORKER ATTENDANCE (date-wise for selected month)
 // ============================================================
 function printWorkerAttendance(){
@@ -4484,9 +4491,11 @@ function renderMachSessions(d){
 }
 
 function delMachSession(d,id){
-  var store=lmach();
-  if(store[d])store[d]=store[d].filter(function(s){return s.id!==id;});
-  smach(store);renderMachSessions(d);renderMachMonthly();toast('Deleted','ok');
+  askDel('Delete this machinery session?', function(){
+    var store=lmach();
+    if(store[d])store[d]=store[d].filter(function(s){return s.id!==id;});
+    smach(store);renderMachSessions(d);renderMachMonthly();toast('Deleted','ok');
+  });
 }
 
 function renderMachMonthly(){
@@ -4775,9 +4784,11 @@ function downloadDrawing(id,room){
 }
 
 function delDrawing(room,id){
-  var store=ldrw();
-  if(store[room])store[room]=store[room].filter(function(d){return d.id!==id;});
-  sdrw(store);buildRoomTabs();renderDrawings();toast('Deleted','ok');
+  askDel('Delete this drawing?', function(){
+    var store=ldrw();
+    if(store[room])store[room]=store[room].filter(function(d){return d.id!==id;});
+    sdrw(store);buildRoomTabs();renderDrawings();toast('Deleted','ok');
+  });
 }
 
 // ============================================================
@@ -4894,7 +4905,7 @@ function markMsDone(id){
   var ms=lms(),m=ms.find(function(x){return x.id===id;});
   if(m)m.status='✅ Completed';sms(ms);renderSchedule();toast('Marked complete!','ok');
 }
-function delMs(id){var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');}
+function delMs(id){askDel('Delete this milestone?',function(){var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');});}
 
 // ============================================================
 // PUNCH LIST
@@ -4950,7 +4961,7 @@ function renderPunchList(){
 }
 
 function updatePunchStatus(id,status){var list=lpl(),p=list.find(function(x){return x.id===id;});if(p)p.status=status;spl(list);renderPunchList();toast('Updated','ok');}
-function delPunch(id){var list=lpl().filter(function(p){return p.id!==id;});spl(list);renderPunchList();toast('Deleted','ok');}
+function delPunch(id){askDel('Delete this punch list item?',function(){var list=lpl().filter(function(p){return p.id!==id;});spl(list);renderPunchList();toast('Deleted','ok');});}
 
 // ============================================================
 // BILL
@@ -5239,8 +5250,28 @@ function _buildInvoiceHTML(inv){
 }
 
 function _printInvoiceHTML(inv){
-  var w=window.open('','_blank');
-  if(w){w.document.write(_buildInvoiceHTML(inv));w.document.close();}
+  var html = _buildInvoiceHTML(inv);
+  // Blob URL approach - works on iOS Safari where window.open gets blocked
+  try {
+    var blob = new Blob([html], {type: 'text/html'});
+    var url = URL.createObjectURL(blob);
+    var w = window.open(url, '_blank');
+    if (w) {
+      // Revoke blob URL after window opens
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+      return;
+    }
+  } catch(e) {}
+  // Fallback: write directly to new window
+  var w2 = window.open('', '_blank');
+  if (w2) { w2.document.write(html); w2.document.close(); return; }
+  // Last resort: replace current page temporarily (for strict popup blockers)
+  var printWin = document.createElement('iframe');
+  printWin.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:white;';
+  printWin.id = 'invoice-print-frame';
+  document.body.appendChild(printWin);
+  printWin.contentDocument.write(html.replace('window.close()', "document.getElementById('invoice-print-frame').remove()").replace("onclick=\"window.close()\"", "onclick=\"parent.document.getElementById('invoice-print-frame').remove()\""));
+  printWin.contentDocument.close();
 }
 
 function generateInvoice(){
@@ -5264,18 +5295,17 @@ function generateInvoice(){
   });
   var gst=parseFloat(document.getElementById('inv-gst').value)||0;
   var total=sub*(1+gst/100);
-  // Save to records
   var inv={id:'inv'+Date.now(),no:no,date:date,client:client,addr:addr,clientGst:clientGst,project:project,terms:terms,lines:lines,sub:sub,gst:gst,total:total,company:p.company||''};
-  var list=linvs();list.push(inv);sinvs(list);
-  // Print
+  // Print FIRST while still in gesture tick (before any async ops)
   _printInvoiceHTML(inv);
+  // Then save to records
+  var list=linvs();list.push(inv);sinvs(list);
   // Reset form
   ['inv-no','inv-client','inv-addr','inv-client-gst','inv-project','inv-terms'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('inv-gst').value='0';
   document.getElementById('inv-lines-body').innerHTML='<div class="inv-line grid grid-cols-12 gap-1 mb-1"><input type="text" placeholder="Item description" class="col-span-6 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc"><input type="number" placeholder="1" class="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" value="1" min="1" step="any" oninput="calcInvTotal()"><input type="number" placeholder="0" class="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-rate" step="any" oninput="calcInvTotal()"><button onclick="removeInvLine(this)" class="col-span-1 text-rose-400 font-bold text-sm">✕</button></div>';
   calcInvTotal();
   renderInvoiceRecords();
-  // Auto-increment invoice number
   var nextNo='INV-'+String(list.length+1).padStart(3,'0');
   var noEl=document.getElementById('inv-no');if(noEl)noEl.value=nextNo;
   toast('Invoice saved & printed!','ok');
@@ -5647,16 +5677,7 @@ function checkViewerMode() {
   _IS_VIEWER = true;
 
   // Add top banner
-  document.body.insertAdjacentHTML('afterbegin',
-    '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">' +
-    '<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ VIEWER — ' + viewSiteId + '</span>' +
-    '<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>' +
-    '<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>' +
-    '</div>');
-
-  // Push content down for banner
-  var main = document.getElementById('main-app');
-  if (main) main.style.marginTop = '32px';
+  _showViewerBar('Site: ' + viewSiteId);
 
   // Try to load Firebase data
   _viewerLoadData(viewSiteId, projId);
@@ -5707,40 +5728,58 @@ function _viewerLoadData(siteId, projId) {
   };
 
   function applyViewerData(d) {
-    if (d.db) { sd(d.db); AD = ld(); }
-    if (d.meta) sm(d.meta);
-    if (d.mats) smat(d.mats);
-    if (d.dept) sdept(d.dept);
-    if (d.prof) sprof(d.prof);
-    if (d.machinery) smach(d.machinery);
-    if (d.drawings) sdrw(d.drawings);
-    if (d.budget) sbgt(d.budget);
-    if (d.milestones) sms(d.milestones);
-    if (d.punchlist) spl(d.punchlist);
-    applyProfile();
-    updateDash();
-    _disableViewerWrites();
-    var rawPerms = sessionStorage.getItem('sj_viewer_perms');
-    if (rawPerms) {
-      try {
-        var perms = JSON.parse(rawPerms);
-        var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
-        document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
-          btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
-        });
-        if (!canPrint) {
-          document.querySelectorAll('button').forEach(function(b) {
-            var t = b.textContent.trim();
-            if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF')) {
-              b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
-            }
-          });
-        }
-        if (perms.length > 0) { switchTab(perms[0]); }
-      } catch(ex) {}
+    // Guard: check if snapshot has meaningful data
+    var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist);
+    if (!hasData) {
+      toast('No backup data found. Ask admin to run Backup Now.', 'err');
+      return;
     }
+
+    // 1. Store all cloud data into localStorage
+    if (d.db)         { sd(d.db); AD = ld(); }
+    if (d.meta)       sm(d.meta);
+    if (d.mats)       smat(d.mats);
+    if (d.dept)       sdept(d.dept);
+    if (d.prof)       sprof(d.prof);
+    if (d.machinery)  smach(d.machinery);
+    if (d.drawings)   sdrw(d.drawings);
+    if (d.budget)     sbgt(d.budget);
+    if (d.milestones) sms(d.milestones);
+    if (d.punchlist)  spl(d.punchlist);
+    applyProfile();
+
+    var rawPerms = sessionStorage.getItem('sj_viewer_perms');
+    var perms = [];
+    var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+    if (rawPerms) { try { perms = JSON.parse(rawPerms); } catch(ex) {} }
+
+    // 2. Hide non-permitted tab buttons
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
+      btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
+    });
+
+    // 3. Switch to first permitted tab — renders that tab's content fresh with new data
+    var firstTab = perms.length > 0 ? perms[0] : 'dashboard';
+    switchTab(firstTab);
+
+    // 4. Disable write controls on the freshly rendered DOM
+    _disableViewerWrites();
+
+    // 5. Re-enable print/export if viewer has print permission
+    if (canPrint) {
+      document.querySelectorAll('button').forEach(function(b) {
+        var t = b.textContent.trim();
+        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
+          b.disabled = false;
+          b.style.opacity = '';
+          b.style.cursor = '';
+        }
+      });
+    }
+
     var syncEl = document.getElementById('viewer-sync-time');
     if (syncEl) syncEl.textContent = 'Updated: ' + new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
+    toast('✅ Cloud data loaded', 'ok');
   }
 
   if (!window._fbModules) {
@@ -5774,21 +5813,28 @@ function _viewerLoadData(siteId, projId) {
 }
 
 function _disableViewerWrites() {
-  // Disable all action buttons except navigation
+  // Disable write-action buttons only (by text content)
+  var writeWords = ['Save','Add','Submit','Log','Delete','Remove','Upload','Generate','Backup','Restore','Deposit','Record','Mark','Connect','Pay','Activate','Create','Send','Issue'];
   document.querySelectorAll('button').forEach(function(b) {
     var txt = b.textContent.trim();
-    var writeWords = ['Save','Add','Submit','Log','Delete','Remove','Upload','Generate','Print','Export','Backup','Restore','Deposit','Record','Mark','Connect','Pay','Activate'];
     if (writeWords.some(function(w) { return txt.includes(w); })) {
       b.disabled = true;
-      b.style.opacity = '0.4';
+      b.style.opacity = '0.35';
       b.style.cursor = 'not-allowed';
     }
   });
-  // Disable all inputs
-  document.querySelectorAll('input,textarea,select').forEach(function(el) {
+  // Hide write-only inputs (those inside forms/add sections) but NOT filter selects
+  // Strategy: disable inputs that have placeholder suggesting data entry
+  // but leave month-selectors, date-pickers, and filter dropdowns functional
+  document.querySelectorAll('input[placeholder], textarea').forEach(function(el) {
+    var ph = (el.getAttribute('placeholder') || '').toLowerCase();
+    // Only disable inputs that are clearly for entering new data
     el.disabled = true;
-    el.style.background = '#f9fafb';
+    el.style.opacity = '0.5';
+    el.style.cursor = 'not-allowed';
   });
+  // DO NOT disable select elements - they are needed for tab navigation & filtering
+  // DO NOT disable date/month inputs used as filters
 }
 
 
@@ -6007,16 +6053,7 @@ function doSmartLogin() {
             var siteId = vData.siteId || getSiteId();
             if (siteId) {
               _viewerLoadData(siteId, cfg.projectId || '');
-              if (!document.getElementById('viewer-top-bar')) {
-                document.body.insertAdjacentHTML('afterbegin',
-                  '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-                  +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+'</span>'
-                  +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
-                  +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
-                  +'</div>');
-                var main = document.getElementById('main-app');
-                if (main) main.style.marginTop = '32px';
-              }
+              _showViewerBar(email);
             }
             toast('✅ Welcome, ' + email, 'ok');
           } else {
@@ -6158,7 +6195,9 @@ function onAdminLoginSuccess(email, user, app) {
       if (ok) {
         updateCloudBtn();
         startAutoSync();
-        // Auto-restore cloud data to local on login
+        // Immediate backup on login so viewer always has latest data
+        setTimeout(function() { cloudBackupNow(); }, 2000);
+        // Also restore cloud data to local on login
         var siteId = getSiteId();
         if (siteId && _fbDb) {
           window._fbModules.getDoc(window._fbModules.doc(_fbDb, 'sites', siteId)).then(function(snap) {
@@ -6306,24 +6345,6 @@ var _pendingAuthApp = null, _pendingAuthUser = null, _pendingAuthEmail = null;
 // ── VIEWER ACCOUNT MANAGEMENT ─────────────────────────────────
 // ================================================================
 
-var _TABS_LIST = [
-  {id:'dashboard',   label:'📊 Dashboard'},
-  {id:'daily',       label:'📋 Daily Report'},
-  {id:'departmental',label:'🏗️ Dept Work'},
-  {id:'attendance',  label:'📅 Attendance'},
-  {id:'machinery',   label:'⚙️ Machinery'},
-  {id:'expenses',    label:'💰 Expenses'},
-  {id:'materials',   label:'🧱 Materials'},
-  {id:'tools',       label:'🔧 Tools'},
-  {id:'drawings',    label:'📐 Drawings'},
-  {id:'rentals',     label:'📦 Rentals'},
-  {id:'contractors', label:'👥 Teams'},
-  {id:'budget',      label:'📊 Budget'},
-  {id:'schedule',    label:'📅 Schedule'},
-  {id:'punchlist',   label:'📋 Punch List'},
-  {id:'bill',        label:'🧾 Bill'}
-];
-
 // Toggle permission chip
 (function() {
   document.addEventListener('click', function(e) {
@@ -6444,7 +6465,7 @@ function loadViewerAccountsInline() {
         }).join('');
         var editChips = allTabs.map(function(tab){
           var isOn = perms.indexOf(tab)!==-1;
-          return '<span onclick="toggleInlineChip(this)" data-tab="'+tab+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">'+(te[tab]||'')+' '+tab+'</span>';
+          return '<span onclick="toggleInlineChip(this)" data-tab="'+tab+'" data-on="'+(isOn?'1':'0')+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">'+(te[tab]||'')+' '+tab+'</span>';
         }).join('');
         return '<div id="inline-viewer-card-'+i+'" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.6rem;margin-bottom:.5rem;">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">'
@@ -6480,10 +6501,12 @@ function loadViewerAccountsInline() {
 }
 
 function toggleInlineChip(el) {
-  var isOn = el.style.background.indexOf('99,102,241')!==-1;
-  el.style.background = isOn?'rgba(255,255,255,0.05)':'rgba(99,102,241,0.3)';
-  el.style.borderColor = isOn?'rgba(255,255,255,0.15)':'#818cf8';
-  el.style.color = isOn?'rgba(255,255,255,0.4)':'#c7d2fe';
+  var isOn = el.getAttribute('data-on') === '1';
+  isOn = !isOn;
+  el.setAttribute('data-on', isOn ? '1' : '0');
+  el.style.background = isOn ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)';
+  el.style.borderColor = isOn ? '#818cf8' : 'rgba(255,255,255,0.15)';
+  el.style.color = isOn ? '#c7d2fe' : 'rgba(255,255,255,0.4)';
 }
 
 function toggleInlineEdit(btn, idx) {
@@ -6501,7 +6524,7 @@ function saveInlineViewerPerms(idx, uid) {
   if (!chipsEl) return;
   var newPerms=[];
   chipsEl.querySelectorAll('span[data-tab]').forEach(function(c){
-    if(c.style.background.indexOf('99,102,241')!==-1) newPerms.push(c.getAttribute('data-tab'));
+    if(c.getAttribute('data-on') === '1') newPerms.push(c.getAttribute('data-tab'));
   });
   var canPrint = document.getElementById('inline-print-'+idx) ? document.getElementById('inline-print-'+idx).checked : false;
   var m=window._fbModules, cfg=getFbConfig();
@@ -6769,14 +6792,7 @@ function doViewerLoginInline() {
         if (siteId) {
           _viewerLoadData(siteId, cfg.projectId || '');
           if (!document.getElementById('viewer-top-bar')) {
-            document.body.insertAdjacentHTML('afterbegin',
-              '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-              +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+'</span>'
-              +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
-              +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
-              +'</div>');
-            var main = document.getElementById('main-app');
-            if (main) main.style.marginTop = '32px';
+            _showViewerBar(email);
           }
         }
         toast('✅ Welcome, '+email,'ok');
@@ -6831,14 +6847,7 @@ function doViewerLogin() {
         if (siteId) {
           _viewerLoadData(siteId, cfg.projectId || params.get('pid') || '');
           if (!document.getElementById('viewer-top-bar')) {
-            document.body.insertAdjacentHTML('afterbegin',
-              '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-              +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+'</span>'
-              +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
-              +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
-              +'</div>');
-            var main = document.getElementById('main-app');
-            if (main) main.style.marginTop = '32px';
+            _showViewerBar(email);
           }
         }
         toast('✅ Welcome, '+email,'ok');
@@ -6856,28 +6865,40 @@ function doViewerLogin() {
   }
 }
 
+// ── Viewer top bar helper ────────────────────────────────────
+function _showViewerBar(email) {
+  if (document.getElementById('viewer-top-bar')) return;
+  document.body.insertAdjacentHTML('afterbegin',
+    '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
+    +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+'</span>'
+    +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
+    +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
+    +'</div>');
+  var main = document.getElementById('main-app');
+  if (main) main.style.marginTop = '32px';
+}
+
 function _applyViewerPermissions(perms, canPrint, siteId) {
-  // Hide all tab buttons not in perms using data-tab attribute (reliable selector)
+  // Hide all tab buttons not in perms using data-tab attribute
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     var tabId = btn.getAttribute('data-tab');
     if (perms.indexOf(tabId) === -1) {
       btn.style.display = 'none';
     }
   });
-  // Disable write actions
+  // Disable all write actions
   _disableViewerWrites();
-  // Disable print if not allowed
-  if (!canPrint) {
+  // Re-enable print/export buttons if viewer has print permission
+  if (canPrint) {
     document.querySelectorAll('button').forEach(function(b) {
-      var txt = b.textContent.trim();
-      if (txt.includes('Print') || txt.includes('Export') || txt.includes('Save PDF')) {
-        b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
+      var t = b.textContent.trim();
+      if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
+        b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
       }
     });
   }
-  // Navigate to first permitted tab (don't leave viewer on a tab they can't see)
+  // Navigate to first permitted tab
   if (perms.length > 0) {
-    // Wait for data to load first, then switch
     setTimeout(function() { switchTab(perms[0]); }, 800);
   }
 }
@@ -6897,34 +6918,6 @@ function closePayLanding() {
 }
 
 // Open viewer login as inline modal (no URL param needed)
-function openViewerLoginModal() {
-  closeCloudModal();
-  // Reuse the viewer login overlay if not already present
-  if (!document.getElementById('viewer-login-overlay')) {
-    document.body.insertAdjacentHTML('beforeend',
-      '<div id="viewer-login-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">'
-      +'<div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,0.18);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:360px">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">'
-      +'<div style="text-align:left">'
-      +'<p style="font-size:18px;font-weight:900;color:white;line-height:1">👁️ Viewer Login</p>'
-      +'<p style="font-size:11px;color:#a78bfa;margin-top:4px">Site data — read only · No subscription needed</p>'
-      +'</div>'
-      +'<button onclick="document.getElementById(\'viewer-login-overlay\').remove()" style="background:rgba(255,255,255,0.1);border:none;color:rgba(255,255,255,0.6);font-size:20px;width:32px;height:32px;border-radius:8px;cursor:pointer;line-height:1">✕</button>'
-      +'</div>'
-      +'<label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Email</label>'
-      +'<input id="vl-email" type="email" placeholder="viewer@example.com" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px">'
-      +'<label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Password</label>'
-      +'<input id="vl-pass" type="password" placeholder="Your password" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:12px">'
-      +'<button onclick="doViewerLogin()" id="vl-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.95rem;cursor:pointer">👁️ View Site Data</button>'
-      +'<p id="vl-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.5rem;display:none"></p>'
-      +'<p style="font-size:10px;color:rgba(255,255,255,0.35);text-align:center;margin-top:.75rem">Access granted by your site admin · Free of cost</p>'
-      +'</div></div>'
-    );
-  } else {
-    document.getElementById('viewer-login-overlay').style.display = 'flex';
-  }
-}
-
 function startSubscriptionPayment() {
   if (typeof Razorpay === 'undefined') {
     toast('Payment gateway load ho raha hai…', 'ok');
