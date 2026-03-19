@@ -1816,9 +1816,8 @@ body{margin:0}
 <div id="cloud-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
   <div style="background:linear-gradient(160deg,#0f0c29,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.14);border-radius:1.75rem;width:100%;max-width:420px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.75);">
 
-    <!-- FIXED TOP: header + tabs never scroll -->
+    <!-- FIXED TOP -->
     <div style="flex-shrink:0;">
-
       <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.1rem .75rem;">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -1850,44 +1849,43 @@ body{margin:0}
         <p id="cloud-sub-expiry" style="font-size:9px;color:#86efac;font-weight:600;">&mdash;</p>
       </div>
 
-      <!-- TAB CHIPS — stable at top, hidden when admin logged in -->
+      <!-- TAB CHIPS: Login & Create only -->
       <div id="cloud-tab-switcher" style="display:flex;gap:6px;padding:0 1.1rem .75rem;">
-        <button id="ctab-admin-btn" onclick="switchCloudTab('admin')" style="flex:1;padding:10px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.45);">&#128273; Admin</button>
-        <button id="ctab-create-btn" onclick="switchCloudTab('create')" style="flex:1;padding:10px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">&#10024; Create</button>
-        <button id="ctab-viewer-btn" onclick="switchCloudTab('viewer')" style="flex:1;padding:10px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">&#128065;&#65039; Viewer</button>
+        <button id="ctab-admin-btn" onclick="switchCloudTab('admin')" style="flex:1;padding:10px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 4px 14px rgba(79,70,229,.45);">&#128273; Login</button>
+        <button id="ctab-create-btn" onclick="switchCloudTab('create')" style="flex:1;padding:10px 4px;font-size:11px;font-weight:800;border:none;border-radius:12px;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">&#10024; Create Account</button>
       </div>
+      <!-- Hidden viewer tab div kept for JS compatibility -->
+      <div id="ctab-viewer-btn" style="display:none;"></div>
       <div style="height:1px;background:rgba(255,255,255,.07);margin:0 1.1rem;"></div>
     </div>
 
     <!-- SCROLLABLE BODY -->
     <div style="overflow-y:auto;flex:1;padding:1rem 1.1rem 1.4rem;">
 
-      <!-- ADMIN TAB -->
+      <!-- LOGIN TAB (Admin + Viewer smart detect) -->
       <div id="ctab-admin" style="display:block;">
-
-        <!-- PRE-LOGIN: form at top, features below -->
         <div id="ctab-admin-prelogin">
           <div style="background:rgba(79,70,229,.1);border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:.9rem;margin-bottom:.9rem;">
-            <p style="font-size:13px;font-weight:900;color:#c7d2fe;margin-bottom:.75rem;">&#128273; Admin Login</p>
+            <p style="font-size:13px;font-weight:900;color:#c7d2fe;margin-bottom:.4rem;">&#128273; Login</p>
+            <p style="font-size:10px;color:#a78bfa;margin-bottom:.75rem;opacity:.8;">Admin or Viewer &mdash; we detect automatically</p>
             <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Email</label>
-            <input id="auth-login-email" type="email" class="auth-input" placeholder="admin@example.com">
+            <input id="auth-login-email" type="email" class="auth-input" placeholder="your@email.com">
             <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Password</label>
             <input id="auth-login-pass" type="password" class="auth-input" placeholder="Your password">
-            <button onclick="doAdminLogin()" id="auth-login-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(79,70,229,.5);">&#128273; Login as Admin</button>
+            <button onclick="doSmartLogin()" id="auth-login-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;margin-top:4px;box-shadow:0 4px 16px rgba(79,70,229,.5);">&#128273; Login</button>
             <p id="auth-login-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none;"></p>
           </div>
           <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.75rem .9rem;">
-            <p style="font-size:10px;font-weight:700;color:#7c3aed;margin-bottom:.5rem;">&#8505;&#65039; About Admin Account</p>
+            <p style="font-size:10px;font-weight:700;color:#7c3aed;margin-bottom:.5rem;">&#8505;&#65039; How login works</p>
             <div style="display:flex;flex-direction:column;gap:5px;">
-              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#9729;&#65039;</span><p style="font-size:10px;color:#a78bfa;">Cloud Backup &amp; Sync &mdash; <strong style="color:#fbbf24;">&#8377;30/month</strong></p></div>
-              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128101;</span><p style="font-size:10px;color:#a78bfa;">Unlimited Viewer accounts &mdash; <strong style="color:#86efac;">Free</strong></p></div>
-              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128242;</span><p style="font-size:10px;color:#a78bfa;">Multi-device real-time sync</p></div>
-              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128274;</span><p style="font-size:10px;color:#a78bfa;">Tab-level viewer permissions</p></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128273;</span><p style="font-size:10px;color:#a78bfa;">Admin ID &rarr; full access, backup, manage viewers</p></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128065;&#65039;</span><p style="font-size:10px;color:#a78bfa;">Viewer ID &rarr; read-only, permitted tabs only</p></div>
+              <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128272;</span><p style="font-size:10px;color:#a78bfa;">Viewer credentials given by site admin</p></div>
             </div>
           </div>
         </div>
 
-        <!-- POST-LOGIN: controls + viewer list -->
+        <!-- POST-LOGIN admin panel (unchanged) -->
         <div id="ctab-admin-postlogin" style="display:none;">
           <div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(16,185,129,.07));border:1px solid rgba(34,197,94,.22);border-radius:12px;padding:.75rem .9rem;margin-bottom:.75rem;">
             <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -1932,6 +1930,10 @@ body{margin:0}
               <p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px;">Loading&hellip;</p>
             </div>
           </div>
+          <!-- Unsubscribe at very bottom -->
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);">
+            <button onclick="doUnsubscribe()" style="width:100%;padding:.6rem;background:transparent;border:1px solid rgba(239,68,68,.3);color:rgba(239,68,68,.6);border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;">Unsubscribe &amp; Delete Account</button>
+          </div>
         </div>
       </div>
 
@@ -1960,31 +1962,13 @@ body{margin:0}
         </div>
       </div>
 
-      <!-- VIEWER TAB -->
-      <div id="ctab-viewer" style="display:none;">
-        <div style="background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.25);border-radius:14px;padding:.9rem;margin-bottom:.9rem;">
-          <p style="font-size:13px;font-weight:900;color:#fbbf24;margin-bottom:.75rem;">&#128065;&#65039; Viewer Login</p>
-          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Email</label>
-          <input id="vl-inline-email" type="email" class="auth-input" placeholder="viewer@example.com">
-          <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Password</label>
-          <input id="vl-inline-pass" type="password" class="auth-input" placeholder="Your password">
-          <button onclick="doViewerLoginInline()" id="vl-inline-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;margin-top:4px;box-shadow:0 4px 14px rgba(217,119,6,.4);">&#128065;&#65039; View Site Data</button>
-          <p id="vl-inline-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none;"></p>
-        </div>
-        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:.75rem .9rem;">
-          <p style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:.5rem;">&#8505;&#65039; About Viewer Access</p>
-          <div style="display:flex;flex-direction:column;gap:5px;">
-            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128065;&#65039;</span><p style="font-size:10px;color:#c4b5fd;">Read-only &mdash; cannot edit any data</p></div>
-            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#127358;</span><p style="font-size:10px;color:#c4b5fd;">No subscription needed &mdash; completely free</p></div>
-            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128272;</span><p style="font-size:10px;color:#c4b5fd;">Login credentials given by your admin</p></div>
-            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">&#128202;</span><p style="font-size:10px;color:#c4b5fd;">See only tabs your admin permitted</p></div>
-          </div>
-        </div>
-      </div>
+      <!-- Hidden viewer tab for JS compat -->
+      <div id="ctab-viewer" style="display:none;"></div>
 
     </div>
   </div>
 </div>
+
 
 <!-- ====== VIEWER LINK MODAL ====== -->
 <div id="viewer-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none">
@@ -2556,8 +2540,45 @@ function boot() {
     safeLS.setItem(CLOUD_KEY, '1');
   }
   autoInitCloud();
-  // Don't switchTab here if viewer is already logged in (permissions would be overridden)
-  if (!sessionStorage.getItem('sj_viewer_email')) {
+  // Restore viewer session if they refreshed the page
+  var viewerEmail = sessionStorage.getItem('sj_viewer_email');
+  var viewerPerms = sessionStorage.getItem('sj_viewer_perms');
+  var viewerSite  = sessionStorage.getItem('sj_viewer_site');
+  if (viewerEmail && viewerPerms && viewerSite) {
+    _IS_VIEWER = true;
+    var perms = [];
+    try { perms = JSON.parse(viewerPerms); } catch(ex) {}
+    var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+    // Show viewer top bar
+    if (!document.getElementById('viewer-top-bar')) {
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
+        +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+viewerEmail+'</span>'
+        +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
+        +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
+        +'</div>');
+      var main = document.getElementById('main-app');
+      if (main) main.style.marginTop = '32px';
+    }
+    // Apply permissions immediately (before data loads)
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
+      btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
+    });
+    _disableViewerWrites();
+    if (!canPrint) {
+      document.querySelectorAll('button').forEach(function(b) {
+        var t = b.textContent.trim();
+        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF')) {
+          b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
+        }
+      });
+    }
+    if (perms.length > 0) { switchTab(perms[0]); }
+    // Load data (uses _fbApp via fallback in _viewerLoadData)
+    setTimeout(function() { _viewerLoadData(viewerSite, ''); }, 1500);
+    return;
+  }
+  if (!viewerEmail) {
     switchTab('dashboard');
   }
 }
@@ -5672,7 +5693,7 @@ function _viewerLogout() {
   });
   toast('Viewer logged out', 'ok');
   openCloudModal();
-  switchCloudTab('viewer');
+  switchCloudTab('admin');
 }
 
 function _viewerLoadData(siteId, projId) {
@@ -5730,14 +5751,14 @@ function _viewerLoadData(siteId, projId) {
   try {
     var m = window._fbModules;
     // Use stored authenticated viewer app — NO anonymous auth needed at all
-    var app = _viewerApp;
+    // Use viewer's authenticated app if available, otherwise fall back to _fbApp
+    // _fbApp has anonymous auth which satisfies rules: allow read if auth != null
+    var app = _viewerApp || _fbApp;
     if (!app) {
       try { app = m.initializeApp(cfg, 'viewer-data'); }
       catch(e) { app = m.initializeApp(cfg, 'viewer-data-' + Date.now()); }
-      _viewerApp = app;
     }
     var db = m.getFirestore(app);
-    // Viewer signed in with email/pass — read directly using their session
     m.onSnapshot(m.doc(db, 'sites', siteId), function(snap) {
       if (snapExists(snap)) {
         applyViewerData(snapData(snap));
@@ -5915,92 +5936,117 @@ function switchAuthTab(tab) {
 }
 
 // ── Admin Login ─────────────────────────────────────────────────
-function doAdminLogin() {
+// ── Smart Login — detects admin vs viewer automatically ──────────
+function doSmartLogin() {
   var email = document.getElementById('auth-login-email').value.trim();
   var pass  = document.getElementById('auth-login-pass').value;
   var errEl = document.getElementById('auth-login-err');
   var btn   = document.getElementById('auth-login-btn');
   errEl.style.display = 'none';
-  if (!email || !pass) { showAuthErr('login','Email aur password dono bharo'); return; }
+  if (!email || !pass) { errEl.textContent = '⚠️ Email aur password dono bharo'; errEl.style.display = 'block'; return; }
 
-  // If Firebase modules not yet loaded, wait and retry (module script is async)
   if (!window._fbModules || !window.firebase) {
     btn.textContent = '⏳ Loading…'; btn.disabled = true;
     var tries = 0;
     var wait = setInterval(function() {
       tries++;
-      if (window._fbModules && window.firebase) {
-        clearInterval(wait);
-        btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-        doAdminLogin();
-      } else if (tries > 20) {
-        clearInterval(wait);
-        btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-        showAuthErr('login', 'Firebase load nahi hua — internet check karo aur reload karo');
-      }
+      if (window._fbModules && window.firebase) { clearInterval(wait); btn.textContent = '🔑 Login'; btn.disabled = false; doSmartLogin(); }
+      else if (tries > 20) { clearInterval(wait); btn.textContent = '🔑 Login'; btn.disabled = false; errEl.textContent = '⚠️ Firebase load nahi hua — reload karo'; errEl.style.display = 'block'; }
     }, 300);
     return;
   }
+
   var m = window._fbModules;
+  var cfg = getFbConfig();
+  if (!cfg) { errEl.textContent = '⚠️ Firebase config missing'; errEl.style.display = 'block'; return; }
 
   btn.textContent = '⏳ Logging in…'; btn.disabled = true;
 
-  var cfg = getFbConfig();
-  if (!cfg) { showAuthErr('login','Firebase config missing — Cloud Setup pehle karo'); btn.textContent='🔑 Login as Admin'; btn.disabled=false; return; }
-
   try {
     var app;
-    try { app = m.initializeApp(cfg, 'admin-auth-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'admin-auth'); }
+    try { app = m.initializeApp(cfg, 'smart-login-' + Date.now()); }
+    catch(e) { app = m.initializeApp(cfg, 'smart-login'); }
     var auth = m.getAuth(app);
-    m.signInWithEmailAndPassword(auth, email, pass)
-      .then(function(uc) {
-        _adminUser = uc.user;
-        safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
-        safeLS.setItem(ADMIN_EMAIL_KEY, email);
-        // Check subscription in Firestore
-        var db = m.getFirestore(app);
-        return m.getDoc(m.doc(db, 'admins', uc.user.uid)).then(function(snap) {
-          var data = snapExists(snap) ? snapData(snap) : {};
+    var db   = m.getFirestore(app);
+
+    m.signInWithEmailAndPassword(auth, email, pass).then(function(uc) {
+      // Check admins collection first
+      return m.getDoc(m.doc(db, 'admins', uc.user.uid)).then(function(adminSnap) {
+        if (snapExists(adminSnap)) {
+          // ── ADMIN LOGIN ──
+          var data = snapData(adminSnap);
           var now = Date.now();
           var endDate = data.subscriptionEndDate || 0;
           var isActive = data.subscribed && endDate > now;
+          safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
+          safeLS.setItem(ADMIN_EMAIL_KEY, email);
           if (isActive) {
             onAdminLoginSuccess(email, uc.user, app);
           } else {
-            // Not subscribed or expired — show payment landing
             closeAuthModal();
             _pendingAuthApp = app; _pendingAuthUser = uc.user; _pendingAuthEmail = email;
-            if (data.subscribed && endDate <= now) {
-              toast('⚠️ Subscription expired! Please renew to continue.', 'err');
-            }
+            if (data.subscribed && endDate <= now) toast('⚠️ Subscription expired! Renew to continue.', 'err');
             openPayLanding(true);
           }
-        }).catch(function(e) {
-          // If Firestore read fails (permission/network), still let authenticated user in
-          // They can sort out subscription later — don't block a valid login
-          if (e.code === 'permission-denied' || e.code === 'unavailable' || !navigator.onLine) {
-            onAdminLoginSuccess(email, uc.user, app);
+          return;
+        }
+        // Check viewers collection
+        return m.getDoc(m.doc(db, 'viewers', uc.user.uid)).then(function(viewerSnap) {
+          if (snapExists(viewerSnap)) {
+            // ── VIEWER LOGIN ──
+            var vData = snapData(viewerSnap);
+            if (vData.role !== 'viewer') { throw new Error('Account type unrecognised.'); }
+            _viewerApp = app;
+            sessionStorage.setItem('sj_viewer_perms', JSON.stringify(vData.permissions || []));
+            sessionStorage.setItem('sj_viewer_print', vData.canPrint ? '1' : '0');
+            sessionStorage.setItem('sj_viewer_site',  vData.siteId || '');
+            sessionStorage.setItem('sj_viewer_email', email);
+            closeAuthModal();
+            _IS_VIEWER = true;
+            _applyViewerPermissions(vData.permissions || [], vData.canPrint, vData.siteId);
+            var siteId = vData.siteId || getSiteId();
+            if (siteId) {
+              _viewerLoadData(siteId, cfg.projectId || '');
+              if (!document.getElementById('viewer-top-bar')) {
+                document.body.insertAdjacentHTML('afterbegin',
+                  '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
+                  +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+'</span>'
+                  +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">🔄</button>'
+                  +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;cursor:pointer;">Logout</button>'
+                  +'</div>');
+                var main = document.getElementById('main-app');
+                if (main) main.style.marginTop = '32px';
+              }
+            }
+            toast('✅ Welcome, ' + email, 'ok');
           } else {
-            btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-            showAuthErr('login', 'Subscription check failed — Internet check karo aur retry karo');
+            throw new Error('Account not found. Use correct email or contact admin.');
           }
         });
-      })
-      .catch(function(e) {
-        btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-        var msg = e.code === 'auth/wrong-password' ? 'Galat password' :
-                  e.code === 'auth/user-not-found' ? 'Email registered nahi hai' :
-                  e.code === 'auth/invalid-email'  ? 'Valid email enter karo' :
-                  e.code === 'auth/invalid-credential' ? 'Galat email ya password' : e.message;
-        showAuthErr('login', msg);
+      }).catch(function(e) {
+        // Firestore permission error — still let admin through (admin check already passed in auth)
+        if (e.code === 'permission-denied') {
+          onAdminLoginSuccess(email, uc.user, app);
+        } else {
+          btn.textContent = '🔑 Login'; btn.disabled = false;
+          errEl.textContent = '⚠️ ' + (e.message || 'Login failed'); errEl.style.display = 'block';
+        }
       });
+    }).catch(function(e) {
+      btn.textContent = '🔑 Login'; btn.disabled = false;
+      var msg = e.code === 'auth/wrong-password' ? 'Galat password' :
+                e.code === 'auth/user-not-found' ? 'Email registered nahi hai' :
+                e.code === 'auth/invalid-email'  ? 'Valid email enter karo' :
+                e.code === 'auth/invalid-credential' ? 'Galat email ya password' : e.message;
+      errEl.textContent = '⚠️ ' + msg; errEl.style.display = 'block';
+    });
   } catch(e) {
-    btn.textContent = '🔑 Login as Admin'; btn.disabled = false;
-    showAuthErr('login', e.message);
+    btn.textContent = '🔑 Login'; btn.disabled = false;
+    errEl.textContent = '⚠️ ' + e.message; errEl.style.display = 'block';
   }
 }
 
+function doAdminLogin() { doSmartLogin(); } // alias for backward compat
 // ── Admin Signup ────────────────────────────────────────────────
 function doAdminSignup() {
   var name  = document.getElementById('auth-signup-name').value.trim();
@@ -6090,7 +6136,7 @@ function onAdminLoginSuccess(email, user, app) {
           var mm = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
           var yy = d.getFullYear();
           expiryEl.textContent = '✅ Valid till ' + dd + ' ' + mm + ' ' + yy;
-          // Warn if expiring in 5 days
+          expiryEl.style.color = '#86efac';
           if (endDate - Date.now() < 5 * 24 * 60 * 60 * 1000) {
             expiryEl.style.color = '#fbbf24';
             expiryEl.textContent = '⚠️ Expires ' + dd + ' ' + mm + ' ' + yy + ' — Renew soon!';
@@ -6100,15 +6146,111 @@ function onAdminLoginSuccess(email, user, app) {
       }
     }).catch(function(){});
   } catch(e) {}
-  toast('✅ Login successful! Welcome, Admin', 'ok');
+  toast('✅ Welcome Admin! Fetching cloud data…', 'ok');
   // Load viewer list in cloud modal inline panel
   loadViewerAccountsInline();
-  // Make sure cloud is activated & syncing
-  if (!isCloudActivated()) {
-    safeLS.setItem(CLOUD_KEY, '1');
+  // Activate cloud and trigger full sync + fetch
+  if (!isCloudActivated()) safeLS.setItem(CLOUD_KEY, '1');
+  // Init Firebase with stored config and fetch latest data
+  var cfg = getFbConfig();
+  if (cfg && getSiteId()) {
+    initFirebase(cfg, function(ok) {
+      if (ok) {
+        updateCloudBtn();
+        startAutoSync();
+        // Auto-restore cloud data to local on login
+        var siteId = getSiteId();
+        if (siteId && _fbDb) {
+          window._fbModules.getDoc(window._fbModules.doc(_fbDb, 'sites', siteId)).then(function(snap) {
+            if (snapExists(snap)) {
+              var d = snapData(snap);
+              if (d.db) { sd(d.db); AD = ld(); }
+              if (d.meta) sm(d.meta);
+              if (d.mats) smat(d.mats);
+              if (d.dept) sdept(d.dept);
+              if (d.prof) sprof(d.prof);
+              if (d.machinery) smach(d.machinery);
+              if (d.drawings) sdrw(d.drawings);
+              if (d.budget) sbgt(d.budget);
+              if (d.milestones) sms(d.milestones);
+              if (d.punchlist) spl(d.punchlist);
+              applyProfile();
+              updateDash();
+              toast('☁️ Cloud data loaded!', 'ok');
+            }
+          }).catch(function(){});
+        }
+      }
+    });
   }
   openCloudModal();
   updateCloudBtn();
+}
+
+function doUnsubscribe() {
+  if (!_adminUser || !_adminApp) {
+    toast('Login required to unsubscribe', 'err'); return;
+  }
+  if (!confirm('⚠️ Unsubscribe?\n\nYour data will be saved to local storage first.\nCloud sync will stop. Firebase account will be deleted.\n\nThis cannot be undone.')) return;
+
+  var m = window._fbModules;
+  var db = m.getFirestore(_adminApp);
+  var siteId = getSiteId();
+
+  toast('⏳ Saving data locally…', 'ok');
+
+  // Step 1: pull latest cloud data to local storage
+  var fetchProm = (siteId && _fbDb) ?
+    m.getDoc(m.doc(_fbDb, 'sites', siteId)).then(function(snap) {
+      if (snapExists(snap)) {
+        var d = snapData(snap);
+        if (d.db) sd(d.db);
+        if (d.meta) sm(d.meta);
+        if (d.mats) smat(d.mats);
+        if (d.dept) sdept(d.dept);
+        if (d.prof) sprof(d.prof);
+        if (d.machinery) smach(d.machinery);
+        if (d.drawings) sdrw(d.drawings);
+        if (d.budget) sbgt(d.budget);
+        if (d.milestones) sms(d.milestones);
+        if (d.punchlist) spl(d.punchlist);
+      }
+    }).catch(function(){}) : Promise.resolve();
+
+  fetchProm.then(function() {
+    // Step 2: mark as unsubscribed in Firestore (won't fail the flow)
+    m.setDoc(m.doc(db, 'admins', _adminUser.uid),
+      { subscribed: false, unsubscribedAt: Date.now() },
+      { merge: true }
+    ).catch(function(){});
+
+    // Step 3: delete Firebase Auth account
+    return _adminUser.delete();
+  }).then(function() {
+    // Step 4: clear all cloud keys from localStorage
+    safeLS.removeItem(ADMIN_ROLE_KEY);
+    safeLS.removeItem(ADMIN_EMAIL_KEY);
+    safeLS.removeItem('cm_sub_end');
+    safeLS.removeItem('cm_rzp_payment_id');
+    safeLS.removeItem(CLOUD_KEY);
+    // Keep CLOUD_FB_CFG and CLOUD_SITE_ID so data remains linked
+    _adminUser = null; _adminApp = null; _fbApp = null; _fbDb = null; _fbAuth = null;
+    AD = ld(); // refresh from local storage
+    updateDash();
+    updateCloudBtn();
+    closeCloudModal();
+    toast('✅ Unsubscribed. Data saved locally. Account deleted.', 'ok');
+  }).catch(function(e) {
+    // If delete fails (requires recent login), still clear local keys
+    safeLS.removeItem(ADMIN_ROLE_KEY);
+    safeLS.removeItem(ADMIN_EMAIL_KEY);
+    safeLS.removeItem('cm_sub_end');
+    safeLS.removeItem(CLOUD_KEY);
+    _adminUser = null; _adminApp = null;
+    updateCloudBtn();
+    closeCloudModal();
+    toast('Data saved locally. Account removal: ' + e.message, 'ok');
+  });
 }
 
 function doAdminLogout() {
@@ -6279,10 +6421,11 @@ function loadViewerAccountsInline() {
   }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
   try {
-    var app;
-    try { app=m.initializeApp(cfg,'vi-inline-'+Date.now()); } catch(e) { app=m.initializeApp(cfg,'vi-inline'); }
+    // Use admin app (authenticated with email) for reading viewer list
+    var app = _adminApp || _fbApp;
+    if (!app) { try { app=m.initializeApp(cfg,'vi-inline'); } catch(e) {} }
+    if (!app) { listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Please login as admin first</p>'; return; }
     var db=m.getFirestore(app);
-    var auth=m.getAuth(app);
     var siteId=getSiteId();
 
     function doFetchInline() {
@@ -6330,10 +6473,7 @@ function loadViewerAccountsInline() {
       listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+e.message+'</p>';
     });
     }
-    if (auth.currentUser) { doFetchInline(); }
-    else { m.signInAnonymously(auth).then(doFetchInline).catch(function(e) {
-      listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Auth failed: '+e.message+'</p>';
-    }); }
+    doFetchInline();
   } catch(e) {
     listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">'+e.message+'</p>';
   }
@@ -6367,8 +6507,9 @@ function saveInlineViewerPerms(idx, uid) {
   var m=window._fbModules, cfg=getFbConfig();
   if(!m||!cfg){toast('Firebase error','err');return;}
   try {
-    var app;
-    try{app=m.initializeApp(cfg,'vi-save-'+Date.now());}catch(e){app=m.initializeApp(cfg,'vi-save');}
+    // Use admin app for saving — avoids creating unauthenticated new apps
+    var app = _adminApp || _fbApp;
+    if (!app) { try{app=m.initializeApp(cfg,'vi-save-'+Date.now());}catch(e){app=m.initializeApp(cfg,'vi-save');} }
     var db=m.getFirestore(app), siteId=getSiteId();
     m.setDoc(m.doc(db,'viewers',uid),{permissions:newPerms,canPrint:canPrint},{merge:true})
       .then(function(){
@@ -6392,33 +6533,27 @@ function loadViewerAccounts() {
   var m = window._fbModules;
   var cfg = getFbConfig();
   if (!m || !cfg) {
-    listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Firebase connected nahi hai</p>';
+    listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Firebase not connected</p>';
     return;
   }
+  // Use admin app (authenticated with email) — _fbApp may not be authenticated if anonymous auth is disabled
+  var app = _adminApp || _fbApp;
+  if (!app) {
+    try { app = m.initializeApp(cfg, 'va-list'); } catch(e) {}
+  }
+  if (!app) { listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Please login as admin first</p>'; return; }
   try {
-    var app;
-    try { app = m.initializeApp(cfg, 'va-list-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'va-list'); }
     var db = m.getFirestore(app);
-    var auth = m.getAuth(app);
     var siteId = getSiteId();
-
-    function doFetch() {
-      m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
-        if (snapExists(snap)) {
-          renderViewerList(snapData(snap).list || []);
-        } else {
-          listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
-        }
-      }).catch(function(e) {
-        listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Load failed: ' + e.message + '</p>';
-      });
-    }
-
-    if (auth.currentUser) { doFetch(); }
-    else { m.signInAnonymously(auth).then(doFetch).catch(function(e) {
-      listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Auth error: ' + e.message + '</p>';
-    }); }
+    m.getDoc(m.doc(db, 'sites', siteId + '_viewers')).then(function(snap) {
+      if (snapExists(snap)) {
+        renderViewerList(snapData(snap).list || []);
+      } else {
+        listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
+      }
+    }).catch(function(e) {
+      listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Load failed: ' + e.message + '</p>';
+    });
   } catch(e) {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + e.message + '</p>';
   }
@@ -6505,9 +6640,11 @@ function saveViewerPerms(idx, uid) {
   var cfg = getFbConfig();
   if (!m || !cfg) { toast('Firebase error','err'); return; }
   try {
-    var app;
-    try { app = m.initializeApp(cfg, 'viewer-edit-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'viewer-edit'); }
+    var app = _adminApp || _fbApp;
+    if (!app) {
+      try { app = m.initializeApp(cfg, 'viewer-edit-' + Date.now()); }
+      catch(e) { app = m.initializeApp(cfg, 'viewer-edit'); }
+    }
     var db = m.getFirestore(app);
     var siteId = getSiteId();
     // Update viewers/{uid}
@@ -6536,9 +6673,12 @@ function deleteViewerAccount(uid, idx) {
   var cfg = getFbConfig();
   if (!m || !cfg) { toast('Firebase error', 'err'); return; }
   try {
-    var app;
-    try { app = m.initializeApp(cfg, 'viewer-del-' + Date.now()); }
-    catch(e) { app = m.initializeApp(cfg, 'viewer-del'); }
+    // Use admin app for deletions
+    var app = _adminApp || _fbApp;
+    if (!app) {
+      try { app = m.initializeApp(cfg, 'viewer-del-' + Date.now()); }
+      catch(e) { app = m.initializeApp(cfg, 'viewer-del'); }
+    }
     var db = m.getFirestore(app);
     var siteId = getSiteId();
     var listRef = m.doc(db, 'sites', siteId + '_viewers');
