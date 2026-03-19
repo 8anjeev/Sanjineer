@@ -247,13 +247,13 @@ body{margin:0}
     /* Worker cards and team cards dark shadow */
     #workers-list > div > div,
     #contractors-list > div,
-    #team-details > div{box-shadow:0 8px 28px rgba(0,0,0,0.32),0 3px 10px rgba(0,0,0,0.22)!important;}
+    #team-details > div{box-shadow:0 3px 10px rgba(0,0,0,0.14),0 1px 4px rgba(0,0,0,0.10)!important;}
     /* Team worker name mini-chips inside team card */
     #contractors-list .team-worker-chip{box-shadow:0 4px 12px rgba(0,0,0,0.28),0 1px 4px rgba(0,0,0,0.18)!important;}
     /* Team stats chips (Payment/Advances/Balance) */
-    #contractors-list .team-stat-chip{box-shadow:0 5px 15px rgba(0,0,0,0.30),0 2px 6px rgba(0,0,0,0.18)!important;}
+    #contractors-list .team-stat-chip{box-shadow:0 2px 7px rgba(0,0,0,0.15),0 1px 3px rgba(0,0,0,0.09)!important;}
     /* Dashboard team summary chips */
-    #team-details .team-chip{box-shadow:0 5px 14px rgba(0,0,0,0.28),0 2px 6px rgba(0,0,0,0.18)!important;}
+    #team-details .team-chip{box-shadow:0 2px 7px rgba(0,0,0,0.14),0 1px 3px rgba(0,0,0,0.09)!important;}
     ::-webkit-scrollbar{width:5px;height:5px;}
     ::-webkit-scrollbar-thumb{background:rgba(99,102,241,.4);border-radius:3px;}
     /* ── COMPACT DATE / TIME INPUTS — never overflow their container ── */
@@ -490,8 +490,8 @@ body{margin:0}
     .tab-btn.active{background:rgba(255,255,255,0.18);color:#ffffff;box-shadow:0 2px 10px rgba(0,0,0,.2);font-weight:700;}
     .expand-content{max-height:0;overflow:hidden;transition:max-height .35s ease;}
     .expand-content.open{max-height:4000px;}
-    .calendar-day{transition:.1s;cursor:pointer;}
-    .calendar-day:hover{transform:scale(1.06);}
+    .calendar-day{transition:.1s;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.12);border-radius:6px;}
+    .calendar-day:hover{transform:scale(1.06);box-shadow:0 2px 6px rgba(0,0,0,0.18);}
     .low-badge{animation:pulse 1.6s infinite;}
     input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
     /* Modal overlays - hidden by default */
@@ -732,14 +732,16 @@ body{margin:0}
   </div>
 
   <div class="bg-white rounded-xl mb-2 shadow-xl" style="padding:6px 10px">
-    <p class="text-xs font-bold text-gray-700 mb-1.5">🌤️ Site Status</p>
+    <div class="flex items-center justify-between mb-1.5">
+      <p class="text-xs font-bold text-gray-700">🌤️ Site Status</p>
+      <button onclick="saveDailyMeta()" class="g-tor-indigo500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:3px 10px">💾 Save</button>
+    </div>
     <div class="flex gap-1.5 mb-1.5">
       <button onclick="setWeather('☀️ Sunny')" id="wbtn-sunny" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-amber-50 text-amber-700" style="padding:3px 0">☀️ Sunny</button>
       <button onclick="setWeather('☁️ Cloudy')" id="wbtn-cloudy" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-gray-100 text-gray-700" style="padding:3px 0">☁️ Cloudy</button>
       <button onclick="setWeather('🌧️ Rainy')" id="wbtn-rainy" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-blue-50 text-blue-700" style="padding:3px 0">🌧️ Rainy</button>
     </div>
-    <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full border border-gray-200 rounded-lg text-xs mb-1.5 resize-none focus:outline-none focus:border-indigo-400" style="padding:4px 8px"></textarea>
-    <button onclick="saveDailyMeta()" class="g-tor-indigo500-purple500 w-full text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:4px 0">💾 Save Site Status</button>
+    <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full border border-gray-200 rounded-lg text-xs resize-none focus:outline-none focus:border-indigo-400" style="padding:4px 8px"></textarea>
   </div>
 
   <div class="grid grid-cols-2 gap-2 mb-2">
@@ -784,7 +786,7 @@ body{margin:0}
   <div class="bg-white rounded-2xl p-3 shadow-xl">
     <h3 class="text-sm font-bold text-gray-700 mb-3">📷 Site Photos (max 4)</h3>
     <div class="flex gap-2 flex-wrap mb-3" id="photo-previews"><p class="text-gray-400 text-xs">No photos yet</p></div>
-    <label class="g-tor-amber500-orange500 px-4 py-2.5 text-white rounded-xl text-sm font-semibold cursor-pointer active:scale-95 inline-flex items-center gap-2">
+    <label class="g-tor-amber500-orange500 px-3 py-1.5 text-white rounded-lg text-xs font-semibold cursor-pointer active:scale-95 inline-flex items-center gap-1.5">
       📷 Add Photo
       <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" onchange="addPhoto(event)">
     </label>
@@ -803,7 +805,7 @@ body{margin:0}
         <option value="">-- Select Worker --</option>
       </select>
       <select id="att-print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-      <button onclick="printWorkerAttendance()" class="g-tor-violet500-purple600 flex-shrink-0 px-4 py-2 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="printWorkerAttendance()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -823,7 +825,7 @@ body{margin:0}
         <option value="">Select Team</option>
       </select>
       <input type="number" id="w-wage" placeholder="Hourly Wage (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addWorker()" class="g-tor-emerald500-teal500 col-span-2 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Worker</button>
+      <button onclick="addWorker()" class="g-tor-emerald500-teal500 col-span-2 text-white rounded-xl font-semibold text-sm active:scale-95" style="padding:6px 0">Add Worker</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 shadow-xl">
@@ -837,10 +839,10 @@ body{margin:0}
 <div id="tab-expenses" class="tab-content" style="display:none">
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">💰 Petty Cash <span class="font-normal text-gray-400">— record cash brought to site</span></p>
-    <div class="grid grid-cols-3 gap-3">
-      <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="date" id="petty-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addPettyCash()" class="g-tor-cyan500-sky500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💰 Deposit</button>
+    <div class="grid grid-cols-3 gap-3" style="align-items:stretch">
+      <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400" style="height:44px;box-sizing:border-box">
+      <input type="date" id="petty-date" class="px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400" style="height:44px;box-sizing:border-box">
+      <button onclick="addPettyCash()" class="g-tor-cyan500-sky500 text-white rounded-xl font-semibold text-sm active:scale-95" style="height:44px;padding:0;box-sizing:border-box">💰 Deposit</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -882,7 +884,7 @@ body{margin:0}
           </div>
         </div>
       </div>
-      <button onclick="addExpenseMaterial()" class="g-tor-amber500-orange500 col-span-2 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Save Purchase</button>
+      <button onclick="addExpenseMaterial()" class="g-tor-amber500-orange500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:9px 0">🧱 Save Purchase</button>
     </div>
   </div>
   <div class="grid grid-cols-3 gap-2.5 mb-3">
@@ -929,14 +931,14 @@ body{margin:0}
 
 <div id="tab-departmental" class="tab-content" style="display:none">
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <div class="flex items-center gap-2 flex-wrap">
-      <div class="flex-1">
-        <p class="text-xs text-gray-500 font-semibold mb-1">📅 Select Date</p>
-        <input type="date" id="dept-tab-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+    <div class="flex items-center justify-between gap-2">
+      <div style="width:140px;flex-shrink:0">
+        <p class="text-xs text-gray-500 font-semibold mb-1">📅 Date</p>
+        <input type="date" id="dept-tab-date" class="w-full px-2 py-1.5 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-400" style="font-size:11px">
       </div>
-      <div class="flex gap-2 self-end">
-        <button onclick="loadDeptTab()" class="g-tor-emerald500-teal500 px-3 py-2 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
-        <button onclick="printDeptReport()" class="g-tor-indigo500-purple600 px-3 py-2 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Day</button>
+      <div class="flex gap-2">
+        <button onclick="loadDeptTab()" class="g-tor-emerald500-teal500 px-3 py-1.5 text-white rounded-xl text-xs font-bold active:scale-95">📂 Load</button>
+        <button onclick="printDeptReport()" class="g-tor-indigo500-purple600 px-3 py-1.5 text-white rounded-xl text-xs font-bold active:scale-95">🖨️ Day</button>
       </div>
     </div>
     <p id="dept-tab-label" class="text-xs text-indigo-600 font-semibold mt-1.5"></p>
@@ -1019,7 +1021,7 @@ body{margin:0}
         <input type="number" id="tl-qty" placeholder="Quantity" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
         <input type="date" id="tl-date" title="Date Added" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
         <input type="number" id="tl-cost" placeholder="Cost (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <button onclick="addTool()" class="g-tor-violet500-purple500 col-span-2 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">Add Tool</button>
+        <button onclick="addTool()" class="g-tor-violet500-purple500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:6px 0">Add Tool</button>
       </div>
     </div>
     <div class="bg-white rounded-2xl p-3 shadow-xl">
@@ -1052,7 +1054,7 @@ body{margin:0}
           <input type="date" id="as-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Qty Assigned</label>
           <input type="number" id="as-qty" placeholder="1" min="1" step="1" value="1" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <button onclick="assignTool()" class="g-tor-indigo500-blue500 col-span-2 text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">Assign Tool</button>
+        <button onclick="assignTool()" class="g-tor-indigo500-blue500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:6px 0">Assign Tool</button>
       </div>
     </div>
     <div class="bg-white rounded-2xl p-3 shadow-xl">
@@ -1215,7 +1217,7 @@ body{margin:0}
       <select id="teams-print-filter" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
         <option value="all">All Teams</option>
       </select>
-      <button onclick="printMonthlyReport()" class="g-tor-violet500-purple600 flex-shrink-0 px-4 py-2 text-white rounded-xl text-sm font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="printMonthlyReport()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -1549,13 +1551,19 @@ body{margin:0}
       <div class="mb-2">
         <div class="flex items-center justify-between mb-2"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Line Items</label><button onclick="addInvLine()" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold px-2 py-1 active:scale-95">+ Add</button></div>
         <div id="inv-lines">
-          <div class="grid grid-cols-12 gap-1 mb-1 text-[9px] font-bold text-gray-400 uppercase"><div class="col-span-6">Description</div><div class="col-span-2 text-center">Qty</div><div class="col-span-3 text-center">Rate(₹)</div><div class="col-span-1"></div></div>
+          
           <div id="inv-lines-body">
-            <div class="inv-line grid grid-cols-12 gap-1 mb-1">
-              <input type="text" placeholder="Item description" class="col-span-6 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc">
-              <input type="number" placeholder="1" class="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" value="1" min="1" step="any" oninput="calcInvTotal()">
-              <input type="number" placeholder="0" class="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-rate" step="any" oninput="calcInvTotal()">
-              <button onclick="removeInvLine(this)" class="col-span-1 text-rose-400 font-bold text-sm">✕</button>
+            <div class="inv-line mb-2 bg-gray-50 rounded-lg p-2">
+              <input type="text" placeholder="Description" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc mb-1">
+              <div class="grid grid-cols-2 gap-1 mb-1">
+                <input type="number" placeholder="Rate (₹)" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-rate" step="any" oninput="calcInvTotal()">
+                <input type="text" placeholder="Unit (nos/sqft…)" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-unit">
+              </div>
+              <div class="flex items-center gap-1">
+                <input type="number" placeholder="Quantity" class="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" min="1" step="any" oninput="calcInvTotal()">
+                <span class="inv-amt text-xs font-bold text-indigo-700 flex-1 text-right px-1">₹0</span>
+                <button onclick="removeInvLine(this)" class="text-rose-400 font-bold text-sm px-1">✕</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1565,7 +1573,7 @@ body{margin:0}
         <div class="flex justify-between text-xs mb-1"><span class="text-gray-500">Sub Total</span><span id="inv-subtotal" class="font-bold text-gray-800">₹0</span></div>
         <div class="flex items-center justify-between text-xs mb-1">
           <span class="text-gray-500">GST (%)</span>
-          <input type="number" id="inv-gst" placeholder="0" value="0" step="any" class="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right focus:outline-none" oninput="calcInvTotal()">
+          <input type="number" id="inv-gst" placeholder="18" value="18" step="any" class="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right focus:outline-none" oninput="calcInvTotal()">
         </div>
         <div class="flex justify-between text-sm font-black border-t border-gray-200 pt-2 mt-1"><span>Total</span><span id="inv-total" class="text-indigo-700">₹0</span></div>
       </div>
@@ -2512,7 +2520,7 @@ function switchTab(name) {
   // Re-apply viewer restrictions after every tab render
   if (_IS_VIEWER) {
     _disableViewerWrites();
-    var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+    var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (canPrint) {
       document.querySelectorAll('button').forEach(function(b) {
         var t = b.textContent.trim();
@@ -2584,14 +2592,14 @@ function boot() {
   }
   autoInitCloud();
   // Restore viewer session if they refreshed the page
-  var viewerEmail = sessionStorage.getItem('sj_viewer_email');
-  var viewerPerms = sessionStorage.getItem('sj_viewer_perms');
-  var viewerSite  = sessionStorage.getItem('sj_viewer_site');
+  var viewerEmail = safeLS.getItem('sj_viewer_email');
+  var viewerPerms = safeLS.getItem('sj_viewer_perms');
+  var viewerSite  = safeLS.getItem('sj_viewer_site');
   if (viewerEmail && viewerPerms && viewerSite) {
     _IS_VIEWER = true;
     var perms = [];
     try { perms = JSON.parse(viewerPerms); } catch(ex) {}
-    var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+    var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     // Show viewer top bar
     if (!document.getElementById('viewer-top-bar')) {
       _showViewerBar(viewerEmail);
@@ -3378,13 +3386,13 @@ function viewMaterials(){
     var tPQ=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+t.qty; },0);
     var tC=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+(parseFloat(t.cost)||0); },0);
     return '<div style="background:white;border-radius:12px;overflow:hidden;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
-      +'<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f3f4f6">'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #f3f4f6">'
       +'<div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,'+(low?'#ef4444,#f43f5e':'#6366f1,#8b5cf6')+');display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:13px">'+item.name[0].toUpperCase()+'</div>'
       +'<div style="flex:1;min-width:0"><p style="font-weight:700;color:#1f2937;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+(low?' <span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:999px">LOW</span>':'')+'</p>'
       +'<p style="font-size:10px"><span style="font-weight:600;color:'+(low?'#dc2626':'#059669')+'">Stock: '+bal+' '+item.unit+'</span> &nbsp;|&nbsp; Bought: '+tPQ+' &nbsp;|&nbsp; <span style="color:#b45309;font-weight:600">'+fc(tC)+'</span></p></div>'
       +'<div style="display:flex;gap:4px;flex-shrink:0">'
-      +'<button onclick="openMatPurchaseModal(\''+item.id+'\')" style="font-size:10px;padding:3px 7px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Buy</button>'
-      +'<button onclick="openMatUseModal(\''+item.id+'\')" style="font-size:10px;padding:3px 7px;background:#ef4444;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Use</button>'
+      +'<button onclick="openMatPurchaseModal(\''+item.id+'\')" style="font-size:10px;padding:5px 14px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Buy</button>'
+      +'<button onclick="openMatUseModal(\''+item.id+'\')" style="font-size:10px;padding:5px 14px;background:#ef4444;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Use</button>'
       +'<button onclick="delMaterialItem(\''+item.id+'\')" style="font-size:10px;padding:3px 7px;background:#f3f4f6;color:#6b7280;border:none;border-radius:7px;cursor:pointer">X</button>'
       +'</div></div>'
       +'<button onclick="toggleMatHistory(\'mx-'+item.id+'\')" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:#4f46e5">'
@@ -3904,9 +3912,9 @@ return '<div style="background:white;border-radius:16px;padding:14px;box-shadow:
 +'<button onclick="delContractor(\''+c.__id+'\')" style="padding:5px 10px;background:#fee2e2;color:#dc2626;border:none;border-radius:10px;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(220,38,38,0.18)">Del</button>'
 +'</div></div>'
 +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
-+'<div class="team-stat-chip" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:10px;padding:8px;text-align:center;box-shadow:0 5px 16px rgba(0,0,0,0.28),0 2px 6px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#3b82f6;font-weight:700">Payment</p><p style="font-size:14px;font-weight:800;color:#1d4ed8">'+fc(tp2)+'</p></div>'
-+'<div class="team-stat-chip" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:10px;padding:8px;text-align:center;box-shadow:0 5px 16px rgba(0,0,0,0.28),0 2px 6px rgba(0,0,0,0.18)"><p style="font-size:9px;color:#d97706;font-weight:700">Advances</p><p style="font-size:14px;font-weight:800;color:#b45309">'+fc(ta2)+'</p></div>'
-+'<div class="team-stat-chip" style="background:'+(bal>=0?'linear-gradient(135deg,#f0fdf4,#dcfce7)':'linear-gradient(135deg,#fff1f2,#ffe4e6)')+';border-radius:10px;padding:8px;text-align:center;box-shadow:0 5px 16px rgba(0,0,0,0.28),0 2px 6px rgba(0,0,0,0.18)"><p style="font-size:9px;color:'+(bal>=0?'#059669':'#dc2626')+';font-weight:700">Balance</p><p style="font-size:14px;font-weight:800;color:'+(bal>=0?'#047857':'#be123c')+'">'+fc(bal)+'</p></div>'
++'<div class="team-stat-chip" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:10px;padding:8px;text-align:center;box-shadow:0 2px 7px rgba(0,0,0,0.13),0 1px 3px rgba(0,0,0,0.08)"><p style="font-size:9px;color:#3b82f6;font-weight:700">Payment</p><p style="font-size:14px;font-weight:800;color:#1d4ed8">'+fc(tp2)+'</p></div>'
++'<div class="team-stat-chip" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:10px;padding:8px;text-align:center;box-shadow:0 2px 7px rgba(0,0,0,0.13),0 1px 3px rgba(0,0,0,0.08)"><p style="font-size:9px;color:#d97706;font-weight:700">Advances</p><p style="font-size:14px;font-weight:800;color:#b45309">'+fc(ta2)+'</p></div>'
++'<div class="team-stat-chip" style="background:'+(bal>=0?'linear-gradient(135deg,#f0fdf4,#dcfce7)':'linear-gradient(135deg,#fff1f2,#ffe4e6)')+';border-radius:10px;padding:8px;text-align:center;box-shadow:0 2px 7px rgba(0,0,0,0.13),0 1px 3px rgba(0,0,0,0.08)"><p style="font-size:9px;color:'+(bal>=0?'#059669':'#dc2626')+';font-weight:700">Balance</p><p style="font-size:14px;font-weight:800;color:'+(bal>=0?'#047857':'#be123c')+'">'+fc(bal)+'</p></div>'
 +'</div>'
 +(tw.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px;margin-bottom:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Team ('+tw.length+')</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">'+tw.map(function(w){ return '<div class="team-worker-chip" style="background:white;border-radius:8px;padding:7px 8px;box-shadow:0 4px 14px rgba(0,0,0,0.26),0 1px 5px rgba(0,0,0,0.16)"><p style="font-weight:700;color:#374151;font-size:12px">'+w.name+'</p><p style="font-size:9px;color:#9ca3af">'+w.category+' · '+fc(w.hourly_wage)+'/hr</p></div>'; }).join('')+'</div></div>' : '')
 +(pays.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Advances ('+mlabel(VM)+')</p><table style="width:100%;font-size:11px;border-collapse:collapse"><tbody>'
@@ -3996,13 +4004,15 @@ var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').s
 var pay=ta.reduce(function(s,a){ return s+(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0); },0)+(parseFloat(c.total_contract)||0);
 var adv=ta.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0)+AD.filter(function(d){ return d.type==='contractor_payment'&&d.contractor_name===c.contractor_name&&(d.date||'').startsWith(cums); }).reduce(function(s,p){ return s+(parseFloat(p.payment)||0); },0);
 var bal=pay-adv;
-return '<div style="background:#eff6ff;border-radius:10px;padding:10px;margin-bottom:8px;box-shadow:0 5px 16px rgba(0,0,0,0.28),0 2px 6px rgba(0,0,0,0.16)">'
-+'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
-+'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+c.contractor_name+'</p><p style="font-size:10px;color:#6b7280">'+tw.length+' workers</p></div>'
-+'<div style="text-align:right"><p style="font-size:10px;color:#6b7280">Balance</p><p style="font-weight:700;font-size:13px;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</p></div></div>'
-+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
-+'<div class="team-chip" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:8px;padding:6px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.24),0 1px 4px rgba(0,0,0,0.14)"><p style="font-size:9px;color:#3b82f6;font-weight:700">Payment</p><p style="font-weight:700;font-size:13px;color:#1d4ed8">'+fc(pay)+'</p></div>'
-+'<div class="team-chip" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:8px;padding:6px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.24),0 1px 4px rgba(0,0,0,0.14)"><p style="font-size:9px;color:#d97706;font-weight:700">Advances</p><p style="font-weight:700;font-size:13px;color:#b45309">'+fc(adv)+'</p></div>'
+return '<div style="background:#eff6ff;border-radius:8px;padding:7px 8px;margin-bottom:5px;box-shadow:0 2px 7px rgba(0,0,0,0.12)">'
++'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">'
++'<p style="font-weight:700;color:#1f2937;font-size:10px;line-height:1">'+c.contractor_name+'</p>'
++'<span style="font-size:8px;color:#6b7280;background:#e5e7eb;border-radius:3px;padding:1px 5px;font-weight:600">'+tw.length+' workers</span>'
++'</div>'
++'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px">'
++'<div class="team-chip" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:5px;padding:3px 4px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.09)"><p style="font-size:7px;color:#3b82f6;font-weight:700;line-height:1">Payment</p><p style="font-weight:700;font-size:10px;color:#1d4ed8">'+fc(pay)+'</p></div>'
++'<div class="team-chip" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:5px;padding:3px 4px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.09)"><p style="font-size:7px;color:#d97706;font-weight:700;line-height:1">Advance</p><p style="font-weight:700;font-size:10px;color:#b45309">'+fc(adv)+'</p></div>'
++'<div class="team-chip" style="background:'+(bal>=0?'linear-gradient(135deg,#f0fdf4,#dcfce7)':'linear-gradient(135deg,#fff1f2,#ffe4e6)')+';border-radius:5px;padding:3px 4px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.09)"><p style="font-size:7px;color:'+(bal>=0?'#059669':'#dc2626')+';font-weight:700;line-height:1">Balance</p><p style="font-weight:800;font-size:10px;color:'+(bal>=0?'#047857':'#be123c')+'">'+fc(bal)+'</p></div>'
 +'</div></div>';
 }).join('') : '<p style="text-align:center;color:#9ca3af;padding:12px;font-size:13px">No teams yet</p>';
 }
@@ -5130,18 +5140,31 @@ function generateSalarySlip(){
 
 function addInvLine(){
   var body=document.getElementById('inv-lines-body');if(!body)return;
-  var div=document.createElement('div');div.className='inv-line grid grid-cols-12 gap-1 mb-1';
-  div.innerHTML='<input type="text" placeholder="Item description" class="col-span-6 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc">'+
-    '<input type="number" placeholder="1" class="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" value="1" min="1" step="any" oninput="calcInvTotal()">'+
-    '<input type="number" placeholder="0" class="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-rate" step="any" oninput="calcInvTotal()">'+
-    '<button onclick="removeInvLine(this)" class="col-span-1 text-rose-400 font-bold text-sm">✕</button>';
+  var div=document.createElement('div');div.className='inv-line mb-2 bg-gray-50 rounded-lg p-2';
+  div.innerHTML='<input type="text" placeholder="Description" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc mb-1">'+
+    '<div class="grid grid-cols-2 gap-1 mb-1">'+
+    '<input type="number" placeholder="Rate (₹)" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-rate" step="any" oninput="calcInvTotal()">'+
+    '<input type="text" placeholder="Unit (nos/sqft…)" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-unit">'+
+    '</div>'+
+    '<div class="flex items-center gap-1">'+
+    '<input type="number" placeholder="Quantity" class="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" min="1" step="any" oninput="calcInvTotal()">'+
+    '<span class="inv-amt text-xs font-bold text-indigo-700 flex-1 text-right px-1">\u20b90</span>'+
+    '<button onclick="removeInvLine(this)" class="text-rose-400 font-bold text-sm px-1">✕</button>'+
+    '</div>';
   body.appendChild(div);
 }
 function removeInvLine(btn){var line=btn.closest('.inv-line');if(line)line.remove();calcInvTotal();}
 function calcInvTotal(){
   var lines=document.querySelectorAll('#inv-lines-body .inv-line');
   var sub=0;
-  lines.forEach(function(l){sub+=(parseFloat(l.querySelector('.inv-qty').value)||0)*(parseFloat(l.querySelector('.inv-rate').value)||0);});
+  lines.forEach(function(l){
+    var qty=parseFloat(l.querySelector('.inv-qty').value)||0;
+    var rate=parseFloat(l.querySelector('.inv-rate').value)||0;
+    var amt=qty*rate;
+    sub+=amt;
+    var amtEl=l.querySelector('.inv-amt');
+    if(amtEl)amtEl.textContent=fc(amt);
+  });
   var gst=parseFloat(document.getElementById('inv-gst').value)||0;
   var total=sub*(1+gst/100);
   var se=document.getElementById('inv-subtotal'),te=document.getElementById('inv-total');
@@ -5157,14 +5180,18 @@ function renderInvoiceRecords(){
   if(!el)return;
   if(!list.length){el.innerHTML='<p class="text-gray-400 text-sm text-center py-2">No invoices yet</p>';return;}
   el.innerHTML=[...list].reverse().map(function(inv){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;margin-bottom:6px">'+
-      '<div><p style="font-weight:700;color:#374151;font-size:12px">'+inv.no+' — '+inv.client+'</p>'+
-      '<p style="font-size:10px;color:#9ca3af">'+fd(inv.date)+(inv.project?' · '+inv.project:'')+'</p></div>'+
+    return '<div style="position:relative;padding:8px 10px;background:#f9fafb;border-radius:10px;border:1px solid #e5e7eb;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+      '<p style="font-weight:700;color:#374151;font-size:12px">'+inv.no+' — '+inv.client+'</p>'+
+      '<button onclick="delInvoice(\''+inv.id+'\')\" style="font-size:11px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:700;flex-shrink:0;margin-left:6px">✕</button>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:5px">'+
+      '<span style="font-size:10px;color:#9ca3af;background:#e5e7eb;padding:2px 8px;border-radius:20px">'+fd(inv.date)+(inv.project?' · '+inv.project:'')+' <\/span>'+
       '<div style="display:flex;align-items:center;gap:6px">'+
-      '<p style="font-weight:800;font-size:13px;color:#4f46e5">'+fc(inv.total)+'</p>'+
-      '<button onclick="reprintInvoice(\''+inv.id+'\')" style="font-size:10px;padding:3px 8px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:6px;cursor:pointer;font-weight:700">🖨️</button>'+
-      '<button onclick="delInvoice(\''+inv.id+'\')" style="font-size:10px;padding:3px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;cursor:pointer;font-weight:700">✕</button>'+
-      '</div></div>';
+      '<button onclick="reprintInvoice(\''+inv.id+'\')\" style="font-size:10px;padding:4px 22px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:6px;cursor:pointer;font-weight:700">🖨️ Print<\/button>'+
+      '<p style="font-weight:800;font-size:13px;color:#4f46e5">'+fc(inv.total)+'<\/p>'+
+      '<\/div><\/div>'+
+      '<\/div>';
   }).join('');
 }
 
@@ -5194,6 +5221,7 @@ function _buildInvoiceHTML(inv){
   var lineRows = inv.lines.map(function(l){
     return '<tr>'
       + '<td style="padding:7px 10px;border-bottom:1px solid #e5e7eb">' + l.desc + '</td>'
+      + '<td style="padding:7px 10px;text-align:center;border-bottom:1px solid #e5e7eb">' + (l.unit||'—') + '</td>'
       + '<td style="padding:7px 10px;text-align:center;border-bottom:1px solid #e5e7eb">' + l.qty + '</td>'
       + '<td style="padding:7px 10px;text-align:right;border-bottom:1px solid #e5e7eb">' + fc(l.rate) + '</td>'
       + '<td style="padding:7px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-weight:700">' + fc(l.qty * l.rate) + '</td>'
@@ -5254,6 +5282,7 @@ function _buildInvoiceHTML(inv){
     // Line items table
     + '<table><thead><tr>'
     + '<td>Description</td>'
+    + '<td style="text-align:center">Unit</td>'
     + '<td style="text-align:center">Qty</td>'
     + '<td style="text-align:right">Rate</td>'
     + '<td style="text-align:right">Amount</td>'
@@ -5316,10 +5345,12 @@ function generateInvoice(){
   var sub=0;
   var lines=Array.from(lineEls).map(function(l){
     var desc=l.querySelector('.inv-desc').value||'Item';
+    var unitEl=l.querySelector('.inv-unit');
+    var unit=unitEl?unitEl.value:'';
     var qty=parseFloat(l.querySelector('.inv-qty').value)||0;
     var rate=parseFloat(l.querySelector('.inv-rate').value)||0;
     sub+=qty*rate;
-    return {desc:desc,qty:qty,rate:rate};
+    return {desc:desc,unit:unit,qty:qty,rate:rate};
   });
   var gst=parseFloat(document.getElementById('inv-gst').value)||0;
   var total=sub*(1+gst/100);
@@ -5330,8 +5361,8 @@ function generateInvoice(){
   var list=linvs();list.push(inv);sinvs(list);
   // Reset form
   ['inv-no','inv-client','inv-addr','inv-client-gst','inv-project','inv-terms'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('inv-gst').value='0';
-  document.getElementById('inv-lines-body').innerHTML='<div class="inv-line grid grid-cols-12 gap-1 mb-1"><input type="text" placeholder="Item description" class="col-span-6 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc"><input type="number" placeholder="1" class="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" value="1" min="1" step="any" oninput="calcInvTotal()"><input type="number" placeholder="0" class="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-rate" step="any" oninput="calcInvTotal()"><button onclick="removeInvLine(this)" class="col-span-1 text-rose-400 font-bold text-sm">✕</button></div>';
+  document.getElementById('inv-gst').value='18';
+  document.getElementById('inv-lines-body').innerHTML='<div class="inv-line mb-2 bg-gray-50 rounded-lg p-2"><input type="text" placeholder="Description" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-desc mb-1"><div class="grid grid-cols-2 gap-1 mb-1"><input type="number" placeholder="Rate (\u20b9)" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-rate" step="any" oninput="calcInvTotal()"><input type="text" placeholder="Unit (nos/sqft\u2026)" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none inv-unit"></div><div class="flex items-center gap-1"><input type="number" placeholder="Quantity" class="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none text-center inv-qty" min="1" step="any" oninput="calcInvTotal()"><span class="inv-amt text-xs font-bold text-indigo-700 flex-1 text-right px-1">\u20b90</span><button onclick="removeInvLine(this)" class="text-rose-400 font-bold text-sm px-1">\u2715</button></div></div>';
   calcInvTotal();
   renderInvoiceRecords();
   var nextNo='INV-'+String(list.length+1).padStart(3,'0');
@@ -5511,6 +5542,11 @@ function initFirebase(cfg, cb) {
       // If admin is logged in, refresh viewer list now that auth is ready
       if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') {
         setTimeout(loadViewerAccountsInline, 300);
+      }
+      // If viewer is logged in (localStorage keys set), reload their data now auth ready
+      var vSite = safeLS.getItem('sj_viewer_email') ? safeLS.getItem('sj_viewer_site') : null;
+      if (vSite && _IS_VIEWER) {
+        setTimeout(function() { _viewerLoadData(vSite, ''); }, 400);
       }
     }).catch(function(e) {
       console.error('Firebase auth error', e);
@@ -5725,7 +5761,7 @@ function checkViewerMode() {
 }
 
 function _viewerRefresh() {
-  var siteId = sessionStorage.getItem('sj_viewer_site') || '';
+  var siteId = safeLS.getItem('sj_viewer_site') || '';
   var params = new URLSearchParams(window.location.search);
   if (!siteId) siteId = params.get('view') || '';
   var cfg = getFbConfig();
@@ -5739,10 +5775,10 @@ function _viewerRefresh() {
 }
 
 function _viewerLogout() {
-  sessionStorage.removeItem('sj_viewer_perms');
-  sessionStorage.removeItem('sj_viewer_print');
-  sessionStorage.removeItem('sj_viewer_site');
-  sessionStorage.removeItem('sj_viewer_email');
+  safeLS.removeItem('sj_viewer_perms');
+  safeLS.removeItem('sj_viewer_print');
+  safeLS.removeItem('sj_viewer_site');
+  safeLS.removeItem('sj_viewer_email');
   _IS_VIEWER = false;
   _viewerApp = null;
   var bar = document.getElementById('viewer-top-bar');
@@ -5789,9 +5825,9 @@ function _viewerLoadData(siteId, projId) {
     if (d.punchlist)  spl(d.punchlist);
     applyProfile();
 
-    var rawPerms = sessionStorage.getItem('sj_viewer_perms');
+    var rawPerms = safeLS.getItem('sj_viewer_perms');
     var perms = [];
-    var canPrint = sessionStorage.getItem('sj_viewer_print') === '1';
+    var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (rawPerms) { try { perms = JSON.parse(rawPerms); } catch(ex) {} }
 
     // 2. Hide non-permitted tab buttons
@@ -5830,13 +5866,19 @@ function _viewerLoadData(siteId, projId) {
 
   try {
     var m = window._fbModules;
-    // Use stored authenticated viewer app — NO anonymous auth needed at all
-    // Use viewer's authenticated app if available, otherwise fall back to _fbApp
-    // _fbApp has anonymous auth which satisfies rules: allow read if auth != null
+    // Priority: viewer's own app (email/pass) > _fbApp (anonymous, already signed in)
     var app = _viewerApp || _fbApp;
     if (!app) {
-      try { app = m.initializeApp(cfg, 'viewer-data'); }
-      catch(e) { app = m.initializeApp(cfg, 'viewer-data-' + Date.now()); }
+      // Neither ready yet — wait for autoInitCloud to finish then retry
+      setTimeout(function() { _viewerLoadData(siteId, projId); }, 800);
+      return;
+    }
+    // Make sure auth is actually ready before reading
+    var auth = m.getAuth(app);
+    if (!auth.currentUser) {
+      // Auth not resolved yet — wait and retry
+      setTimeout(function() { _viewerLoadData(siteId, projId); }, 600);
+      return;
     }
     var db = m.getFirestore(app);
     m.onSnapshot(m.doc(db, 'sites', siteId), function(snap) {
@@ -6088,10 +6130,10 @@ function doSmartLogin() {
             var vData = snapData(viewerSnap);
             if (vData.role !== 'viewer') { throw new Error('Account type unrecognised.'); }
             _viewerApp = app;
-            sessionStorage.setItem('sj_viewer_perms', JSON.stringify(vData.permissions || []));
-            sessionStorage.setItem('sj_viewer_print', vData.canPrint ? '1' : '0');
-            sessionStorage.setItem('sj_viewer_site',  vData.siteId || '');
-            sessionStorage.setItem('sj_viewer_email', email);
+            safeLS.setItem('sj_viewer_perms', JSON.stringify(vData.permissions || []));
+            safeLS.setItem('sj_viewer_print', vData.canPrint ? '1' : '0');
+            safeLS.setItem('sj_viewer_site',  vData.siteId || '');
+            safeLS.setItem('sj_viewer_email', email);
             closeAuthModal();
             _IS_VIEWER = true;
             _applyViewerPermissions(vData.permissions || [], vData.canPrint, vData.siteId);
@@ -6524,19 +6566,19 @@ function loadViewerAccountsInline() {
     // Prefer _fbDb (already initialised + anonymous auth complete) or _adminApp (email auth)
     // If both are null or auth is still pending, retry shortly
     var db = null;
-    if (_fbDb) {
-      // Check if anonymous auth completed
-      var auth = _fbAuth || (_fbApp ? m.getAuth(_fbApp) : null);
-      if (auth && auth.currentUser) {
-        db = _fbDb;
+    // Priority: admin email-auth app > anonymous fb app
+    if (_adminApp) {
+      var adminAuth = m.getAuth(_adminApp);
+      if (adminAuth && adminAuth.currentUser) {
+        db = m.getFirestore(_adminApp);
       }
     }
-    if (!db && _adminApp) {
-      db = m.getFirestore(_adminApp);
+    if (!db && _fbDb && _fbAuth && _fbAuth.currentUser) {
+      db = _fbDb;
     }
     if (!db) {
-      // Auth still pending - retry in 800ms
-      setTimeout(loadViewerAccountsInline, 800);
+      // Auth not ready yet - retry
+      setTimeout(loadViewerAccountsInline, 600);
       return;
     }
     var siteId = getSiteId();
@@ -6879,10 +6921,10 @@ function doViewerLoginInline() {
         if (!snapExists(snap)) { throw new Error('Viewer account nahi mila. Admin se contact karo.'); }
         var data = snapData(snap);
         if (data.role !== 'viewer') { throw new Error('Yeh admin account hai — Admin login use karo.'); }
-        sessionStorage.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
-        sessionStorage.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
-        sessionStorage.setItem('sj_viewer_site',  data.siteId  || '');
-        sessionStorage.setItem('sj_viewer_email', email);
+        safeLS.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
+        safeLS.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
+        safeLS.setItem('sj_viewer_site',  data.siteId  || '');
+        safeLS.setItem('sj_viewer_email', email);
         closeAuthModal();
         _IS_VIEWER = true;
         _applyViewerPermissions(data.permissions || [], data.canPrint, data.siteId);
@@ -6932,10 +6974,10 @@ function doViewerLogin() {
         var data = snapData(snap);
         if (data.role !== 'viewer') { throw new Error('Yeh admin account hai — Admin login use karo.'); }
         // Store permissions in sessionStorage
-        sessionStorage.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
-        sessionStorage.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
-        sessionStorage.setItem('sj_viewer_site',  data.siteId  || '');
-        sessionStorage.setItem('sj_viewer_email', email);
+        safeLS.setItem('sj_viewer_perms', JSON.stringify(data.permissions || []));
+        safeLS.setItem('sj_viewer_print', data.canPrint ? '1' : '0');
+        safeLS.setItem('sj_viewer_site',  data.siteId  || '');
+        safeLS.setItem('sj_viewer_email', email);
         var ov = document.getElementById('viewer-login-overlay');
         if (ov) ov.remove();
         _IS_VIEWER = true;
