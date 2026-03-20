@@ -2519,7 +2519,7 @@ function switchTab(name) {
 
   // Re-apply viewer restrictions after every tab render
   if (_IS_VIEWER) {
-  setTimeout(function(){ _disableViewerWrites(); }, 30);
+    _disableViewerWrites();
     var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (canPrint) {
       document.querySelectorAll('button').forEach(function(b) {
@@ -2609,12 +2609,11 @@ function boot() {
       btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
     });
     if (perms.length > 0) { switchTab(perms[0]); }
-    setTimeout(function(){ _disableViewerWrites(); }, 60);
+    _disableViewerWrites();
     if (canPrint) {
-document.querySelectorAll('button').forEach(function(b) {
+      document.querySelectorAll('button').forEach(function(b) {
         var t = b.textContent.trim();
-        if (t.includes('Print')
-t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
+        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
           b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
         }
       });
@@ -5841,7 +5840,7 @@ function _viewerLoadData(siteId, projId) {
     switchTab(firstTab);
 
     // 4. Disable write controls on the freshly rendered DOM
-    setTimeout(function(){ _disableViewerWrites(); }, 80);
+    _disableViewerWrites();
 
     // 5. Re-enable print/export if viewer has print permission
     if (canPrint) {
@@ -6955,10 +6954,7 @@ function doViewerLoginInline() {
 
 function doViewerLogin() {
   var email = document.getElementById('vl-email').value.trim();
-    var pass  = document.getElementById('vl-pass').value;
-  var btn   = document.getElementById('vl-btn');
-  var errEl = document.getElementById('vl-err');
-  if (!email || !pass) { if(errEl){errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; return; }
+  if (!email || !pass) { errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; return; }
 
   var m = window._fbModules;
   var cfg = getFbConfig();
@@ -7031,8 +7027,8 @@ function _applyViewerPermissions(perms, canPrint, siteId) {
     }
   });
   // Disable all write actions
-   setTimeout(function(){ _disableViewerWrites(); }, 50);
-  // Re-enable print/export buttons
+  _disableViewerWrites();
+  // Re-enable print/export buttons if viewer has print permission
   if (canPrint) {
     document.querySelectorAll('button').forEach(function(b) {
       var t = b.textContent.trim();
