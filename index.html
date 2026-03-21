@@ -5575,22 +5575,19 @@ function updateCloudBtn() {
 
 // -- Open / Close Cloud Modal --
 function openCloudModal() {
-  // If admin is logged in but _sbSubActive not yet set (DB check pending), wait briefly
-  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
-  if (isAdmin && !window._sbSubActive && !window._sbSubChecked) {
-    // Show modal immediately with loading state, then refresh when ready
-    document.getElementById('cloud-modal').classList.add('show');
-    var loadingCheck = setInterval(function() {
-      if (window._sbSubChecked) {
-        clearInterval(loadingCheck);
-        refreshCloudModalState();
-      }
-    }, 200);
-    setTimeout(function(){ clearInterval(loadingCheck); }, 8000);
-    return;
-  }
   refreshCloudModalState();
   document.getElementById('cloud-modal').classList.add('show');
+  // If admin is logged in but DB check still pending, retry once it completes
+  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+  if (isAdmin && !window._sbSubChecked) {
+    var check = setInterval(function() {
+      if (window._sbSubChecked) {
+        clearInterval(check);
+        refreshCloudModalState();
+      }
+    }, 300);
+    setTimeout(function(){ clearInterval(check); }, 8000);
+  }
 }
 function closeCloudModal() { document.getElementById('cloud-modal').classList.remove('show'); }
 
@@ -5628,11 +5625,10 @@ function refreshCloudModalState() {
   var isAdmin  = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   var siteId   = getSiteId();
   var sbReady  = !!(_sb && _adminSBUser);
-  // Subscription check: ONLY trust Supabase DB (set by webhook or login verify)
-  // _sbSubActive is set by restoreAdminSession after DB check
+  var subEnd   = parseInt(safeLS.getItem('cm_sub_end') || '0'); // display only
   var isFullyActive = isAdmin && !!window._sbSubActive;
 
-  // Admin bar visibility — only when fully active
+  // Admin bar — only when fully active
   var adminBar = document.getElementById('cloud-admin-bar');
   if (adminBar) adminBar.style.display = isFullyActive ? 'block' : 'none';
 
@@ -5641,9 +5637,21 @@ function refreshCloudModalState() {
   if (tabSwitcher) tabSwitcher.style.display = isFullyActive ? 'none' : 'flex';
 
   if (isFullyActive) {
+    var adminPanel = document.getElementById('ctab-admin');
+    // If panel was overwritten by expired-screen, restore original structure
+    if (adminPanel && !document.getElementById('ctab-admin-postlogin')) {
+      adminPanel.innerHTML =
+        '<div id="ctab-admin-prelogin" style="display:none"></div>'
+        + '<div id="ctab-admin-postlogin" style="display:block">'
+        + document.getElementById('ctab-admin-postlogin-tpl') ? '' : ''
+        + '</div>';
+      // Reload the page to restore full UI — safer than rebuilding HTML inline
+      toast('✅ Cloud ready! Refreshing…', 'ok');
+      setTimeout(function(){ location.reload(); }, 800);
+      return;
+    }
     var prelogin  = document.getElementById('ctab-admin-prelogin');
     var postlogin = document.getElementById('ctab-admin-postlogin');
-    var adminPanel = document.getElementById('ctab-admin');
     if (prelogin)  prelogin.style.display  = 'none';
     if (postlogin) postlogin.style.display = 'block';
     if (adminPanel) adminPanel.style.display = 'block';
@@ -5656,39 +5664,38 @@ function refreshCloudModalState() {
     var syncTime = document.getElementById('cloud-sync-time');
     if (syncDot)  syncDot.style.background = sbReady ? '#22c55e' : '#fbbf24';
     if (syncTime) syncTime.textContent = sbReady ? 'Connected ✓' : 'Connecting…';
-    // Show expiry warning if near expiry
-    if (subEnd && subEnd - Date.now() < 5 * 24 * 60 * 60 * 1000 && subEnd > Date.now()) {
+    // Expiry warning
+    if (subEnd && subEnd > Date.now() && subEnd - Date.now() < 5 * 24 * 60 * 60 * 1000) {
       var expiryEl = document.getElementById('cloud-sub-expiry');
-      if (expiryEl && !expiryEl.textContent.includes('Expires')) {
+      if (expiryEl && expiryEl.textContent && !expiryEl.textContent.includes('Expires')) {
         expiryEl.style.color = '#fbbf24';
         expiryEl.textContent = '⚠️ Subscription expiring soon — renew!';
       }
     }
-  } else if (isAdmin && !isSubbed) {
-    // Logged in but subscription expired/missing — force payment
-    var prelogin  = document.getElementById('ctab-admin-prelogin');
-    var postlogin = document.getElementById('ctab-admin-postlogin');
-    if (prelogin)  prelogin.style.display  = 'none';
-    if (postlogin) postlogin.style.display = 'none';
-    // Show payment required screen inline
+  } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
+    // Logged in but subscription expired/not paid — show renew screen
     var adminPanel = document.getElementById('ctab-admin');
     if (adminPanel) {
       adminPanel.style.display = 'block';
       adminPanel.innerHTML = '<div style="text-align:center;padding:2rem 1rem;">'
         + '<p style="font-size:32px;margin-bottom:12px">🔒</p>'
-        + '<p style="font-size:16px;font-weight:800;color:#fca5a5;margin-bottom:6px">Subscription Expired</p>'
-        + '<p style="font-size:12px;color:#a78bfa;margin-bottom:1.5rem">Renew to continue using Cloud Backup, Sync & Viewers</p>'
-        + '<button onclick="openPayLanding(true)" style="width:100%;padding:.9rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;box-shadow:0 4px 18px rgba(79,70,229,.5);margin-bottom:.75rem;">💳 Renew — ₹30/month</button>'
+        + '<p style="font-size:16px;font-weight:800;color:#fca5a5;margin-bottom:6px">Subscription Required</p>'
+        + '<p style="font-size:12px;color:#a78bfa;margin-bottom:1.5rem">Pay ₹30/month to activate Cloud Backup, Sync & Viewers</p>'
+        + '<button onclick="openPayLanding(true)" style="width:100%;padding:.9rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;margin-bottom:.75rem;">💳 Subscribe — ₹30/month</button>'
         + '<button onclick="doAdminLogout()" style="width:100%;padding:.65rem;background:transparent;border:1px solid rgba(239,68,68,.3);color:rgba(239,68,68,.7);border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;">Logout</button>'
         + '</div>';
     }
-  } else {
+    var tabSwitcher2 = document.getElementById('cloud-tab-switcher');
+    if (tabSwitcher2) tabSwitcher2.style.display = 'none';
+  } else if (!isAdmin) {
+    // Not logged in — show login/create tabs
     var prelogin  = document.getElementById('ctab-admin-prelogin');
     var postlogin = document.getElementById('ctab-admin-postlogin');
     if (prelogin)  prelogin.style.display  = 'block';
     if (postlogin) postlogin.style.display = 'none';
     switchCloudTab('admin');
   }
+  // else: admin logged in but DB check still pending — keep showing whatever is there
 }
 
 // -- Razorpay Payment --
@@ -6329,6 +6336,7 @@ function onAdminLoginSuccess(email, user, app) {
   _adminApp  = null;
   _adminSBUser = user;
   window._sbSubActive = true; // Set by login (already verified from DB before calling this)
+  window._sbSubChecked = true; // DB already verified during login
   safeLS.setItem(ADMIN_ROLE_KEY,  'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY, email);
   // Always ensure admin row exists — prevents foreign key issues when creating viewers
@@ -6428,6 +6436,7 @@ function doAdminLogout() {
   _sb && _sb.auth.signOut().catch(function(){});
   _adminUser = null; _adminApp = null; _adminSBUser = null;
   window._sbSubActive = false;
+  window._sbSubChecked = true;
   safeLS.removeItem(ADMIN_ROLE_KEY);
   safeLS.removeItem(ADMIN_EMAIL_KEY);
   safeLS.removeItem('cm_sub_end');
