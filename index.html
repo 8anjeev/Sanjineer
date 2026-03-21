@@ -160,6 +160,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   var _SB_URL  = 'https://doawfaujanpxivinvivn.supabase.co';
   var _SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvYXdmYXVqYW5weGl2aW52aXZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNjY0MTYsImV4cCI6MjA4OTY0MjQxNn0.-vFAQfm4oAnvh4ZTPg0EL1FiofgCMq_N-ccKwoMVCbE';
   var _sb = null;
+  window._sbSubActive = false; // Only set to true after DB verification
 
   // Init Supabase client (SDK loaded synchronously via CDN)
   function _initSB() {
@@ -5612,11 +5613,9 @@ function refreshCloudModalState() {
   var isAdmin  = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   var siteId   = getSiteId();
   var sbReady  = !!(_sb && _adminSBUser);
-  // Subscription check: DB or cached localStorage payment
-  var subEnd   = parseInt(safeLS.getItem('cm_sub_end') || '0');
-  var hasPaid  = !!safeLS.getItem('cm_rzp_payment_id');
-  var isSubbed = (subEnd > Date.now()) || hasPaid;
-  var isFullyActive = isAdmin && isSubbed;
+  // Subscription check: ONLY trust Supabase DB (set by webhook or login verify)
+  // _sbSubActive is set by restoreAdminSession after DB check
+  var isFullyActive = isAdmin && !!window._sbSubActive;
 
   // Admin bar visibility — only when fully active
   var adminBar = document.getElementById('cloud-admin-bar');
@@ -6229,22 +6228,17 @@ function doSmartLogin() {
         var data = aRes.data || {};
         var now = Date.now();
         var endDate = data.subscription_end_date || 0;
-        // Also check localStorage fallback (in case DB write was delayed after payment)
-        var cachedSubEnd = parseInt(safeLS.getItem('cm_sub_end') || '0');
-        var hasCachedPayment = !!safeLS.getItem('cm_rzp_payment_id');
+        // ONLY trust Supabase DB — no localStorage fallback
         var isActive = data.subscribed && endDate > now;
-        var allowFromCache = hasCachedPayment && cachedSubEnd > now;
         safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
         safeLS.setItem(ADMIN_EMAIL_KEY, email);
         _adminSBUser = user;
-        if (isActive || allowFromCache) {
-          // Silently sync to DB if only cached
-          if (allowFromCache && !isActive) {
-            var subEnd2 = cachedSubEnd > now ? cachedSubEnd : (now + 30*24*60*60*1000);
-            _sb.from('admins').upsert({ id: user.id, subscribed: true, subscription_end_date: subEnd2 }, { onConflict: 'id' }).catch(function(){});
-          }
+        if (isActive) {
+          window._sbSubActive = true;
+          safeLS.setItem('cm_sub_end', String(endDate)); // cache for display only, not for auth
           onAdminLoginSuccess(email, user, null);
         } else {
+          window._sbSubActive = false;
           closeAuthModal();
           _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null;
           if (data.subscribed && endDate <= now) toast('⚠️ Subscription expired! Renew karo.', 'err');
@@ -6317,6 +6311,7 @@ function onAdminLoginSuccess(email, user, app) {
   _adminUser = user;
   _adminApp  = null;
   _adminSBUser = user;
+  window._sbSubActive = true; // Set by login (already verified from DB before calling this)
   safeLS.setItem(ADMIN_ROLE_KEY,  'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY, email);
   // Always ensure admin row exists — prevents foreign key issues when creating viewers
@@ -6415,6 +6410,7 @@ function doUnsubscribe() {
 function doAdminLogout() {
   _sb && _sb.auth.signOut().catch(function(){});
   _adminUser = null; _adminApp = null; _adminSBUser = null;
+  window._sbSubActive = false;
   safeLS.removeItem(ADMIN_ROLE_KEY);
   safeLS.removeItem(ADMIN_EMAIL_KEY);
   safeLS.removeItem('cm_sub_end');
@@ -6456,27 +6452,31 @@ function restoreAdminSession() {
         if (r.data && r.data.session) {
           var user = r.data.session.user;
           _adminSBUser = user; _adminUser = user;
-          // Verify subscription from DB silently in background
-          _sb.from('admins').select('subscribed,subscription_end_date,last_payment_id')
+          // Verify subscription from DB — ONLY source of truth
+          _sb.from('admins').select('subscribed,subscription_end_date')
             .eq('id', user.id).single().then(function(aRes) {
             if (!aRes.error && aRes.data) {
               var d = aRes.data;
               var endDate = d.subscription_end_date || 0;
               var isActive = d.subscribed && endDate > Date.now();
+              window._sbSubActive = isActive;
               if (isActive) {
-                safeLS.setItem('cm_sub_end', endDate);
-                if (d.last_payment_id) safeLS.setItem('cm_rzp_payment_id', d.last_payment_id);
-              } else if (!isActive && !safeLS.getItem('cm_rzp_payment_id')) {
-                // Subscription truly expired and no local payment record
-                safeLS.removeItem('cm_sub_end');
+                safeLS.setItem('cm_sub_end', String(endDate)); // for display only
+              } else {
+                window._sbSubActive = false;
               }
+            } else {
+              window._sbSubActive = false;
             }
-            // Always refresh UI after DB check
+            // Refresh UI after DB check
             updateCloudBtn && updateCloudBtn();
             refreshCloudModalState && refreshCloudModalState();
             setTimeout(loadViewerAccountsInline, 200);
           }).catch(function(){
-            setTimeout(loadViewerAccountsInline, 200);
+            // Network error — deny access rather than allow
+            window._sbSubActive = false;
+            updateCloudBtn && updateCloudBtn();
+            refreshCloudModalState && refreshCloudModalState();
           });
         }
       }).catch(function(){});
@@ -7052,10 +7052,10 @@ function _openSubscriptionRazorpay() {
 function onSubscriptionPaymentSuccess(response) {
   var payId = response.razorpay_payment_id || ('LIVE_' + Date.now());
   var subEnd = Date.now() + (30 * 24 * 60 * 60 * 1000);
-  // Store payment locally immediately — never lose it
+  // Store payment ID locally for display/reference only (NOT for auth decisions)
   safeLS.setItem(CLOUD_KEY, '1');
-  safeLS.setItem('cm_rzp_payment_id', payId);
-  safeLS.setItem('cm_sub_end', String(subEnd));
+  safeLS.setItem('cm_rzp_payment_id', payId); // display only
+  safeLS.setItem('cm_sub_end', String(subEnd)); // display only — real auth is from DB
 
   var user = _pendingAuthUser || _adminSBUser;
 
