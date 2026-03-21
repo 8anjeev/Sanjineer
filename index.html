@@ -711,7 +711,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       <div id="dash-clock-circle" style="width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#1e1b4b,#4f46e5);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(79,70,229,0.55),0 0 0 3px rgba(255,255,255,0.16);border:2px solid rgba(255,255,255,0.24);overflow:hidden;box-sizing:border-box;">
         <p id="dash-clock-date" class="text-white font-bold" style="font-size:9px;line-height:1;opacity:.88;margin:0"></p>
         <p id="dash-clock-weekday" class="text-white font-black" style="font-size:12px;line-height:1.2;margin-top:2px;margin-bottom:0"></p>
-        <p id="dash-clock-time" class="font-black" style="font-size:11px;line-height:1;color:#a5b4fc;margin-top:2px;margin-bottom:0"></p>
+        <p id="dash-clock-time" class="font-black" style="font-size:10px;line-height:1;color:white;opacity:.88;margin-top:2px;margin-bottom:0"></p>
       </div>
     </div>
     <!-- Workers chip — expands horizontally, fixed height -->
@@ -1964,24 +1964,11 @@ service cloud.firestore {
 }</div>
             <button onclick="var r='rules_version = \'2\';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /admins/{uid} {\n      allow read, write: if request.auth != null\n        &amp;&amp; request.auth.uid == uid;\n    }\n    match /viewers/{uid} {\n      allow read: if request.auth != null\n        &amp;&amp; request.auth.uid == uid;\n      allow write: if request.auth != null\n        &amp;&amp; exists(/databases/$(database)/documents/admins/$(request.auth.uid));\n    }\n    match /sites/{siteId} {\n      allow write: if request.auth != null\n        &amp;&amp; exists(/databases/$(database)/documents/admins/$(request.auth.uid));\n      allow read: if request.auth != null;\n    }\n  }\n}';var t=document.createElement('textarea');t.value=r.replace(/&amp;/g,'&');document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();toast('✅ Rules copied!','ok');" style="width:100%;margin-top:6px;padding:6px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:8px;font-size:10px;font-weight:800;cursor:pointer;">📋 Copy Rules to Clipboard</button>
           </div>
-          <div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(16,185,129,.07));border:1px solid rgba(34,197,94,.22);border-radius:12px;padding:.75rem .9rem;margin-bottom:.75rem;">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <div>
-                <p style="font-size:12px;font-weight:800;color:#86efac;line-height:1;">&#9729;&#65039; Cloud Active</p>
-                <p id="cloud-site-id-display" style="font-size:9px;color:#6ee7b7;margin-top:3px;">Site ID: &mdash;</p>
-              </div>
-              <div style="width:30px;height:30px;background:rgba(34,197,94,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;">&#9989;</div>
-            </div>
-          </div>
+          <div id="cloud-firebase-section" style="display:none;"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
             <button onclick="cloudBackupNow()" style="padding:.7rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:12px;font-weight:700;font-size:.78rem;cursor:pointer;">&#11014;&#65039; Backup Now</button>
             <button onclick="cloudRestoreNow()" style="padding:.7rem;background:linear-gradient(135deg,#0891b2,#0ea5e9);color:white;border:none;border-radius:12px;font-weight:700;font-size:.78rem;cursor:pointer;">&#11015;&#65039; Restore</button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-            <button onclick="openViewerModal()" style="padding:.65rem;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);color:#c4b5fd;border-radius:12px;font-weight:700;font-size:.78rem;cursor:pointer;">&#128279; Viewer Link</button>
-            <button onclick="disconnectCloudWithBackup()" style="padding:.65rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;border-radius:12px;font-size:.78rem;font-weight:700;cursor:pointer;">&#128268; Disconnect</button>
-          </div>
-          <div id="cloud-firebase-section" style="display:none;"></div>
           <div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
               <p style="font-size:11px;font-weight:800;color:#a78bfa;">&#128101; Viewer Accounts</p>
