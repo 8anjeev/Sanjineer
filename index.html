@@ -161,6 +161,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   var _SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvYXdmYXVqYW5weGl2aW52aXZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNjY0MTYsImV4cCI6MjA4OTY0MjQxNn0.-vFAQfm4oAnvh4ZTPg0EL1FiofgCMq_N-ccKwoMVCbE';
   var _sb = null;
   window._sbSubActive = false; // Only set to true after DB verification
+  window._sbSubChecked = false; // Set to true once DB check completes
 
   // Init Supabase client (SDK loaded synchronously via CDN)
   function _initSB() {
@@ -5574,6 +5575,20 @@ function updateCloudBtn() {
 
 // -- Open / Close Cloud Modal --
 function openCloudModal() {
+  // If admin is logged in but _sbSubActive not yet set (DB check pending), wait briefly
+  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+  if (isAdmin && !window._sbSubActive && !window._sbSubChecked) {
+    // Show modal immediately with loading state, then refresh when ready
+    document.getElementById('cloud-modal').classList.add('show');
+    var loadingCheck = setInterval(function() {
+      if (window._sbSubChecked) {
+        clearInterval(loadingCheck);
+        refreshCloudModalState();
+      }
+    }, 200);
+    setTimeout(function(){ clearInterval(loadingCheck); }, 8000);
+    return;
+  }
   refreshCloudModalState();
   document.getElementById('cloud-modal').classList.add('show');
 }
@@ -6250,7 +6265,9 @@ function doSmartLogin() {
   }).catch(function(e) {
     btn.textContent = '🔑 Login'; btn.disabled = false;
     var msg = (e.message || 'Login failed');
-    if (msg.includes('Invalid login') || msg.includes('invalid_credentials')) msg = 'Galat email ya password';
+    if (msg.includes('Invalid login') || msg.includes('invalid_credentials') || msg.includes('invalid credentials')) {
+      msg = 'Account nahi mila — pehle Create Account karo, fir login karo';
+    }
     errEl.textContent = '⚠️ ' + msg; errEl.style.display = 'block';
   });
 }
@@ -6290,7 +6307,7 @@ function doAdminSignup() {
     if (r.error) throw r.error;
     var user = r.data.user;
     _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null; _adminSBUser = user;
-    _sb.from('admins').upsert({ id: user.id, email: email, subscribed: false }, { onConflict: 'id' }).catch(function(){});
+    Promise.resolve(_sb.from('admins').upsert({ id: user.id, email: email, subscribed: false }, { onConflict: 'id' })).catch(function(){});
     closeAuthModal();
     openPayLanding(true);
     btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
@@ -6315,7 +6332,7 @@ function onAdminLoginSuccess(email, user, app) {
   safeLS.setItem(ADMIN_ROLE_KEY,  'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY, email);
   // Always ensure admin row exists — prevents foreign key issues when creating viewers
-  _sb.from('admins').upsert({ id: user.id, email: email }, { onConflict: 'id', ignoreDuplicates: true }).catch(function(){});
+  Promise.resolve(_sb.from('admins').upsert({ id: user.id, email: email }, { onConflict: 'id' })).catch(function(){});
   closeAuthModal();
   var emailEl = document.getElementById('cloud-admin-email');
   if (emailEl) emailEl.textContent = email;
@@ -6468,6 +6485,7 @@ function restoreAdminSession() {
             } else {
               window._sbSubActive = false;
             }
+            window._sbSubChecked = true;
             // Refresh UI after DB check
             updateCloudBtn && updateCloudBtn();
             refreshCloudModalState && refreshCloudModalState();
@@ -6475,6 +6493,7 @@ function restoreAdminSession() {
           }).catch(function(){
             // Network error — deny access rather than allow
             window._sbSubActive = false;
+            window._sbSubChecked = true;
             updateCloudBtn && updateCloudBtn();
             refreshCloudModalState && refreshCloudModalState();
           });
@@ -6551,10 +6570,10 @@ function generateViewerLink() {
   var token  = _genToken();
   var slug   = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,20) + '-' + token.slice(0,4);
 
-  _sb.from('admins').upsert({
+  Promise.resolve(_sb.from('admins').upsert({
     id: _adminSBUser.id,
     email: _adminSBUser.email || safeLS.getItem(ADMIN_EMAIL_KEY) || ''
-  }, { onConflict: 'id', ignoreDuplicates: true }).then(function() {
+  }, { onConflict: 'id' })).then(function() {
     return _sb.from('viewers').insert({
       admin_id:      _adminSBUser.id,
       email:         slug,
