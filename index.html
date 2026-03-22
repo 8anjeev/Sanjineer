@@ -742,7 +742,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   </div>
 
   <!-- Low Stock Alert -->
-  <div id="dash-low-stock" class="mb-2 hidden"><div class="g-tobr-red500-rose600 rounded-2xl p-3 text-white shadow-xl"><p class="font-bold text-sm mb-1.5">⚠️ Low Stock Alert</p><div id="dash-low-list"></div></div></div>
+  <div id="dash-low-stock" class="mb-2 hidden"><div class="g-tobr-red500-rose600 rounded-xl text-white shadow-xl" style="padding:6px 10px"><p class="font-bold mb-1" style="font-size:11px">⚠️ Low Stock Alert</p><div id="dash-low-list" style="display:flex;flex-wrap:wrap;gap:4px"></div></div></div>
 
   <!-- Teams This Month -->
   <div class="bg-white rounded-2xl p-3 shadow-xl"><h3 class="font-bold text-gray-800 mb-2">👥 Teams This Month</h3><div id="team-details"><p class="text-gray-400 text-center py-4 text-sm">No teams yet</p></div></div>
@@ -777,9 +777,10 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full border border-gray-200 rounded-lg text-xs resize-none focus:outline-none focus:border-indigo-400" style="padding:4px 8px"></textarea>
   </div>
 
-  <div class="grid grid-cols-2 gap-2 mb-2">
+  <div class="grid grid-cols-3 gap-2 mb-2">
     <div class="g-tobr-rose500-pink500 rounded-xl text-white" style="padding:5px 10px"><p class="text-[9px] text-rose-100 leading-none">Advances Today</p><p id="daily-advances" class="text-base font-bold leading-none mt-0.5">₹0</p></div>
     <div class="g-tobr-amber500-orange500 rounded-xl text-white" style="padding:5px 10px"><p class="text-[9px] text-amber-100 leading-none">Material Today</p><p id="daily-mat-cost" class="text-base font-bold leading-none mt-0.5">₹0</p></div>
+    <div class="g-tobr-indigo500-violet500 rounded-xl text-white" style="padding:5px 10px"><p class="text-[9px] text-indigo-100 leading-none">Worker Cost</p><p id="daily-worker-cost" class="text-base font-bold leading-none mt-0.5">₹0</p></div>
   </div>
 
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -812,6 +813,26 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       <table class="w-full text-sm">
         <thead><tr class="g-tor-amber500-orange500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Material</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right rounded-r-lg">Amount</th></tr></thead>
         <tbody id="daily-mat-table"><tr><td colspan="3" class="px-3 py-4 text-center text-gray-400">None today</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Materials Stock Usage Table -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3">📦 Materials Stock</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full" style="font-size:11px;border-collapse:collapse">
+        <thead>
+          <tr style="background:linear-gradient(135deg,#d97706,#f59e0b);color:white">
+            <th style="padding:6px 8px;text-align:left;border-radius:8px 0 0 8px">Material</th>
+            <th style="padding:6px 8px;text-align:center">Stock</th>
+            <th style="padding:6px 8px;text-align:center">Used Today</th>
+            <th style="padding:6px 8px;text-align:center;border-radius:0 8px 8px 0">Remaining</th>
+          </tr>
+        </thead>
+        <tbody id="daily-stock-table">
+          <tr><td colspan="4" style="padding:12px;text-align:center;color:#9ca3af">No materials in stock</td></tr>
+        </tbody>
       </table>
     </div>
   </div>
@@ -2874,10 +2895,48 @@ function viewDaily() {
   var mats = AD.filter(function(a){ return a.type==='material' && a.date===DD && !a.is_petty_cash; });
   var mc = mats.reduce(function(s,m){ return s+(parseFloat(m.cost)||0); }, 0);
   var dm = document.getElementById('daily-mat-cost'); if (dm) dm.textContent = fc(mc);
+  // Worker cost = sum of (hours × hourly_wage) for each worker present today
+  var wc = att.reduce(function(s, a) {
+    var worker = AD.find(function(w){ return w.type==='worker' && w.name===a.name; });
+    var rate = worker ? (parseFloat(worker.hourly_wage)||0) : 0;
+    return s + (parseFloat(a.hours)||0) * rate;
+  }, 0);
+  var dwc = document.getElementById('daily-worker-cost'); if (dwc) dwc.textContent = fc(wc);
   var dmt = document.getElementById('daily-mat-table');
   if (dmt) dmt.innerHTML = mats.length
     ? mats.map(function(m){ return '<tr class="border-b border-gray-100"><td class="px-2 py-2 font-medium text-xs">'+m.material_name+'</td><td class="px-2 py-2 text-center text-xs">'+(m.quantity||'--')+'</td><td class="px-2 py-2 text-right text-xs">'+fc(m.cost)+'</td></tr>'; }).join('')
     : '<tr><td colspan="3" class="py-3 text-center text-gray-400 text-xs">None today</td></tr>';
+
+  // Populate Materials Stock Usage table
+  var stockTbl = document.getElementById('daily-stock-table');
+  if (stockTbl) {
+    var allMats = lmat();
+    if (!allMats.length) {
+      stockTbl.innerHTML = '<tr><td colspan="4" style="padding:8px;text-align:center;color:#9ca3af;font-size:11px">No materials in stock</td></tr>';
+    } else {
+      stockTbl.innerHTML = allMats.map(function(item) {
+        var currentStock = getbal(item);
+        var usedToday = (item.transactions||[]).filter(function(t){ return t.type==='use' && (t.date||'').startsWith(DD); }).reduce(function(s,t){ return s+t.qty; }, 0);
+        var purchasedToday = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && (t.date||'').startsWith(DD); }).reduce(function(s,t){ return s+t.qty; }, 0);
+        // Previous day stock = current stock - today's purchases + today's usage
+        var prevStock = currentStock - purchasedToday + usedToday;
+        var remaining = currentStock;
+        var isLow = item.minQty > 0 && remaining <= item.minQty;
+        var nameCell = isLow
+          ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:6px;padding:2px 7px;font-size:11px">'+item.name+'</span> <span style="background:#fef08a;color:#92400e;font-weight:700;border-radius:4px;padding:1px 5px;font-size:9px">LOW</span>'
+          : '<span style="font-size:11px;font-weight:600;color:#374151">'+item.name+'</span>';
+        var remCell = isLow
+          ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:6px;padding:2px 6px;font-size:11px">'+remaining+' '+item.unit+'</span>'
+          : '<span style="color:#059669;font-weight:700;font-size:11px">'+remaining+' '+item.unit+'</span>';
+        return '<tr style="border-bottom:1px solid #f3f4f6">'
+          + '<td style="padding:5px 8px;">'+nameCell+'</td>'
+          + '<td style="padding:5px 8px;text-align:center;font-size:11px;color:#374151">'+prevStock+' '+item.unit+'</td>'
+          + '<td style="padding:5px 8px;text-align:center;font-size:11px;color:'+(usedToday>0?'#d97706':'#9ca3af')+';font-weight:'+(usedToday>0?'700':'400')+'">'+(usedToday>0?usedToday+' '+item.unit:'—')+'</td>'
+          + '<td style="padding:5px 8px;text-align:center">'+remCell+'</td>'
+          + '</tr>';
+      }).join('');
+    }
+  }
   var grp = {};
   att.forEach(function(a){ if (!grp[a.category]) grp[a.category]=[]; grp[a.category].push(a); });
   var cats = Object.keys(grp).sort(function(a,b){ return (CATS.indexOf(a)+1||99)-(CATS.indexOf(b)+1||99); });
@@ -4095,7 +4154,7 @@ if(sBar)sBar.style.width=msPct+'%';if(sPct)sPct.textContent=msPct+'%';
 // Live clock
 _updateDashClock();
 var low=getLowStock(), lsDiv=document.getElementById('dash-low-stock');
-if (low.length) { lsDiv.classList.remove('hidden'); document.getElementById('dash-low-list').innerHTML=low.map(function(i){ return '<p style="color:white;font-size:12px">• '+i.name+': '+getbal(i)+' '+i.unit+' (min '+i.minQty+')</p>'; }).join(''); }
+if (low.length) { lsDiv.classList.remove('hidden'); document.getElementById('dash-low-list').innerHTML=low.map(function(i){ return '<span style="background:rgba(0,0,0,0.2);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;white-space:nowrap">'+i.name+' <span style="color:#fde68a">'+getbal(i)+' '+i.unit+'</span></span>'; }).join(''); }
 else lsDiv.classList.add('hidden');
 var ctrs=AD.filter(function(d){ return d.type==='contractor'; });
 var td=document.getElementById('team-details');
@@ -4292,9 +4351,34 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
 +(dept.length ? '<div class="sec"><div class="st" style="border-left-color:#7c3aed">🏗 Departmental Work</div><table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
 +dept.map(function(e){ return '<tr><td style="font-weight:700;padding:6px 10px">'+e.cat+'</td><td style="text-align:center;padding:6px 10px;color:#7c3aed;font-weight:700">'+e.workers+'</td><td style="text-align:center;padding:6px 10px">'+(e.hours||'–')+'h</td><td style="padding:6px 10px">'+(e.work||'–')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+(e.amount?fc(e.amount):'–')+'</td></tr>'; }).join('')
 +'</tbody><tfoot><tr><td style="padding:7px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dW+'</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dH+'h</td><td></td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(dA)+'</td></tr></tfoot></table></div>' : '')
-+(mats.length ? '<div class="sec"><div class="st" style="border-left-color:#059669">🪰 Materials</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++(mats.length ? '<div class="sec"><div class="st" style="border-left-color:#059669">🧱 Materials Purchased</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
 +mats.map(function(m){ return '<tr><td style="font-weight:600;padding:6px 10px">'+m.material_name+'</td><td style="text-align:center;padding:6px 10px">'+(m.quantity||'–')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(m.cost)+'</td></tr>'; }).join('')
 +'</tbody><tfoot><tr><td colspan="2" style="padding:7px 10px;font-weight:900">Total</td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(mc)+'</td></tr></tfoot></table></div>' : '')
++(function(){
+  var allMats = lmat(); if (!allMats.length) return '';
+  var rows = allMats.map(function(item){
+    var currentStock = getbal(item);
+    var usedToday = (item.transactions||[]).filter(function(t){ return t.type==='use' && (t.date||'').startsWith(d); }).reduce(function(s,t){ return s+t.qty; }, 0);
+    var purchasedToday = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && (t.date||'').startsWith(d); }).reduce(function(s,t){ return s+t.qty; }, 0);
+    var prevStock = currentStock - purchasedToday + usedToday;
+    var remaining = currentStock;
+    var isLow = item.minQty > 0 && remaining <= item.minQty;
+    var nameCell = isLow
+      ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:5px;padding:2px 6px">'+item.name+'</span> <span style="background:#fef08a;color:#92400e;font-weight:700;border-radius:4px;padding:1px 5px;font-size:9px">LOW</span>'
+      : item.name;
+    var remCell = isLow
+      ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:5px;padding:2px 6px">'+remaining+' '+item.unit+'</span>'
+      : '<span style="color:#059669;font-weight:700">'+remaining+' '+item.unit+'</span>';
+    return '<tr style="border-bottom:1px solid #f3f4f6">'
+      +'<td style="padding:5px 8px">'+nameCell+'</td>'
+      +'<td style="text-align:center;padding:5px 8px">'+prevStock+' '+item.unit+'</td>'
+      +'<td style="text-align:center;padding:5px 8px;color:'+(usedToday>0?'#d97706':'#9ca3af')+';font-weight:'+(usedToday>0?'700':'400')+'">'+(usedToday>0?usedToday+' '+item.unit:'—')+'</td>'
+      +'<td style="text-align:center;padding:5px 8px">'+remCell+'</td></tr>';
+  }).join('');
+  return '<div class="sec"><div class="st" style="border-left-color:#d97706">📦 Materials Stock</div>'
+    +'<table><thead><tr><th>Material</th><th style="text-align:center">Prev Stock</th><th style="text-align:center">Used Today</th><th style="text-align:center">Remaining</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody></table></div>';
+})()
 +(photos.length ? '<div class="sec"><div class="st">📷 Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
 +pftr()+'</div></body></html>';
 opw(html);
@@ -5743,8 +5827,7 @@ function cloudBackupNow() {
     lastSync: Date.now(), syncedBy: _adminSBUser.email, version: '2.0'
   };
   _sb.from('cloud_backups').upsert({
-    admin_id: _adminSBUser.id, backup_key: siteId, data: payload,
-    updated_at: new Date().toISOString()
+    admin_id: _adminSBUser.id, backup_key: siteId, data: payload
   }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
     if (r.error) { toast('Backup failed: ' + r.error.message, 'err'); return; }
     var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
@@ -6025,7 +6108,6 @@ function _viewerLoadData(adminId, projId) {
   }
 
   // Query by admin_id — get their latest backup
-  // Try with id ordering first (always exists), fallback to no ordering
   _sb.from('cloud_backups')
     .select('data,backup_key')
     .eq('admin_id', adminId)
@@ -6033,15 +6115,9 @@ function _viewerLoadData(adminId, projId) {
     .limit(1)
     .then(function(r) {
       if (r.error) {
-        // RLS might block — try without auth filter using backup_key directly
-        var cachedKey = safeLS.getItem('sj_viewer_site') || '';
-        if (cachedKey) {
-          return _sb.from('cloud_backups').select('data').eq('admin_id', adminId).eq('backup_key', cachedKey).maybeSingle().then(function(r2) {
-            if (r2.error || !r2.data) { toast('⚠️ Cannot access backup — check Supabase RLS policy for cloud_backups table', 'err'); return; }
-            applyViewerData(r2.data.data);
-          });
-        }
-        toast('⚠️ DB error: ' + (r.error.message || r.error.code || 'RLS may be blocking viewer access'), 'err');
+        // Log exact error so user can report it
+        console.error('Viewer backup fetch error:', r.error);
+        toast('⚠️ Load error: ' + (r.error.message || r.error.code || 'Check Supabase RLS on cloud_backups'), 'err');
         return;
       }
       if (!r.data || r.data.length === 0) {
@@ -6050,6 +6126,7 @@ function _viewerLoadData(adminId, projId) {
       }
       applyViewerData(r.data[0].data);
     }).catch(function(e) {
+      console.error('Viewer load catch:', e);
       toast('Data load error: ' + (e.message || 'unknown'), 'err');
     });
 }
@@ -6704,7 +6781,7 @@ function loadViewerAccountsInline() {
         +'<div style="display:flex;gap:5px;">'
         +'<button onclick="_copyViewerToken(\''+v.password_hash+'\')" style="padding:4px 8px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🔗 Link</button>'
         +'<button onclick="toggleInlineEdit(this,'+i+')" style="padding:4px 8px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
-        +'<button onclick="deleteViewerAccount(\''+v.id+'\','+i+')" style="padding:4px 8px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🗑</button>'
+        +'<button onclick="deleteViewerAccount(\''+( v.id || v.email )+'\','+i+')" style="padding:4px 8px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🗑</button>'
         +'</div></div>'
         +'<div id="inline-chips-view-'+i+'" style="display:flex;flex-wrap:wrap;">'+(chips||'<span style="font-size:9px;color:rgba(255,255,255,.3)">No tabs</span>')+'</div>'
         +'<div id="inline-edit-panel-'+i+'" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px;">'
@@ -6714,7 +6791,7 @@ function loadViewerAccountsInline() {
         +'<input type="checkbox" id="inline-print-'+i+'" '+(v.can_print?'checked':'')+' style="accent-color:#818cf8;width:13px;height:13px;">'
         +'<label for="inline-print-'+i+'" style="font-size:10px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
         +'</div>'
-        +'<button onclick="saveInlineViewerPerms('+i+',\''+v.id+'\')" style="width:100%;padding:6px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:8px;font-weight:800;font-size:10px;cursor:pointer;">💾 Save Permissions</button>'
+        +'<button onclick="saveInlineViewerPerms('+i+',\''+v.email+'\')" style="width:100%;padding:6px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:8px;font-weight:800;font-size:10px;cursor:pointer;">💾 Save Permissions</button>'
         +'</div>'
         +'</div>';
     }).join('');
@@ -6751,12 +6828,18 @@ function saveInlineViewerPerms(idx, rowId) {
   });
   var canPrint = document.getElementById('inline-print-'+idx) ? document.getElementById('inline-print-'+idx).checked : false;
   if(!_sb||!_adminSBUser){toast('Not logged in','err');return;}
-  _sb.from('viewers').update({permissions:newPerms,can_print:canPrint}).eq('id',rowId).eq('admin_id',_adminSBUser.id)
+  if(!_adminSBUser.id){toast('Session expired — please login again','err');return;}
+  if(!rowId){toast('Cannot identify viewer row','err');return;}
+  // Always update by email + admin_id (safest — avoids UUID issues)
+  _sb.from('viewers')
+    .update({permissions: newPerms, can_print: canPrint})
+    .eq('admin_id', _adminSBUser.id)
+    .eq('email', rowId)
     .then(function(r){
       if(r.error){toast('Save failed: '+r.error.message,'err');return;}
       toast('✅ Permissions saved!','ok');
       loadViewerAccountsInline();
-    }).catch(function(e){toast(e.message,'err');});
+    }).catch(function(e){toast('Save error: '+(e.message||'unknown'),'err');});
 }
 
 function loadViewerAccounts() {
@@ -6881,7 +6964,14 @@ function _copyViewerToken(token) {
 function deleteViewerAccount(rowId, idx) {
   if (!confirm('Delete this viewer account?')) return;
   if (!_sb || !_adminSBUser) { toast('Not logged in', 'err'); return; }
-  _sb.from('viewers').delete().eq('id', rowId).eq('admin_id', _adminSBUser.id)
+  var delQuery = _sb.from('viewers').delete();
+  // If rowId is a UUID (36 chars with dashes), use id; otherwise use email
+  if (rowId && rowId.length === 36 && rowId.split('-').length === 5) {
+    delQuery = delQuery.eq('id', rowId);
+  } else {
+    delQuery = delQuery.eq('email', rowId);
+  }
+  delQuery.eq('admin_id', _adminSBUser.id)
     .then(function(r) {
       if (r.error) { toast('Delete failed: ' + r.error.message, 'err'); return; }
       toast('Viewer account deleted', 'ok');
