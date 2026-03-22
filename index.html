@@ -217,7 +217,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   }
   function getSiteId() {
     var s = safeLS.getItem(CLOUD_SITE_ID);
-    return s || 'sanjineer-main-site';
+    return s || '';
   }
   function isCloudActivated() { return safeLS.getItem(CLOUD_KEY) === '1'; }
   </script>
@@ -2690,9 +2690,7 @@ function boot() {
   var machDate=document.getElementById('mach-date');if(machDate)machDate.value=ist();
   checkViewerMode();
   // ── SUPABASE CONFIG (pre-configured, no manual setup needed) ──
-  if (!getSiteId()) {
-    safeLS.setItem(CLOUD_SITE_ID, 'sanjineer-main-site');
-  }
+  // Site ID is now auto-set from admin user ID on login — no hardcoded default needed
   if (!isCloudActivated()) {
     safeLS.setItem(CLOUD_KEY, '1');
   }
@@ -2700,17 +2698,15 @@ function boot() {
   // Restore viewer session if they refreshed the page
   var viewerEmail = safeLS.getItem('sj_viewer_email');
   var viewerPerms = safeLS.getItem('sj_viewer_perms');
-  var viewerSite  = safeLS.getItem('sj_viewer_site');
-  if (viewerEmail && viewerPerms && viewerSite) {
+  var viewerAdmin = safeLS.getItem('sj_viewer_admin'); // adminId — used to fetch data
+  if (viewerEmail && viewerPerms && viewerAdmin) {
     _IS_VIEWER = true;
     var perms = [];
     try { perms = JSON.parse(viewerPerms); } catch(ex) {}
     var canPrint = safeLS.getItem('sj_viewer_print') === '1';
-    // Show viewer top bar
     if (!document.getElementById('viewer-top-bar')) {
       _showViewerBar(viewerEmail);
     }
-    // Apply permissions immediately (before data loads)
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
       btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
     });
@@ -2724,8 +2720,8 @@ function boot() {
         }
       });
     }
-    // Load data via Supabase backup
-    setTimeout(function() { _viewerLoadData(viewerSite, ''); }, 1500);
+    // Load data using adminId — correct admin's data always
+    setTimeout(function() { _viewerLoadData(viewerAdmin, ''); }, 1500);
     return;
   }
   if (!viewerEmail) {
@@ -5549,7 +5545,14 @@ var _cloudSyncTimer = null;
 // -- Helpers --
 function isCloudActivated() { return safeLS.getItem(CLOUD_KEY) === '1'; }
 function getFbConfig() { try { return JSON.parse(safeLS.getItem(CLOUD_FB_CFG) || 'null'); } catch(e) { return null; } }
-function getSiteId() { return safeLS.getItem(CLOUD_SITE_ID) || ''; }
+function getSiteId() {
+  if (_adminSBUser && _adminSBUser.id) {
+    var key = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+    safeLS.setItem(CLOUD_SITE_ID, key);
+    return key;
+  }
+  return safeLS.getItem(CLOUD_SITE_ID) || '';
+}
 
 // -- Header cloud button update --
 function updateCloudBtn() {
@@ -5659,7 +5662,8 @@ function refreshCloudModalState() {
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = 'none';
     var siteEl = document.getElementById('cloud-site-id-display');
-    if (siteEl) siteEl.textContent = 'Site ID: ' + (siteId || 'sanjineer-main-site');
+    var displaySite = siteId || ((_adminSBUser && _adminSBUser.id) ? 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) : '—');
+    if (siteEl) siteEl.textContent = 'Site ID: ' + displaySite;
     var syncDot  = document.getElementById('cloud-sync-dot');
     var syncTime = document.getElementById('cloud-sync-time');
     if (syncDot)  syncDot.style.background = sbReady ? '#22c55e' : '#fbbf24';
@@ -5929,33 +5933,33 @@ function _fetchViewerByToken(token, silent) {
 function _applyTokenViewer(vData, token) {
   var perms    = vData.perms || vData.permissions || [];
   var canPrint = vData.canPrint || vData.can_print || false;
-  var siteId   = vData.siteId  || vData.site_id   || getSiteId();
+  var adminId  = vData.adminId || vData.admin_id || '';
   var label    = vData.email ? vData.email.split('-').slice(0,-1).join(' ') : 'Viewer';
 
   // Store in localStorage so reload works
-  safeLS.setItem('sj_viewer_perms', JSON.stringify(perms));
-  safeLS.setItem('sj_viewer_print', canPrint ? '1' : '0');
-  safeLS.setItem('sj_viewer_site',  siteId);
-  safeLS.setItem('sj_viewer_email', label);
-  safeLS.setItem('sj_viewer_token', token);
+  safeLS.setItem('sj_viewer_perms',   JSON.stringify(perms));
+  safeLS.setItem('sj_viewer_print',   canPrint ? '1' : '0');
+  safeLS.setItem('sj_viewer_admin',   adminId);   // key: always use adminId to find data
+  safeLS.setItem('sj_viewer_email',   label);
+  safeLS.setItem('sj_viewer_token',   token);
 
   _IS_VIEWER = true;
   _showViewerBar(label);
-  _applyViewerPermissions(perms, canPrint, siteId);
-  if (siteId) _viewerLoadData(siteId, '');
+  _applyViewerPermissions(perms, canPrint, adminId);
+  if (adminId) _viewerLoadData(adminId, '');
+  else toast('⚠️ Could not find admin data — invalid link?', 'err');
 }
 
 function _viewerRefresh() {
-  var siteId = safeLS.getItem('sj_viewer_site') || '';
-  var params = new URLSearchParams(window.location.search);
-  if (!siteId) siteId = params.get('view') || '';
-  var cfg = getFbConfig();
-  var projId = (cfg && cfg.projectId) ? cfg.projectId : (params.get('pid') || '');
-  if (siteId) {
-    _viewerLoadData(siteId, projId);
+  var adminId = safeLS.getItem('sj_viewer_admin') || '';
+  if (adminId) {
+    _viewerLoadData(adminId, '');
     toast('🔄 Refreshing data…', 'ok');
   } else {
-    toast('Site ID not found — please login again', 'err');
+    // Fallback: re-fetch token from DB
+    var token = safeLS.getItem('sj_viewer_token') || '';
+    if (token) { _fetchViewerByToken(token, false); }
+    else toast('Session expired — open the viewer link again', 'err');
   }
 }
 
@@ -5963,7 +5967,9 @@ function _viewerLogout() {
   safeLS.removeItem('sj_viewer_perms');
   safeLS.removeItem('sj_viewer_print');
   safeLS.removeItem('sj_viewer_site');
+  safeLS.removeItem('sj_viewer_admin');
   safeLS.removeItem('sj_viewer_email');
+  safeLS.removeItem('sj_viewer_token');
   _IS_VIEWER = false;
   _viewerApp = null;
   var bar = document.getElementById('viewer-top-bar');
@@ -5979,8 +5985,9 @@ function _viewerLogout() {
   switchCloudTab('admin');
 }
 
-function _viewerLoadData(siteId, projId) {
-  if (!_sb) { setTimeout(function() { _viewerLoadData(siteId, projId); }, 600); return; }
+function _viewerLoadData(adminId, projId) {
+  if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
+  if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
 
   function applyViewerData(d) {
     var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist);
@@ -6013,20 +6020,25 @@ function _viewerLoadData(siteId, projId) {
         }
       });
     }
-    var syncEl = document.getElementById('viewer-sync-time');
-    if (syncEl) syncEl.textContent = 'Updated: ' + new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
+    updateDash();
     toast('✅ Cloud data loaded', 'ok');
   }
 
-  // Find which admin owns this siteId, load their latest backup
-  _sb.from('cloud_backups').select('data').eq('backup_key', siteId).single().then(function(r) {
-    if (r.error || !r.data) {
-      toast('No site data found for: ' + siteId, 'err'); return;
-    }
-    applyViewerData(r.data.data);
-  }).catch(function(e) {
-    toast('Data load error: ' + e.message, 'err');
-  });
+  // Query by admin_id — gets this admin's most recent backup regardless of key name
+  _sb.from('cloud_backups')
+    .select('data,backup_key')
+    .eq('admin_id', adminId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .then(function(r) {
+      if (r.error || !r.data || r.data.length === 0) {
+        toast('No backup found for this site. Ask admin to run Backup Now.', 'err');
+        return;
+      }
+      applyViewerData(r.data[0].data);
+    }).catch(function(e) {
+      toast('Data load error: ' + (e.message || 'unknown'), 'err');
+    });
 }
 
 function _disableViewerWrites() {
@@ -6364,33 +6376,54 @@ function onAdminLoginSuccess(email, user, app) {
       }
     }
   }).catch(function(){});
-  toast('✅ Welcome Admin! Fetching cloud data…', 'ok');
+  toast('✅ Welcome! Fetching cloud data…', 'ok');
   loadViewerAccountsInline();
   if (!isCloudActivated()) safeLS.setItem(CLOUD_KEY, '1');
   updateCloudBtn();
   startAutoSync();
-  // Restore latest cloud data to local on login
-  var siteId = getSiteId();
-  if (siteId) {
-    _sb.from('cloud_backups').select('data').eq('admin_id', user.id).eq('backup_key', siteId).single().then(function(r) {
-      if (!r.error && r.data && r.data.data) {
-        var d = r.data.data;
-        if (d.db) { sd(d.db); AD = ld(); }
-        if (d.meta) sm(d.meta);
-        if (d.mats) smat(d.mats);
-        if (d.dept) sdept(d.dept);
-        if (d.prof) sprof(d.prof);
-        if (d.machinery) smach(d.machinery);
-        if (d.drawings) sdrw(d.drawings);
-        if (d.budget) sbgt(d.budget);
-        if (d.milestones) sms(d.milestones);
-        if (d.punchlist) spl(d.punchlist);
-        applyProfile(); updateDash();
-        toast('☁️ Cloud data loaded!', 'ok');
-      }
-    }).catch(function(){});
-    setTimeout(function() { cloudBackupNow(); }, 2000);
-  }
+  // Restore latest cloud data — use siteId or fallback to any backup for this admin
+  // Always scope backup key to this admin's user ID — unique per user
+  var siteId = 'user-' + user.id.replace(/-/g,'').slice(0,12);
+  safeLS.setItem(CLOUD_SITE_ID, siteId);
+  _sb.from('cloud_backups').select('data').eq('admin_id', user.id).eq('backup_key', siteId).maybeSingle().then(function(r) {
+    if (r && !r.error && r.data && r.data.data) {
+      var d = r.data.data;
+      if (d.db) { sd(d.db); AD = ld(); }
+      if (d.meta) sm(d.meta);
+      if (d.mats) smat(d.mats);
+      if (d.dept) sdept(d.dept);
+      if (d.prof) sprof(d.prof);
+      if (d.machinery) smach(d.machinery);
+      if (d.drawings) sdrw(d.drawings);
+      if (d.budget) sbgt(d.budget);
+      if (d.milestones) sms(d.milestones);
+      if (d.punchlist) spl(d.punchlist);
+      applyProfile(); updateDash();
+      toast('☁️ Cloud data restored!', 'ok');
+    } else {
+      // No backup with that key — try getting the most recent backup for this admin
+      _sb.from('cloud_backups').select('data,backup_key').eq('admin_id', user.id).order('created_at', {ascending: false}).limit(1).then(function(r2) {
+        if (r2 && !r2.error && r2.data && r2.data.length > 0) {
+          var d = r2.data[0].data;
+          var foundKey = r2.data[0].backup_key;
+          if (foundKey) safeLS.setItem(CLOUD_SITE_ID, foundKey);
+          if (d.db) { sd(d.db); AD = ld(); }
+          if (d.meta) sm(d.meta);
+          if (d.mats) smat(d.mats);
+          if (d.dept) sdept(d.dept);
+          if (d.prof) sprof(d.prof);
+          if (d.machinery) smach(d.machinery);
+          if (d.drawings) sdrw(d.drawings);
+          if (d.budget) sbgt(d.budget);
+          if (d.milestones) sms(d.milestones);
+          if (d.punchlist) spl(d.punchlist);
+          applyProfile(); updateDash();
+          toast('☁️ Cloud data restored!', 'ok');
+        }
+      }).catch(function(){});
+    }
+  }).catch(function(){});
+  setTimeout(function() { cloudBackupNow(); }, 3000);
   openCloudModal();
   updateCloudBtn();
 }
