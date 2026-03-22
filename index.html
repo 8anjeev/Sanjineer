@@ -6024,15 +6024,28 @@ function _viewerLoadData(adminId, projId) {
     toast('✅ Cloud data loaded', 'ok');
   }
 
-  // Query by admin_id — gets this admin's most recent backup regardless of key name
+  // Query by admin_id — get their latest backup
+  // Try with id ordering first (always exists), fallback to no ordering
   _sb.from('cloud_backups')
     .select('data,backup_key')
     .eq('admin_id', adminId)
-    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(1)
     .then(function(r) {
-      if (r.error || !r.data || r.data.length === 0) {
-        toast('No backup found for this site. Ask admin to run Backup Now.', 'err');
+      if (r.error) {
+        // RLS might block — try without auth filter using backup_key directly
+        var cachedKey = safeLS.getItem('sj_viewer_site') || '';
+        if (cachedKey) {
+          return _sb.from('cloud_backups').select('data').eq('admin_id', adminId).eq('backup_key', cachedKey).maybeSingle().then(function(r2) {
+            if (r2.error || !r2.data) { toast('⚠️ Cannot access backup — check Supabase RLS policy for cloud_backups table', 'err'); return; }
+            applyViewerData(r2.data.data);
+          });
+        }
+        toast('⚠️ DB error: ' + (r.error.message || r.error.code || 'RLS may be blocking viewer access'), 'err');
+        return;
+      }
+      if (!r.data || r.data.length === 0) {
+        toast('No backup found. Admin needs to click Backup Now first.', 'err');
         return;
       }
       applyViewerData(r.data[0].data);
