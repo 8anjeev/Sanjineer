@@ -2023,8 +2023,14 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
       <button onclick="addMachineSession()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Session</button>
     </div>
     <div class="grid grid-cols-2 gap-2">
-      <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Machine Name</label><input type="text" id="mach-name" placeholder="JCB, Mixer, Vibrator…" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Operator Name</label><input type="text" id="mach-operator" placeholder="Operator name" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Machine Name</label>
+        <input type="text" id="mach-name" placeholder="JCB, Mixer, Vibrator…" list="mach-name-list" autocomplete="off" oninput="machAutoFillRate()" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400">
+        <datalist id="mach-name-list"></datalist>
+      </div>
+      <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Operator Name</label>
+        <input type="text" id="mach-operator" placeholder="Operator name" list="mach-operator-list" autocomplete="off" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400">
+        <datalist id="mach-operator-list"></datalist>
+      </div>
       <!-- Time row — 2 pickers side by side with arrow -->
       <div class="col-span-2">
         <label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Working Hours</label>
@@ -6041,6 +6047,39 @@ function loadMachinery(){
   if(sd2)sd2.textContent=fd(t);if(ed)ed.textContent=fd(t);
   renderMachSessions(t);
   renderMachMonthly();
+  machPopulateDataLists();
+}
+
+/* ── Populate datalists from all saved machinery history ── */
+function machPopulateDataLists(){
+  var store=lmach();
+  var names={}, ops={}, rateByName={};
+  Object.keys(store).forEach(function(d){
+    (store[d]||[]).forEach(function(s){
+      if(s.name){ names[s.name]=1; }
+      if(s.operator){ ops[s.operator]=1; }
+      // Remember last known rate per machine name
+      if(s.name&&s.rate>0) rateByName[s.name]=s.rate;
+    });
+  });
+  var nl=document.getElementById('mach-name-list');
+  var ol=document.getElementById('mach-operator-list');
+  if(nl) nl.innerHTML=Object.keys(names).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'; }).join('');
+  if(ol) ol.innerHTML=Object.keys(ops).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'; }).join('');
+  // Store for auto-fill
+  window._machRateMap=rateByName;
+}
+
+/* ── Auto-fill rate when machine name matches a known entry ── */
+function machAutoFillRate(){
+  var nameEl=document.getElementById('mach-name');
+  var rateEl=document.getElementById('mach-rate');
+  if(!nameEl||!rateEl) return;
+  var name=nameEl.value.trim();
+  var map=window._machRateMap||{};
+  if(map[name]&&!parseFloat(rateEl.value)){
+    rateEl.value=map[name];
+  }
 }
 
 function addMachineSession(){
@@ -6063,6 +6102,7 @@ function addMachineSession(){
   ['mach-name','mach-operator','mach-start','mach-end','mach-rate','mach-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   renderMachSessions(d);
   renderMachMonthly();
+  machPopulateDataLists();
   toast('Session saved!','ok');
 }
 
@@ -6898,51 +6938,143 @@ function _boqParsePDFWithLib(file){
 
 /* ── Section / Item CRUD ── */
 function boqNextLetter(d){ var l='ABCDEFGHIJKLMNOPQRSTUVWXYZ'; return l[d.sections.length]||(d.sections.length+1)+''; }
+
+/* ── Re-sequence ALL items & sub-items after every structural change ── */
+function boqResequence(data){
+  data.sections.forEach(function(sec,si){
+    // Re-assign section letters in order
+    var letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    sec.letter = letters[si] || String(si+1);
+    sec.items.forEach(function(item,i){
+      item.no = sec.letter+'.'+(i+1);
+      if(!item.subItems) item.subItems=[];
+      item.subItems.forEach(function(sub,j){
+        sub.no = item.no+'.'+(j+1);
+      });
+    });
+  });
+}
+
 function boqAddSection(){
   var inp=document.getElementById('boq-new-sec'); var title=(inp?inp.value.trim():'');
   if(!title){toast('Enter section name','err');return;}
   var data=boqLoad();
   data.sections.push({id:'sec'+Date.now(),letter:boqNextLetter(data),title:title,collapsed:false,items:[]});
+  boqResequence(data);
   boqSave(data); if(inp) inp.value=''; boqRender(); toast('Section added!','ok');
 }
-function boqAddItem(secId){
+
+function boqToggleSecEdit(secId){
+  var lbl=document.getElementById('boq-sec-lbl-'+secId);
+  var inp=document.getElementById('boq-sec-title-input-'+secId);
+  var btn=document.getElementById('boq-sec-edit-btn-'+secId);
+  if(!lbl||!inp||!btn) return;
+  var isEditing=(inp.style.display!=='none');
+  if(isEditing){
+    // Save
+    boqRenameSection(secId);
+  } else {
+    // Enter edit mode
+    lbl.style.display='none';
+    inp.style.display='';
+    inp.value=lbl.textContent;
+    inp.focus();
+    inp.select();
+    btn.textContent='✅';
+    btn.title='Save section name';
+    btn.style.background='rgba(5,150,105,.4)';
+    btn.style.color='#6ee7b7';
+  }
+}
+
+function boqRenameSection(secId){
   var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
-  var nextNo = sec.letter+'.'+(sec.items.length+1);
-  var customNo = prompt('Item number (auto-generated, editable):', nextNo);
-  if(customNo===null) return; // cancelled
-  customNo = customNo.trim() || nextNo;
-  sec.items.push({id:'item'+Date.now(),no:customNo,desc:'New Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:'',subItems:[]});
-  boqResequence(data);
-  boqSave(data); boqRender();
+  var inp=document.getElementById('boq-sec-title-input-'+secId);
+  var lbl=document.getElementById('boq-sec-lbl-'+secId);
+  var btn=document.getElementById('boq-sec-edit-btn-'+secId);
+  if(!inp) return;
+  var newTitle=inp.value.trim();
+  if(!newTitle){toast('Title cannot be empty','err');return;}
+  sec.title=newTitle;
+  // Restore view mode visually before re-render
+  if(lbl){ lbl.textContent=newTitle; lbl.style.display=''; }
+  if(inp){ inp.style.display='none'; }
+  if(btn){ btn.textContent='✏️'; btn.title='Edit section name'; btn.style.background='rgba(99,102,241,.35)'; btn.style.color='#a5b4fc'; }
+  boqSave(data); boqRender(); toast('Section renamed','ok');
 }
 
-function boqAddSubItem(secId, itemId){
+/* ── Smart Add: detect item vs sub-item from the number pattern ─────
+   A.1       (1 dot)  → top-level item in section A
+   A.1.1     (2 dots) → sub-item under item A.1
+──────────────────────────────────────────────────────────────────── */
+function boqSmartAdd(secId){
   var data=boqLoad();
   var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var boxEl=document.getElementById('boq-add-no-'+secId);
+  var dots=(sec.items.length);
+  var defaultNo=sec.letter+'.'+(sec.items.length+1);
+  var customNo=(boxEl?boxEl.value.trim():'')||defaultNo;
+  var dotCount=(customNo.match(/\./g)||[]).length;
+
+  if(dotCount===1){
+    // Top-level item: X.N
+    var newItem={id:'item'+Date.now(),no:customNo,desc:'New Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:'',subItems:[]};
+    sec.items.push(newItem);
+    boqResequence(data);
+    boqSave(data); boqRender(); toast('Item added','ok');
+  } else if(dotCount>=2){
+    // Sub-item: X.N.M — find parent item X.N
+    var parts=customNo.split('.');
+    var parentNo=parts[0]+'.'+parts[1];
+    var parentItem=sec.items.find(function(i){return i.no===parentNo;});
+    if(!parentItem){toast('Parent item '+parentNo+' not found in this section','err');return;}
+    if(!parentItem.subItems) parentItem.subItems=[];
+    var newSub={id:'sub'+Date.now(),no:customNo,desc:'New Sub-Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:''};
+    parentItem.subItems.push(newSub);
+    boqResequence(data);
+    boqSave(data); boqRender(); toast('Sub-item added under '+parentNo,'ok');
+  } else {
+    toast('Enter a valid number like '+defaultNo+' (item) or '+defaultNo+'.1 (sub-item)','err');
+  }
+}
+
+/* ── Update the add-box hint text as user types ── */
+function boqUpdateAddHint(secId){
+  var sec=(boqLoad().sections||[]).find(function(s){return s.id===secId;}); if(!sec) return;
+  var boxEl=document.getElementById('boq-add-no-'+secId);
+  var hintEl=document.getElementById('boq-add-hint-'+secId);
+  if(!boxEl||!hintEl) return;
+  var val=boxEl.value.trim();
+  var dots=(val.match(/\./g)||[]).length;
+  if(dots===1) hintEl.textContent='→ Add as item';
+  else if(dots>=2) hintEl.textContent='→ Add as sub-item';
+  else hintEl.textContent='';
+}
+
+function boqToggleSec(secId){
+  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;});
+  if(sec) sec.collapsed=!sec.collapsed; boqSave(data); boqRender();
+}
+function boqDelSec(secId){ askDel('Delete this section and all its items?',function(){ var data=boqLoad(); data.sections=data.sections.filter(function(s){return s.id!==secId;}); boqResequence(data); boqSave(data); boqRender(); toast('Section deleted','ok'); }); }
+function boqDelItem(secId,itemId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(sec) sec.items=sec.items.filter(function(i){return i.id!==itemId;}); boqResequence(data); boqSave(data); boqRender(); }
+function boqDelSubItem(secId,itemId,subId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return; var item=sec.items.find(function(i){return i.id===itemId;}); if(item&&item.subItems) item.subItems=item.subItems.filter(function(s){return s.id!==subId;}); boqResequence(data); boqSave(data); boqRender(); }
+
+function boqEdit(secId,itemId,field,val){
+  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
   var item=sec.items.find(function(i){return i.id===itemId;}); if(!item) return;
-  if(!item.subItems) item.subItems=[];
-  var parentNo = item.no;
-  var nextNo = parentNo+'.'+(item.subItems.length+1);
-  var customNo = prompt('Sub-item number (auto-generated, editable):', nextNo);
-  if(customNo===null) return;
-  customNo = customNo.trim() || nextNo;
-  item.subItems.push({id:'sub'+Date.now(),no:customNo,desc:'New Sub-Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:''});
-  boqResequence(data);
-  boqSave(data); boqRender();
+  if(['tenderQty','prevQty','todayQty'].indexOf(field)>=0){ val=parseFloat(val)||0; if(val<0)val=0; }
+  item[field]=val;
+  if(field==='todayQty'||field==='prevQty'||field==='tenderQty'){
+    var tender=parseFloat(item.tenderQty)||0;
+    if(tender>0){
+      item.prevDone=Math.min(100,Math.round((parseFloat(item.prevQty)||0)/tender*100*10)/10);
+      item.todayDone=Math.min(100,Math.round((parseFloat(item.todayQty)||0)/tender*100*10)/10);
+    }
+  }
+  boqSave(data); boqUpdateBars(); boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
 }
-
-function boqDelSubItem(secId, itemId, subId){
-  var data=boqLoad();
-  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
-  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item||!item.subItems) return;
-  item.subItems=item.subItems.filter(function(s){return s.id!==subId;});
-  boqResequence(data);
-  boqSave(data); boqRender();
-}
-
 function boqEditSub(secId,itemId,subId,field,val){
-  var data=boqLoad();
-  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
   var item=sec.items.find(function(i){return i.id===itemId;}); if(!item||!item.subItems) return;
   var sub=item.subItems.find(function(s){return s.id===subId;}); if(!sub) return;
   if(['tenderQty','prevQty','todayQty'].indexOf(field)>=0){ val=parseFloat(val)||0; if(val<0)val=0; }
@@ -6956,42 +7088,6 @@ function boqEditSub(secId,itemId,subId,field,val){
   }
   boqSave(data); boqUpdateBars(); boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
 }
-
-/* ── Add sub-item reading from the inline preview box ── */
-function boqAddSubItemWithBox(secId, itemId){
-  var data=boqLoad();
-  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
-  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item) return;
-  if(!item.subItems) item.subItems=[];
-  var boxEl = document.getElementById('sub-no-preview-'+itemId);
-  var nextNo = item.no + '.' + (item.subItems.length+1);
-  var customNo = (boxEl ? boxEl.value.trim() : '') || nextNo;
-  item.subItems.push({id:'sub'+Date.now(),no:customNo,desc:'New Sub-Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:''});
-  boqResequence(data);
-  boqSave(data); boqRender();
-}
-
-/* ── Re-sequence all items and sub-items in order ── */
-function boqResequence(data){
-  data.sections.forEach(function(sec){
-    sec.items.forEach(function(item,i){
-      // Only re-set the numeric part after the letter, preserve letter
-      var letter = sec.letter || 'A';
-      // If item.no starts with letter dot, rewrite ordinal
-      item.no = letter + '.' + (i+1);
-      if(!item.subItems) item.subItems=[];
-      item.subItems.forEach(function(sub,j){
-        sub.no = item.no + '.' + (j+1);
-      });
-    });
-  });
-}
-function boqToggleSec(secId){
-  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;});
-  if(sec) sec.collapsed=!sec.collapsed; boqSave(data); boqRender();
-}
-function boqDelSec(secId){ askDel('Delete this section?',function(){ var data=boqLoad(); data.sections=data.sections.filter(function(s){return s.id!==secId;}); boqSave(data); boqRender(); toast('Deleted','ok'); }); }
-function boqDelItem(secId,itemId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(sec) sec.items=sec.items.filter(function(i){return i.id!==itemId;}); boqResequence(data); boqSave(data); boqRender(); }
 
 function boqEdit(secId,itemId,field,val){
   var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
@@ -7094,7 +7190,6 @@ function boqRender(){
   var dprEl=document.getElementById('boq-dpr-date');
   if(dprEl&&!dprEl.value){ var saved=safeLS.getItem('cm_boq_dpr_date')||ist(); dprEl.value=saved; boqUpdateDprHeading(saved); }
   else if(dprEl&&dprEl.value) boqUpdateDprHeading(dprEl.value);
-  // Render today summary card
   var date=dprEl&&dprEl.value?dprEl.value:ist();
   boqRenderTodaySummaryCard(date);
   if(!data.sections.length){
@@ -7105,32 +7200,51 @@ function boqRender(){
   data.sections.forEach(function(sec){
     var avgPct=sec.items.length?Math.round(sec.items.reduce(function(s,i){return s+boqTotalPct(i);},0)/sec.items.length):0;
     var secColor=avgPct>=100?'#059669':(avgPct>0?'#4f46e5':'#0d9488');
-    html+='<div class="bg-white rounded-2xl shadow-xl mb-2" style="overflow:hidden">';
-    html+='<div onclick="boqToggleSec(\''+sec.id+'\')" style="background:linear-gradient(135deg,#0d2d2a,#0d4a45);padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">';
-    html+='<div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(255,255,255,.15);color:#5eead4;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px">'+sec.letter+'.</span>';
-    html+='<span style="color:#5eead4;font-size:13px;font-weight:700">'+_esc(sec.title.toUpperCase())+'</span>';
-    html+='<span style="background:rgba(94,234,212,.15);color:#5eead4;font-size:10px;padding:1px 7px;border-radius:99px">'+sec.items.length+' items</span></div>';
-    html+='<div style="display:flex;align-items:center;gap:8px"><span style="color:#fbbf24;font-size:12px;font-weight:700">'+avgPct+'%</span><span style="color:#5eead4;font-size:16px">'+(sec.collapsed?'▶':'▼')+'</span></div></div>';
+    var nextItemNo=sec.letter+'.'+(sec.items.length+1);
+
+    html+='<div class="bg-white rounded-2xl shadow-xl mb-3" style="overflow:hidden">';
+
+    /* ── Section header ── */
+    html+='<div style="background:linear-gradient(135deg,#0d2d2a,#0d4a45);padding:10px 12px;display:flex;align-items:center;gap:8px">';
+    // Letter badge + title (title locked until pencil clicked)
+    html+='<span style="background:rgba(255,255,255,.15);color:#5eead4;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;flex-shrink:0">'+_esc(sec.letter)+'.</span>';
+    // Title: span (view mode) + input (edit mode, hidden by default)
+    html+='<span id="boq-sec-lbl-'+sec.id+'" onclick="boqToggleSec(\''+sec.id+'\')" style="flex:1;min-width:0;color:#5eead4;font-size:13px;font-weight:700;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(sec.title)+'</span>';
+    html+='<input id="boq-sec-title-input-'+sec.id+'" value="'+_esc(sec.title)+'" onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();boqRenameSection(\''+sec.id+'\');}" style="display:none;flex:1;min-width:0;background:rgba(255,255,255,.12);border:1.5px solid #5eead4;border-radius:6px;color:#fff;font-size:13px;font-weight:700;outline:none;padding:2px 8px">';
+    html+='<span style="background:rgba(94,234,212,.15);color:#5eead4;font-size:9px;padding:1px 6px;border-radius:99px;flex-shrink:0;white-space:nowrap">'+sec.items.length+' items</span>';
+    // Action buttons
+    html+='<div style="display:flex;align-items:center;gap:5px;flex-shrink:0">';
+    html+='<span style="color:#fbbf24;font-size:11px;font-weight:700">'+avgPct+'%</span>';
+    // Pencil / Check toggle button
+    html+='<button id="boq-sec-edit-btn-'+sec.id+'" onclick="event.stopPropagation();boqToggleSecEdit(\''+sec.id+'\')" title="Edit section name" style="background:rgba(99,102,241,.35);color:#a5b4fc;border:none;border-radius:6px;width:28px;height:28px;font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">✏️</button>';
+    html+='<button onclick="event.stopPropagation();boqDelSec(\''+sec.id+'\')" title="Delete section" style="background:rgba(239,68,68,.3);color:#fca5a5;border:none;border-radius:6px;width:28px;height:28px;font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">🗑</button>';
+    html+='<span onclick="boqToggleSec(\''+sec.id+'\')" style="color:#5eead4;font-size:14px;cursor:pointer;width:22px;text-align:center;flex-shrink:0">'+(sec.collapsed?'▶':'▼')+'</span>';
+    html+='</div></div>';
+
+    /* Progress bar */
     html+='<div style="height:4px;background:#1a3a36"><div style="height:100%;width:'+avgPct+'%;background:'+secColor+';transition:width .4s"></div></div>';
+
     if(!sec.collapsed){
-      html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:660px"><thead><tr style="background:#f0fdf9">';
-      html+='<th style="'+TH+'width:50px">No.</th>';
+      html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:680px"><thead><tr style="background:#f0fdf9">';
+      html+='<th style="'+TH+'width:52px">No.</th>';
       html+='<th style="'+TH+'min-width:160px;text-align:left">Description</th>';
       html+='<th style="'+TH+'width:50px">Unit</th>';
       html+='<th style="'+TH+'width:68px">Tender Qty</th>';
       html+='<th style="'+TH+'width:70px;background:#fef9c3">Prev. Qty</th>';
       html+='<th style="'+TH+'width:70px;background:#dcfce7">Today Qty</th>';
-      html+='<th style="'+TH+'width:68px;background:#eff6ff">Total Qty</th>';
+      html+='<th style="'+TH+'width:66px;background:#eff6ff">Total Qty</th>';
       html+='<th style="'+TH+'width:86px">Start</th>';
       html+='<th style="'+TH+'width:86px">End</th>';
-      html+='<th style="'+TH+'min-width:100px">Progress</th>';
-      html+='<th style="'+TH+'width:28px"></th>';
+      html+='<th style="'+TH+'min-width:90px">Progress</th>';
+      html+='<th style="'+TH+'width:26px"></th>';
       html+='</tr></thead><tbody>';
+
       sec.items.forEach(function(item){
         var totalQty=boqTotalQty(item),pct=boqTotalPct(item),col=boqBarColor(pct,item.startDate,item.endDate);
-        var hasSubs = item.subItems && item.subItems.length > 0;
+
+        /* ── Item row ── */
         html+='<tr style="border-bottom:1px solid #f0fdf9" onmouseover="this.style.background=\'#f9fffe\'" onmouseout="this.style.background=\'\'">';
-        html+='<td style="'+TD+'text-align:center;color:#0d9488;font-weight:700;font-size:11px">'+_esc(item.no)+'</td>';
+        html+='<td style="'+TD+'text-align:center;color:#0d9488;font-weight:800;font-size:11px">'+_esc(item.no)+'</td>';
         html+='<td style="'+TD+'"><input value="'+_esc(item.desc)+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'desc\',this.value)" style="width:100%;border:none;outline:none;font-size:11px;color:#1f2937;background:transparent;padding:2px 0"></td>';
         html+='<td style="'+TD+'text-align:center"><input value="'+_esc(item.unit||'')+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'unit\',this.value)" style="width:44px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
         html+='<td style="'+TD+'text-align:center"><input type="number" value="'+(item.tenderQty||0)+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'tenderQty\',this.value)" style="width:58px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
@@ -7140,43 +7254,33 @@ function boqRender(){
         html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(item.startDate||'')+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'startDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
         html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(item.endDate||'')+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'endDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
         html+='<td style="'+TD+'padding:4px 6px">';
-        html+='<div style="height:13px;background:#f3f4f6;border-radius:7px;overflow:hidden;margin-bottom:2px"><div id="boq-bar-'+item.id+'" style="height:100%;width:'+pct+'%;background:'+col+';border-radius:7px;transition:width .3s"></div></div>';
-        html+='<div style="text-align:center"><span id="boq-pct-'+item.id+'" style="font-size:10px;font-weight:800;color:'+col+'">'+pct+'%</span></div></td>';
-        html+='<td style="'+TD+'text-align:center"><button onclick="boqDelItem(\''+sec.id+'\',\''+item.id+'\')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1">✕</button></td>';
+        html+='<div style="height:12px;background:#f3f4f6;border-radius:7px;overflow:hidden;margin-bottom:2px"><div id="boq-bar-'+item.id+'" style="height:100%;width:'+pct+'%;background:'+col+';border-radius:7px;transition:width .3s"></div></div>';
+        html+='<div style="text-align:center"><span id="boq-pct-'+item.id+'" style="font-size:9px;font-weight:800;color:'+col+'">'+pct+'%</span></div></td>';
+        html+='<td style="'+TD+'text-align:center"><button onclick="boqDelItem(\''+sec.id+'\',\''+item.id+'\')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:22px;height:22px;font-size:12px;cursor:pointer;line-height:1">✕</button></td>';
         html+='</tr>';
 
-        /* ── Sub-items (A.1.1, A.1.2…) ── */
-        var nextSubNo = item.no + '.' + ((item.subItems||[]).length+1);
-        if(hasSubs){
-          (item.subItems||[]).forEach(function(sub){
-            var sPct=boqTotalPct(sub),sCol=boqBarColor(sPct,sub.startDate,sub.endDate);
-            var sTot=boqTotalQty(sub);
-            html+='<tr style="border-bottom:1px solid #f0fdf9;background:#f0fdf9" onmouseover="this.style.background=\'#e6fdf8\'" onmouseout="this.style.background=\'#f0fdf9\'">';
-            html+='<td style="'+TD+'text-align:center;padding-left:14px"><span style="color:#9ca3af;font-size:9px">↳</span> <span style="color:#0d9488;font-weight:800;font-size:10px">'+_esc(sub.no)+'</span></td>';
-            html+='<td style="'+TD+'"><input value="'+_esc(sub.desc)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'desc\',this.value)" style="width:100%;border:none;outline:none;font-size:10.5px;color:#374151;background:transparent;padding:2px 0;padding-left:4px"></td>';
-            html+='<td style="'+TD+'text-align:center"><input value="'+_esc(sub.unit||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'unit\',this.value)" style="width:44px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
-            html+='<td style="'+TD+'text-align:center"><input type="number" value="'+(sub.tenderQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'tenderQty\',this.value)" style="width:58px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
-            html+='<td style="'+TD+'text-align:center;background:#fef9c3"><input type="number" value="'+(sub.prevQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'prevQty\',this.value)" style="width:60px;border:1px solid #fcd34d;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#fef9c3;font-weight:700"></td>';
-            html+='<td style="'+TD+'text-align:center;background:#dcfce7"><input type="number" value="'+(sub.todayQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'todayQty\',this.value)" style="width:60px;border:1px solid #86efac;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#dcfce7;font-weight:700;color:#065f46"></td>';
-            html+='<td style="'+TD+'text-align:center;background:#eff6ff;font-weight:800;color:#1e40af;font-size:11px">'+sTot+'</td>';
-            html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(sub.startDate||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'startDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
-            html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(sub.endDate||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'endDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
-            html+='<td style="'+TD+'padding:4px 6px">';
-            html+='<div style="height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden;margin-bottom:2px"><div id="boq-bar-'+sub.id+'" style="height:100%;width:'+sPct+'%;background:'+sCol+';border-radius:5px;transition:width .3s"></div></div>';
-            html+='<div style="text-align:center"><span id="boq-pct-'+sub.id+'" style="font-size:9px;font-weight:800;color:'+sCol+'">'+sPct+'%</span></div></td>';
-            html+='<td style="'+TD+'text-align:center"><button onclick="boqDelSubItem(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1">✕</button></td>';
-            html+='</tr>';
-          });
-        }
-        /* ── Add sub-item row with next-number preview box ── */
-        html+='<tr style="background:#f8fffe;border-bottom:2px solid #e6fdf8">';
-        html+='<td colspan="11" style="padding:4px 8px">';
-        html+='<div style="display:flex;align-items:center;gap:6px">';
-        html+='<span style="color:#9ca3af;font-size:9px;white-space:nowrap">↳ Next sub-item:</span>';
-        html+='<input id="sub-no-preview-'+item.id+'" value="'+_esc(nextSubNo)+'" style="width:80px;border:1px solid #99f6e4;border-radius:6px;font-size:10px;font-weight:700;color:#0d9488;padding:2px 6px;background:#f0fdf9;text-align:center" title="Edit the number before adding">';
-        html+='<button onclick="boqAddSubItemWithBox(\''+sec.id+'\',\''+item.id+'\')" style="font-size:10px;color:#0d9488;font-weight:700;background:#e6fdf8;border:1px dashed #5eead4;border-radius:6px;padding:3px 10px;cursor:pointer;white-space:nowrap">+ Sub-item</button>';
-        html+='</div></td></tr>';
+        /* ── Sub-item rows ── */
+        (item.subItems||[]).forEach(function(sub){
+          var sPct=boqTotalPct(sub),sCol=boqBarColor(sPct,sub.startDate,sub.endDate),sTot=boqTotalQty(sub);
+          html+='<tr style="border-bottom:1px solid #e6fdf8;background:#f7fffe" onmouseover="this.style.background=\'#e6fdf8\'" onmouseout="this.style.background=\'#f7fffe\'">';
+          html+='<td style="'+TD+'text-align:center;padding-left:10px"><span style="color:#0d9488;font-size:9px">↳</span><br><span style="color:#0d9488;font-weight:800;font-size:10px">'+_esc(sub.no)+'</span></td>';
+          html+='<td style="'+TD+'"><span style="color:#9ca3af;font-size:9px;margin-right:3px">┗</span><input value="'+_esc(sub.desc)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'desc\',this.value)" style="width:calc(100% - 14px);border:none;outline:none;font-size:10.5px;color:#374151;background:transparent;padding:2px 0"></td>';
+          html+='<td style="'+TD+'text-align:center"><input value="'+_esc(sub.unit||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'unit\',this.value)" style="width:44px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
+          html+='<td style="'+TD+'text-align:center"><input type="number" value="'+(sub.tenderQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'tenderQty\',this.value)" style="width:58px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
+          html+='<td style="'+TD+'text-align:center;background:#fef9c3"><input type="number" value="'+(sub.prevQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'prevQty\',this.value)" style="width:60px;border:1px solid #fcd34d;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#fef9c3;font-weight:700"></td>';
+          html+='<td style="'+TD+'text-align:center;background:#dcfce7"><input type="number" value="'+(sub.todayQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'todayQty\',this.value)" style="width:60px;border:1px solid #86efac;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#dcfce7;font-weight:700;color:#065f46"></td>';
+          html+='<td style="'+TD+'text-align:center;background:#eff6ff;font-weight:800;color:#1e40af;font-size:11px">'+sTot+'</td>';
+          html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(sub.startDate||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'startDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
+          html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(sub.endDate||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'endDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
+          html+='<td style="'+TD+'padding:4px 6px">';
+          html+='<div style="height:9px;background:#f3f4f6;border-radius:5px;overflow:hidden;margin-bottom:2px"><div id="boq-bar-'+sub.id+'" style="height:100%;width:'+sPct+'%;background:'+sCol+';border-radius:5px;transition:width .3s"></div></div>';
+          html+='<div style="text-align:center"><span id="boq-pct-'+sub.id+'" style="font-size:9px;font-weight:800;color:'+sCol+'">'+sPct+'%</span></div></td>';
+          html+='<td style="'+TD+'text-align:center"><button onclick="boqDelSubItem(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:22px;height:22px;font-size:12px;cursor:pointer;line-height:1">✕</button></td>';
+          html+='</tr>';
+        });
       });
+
+      /* ── Section totals row ── */
       var totT=sec.items.reduce(function(s,i){return s+(parseFloat(i.tenderQty)||0);},0);
       var totP=sec.items.reduce(function(s,i){return s+(parseFloat(i.prevQty)||0);},0);
       var totD=sec.items.reduce(function(s,i){return s+(parseFloat(i.todayQty)||0);},0);
@@ -7187,11 +7291,19 @@ function boqRender(){
       html+='<td style="'+TD+'text-align:center;color:#065f46;background:#dcfce7">'+totD+'</td>';
       html+='<td style="'+TD+'text-align:center;color:#1e40af;background:#eff6ff;font-weight:800">'+totE+'</td>';
       html+='<td colspan="4" style="'+TD+'"></td></tr>';
+
+      /* ── Single smart-add row at bottom of table ── */
+      html+='<tr style="background:#f0fdf9;border-top:2px solid #ccfbf1">';
+      html+='<td colspan="11" style="padding:7px 10px">';
+      html+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+      html+='<span style="font-size:10px;font-weight:700;color:#0d9488;white-space:nowrap">+ Add to '+_esc(sec.letter)+'.:</span>';
+      html+='<input id="boq-add-no-'+sec.id+'" value="'+_esc(nextItemNo)+'" oninput="boqUpdateAddHint(\''+sec.id+'\')" style="width:90px;border:1.5px solid #5eead4;border-radius:7px;font-size:11px;font-weight:800;color:#0d9488;padding:3px 8px;background:#fff;text-align:center" placeholder="'+_esc(nextItemNo)+'" title="A.1 = item  |  A.1.1 = sub-item">';
+      html+='<span id="boq-add-hint-'+sec.id+'" style="font-size:9px;color:#6b7280;white-space:nowrap">→ Add as item</span>';
+      html+='<button onclick="boqSmartAdd(\''+sec.id+'\')" style="background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;border:none;border-radius:7px;padding:5px 16px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">+ Add</button>';
+      html+='<span style="font-size:9px;color:#9ca3af;white-space:nowrap">A.1 = item &nbsp;·&nbsp; A.1.1 = sub-item</span>';
+      html+='</div></td></tr>';
+
       html+='</tbody></table></div>';
-      html+='<div style="padding:8px 10px;border-top:1px solid #f0fdf9;display:flex;gap:8px;align-items:center">';
-      html+='<button onclick="boqAddItem(\''+sec.id+'\')" style="font-size:11px;color:#0d9488;font-weight:700;background:#f0fdf9;border:1px dashed #99f6e4;border-radius:8px;padding:6px 14px;cursor:pointer;flex:1">+ Add Item to '+sec.letter+'. '+_esc(sec.title)+'</button>';
-      html+='<button onclick="boqDelSec(\''+sec.id+'\')" style="font-size:10px;color:#9ca3af;background:none;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;cursor:pointer">🗑</button>';
-      html+='</div>';
     }
     html+='</div>';
   });
@@ -7212,6 +7324,11 @@ function boqPrintDPR(){
 
   var body='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DPR '+dprDate+'</title><style>';
   body+='*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#111;font-size:9px}';
+  body+='.back-bar{position:fixed;top:0;left:0;right:0;z-index:9999;background:#0f2244;color:#fff;display:flex;align-items:center;gap:10px;padding:7px 14px;box-shadow:0 2px 8px rgba(0,0,0,.3)}';
+  body+='.back-btn{background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:5px 16px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px}';
+  body+='.back-btn:hover{background:#6366f1}.print-btn{background:#059669;color:#fff;border:none;border-radius:8px;padding:5px 16px;font-size:12px;font-weight:700;cursor:pointer}';
+  body+='.back-bar-title{font-size:13px;font-weight:700;color:#fbbf24;flex:1}';
+  body+='body{padding-top:44px}';
   body+='.hdr{background:linear-gradient(135deg,#0f2244,#1a3a6b);color:#fff;padding:10px 14px 8px;margin-bottom:10px}';
   body+='.hdr-badge{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:3px}';
   body+='.hdr-date{font-size:16px;font-weight:900;color:#fbbf24;letter-spacing:1px;margin-bottom:2px}';
@@ -7236,8 +7353,15 @@ function boqPrintDPR(){
   body+='table.info tr:nth-child(even) td{background:#f8faff}';
   // Machinery table
   body+='.mach-working{color:#059669;font-weight:700}.mach-standby{color:#f59e0b;font-weight:700}.mach-breakdown{color:#dc2626;font-weight:700}';
-  body+='@media print{@page{size:A4 landscape;margin:10mm}body{font-size:8px}}';
+  body+='@media print{.back-bar{display:none!important}body{padding-top:0}@page{size:A4 landscape;margin:10mm}body{font-size:8px}}';
   body+='</style></head><body>';
+
+  // Back bar
+  body+='<div class="back-bar">';
+  body+='<button class="back-btn" onclick="window.close()">← Back to App</button>';
+  body+='<span class="back-bar-title">BOQ Daily Progress Report — '+headDate+'</span>';
+  body+='<button class="print-btn" onclick="window.print()">🖨️ Print / Save PDF</button>';
+  body+='</div>';
 
   // Header
   body+='<div class="hdr">';
@@ -7323,7 +7447,7 @@ function boqPrintDPR(){
   }
 
   body+='<p style="font-size:7px;color:#999;text-align:right;margin-top:4px">Printed: '+new Date().toLocaleString()+' | Sanjineer BOQ DPR</p>';
-  body+='<script>window.onload=function(){window.print();};<\/script></body></html>';
+  body+='</body></html>';
   w.document.write(body); w.document.close();
 }
 function boqPrintAll(){ boqPrintDPR(); }
