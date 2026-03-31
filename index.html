@@ -571,7 +571,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     body.js-ready .tab-content{}
     .stat-card{transition:transform .12s,box-shadow .12s;box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);}
     .stat-card:active{transform:scale(0.97);}
-    .stat-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,0.45),0 4px 12px rgba(0,0,0,0.25);}
+    @media(hover:hover){.stat-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,0.45),0 4px 12px rgba(0,0,0,0.25);}}
     /* All colored gradient chips get shadow too */
     [class*="g-tobr-"],[class*="g-tor-"]{box-shadow:0 6px 20px rgba(0,0,0,0.3),0 2px 6px rgba(0,0,0,0.15);}
     [class*="g-tobr-"].stat-card,[class*="g-tor-"].stat-card{box-shadow:0 8px 24px rgba(0,0,0,0.35),0 2px 8px rgba(0,0,0,0.2);}
@@ -965,142 +965,52 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       .fixed > div.max-w-md { max-width: 520px !important; }
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 </head>
 <body>
 
 <!-- ========== WELCOME OVERLAY (first-time only, before any data) ========== -->
 <div id="welcome-overlay" style="display:none;position:fixed;inset:0;z-index:99999;overflow:hidden;background:#0a0818;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;">
-
-  <!-- Blobs -->
   <div style="position:absolute;top:-120px;left:-80px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,#4f46e5,#7c3aed);filter:blur(80px);opacity:0.55;animation:wBlob 14s ease-in-out infinite;pointer-events:none;"></div>
   <div style="position:absolute;bottom:-80px;right:-60px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,#9333ea,#4f46e5);filter:blur(80px);opacity:0.55;animation:wBlob 10s ease-in-out infinite reverse;pointer-events:none;"></div>
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,0.18),transparent);filter:blur(60px);pointer-events:none;"></div>
-  <!-- Grid -->
   <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;"></div>
-  <!-- Bottom line -->
   <div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#4f46e5,#9333ea,#f59e0b,transparent);opacity:0.6;"></div>
-
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
     @keyframes wBlob{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-28px) scale(1.06);}}
-    @keyframes wFadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
-    @keyframes wPulse{0%,100%{box-shadow:0 0 4px #6366f1;}50%{box-shadow:0 0 12px #6366f1,0 0 22px #6366f1aa;}}
-    .wa1{opacity:0;animation:wFadeUp .7s ease .1s forwards;}
-    .wa2{opacity:0;animation:wFadeUp .7s ease .25s forwards;}
-    .wa3{opacity:0;animation:wFadeUp .7s ease .4s forwards;}
-    .wa4{opacity:0;animation:wFadeUp .7s ease .55s forwards;}
-    .wa5{opacity:0;animation:wFadeUp .7s ease .7s forwards;}
-    .wa6{opacity:0;animation:wFadeUp .7s ease .85s forwards;}
-    .w-btn-go{position:relative;width:100%;padding:15px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;border:none;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 8px 30px rgba(79,70,229,0.45);transition:transform .18s,box-shadow .18s;overflow:hidden;}
-    .w-btn-go:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(79,70,229,0.55);}
-    .w-btn-go:active{transform:translateY(0);}
-    .w-btn-go .wshim{position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.13),transparent);transition:left .5s;}
-    .w-btn-go:hover .wshim{left:100%;}
-    .w-btn-ig{width:100%;padding:13px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);font-family:'DM Sans',sans-serif;font-weight:500;font-size:.88rem;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;text-decoration:none;backdrop-filter:blur(8px);}
-    .w-btn-ig:hover{background:rgba(255,255,255,0.10);border-color:rgba(255,255,255,0.22);transform:translateY(-1px);}
-    .w-tab-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:99px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,0.55);font-family:'DM Sans',sans-serif;}
+    @keyframes wFUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes wPls{0%,100%{box-shadow:0 0 4px #6366f1;}50%{box-shadow:0 0 12px #6366f1,0 0 22px #6366f1aa;}}
+    .wa1{opacity:0;animation:wFUp .7s ease .1s forwards;}.wa2{opacity:0;animation:wFUp .7s ease .25s forwards;}
+    .wa3{opacity:0;animation:wFUp .7s ease .4s forwards;}.wa4{opacity:0;animation:wFUp .7s ease .55s forwards;}
+    .wa5{opacity:0;animation:wFUp .7s ease .7s forwards;}.wa6{opacity:0;animation:wFUp .7s ease .85s forwards;}
+    .w-go{position:relative;width:100%;padding:15px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;border:none;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 8px 30px rgba(79,70,229,0.45);transition:transform .18s,box-shadow .18s;overflow:hidden;}
+    .w-go:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(79,70,229,0.55);}
+    .w-go .wsm{position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.13),transparent);transition:left .5s;}
+    .w-go:hover .wsm{left:100%;}
+    .w-ig{width:100%;padding:13px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);font-family:'DM Sans',sans-serif;font-weight:500;font-size:.88rem;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;text-decoration:none;backdrop-filter:blur(8px);}
+    .w-ig:hover{background:rgba(255,255,255,0.10);border-color:rgba(255,255,255,0.22);transform:translateY(-1px);}
+    .w-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:99px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,0.55);font-family:'DM Sans',sans-serif;}
   </style>
-
   <div style="position:relative;z-index:2;width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;">
-
-    <!-- Badge -->
-    <div class="wa1" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);border-radius:99px;padding:5px 14px;font-size:10.5px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.4rem;font-family:'DM Sans',sans-serif;">
-      <span style="width:6px;height:6px;border-radius:50%;background:#6366f1;flex-shrink:0;animation:wPulse 2s ease-in-out infinite;"></span>
-      Construction Management App
-    </div>
-
-    <!-- Logo -->
-    <div class="wa2" style="position:relative;margin-bottom:1.3rem;">
-      <div style="position:absolute;inset:-20px;background:radial-gradient(circle,rgba(99,102,241,0.28) 0%,transparent 70%);z-index:-1;"></div>
-      <div style="width:86px;height:86px;background:linear-gradient(135deg,#4f46e5,#9333ea);border-radius:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(99,102,241,0.5),0 0 80px rgba(99,102,241,0.18);position:relative;">
-        <div style="position:absolute;inset:-2px;border-radius:24px;border:1.5px solid rgba(255,255,255,0.15);"></div>
-        <span style="font-size:40px;line-height:1;">🏗️</span>
-      </div>
-    </div>
-
-    <!-- Headline -->
-    <h1 class="wa3" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.3rem,9vw,3.2rem);line-height:1.05;text-align:center;color:#fff;letter-spacing:-.02em;margin:0 0 .75rem 0;">
-      Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span>
-    </h1>
-
-    <!-- Subtitle -->
+    <div class="wa1" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);border-radius:99px;padding:5px 14px;font-size:10.5px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.4rem;font-family:'DM Sans',sans-serif;"><span style="width:6px;height:6px;border-radius:50%;background:#6366f1;flex-shrink:0;animation:wPls 2s ease-in-out infinite;"></span>Construction Management App</div>
+    <div class="wa2" style="position:relative;margin-bottom:1.3rem;"><div style="position:absolute;inset:-20px;background:radial-gradient(circle,rgba(99,102,241,0.28) 0%,transparent 70%);z-index:-1;"></div><div style="width:86px;height:86px;background:linear-gradient(135deg,#4f46e5,#9333ea);border-radius:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(99,102,241,0.5),0 0 80px rgba(99,102,241,0.18);position:relative;"><div style="position:absolute;inset:-2px;border-radius:24px;border:1.5px solid rgba(255,255,255,0.15);"></div><span style="font-size:40px;line-height:1;">🏗️</span></div></div>
+    <h1 class="wa3" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.3rem,9vw,3.2rem);line-height:1.05;text-align:center;color:#fff;letter-spacing:-.02em;margin:0 0 .75rem 0;">Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span></h1>
     <p class="wa3" style="font-size:.88rem;line-height:1.65;color:rgba(255,255,255,0.48);text-align:center;max-width:280px;margin:0 0 1.7rem 0;font-weight:300;font-family:'DM Sans',sans-serif;">Your all-in-one site management tool — built for engineers who get things done.</p>
-
-    <!-- Tab chips -->
     <div class="wa4" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:1.9rem;max-width:310px;">
-      <span class="w-tab-chip">📊 Dashboard</span>
-      <span class="w-tab-chip">📋 Daily Report</span>
-      <span class="w-tab-chip">📅 Attendance</span>
-      <span class="w-tab-chip">⚙️ Machinery</span>
-      <span class="w-tab-chip">💰 Expenses</span>
-      <span class="w-tab-chip">🧱 Materials</span>
-      <span class="w-tab-chip">🔧 Tools</span>
-      <span class="w-tab-chip">📐 Drawings</span>
-      <span class="w-tab-chip">📦 Rentals</span>
-      <span class="w-tab-chip">🏗️ Dept Work</span>
-      <span class="w-tab-chip">👥 Teams</span>
-      <span class="w-tab-chip">📊 Budget</span>
-      <span class="w-tab-chip">📅 Schedule</span>
-      <span class="w-tab-chip">📋 Punch List</span>
-      <span class="w-tab-chip">🧾 Bill</span>
-      <span class="w-tab-chip">💼 Quotation</span>
-      <span class="w-tab-chip">🏛️ Site Visits</span>
+      <span class="w-chip">📊 Dashboard</span><span class="w-chip">📋 Daily Report</span><span class="w-chip">📅 Attendance</span><span class="w-chip">⚙️ Machinery</span><span class="w-chip">💰 Expenses</span><span class="w-chip">🧱 Materials</span><span class="w-chip">🔧 Tools</span><span class="w-chip">📐 Drawings</span><span class="w-chip">📦 Rentals</span><span class="w-chip">🏗️ Dept Work</span><span class="w-chip">👥 Teams</span><span class="w-chip">📊 Budget</span><span class="w-chip">📅 Schedule</span><span class="w-chip">📋 Punch List</span><span class="w-chip">🧾 Bill</span><span class="w-chip">💼 Quotation</span><span class="w-chip">🏛️ Site Visits</span>
     </div>
-
-    <!-- Buttons -->
     <div class="wa5" style="display:flex;flex-direction:column;gap:11px;width:100%;">
-      <button class="w-btn-go" onclick="dismissWelcome()">
-        <span class="wshim"></span>
-        Get Started
-        <span style="width:22px;height:22px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;">→</span>
-      </button>
-      <a href="https://www.instagram.com/sanjineer" target="_blank" rel="noopener" class="w-btn-ig">
-        <span style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" stroke="white" stroke-width="2.2"/><circle cx="12" cy="12" r="4" stroke="white" stroke-width="2.2"/><circle cx="17.5" cy="6.5" r="1.2" fill="white"/></svg>
-        </span>
-        <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;">
-          <span style="font-weight:700;font-size:13px;color:#fff;">@sanjineer</span>
-          <span style="font-size:10px;color:rgba(255,255,255,0.42);">Follow for updates &amp; DM for support</span>
-        </span>
-        <svg style="margin-left:auto;opacity:0.35;flex-shrink:0;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </a>
+      <button class="w-go" onclick="dismissWelcome()"><span class="wsm"></span>Get Started<span style="width:22px;height:22px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;">→</span></button>
+      <a href="https://www.instagram.com/sanjineer" target="_blank" rel="noopener" class="w-ig"><span style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" stroke="white" stroke-width="2.2"/><circle cx="12" cy="12" r="4" stroke="white" stroke-width="2.2"/><circle cx="17.5" cy="6.5" r="1.2" fill="white"/></svg></span><span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;"><span style="font-weight:700;font-size:13px;color:#fff;">@sanjineer</span><span style="font-size:10px;color:rgba(255,255,255,0.42);">Follow for updates &amp; DM for support</span></span><svg style="margin-left:auto;opacity:0.35;flex-shrink:0;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>
     </div>
-
-    <p class="wa6" style="margin-top:1.5rem;font-size:10px;color:rgba(255,255,255,0.2);text-align:center;font-family:'DM Sans',sans-serif;letter-spacing:.03em;">Made with ❤️ for site engineers</p>
+    <p class="wa6" style="margin-top:1.5rem;font-size:10px;color:rgba(255,255,255,0.2);text-align:center;font-family:'DM Sans',sans-serif;">Made with ❤️ for site engineers</p>
   </div>
 </div>
-
 <script>
-// ── Welcome overlay: shows ONLY if user has never seen it AND has no data ──
-var WELCOME_FLAG = 'sanj_welcomed'; // set once dismissed, never shown again
-
-function dismissWelcome() {
-  try { localStorage.setItem(WELCOME_FLAG, '1'); } catch(e) {}
-  var el = document.getElementById('welcome-overlay');
-  if (!el) return;
-  el.style.transition = 'opacity .4s ease';
-  el.style.opacity = '0';
-  setTimeout(function(){ el.style.display = 'none'; el.style.opacity = ''; }, 430);
-}
-
-function checkShowWelcome() {
-  try {
-    // If user has already seen & dismissed it, never show again
-    if (localStorage.getItem(WELCOME_FLAG)) return;
-    // Also hide if they somehow already have data (data imported / restored)
-    var raw = localStorage.getItem('cm_data');
-    var data = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(data) && data.length > 0) {
-      localStorage.setItem(WELCOME_FLAG, '1'); // mark seen, skip forever
-      return;
-    }
-    // Fresh install — show welcome
-    var el = document.getElementById('welcome-overlay');
-    if (el) el.style.display = 'flex';
-  } catch(e) {}
-}
-
-document.addEventListener('DOMContentLoaded', checkShowWelcome);
+var WELCOME_FLAG='sanj_welcomed';
+function dismissWelcome(){try{localStorage.setItem(WELCOME_FLAG,'1');}catch(e){}var el=document.getElementById('welcome-overlay');if(!el)return;el.style.transition='opacity .4s ease';el.style.opacity='0';setTimeout(function(){el.style.display='none';el.style.opacity='';},430);}
+function checkShowWelcome(){try{if(localStorage.getItem(WELCOME_FLAG))return;var raw=localStorage.getItem('cm_data');var data=raw?JSON.parse(raw):[];if(Array.isArray(data)&&data.length>0){localStorage.setItem(WELCOME_FLAG,'1');return;}var el=document.getElementById('welcome-overlay');if(el)el.style.display='flex';}catch(e){}}
+document.addEventListener('DOMContentLoaded',checkShowWelcome);
 </script>
 
 <!-- ========== MAIN APP ========== -->
@@ -1149,6 +1059,7 @@ document.addEventListener('DOMContentLoaded', checkShowWelcome);
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="daily" onclick="switchTab('daily')">📋 Report</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="attendance" onclick="switchTab('attendance')">📅 Attendance</button>
+    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="boq" onclick="switchTab('boq')">📋 BOQ DPR</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="machinery" onclick="switchTab('machinery')">⚙️ Machinery</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="expenses" onclick="switchTab('expenses')">💰 Expenses</button>
     <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="materials" onclick="switchTab('materials')">🧱 Materials</button>
@@ -1258,12 +1169,7 @@ document.addEventListener('DOMContentLoaded', checkShowWelcome);
     </div>
   </div>
 
-  <!-- Dashboard Month Filter -->
-  <div class="flex items-center gap-2 mb-2 overflow-x-auto" style="scrollbar-width:none">
-    <button onclick="setDashMonth(0)" id="dash-m-0" class="flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold border-2 border-indigo-500 bg-indigo-500 text-white">This Month</button>
-    <button onclick="setDashMonth(-1)" id="dash-m-neg1" class="flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold border-2 border-gray-300 text-gray-500">All Time</button>
-    <span id="dash-month-label" class="flex-shrink-0 text-xs text-gray-500 font-semibold"></span>
-  </div>
+
   <!-- Low Stock Alert -->
   <div id="dash-low-stock" class="mb-2 hidden"><div class="g-tobr-red500-rose600 rounded-xl text-white shadow-xl" style="padding:6px 10px"><p class="font-bold mb-1" style="font-size:11px">⚠️ Low Stock Alert</p><div id="dash-low-list" style="display:flex;flex-wrap:wrap;gap:4px"></div></div></div>
 
@@ -1359,6 +1265,41 @@ document.addEventListener('DOMContentLoaded', checkShowWelcome);
         <tbody id="daily-stock-table">
           <tr><td colspan="4" style="padding:12px;text-align:center;color:#9ca3af">No materials in stock</td></tr>
         </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Today's BOQ Work In Progress -->
+  <div id="daily-boq-inprogress" class="bg-white rounded-2xl p-3 mb-3 shadow-xl" style="display:none">
+    <h3 class="font-bold text-gray-800 mb-2" style="font-size:13px">🔨 Today's Work In Progress</h3>
+    <div id="daily-boq-inprogress-list" style="font-size:11px;color:#374151"></div>
+  </div>
+
+  <!-- Machinery Today -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <h3 class="font-bold text-gray-800 mb-3" style="font-size:13px">⚙️ Machinery Today</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full" style="font-size:11px;border-collapse:collapse">
+        <thead>
+          <tr style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white">
+            <th style="padding:6px 8px;text-align:left;border-radius:8px 0 0 8px">Machine</th>
+            <th style="padding:6px 8px;text-align:center">Operator</th>
+            <th style="padding:6px 8px;text-align:center">Start</th>
+            <th style="padding:6px 8px;text-align:center">End</th>
+            <th style="padding:6px 8px;text-align:center">Hours</th>
+            <th style="padding:6px 8px;text-align:right;border-radius:0 8px 8px 0">Amount</th>
+          </tr>
+        </thead>
+        <tbody id="daily-mach-table">
+          <tr><td colspan="6" style="padding:12px;text-align:center;color:#9ca3af">No machinery logged today</td></tr>
+        </tbody>
+        <tfoot>
+          <tr id="daily-mach-foot" style="display:none;background:#ede9fe;font-weight:800;color:#7c3aed">
+            <td style="padding:5px 8px;border-radius:6px 0 0 6px" colspan="4">Total</td>
+            <td id="daily-mach-foot-h" style="padding:5px 8px;text-align:center">0h</td>
+            <td id="daily-mach-foot-a" style="padding:5px 8px;text-align:right;border-radius:0 6px 6px 0">₹0</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </div>
@@ -1854,6 +1795,214 @@ document.addEventListener('DOMContentLoaded', checkShowWelcome);
   <div id="contractors-list" class="space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
 </div>
 
+<!-- ===== BOQ DPR (standalone tab) ===== -->
+<div id="tab-boq" class="tab-content" style="display:none">
+
+  <!-- ══ HERO HEADER ══ -->
+  <div style="background:linear-gradient(135deg,#0f2244 0%,#1a3a6b 50%,#0f2244 100%);border-radius:18px;padding:16px 14px 14px;margin-bottom:12px;box-shadow:0 8px 32px rgba(15,34,68,0.45);position:relative;overflow:hidden">
+    <div style="position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;background:rgba(251,191,36,0.08);pointer-events:none"></div>
+    <div style="position:absolute;bottom:-20px;left:-20px;width:70px;height:70px;border-radius:50%;background:rgba(99,102,241,0.12);pointer-events:none"></div>
+    <div style="text-align:center;margin-bottom:10px">
+      <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);border-radius:20px;padding:5px 14px">
+        <span style="font-size:14px">📋</span>
+        <span style="font-size:11px;font-weight:800;color:#c7d2fe;letter-spacing:1px;text-transform:uppercase">Daily Progress Report</span>
+      </div>
+      <div id="boq-dpr-heading-date" style="font-size:20px;font-weight:900;color:#fbbf24;margin:6px 0 2px;letter-spacing:1.5px;text-shadow:0 0 20px rgba(251,191,36,0.5)">— Select Date —</div>
+      <div style="font-size:9px;color:rgba(255,255,255,0.4);letter-spacing:1.5px;text-transform:uppercase">BOQ Execution Schedule</div>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:12px">
+      <div style="flex:1">
+        <label style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px">Report Date</label>
+        <input type="date" id="boq-dpr-date" onchange="boqUpdateDprHeading(this.value)"
+          style="width:100%;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:8px 10px;color:#fff;font-size:13px;font-weight:700;outline:none;-webkit-appearance:none;color-scheme:dark">
+      </div>
+      <button onclick="boqSetTodayDate()" style="background:rgba(99,102,241,0.3);color:#a5b4fc;border:1px solid rgba(99,102,241,0.45);padding:9px 12px;border-radius:10px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">📆 Today</button>
+      <button onclick="boqCopyYesterdayToToday()" style="background:rgba(245,158,11,0.25);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);padding:9px 10px;border-radius:10px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">⏩ Next Day</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button onclick="boqPrintDPR()"
+        style="background:linear-gradient(135deg,#dc2626,#f59e0b);color:#fff;padding:13px 8px;border-radius:13px;font-size:11px;font-weight:800;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(220,38,38,0.45);display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent"
+        ontouchstart="this.style.transform='scale(0.96)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:20px">🖨️</span>
+        <div><div style="font-size:12px;font-weight:800">Print PDF</div><div style="font-size:9px;opacity:0.8">DPR Report</div></div>
+      </button>
+      <button onclick="boqExportExcel()"
+        style="background:linear-gradient(135deg,#059669,#0284c7);color:#fff;padding:13px 8px;border-radius:13px;font-size:11px;font-weight:800;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(5,150,105,0.45);display:flex;align-items:center;justify-content:center;gap:8px;-webkit-tap-highlight-color:transparent"
+        ontouchstart="this.style.transform='scale(0.96)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:20px">📊</span>
+        <div><div style="font-size:12px;font-weight:800">Export Excel</div><div style="font-size:9px;opacity:0.8">Download .xlsx</div></div>
+      </button>
+    </div>
+    <div id="boq-dpr-summary" style="display:none;margin-top:10px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+        <div style="background:rgba(5,150,105,0.18);border:1px solid rgba(5,150,105,0.35);border-radius:11px;padding:8px;text-align:center">
+          <p style="font-size:8px;font-weight:700;color:#6ee7b7;text-transform:uppercase;margin:0">Items</p>
+          <p id="boq-stat-total" style="font-size:19px;font-weight:900;color:#6ee7b7;margin:2px 0 0">0</p>
+        </div>
+        <div style="background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);border-radius:11px;padding:8px;text-align:center">
+          <p style="font-size:8px;font-weight:700;color:#a5b4fc;text-transform:uppercase;margin:0">Avg %</p>
+          <p id="boq-stat-avg" style="font-size:19px;font-weight:900;color:#a5b4fc;margin:2px 0 0">0</p>
+        </div>
+        <div style="background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);border-radius:11px;padding:8px;text-align:center">
+          <p style="font-size:8px;font-weight:700;color:#fbbf24;text-transform:uppercase;margin:0">Active</p>
+          <p id="boq-stat-today" style="font-size:19px;font-weight:900;color:#fbbf24;margin:2px 0 0">0</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project Info -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">🏗️ Project Info</p>
+      <div style="display:flex;gap:6px">
+        <button onclick="boqFetchProjectInfo()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:5px 11px;border-radius:8px;font-size:10px;font-weight:700;border:none;cursor:pointer">🔄 Auto-Fetch</button>
+        <button onclick="boqSaveProjectInfo()" style="background:linear-gradient(135deg,#059669,#047857);color:#fff;padding:5px 11px;border-radius:8px;font-size:10px;font-weight:700;border:none;cursor:pointer">💾 Save</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+      <div style="grid-column:1/-1"><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Name of Work</label>
+        <input id="boq-pi-work" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" placeholder="Name of Work / Project"></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Client</label>
+        <input id="boq-pi-client" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" placeholder="Client / Owner"></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Contractor</label>
+        <input id="boq-pi-contractor" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" placeholder="Contractor Name"></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Consultant</label>
+        <input id="boq-pi-consultant" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" placeholder="Consultant Name"></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Work Order No.</label>
+        <input id="boq-pi-wo" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" placeholder="Work Order No."></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Weather</label>
+        <select id="boq-pi-weather" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-indigo-400">
+          <option>Clear</option><option>Cloudy</option><option>Rainy</option><option>Windy</option><option>Foggy</option></select></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Commencement Date</label>
+        <input type="date" id="boq-pi-start" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400"></div>
+      <div><label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Stipulated Completion</label>
+        <input type="date" id="boq-pi-end" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400"></div>
+    </div>
+  </div>
+
+  <!-- Today's Work Details card -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">🌅 Today's Work Details</p>
+      <button onclick="boqOpenTodayModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;display:flex;align-items:center;gap:5px">
+        <span>✏️</span> Fill Daily Status
+      </button>
+    </div>
+    <div id="boq-today-summary-card">
+      <p style="font-size:11px;color:#9ca3af;text-align:center;padding:12px 0">Tap "Fill Daily Status" to add today's work details</p>
+    </div>
+  </div>
+
+  <!-- Import / Add BOQ -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">📂 Import / Add BOQ</p>
+      <span id="boq-import-status" style="font-size:9px;color:#6b7280"></span>
+    </div>
+    <div id="boq-drop-zone"
+      style="border:2px dashed #d1d5db;border-radius:12px;padding:14px;text-align:center;background:#f9fafb;cursor:pointer;transition:border-color .2s,background .2s"
+      onclick="boqTriggerFileInput()"
+      ondragover="event.preventDefault();event.stopPropagation();document.getElementById('boq-drop-zone').style.borderColor='#4f46e5';document.getElementById('boq-drop-zone').style.background='#eef2ff'"
+      ondragleave="document.getElementById('boq-drop-zone').style.borderColor='#d1d5db';document.getElementById('boq-drop-zone').style.background='#f9fafb'"
+      ondrop="event.preventDefault();event.stopPropagation();document.getElementById('boq-drop-zone').style.borderColor='#d1d5db';document.getElementById('boq-drop-zone').style.background='#f9fafb';boqHandleDrop(event)">
+      <div id="boq-drop-icon" style="font-size:28px;margin-bottom:5px">📂</div>
+      <p id="boq-drop-label" style="font-size:12px;font-weight:700;color:#374151;margin:0">Import Excel or PDF</p>
+      <p style="font-size:10px;color:#9ca3af;margin:3px 0 0">.xlsx / .xls / .csv / .pdf — tap or drag & drop</p>
+      <input type="file" id="boq-file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none" onchange="boqHandleFileChange(this)">
+    </div>
+    <div class="flex gap-2 mt-2">
+      <input type="text" id="boq-new-sec" placeholder="New Section name (e.g. Civil Works)" class="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-indigo-400">
+      <button onclick="boqAddSection()" style="background:#4f46e5;color:#fff;padding:8px 14px;border-radius:10px;font-size:11px;font-weight:700;border:none;white-space:nowrap">+ Section</button>
+    </div>
+  </div>
+
+  <!-- BOQ Table -->
+  <div id="boq-table-wrap" class="mb-3">
+    <div class="text-center py-10 bg-white rounded-2xl shadow-xl">
+      <span style="font-size:40px">📋</span>
+      <p class="font-semibold text-gray-600 mt-2">No BOQ data yet</p>
+      <p class="text-gray-400 text-xs mt-1">Import a file or add a section above</p>
+    </div>
+  </div>
+
+  <!-- Gantt -->
+  <div class="bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
+    <p class="text-sm font-bold text-gray-700 mb-3">📊 BOQ Gantt Chart</p>
+    <div id="boq-gantt-view" style="overflow-x:auto"></div>
+  </div>
+
+</div><!-- end tab-boq -->
+
+<!-- ══ TODAY's WORK MODAL ══ -->
+<div id="boq-today-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);overflow-y:auto;padding:16px">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4)">
+    <!-- Modal header -->
+    <div style="background:linear-gradient(135deg,#0f2244,#1a3a6b);padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <p style="font-size:11px;font-weight:800;color:#c7d2fe;text-transform:uppercase;letter-spacing:1px;margin:0">Today's Work Details</p>
+        <p id="boq-modal-date-label" style="font-size:16px;font-weight:900;color:#fbbf24;margin:2px 0 0">—</p>
+      </div>
+      <button onclick="boqCloseTodayModal()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div style="padding:14px;max-height:75vh;overflow-y:auto">
+
+      <!-- Work Description -->
+      <div style="margin-bottom:12px">
+        <label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">Today's Work Description</label>
+        <textarea id="boq-td-workdesc" rows="3" placeholder="Describe work done today (e.g. RCC casting of slab at Floor 2, Brick masonry in Block B...)"
+          style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px;font-size:12px;resize:none;outline:none;font-family:inherit"></textarea>
+      </div>
+
+      <!-- Labour Summary -->
+      <div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">👷 Labour on Site</label>
+          <button onclick="boqAddLabourRow()" style="background:#e0e7ff;color:#4f46e5;border:none;border-radius:7px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">+ Add</button>
+        </div>
+        <div id="boq-labour-rows">
+          <!-- dynamically added rows -->
+        </div>
+        <div id="boq-fetch-att-btn" style="text-align:center;margin-top:6px">
+          <button onclick="boqFetchAttendanceData()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:9px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">🔄 Auto-Fetch from Attendance</button>
+        </div>
+      </div>
+
+      <!-- Machinery Summary -->
+      <div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">⚙️ Machinery & Equipment</label>
+          <button onclick="boqAddMachRow()" style="background:#e0e7ff;color:#4f46e5;border:none;border-radius:7px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer">+ Add</button>
+        </div>
+        <div id="boq-mach-rows"></div>
+        <div style="text-align:center;margin-top:6px">
+          <button onclick="boqFetchMachData()" style="background:linear-gradient(135deg,#059669,#0284c7);color:#fff;border:none;border-radius:9px;padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer">🔄 Auto-Fetch from Machinery</button>
+        </div>
+      </div>
+
+      <!-- Status & Remarks -->
+      <div style="margin-bottom:14px">
+        <label style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">Status / Remarks</label>
+        <select id="boq-td-status" style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px;font-size:12px;background:#fff;margin-bottom:8px">
+          <option value="In Progress">🔄 In Progress</option>
+          <option value="Good Progress">✅ Good Progress</option>
+          <option value="Delayed">⚠️ Delayed</option>
+          <option value="Halted">🛑 Halted</option>
+          <option value="Completed">🎉 Completed</option>
+        </select>
+        <textarea id="boq-td-remarks" rows="2" placeholder="Additional remarks, issues, material shortage..."
+          style="width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:8px 10px;font-size:12px;resize:none;outline:none;font-family:inherit"></textarea>
+      </div>
+
+      <!-- Save button -->
+      <button onclick="boqSaveTodayDetails()"
+        style="width:100%;background:linear-gradient(135deg,#0f2244,#1a3a6b);color:#fff;border:none;border-radius:13px;padding:14px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(15,34,68,0.4)">
+        💾 Save Today's Report
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MACHINERY ===== -->
 <div id="tab-machinery" class="tab-content" style="display:none">
   <!-- Date selector -->
@@ -2027,42 +2176,46 @@ document.addEventListener('DOMContentLoaded', checkShowWelcome);
 
 <!-- ===== SCHEDULE ===== -->
 <div id="tab-schedule" class="tab-content" style="display:none">
-  <!-- Progress -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <div class="flex items-center justify-between mb-2">
-      <p class="text-sm font-bold text-gray-700">📊 Project Progress</p>
-      <span id="sched-pct" class="bg-indigo-100 text-indigo-700 font-black text-sm rounded-full px-2.5 py-0.5">0%</span>
+
+  <!-- Project Schedule (only content) -->
+  <div id="sched-sub-main">
+    <!-- Progress -->
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-sm font-bold text-gray-700">📊 Project Progress</p>
+        <span id="sched-pct" class="bg-indigo-100 text-indigo-700 font-black text-sm rounded-full px-2.5 py-0.5">0%</span>
+      </div>
+      <div class="rounded-full overflow-hidden mb-1" style="height:8px;background:#e5e7eb"><div id="sched-bar" class="h-full rounded-full" style="width:0%;background:linear-gradient(to right,#4f46e5,#7c3aed);transition:width .4s"></div></div>
+      <div class="flex justify-between text-xs text-gray-500 mt-1"><span><span id="sched-done">0</span> done</span><span><span id="sched-total">0</span> total</span></div>
     </div>
-    <div class="rounded-full overflow-hidden mb-1" style="height:8px;background:#e5e7eb"><div id="sched-bar" class="h-full rounded-full" style="width:0%;background:linear-gradient(to right,#4f46e5,#7c3aed);transition:width .4s"></div></div>
-    <div class="flex justify-between text-xs text-gray-500 mt-1"><span><span id="sched-done">0</span> done</span><span><span id="sched-total">0</span> total</span></div>
-  </div>
-  <!-- Add Milestone -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-sm font-bold text-gray-700 mb-3">+ Add Milestone</p>
-    <input type="text" id="ms-title" placeholder="Milestone Title" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2">
-    <div class="grid grid-cols-2 gap-2 mb-2">
-      <input type="date" id="ms-start" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="date" id="ms-end" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+    <!-- Add Milestone -->
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <p class="text-sm font-bold text-gray-700 mb-3">+ Add Milestone</p>
+      <input type="text" id="ms-title" placeholder="Milestone Title" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2">
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input type="date" id="ms-start" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="date" id="ms-end" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <select id="ms-status" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+          <option>🔄 In Progress</option><option>✅ Completed</option><option>⏳ Pending</option><option>⚠️ Delayed</option>
+        </select>
+        <input type="text" id="ms-notes" placeholder="Notes (optional)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <button onclick="addMilestone()" class="g-tobr-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">Add Milestone</button>
     </div>
-    <div class="grid grid-cols-2 gap-2 mb-3">
-      <select id="ms-status" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
-        <option>🔄 In Progress</option><option>✅ Completed</option><option>⏳ Pending</option><option>⚠️ Delayed</option>
-      </select>
-      <input type="text" id="ms-notes" placeholder="Notes (optional)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+    <!-- Timeline list -->
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <p class="text-sm font-bold text-gray-700 mb-3">📅 Project Timeline</p>
+      <div id="milestones-list"><div class="text-center py-10"><span style="font-size:40px">📅</span><p class="font-semibold text-gray-600 mt-2">No milestones yet</p><p class="text-gray-400 text-xs mt-1">Add project phases and deadlines</p></div></div>
     </div>
-    <button onclick="addMilestone()" class="g-tobr-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">Add Milestone</button>
-  </div>
-  <!-- Timeline list -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-sm font-bold text-gray-700 mb-3">📅 Project Timeline</p>
-    <div id="milestones-list"><div class="text-center py-10"><span style="font-size:40px">📅</span><p class="font-semibold text-gray-600 mt-2">No milestones yet</p><p class="text-gray-400 text-xs mt-1">Add project phases and deadlines</p></div></div>
-  </div>
-  <!-- Gantt chart - separate card below with clear spacing -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl" style="margin-top:8px">
-    <p class="text-sm font-bold text-gray-700 mb-3">📊 Gantt Chart</p>
-    <div id="gantt-view" style="overflow-x:auto;min-height:40px"><p class="text-gray-400 text-xs text-center py-2">Add milestones with dates to see Gantt chart</p></div>
-  </div>
-</div>
+    <!-- Gantt chart -->
+    <div class="bg-white rounded-2xl p-3 shadow-xl" style="margin-top:8px">
+      <p class="text-sm font-bold text-gray-700 mb-3">📊 Gantt Chart</p>
+      <div id="gantt-view" style="overflow-x:auto;min-height:40px"><p class="text-gray-400 text-xs text-center py-2">Add milestones with dates to see Gantt chart</p></div>
+    </div>
+  </div><!-- end sched-sub-main -->
+</div><!-- end tab-schedule -->
 
 <!-- ===== PUNCH LIST ===== -->
 <div id="tab-punchlist" class="tab-content" style="display:none">
@@ -2453,39 +2606,37 @@ document.addEventListener('DOMContentLoaded', checkShowWelcome);
       <h3 style="font-size:14px;font-weight:900;color:#1f2937">⚙️ Manage Workers</h3>
       <button onclick="closeManageWorkers()" style="background:none;border:none;font-size:16px;cursor:pointer;color:#9ca3af;height:auto;min-height:auto;padding:0">✕</button>
     </div>
-    <!-- Worker Selector -->
-    <div style="margin-bottom:10px">
-      <label style="font-size:9px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">Select Worker</label>
-      <select id="mw-worker-select" onchange="loadWorkerForEdit()" style="width:100%;padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;background:white;color:#374151">
-        <option value="">-- Select a Worker --</option>
-      </select>
+
+    <!-- Select All / None bar -->
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <button onclick="mwSelectAll(true)" style="flex:1;background:#e0e7ff;color:#4f46e5;border:none;border-radius:8px;padding:5px 0;font-size:10px;font-weight:800;cursor:pointer">✅ Select All</button>
+      <button onclick="mwSelectAll(false)" style="flex:1;background:#f3f4f6;color:#6b7280;border:none;border-radius:8px;padding:5px 0;font-size:10px;font-weight:800;cursor:pointer">☐ Deselect All</button>
+      <span id="mw-sel-count" style="font-size:10px;font-weight:700;color:#4f46e5;white-space:nowrap">0 selected</span>
     </div>
-    <!-- Edit Panel (hidden until worker selected) -->
-    <div id="mw-edit-panel" style="display:none">
-      <!-- Status Badge -->
-      <div id="mw-status-badge" style="text-align:center;margin-bottom:10px;padding:4px 0"></div>
-      <!-- Rate Inputs -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+
+    <!-- Worker multi-select list -->
+    <div id="mw-worker-list-preview" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:10px"></div>
+
+    <!-- Bulk rate edit panel -->
+    <div id="mw-edit-panel" style="background:#f0f4ff;border-radius:12px;padding:10px;margin-bottom:10px">
+      <p style="font-size:10px;font-weight:800;color:#4f46e5;margin-bottom:8px">📝 Set Rates for Selected Workers</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
         <div>
           <label style="font-size:9px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Regular Rate ₹/hr</label>
-          <input type="number" id="mw-wage" step="any" style="width:100%;padding:7px 9px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:12px;font-weight:700;color:#1f2937;box-sizing:border-box" placeholder="₹/hr">
+          <input type="number" id="mw-wage" step="any" style="width:100%;padding:7px 9px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:12px;font-weight:700;color:#1f2937;box-sizing:border-box" placeholder="₹/hr (leave blank to keep)">
         </div>
         <div>
           <label style="font-size:9px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">OT Rate ₹/hr</label>
-          <input type="number" id="mw-ot-rate" step="any" style="width:100%;padding:7px 9px;border:1.5px solid #ddd6fe;border-radius:9px;font-size:12px;font-weight:700;color:#5b21b6;box-sizing:border-box" placeholder="₹/hr (opt)">
+          <input type="number" id="mw-ot-rate" step="any" style="width:100%;padding:7px 9px;border:1.5px solid #ddd6fe;border-radius:9px;font-size:12px;font-weight:700;color:#5b21b6;box-sizing:border-box" placeholder="₹/hr (leave blank to keep)">
         </div>
       </div>
-      <p style="font-size:9px;color:#6b7280;margin-bottom:10px;background:#f9fafb;padding:6px 8px;border-radius:7px;line-height:1.4">⚠️ Rate changes apply from the <strong>current & future months only</strong>. Past records are not affected.</p>
-      <!-- Action Buttons -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <button onclick="saveWorkerRates()" style="background:linear-gradient(to right,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;padding:9px 0;font-size:11px;font-weight:800;cursor:pointer;active:transform:scale(0.97)">💾 Save Rates</button>
-        <button id="mw-toggle-btn" onclick="toggleWorkerActive()" style="border:none;border-radius:10px;padding:9px 0;font-size:11px;font-weight:800;cursor:pointer"></button>
-      </div>
+      <p style="font-size:9px;color:#6b7280;margin-bottom:8px;line-height:1.4">⚠️ Only filled fields will be updated. Leave blank to keep existing rate.</p>
+      <button onclick="saveBulkWorkerRates()" style="width:100%;background:linear-gradient(to right,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;padding:9px 0;font-size:11px;font-weight:800;cursor:pointer">💾 Apply to Selected Workers</button>
     </div>
-    <!-- Worker List Preview -->
-    <div style="margin-top:10px;border-top:1px solid #f3f4f6;padding-top:10px">
-      <p style="font-size:9px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">All Workers</p>
-      <div id="mw-worker-list-preview" style="max-height:200px;overflow-y:auto"></div>
+
+    <!-- Single worker toggle active (shown when exactly 1 selected) -->
+    <div id="mw-single-panel" style="display:none;margin-bottom:8px">
+      <button id="mw-toggle-btn" onclick="toggleWorkerActive()" style="width:100%;border:none;border-radius:10px;padding:9px 0;font-size:11px;font-weight:800;cursor:pointer"></button>
     </div>
   </div>
 </div>
@@ -2930,6 +3081,7 @@ service cloud.firestore {
           <span class="perm-chip on" data-tab="daily">📋 Daily Report</span>
           <span class="perm-chip on" data-tab="departmental">🏗️ Dept Work</span>
           <span class="perm-chip on" data-tab="attendance">📅 Attendance</span>
+          <span class="perm-chip on" data-tab="boq">📋 BOQ DPR</span>
           <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
           <span class="perm-chip on" data-tab="expenses">💰 Expenses</span>
           <span class="perm-chip on" data-tab="materials">🧱 Materials</span>
@@ -3443,7 +3595,7 @@ function dismissPWA(){
 // ============================================================
 // TABS
 // ============================================================
-var TABS = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits'];
+var TABS = ['dashboard','daily','departmental','attendance','boq','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits'];
 
 var _plFilter='all';
 
@@ -3466,7 +3618,7 @@ function switchTab(name) {
   try {
     AD = ld();
     if      (name === 'dashboard')    updateDash();
-    else if (name === 'daily')        { loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); }
+    else if (name === 'daily')        { loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); viewDailyBoqProgress(); viewDailyMachinery(); }
     else if (name === 'departmental') loadDeptTab();
     else if (name === 'attendance')   viewWorkers();
     else if (name === 'machinery')    loadMachinery();
@@ -3477,6 +3629,7 @@ function switchTab(name) {
     else if (name === 'rentals')      viewRentals();
     else if (name === 'contractors')  viewContractors();
     else if (name === 'budget')       loadBudgetTab();
+    else if (name === 'boq')           loadBoqTab();
     else if (name === 'schedule')     loadScheduleTab();
     else if (name === 'punchlist')    loadPunchTab();
     else if (name === 'bill')         initBillTab();
@@ -3622,7 +3775,7 @@ function loadDailyReport() {
   var v = document.getElementById('daily-date').value;
   DD = v || ist();
   document.getElementById('daily-date').value = DD;
-  AD = ld(); loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary();
+  AD = ld(); loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); viewDailyBoqProgress(); viewDailyMachinery();
   toast('Loaded: ' + fd(DD), 'ok');
 }
 function loadMeta() {
@@ -3809,6 +3962,85 @@ function saveWD(cat) {
   dedup(AD.filter(function(a){ return a.type==='attendance' && a.date===DD && a.category===cat; })).forEach(function(a){ upd(a.__id,{work_done:val}); });
   AD = ld(); toast('Saved','ok'); viewDaily();
 }
+
+// ── Daily Report: Today's BOQ Work In Progress ─────────────────
+function viewDailyBoqProgress() {
+  var container = document.getElementById('daily-boq-inprogress');
+  var listEl = document.getElementById('daily-boq-inprogress-list');
+  if (!container || !listEl) return;
+  try {
+    var boqData = JSON.parse(safeLS.getItem('cm_boq_schedule') || '{"sections":[]}');
+    var today = DD || ist();
+    var items = [];
+    (boqData.sections || []).forEach(function(sec) {
+      (sec.items || []).forEach(function(item) {
+        var todayQty = parseFloat((item.dailyQty || {})[today] || item.todayQty || 0);
+        if (todayQty > 0) {
+          items.push({ sec: sec.name, no: item.no, desc: item.desc, unit: item.unit, qty: todayQty });
+        }
+        (item.subItems || []).forEach(function(sub) {
+          var subTodayQty = parseFloat((sub.dailyQty || {})[today] || sub.todayQty || 0);
+          if (subTodayQty > 0) {
+            items.push({ sec: sec.name, no: sub.no, desc: sub.desc, unit: sub.unit, qty: subTodayQty });
+          }
+        });
+      });
+    });
+    if (!items.length) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'block';
+    listEl.innerHTML = items.map(function(it) {
+      return '<div style="display:flex;align-items:flex-start;gap:6px;padding:4px 0;border-bottom:1px solid #f3f4f6">'
+        + '<span style="background:#e0e7ff;color:#4f46e5;font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;white-space:nowrap;flex-shrink:0">'
+        + it.qty + ' ' + (it.unit || '') + '</span>'
+        + '<span style="font-size:11px;color:#374151;line-height:1.4">'
+        + '<span style="font-weight:700;color:#6b7280">' + it.no + '</span> ' + it.desc + '</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    container.style.display = 'none';
+  }
+}
+
+// ── Daily Report: Machinery Table ─────────────────────────────
+function viewDailyMachinery() {
+  var tbody = document.getElementById('daily-mach-table');
+  var tfoot = document.getElementById('daily-mach-foot');
+  var footH = document.getElementById('daily-mach-foot-h');
+  var footA = document.getElementById('daily-mach-foot-a');
+  if (!tbody) return;
+  var today = DD || ist();
+  var store = lmach();
+  var sessions = (store[today] || []);
+  if (!sessions.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;color:#9ca3af;font-size:11px">No machinery logged today</td></tr>';
+    if (tfoot) tfoot.style.display = 'none';
+    return;
+  }
+  var totalHours = 0, totalAmt = 0;
+  tbody.innerHTML = sessions.map(function(s) {
+    var hrs = parseFloat(s.hours || 0);
+    var rate = parseFloat(s.rate || 0);
+    var amt = hrs * rate;
+    totalHours += hrs; totalAmt += amt;
+    return '<tr style="border-bottom:1px solid #f3f4f6">'
+      + '<td style="padding:5px 8px;font-weight:700;font-size:11px;color:#374151">' + (s.name || '—') + '</td>'
+      + '<td style="padding:5px 8px;text-align:center;font-size:11px;color:#6b7280">' + (s.operator || '—') + '</td>'
+      + '<td style="padding:5px 8px;text-align:center;font-size:11px">' + (s.start || '—') + '</td>'
+      + '<td style="padding:5px 8px;text-align:center;font-size:11px">' + (s.end || '—') + '</td>'
+      + '<td style="padding:5px 8px;text-align:center;font-weight:700;font-size:11px;color:#7c3aed">' + hrs.toFixed(1) + 'h</td>'
+      + '<td style="padding:5px 8px;text-align:right;font-size:11px;color:#059669;font-weight:700">' + (rate > 0 ? fc(amt) : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+  if (tfoot) {
+    tfoot.style.display = '';
+    if (footH) footH.textContent = totalHours.toFixed(1) + 'h';
+    if (footA) footA.textContent = totalAmt > 0 ? fc(totalAmt) : '—';
+  }
+}
+
 function viewDeptSummary() {
   var entries = ldept()[DD] || [];
   var tb = document.getElementById('daily-dept-table'), foot = document.getElementById('daily-dept-foot');
@@ -3909,26 +4141,17 @@ function delWorker(id) {
   });
 }
 
-// ── Manage Workers ─────────────────────────────────────────────────
+// ── Manage Workers (Multi-select) ──────────────────────────────────
 var _mwCurrentId = null;
+var _mwSelectedIds = []; // multi-select tracking
 
 function openManageWorkers() {
   AD = ld();
-  var sel = document.getElementById('mw-worker-select');
-  var prev = _mwCurrentId;
-  sel.innerHTML = '<option value="">-- Select a Worker --</option>';
-  var workers = AD.filter(function(d){ return d.type === 'worker'; });
-  workers.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
-  workers.forEach(function(w){
-    var opt = document.createElement('option');
-    opt.value = w.__id;
-    opt.textContent = w.name + (w.category ? ' ('+w.category+')' : '') + (w.active===false ? ' [Inactive]' : '');
-    sel.appendChild(opt);
-  });
-  if (prev) sel.value = prev;
-  _renderMwPreviewList();
-  document.getElementById('mw-edit-panel').style.display = prev ? 'block' : 'none';
-  if (prev) loadWorkerForEdit();
+  _mwSelectedIds = [];
+  _renderMwWorkerList();
+  _mwUpdateSelCount();
+  document.getElementById('mw-wage').value = '';
+  document.getElementById('mw-ot-rate').value = '';
   document.getElementById('manage-workers-modal').style.display = 'flex';
 }
 
@@ -3936,92 +4159,7 @@ function closeManageWorkers() {
   document.getElementById('manage-workers-modal').style.display = 'none';
 }
 
-function loadWorkerForEdit() {
-  var sel = document.getElementById('mw-worker-select');
-  var id = sel.value;
-  _mwCurrentId = id || null;
-  var panel = document.getElementById('mw-edit-panel');
-  if (!id) { panel.style.display = 'none'; return; }
-  var w = AD.find(function(d){ return d.__id === id; });
-  if (!w) { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
-  document.getElementById('mw-wage').value = w.hourly_wage || '';
-  document.getElementById('mw-ot-rate').value = w.ot_rate || '';
-  var isActive = w.active !== false;
-  var badge = document.getElementById('mw-status-badge');
-  badge.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:800;background:'+(isActive?'#d1fae5':'#fee2e2')+';color:'+(isActive?'#065f46':'#991b1b')+'">'+(isActive?'✅ Active':'⛔ Inactive')+'</span>';
-  var btn = document.getElementById('mw-toggle-btn');
-  if (isActive) {
-    btn.textContent = '⛔ Mark Inactive';
-    btn.style.background = 'linear-gradient(to right,#fee2e2,#fecaca)';
-    btn.style.color = '#dc2626';
-  } else {
-    btn.textContent = '✅ Mark Active';
-    btn.style.background = 'linear-gradient(to right,#d1fae5,#a7f3d0)';
-    btn.style.color = '#059669';
-  }
-}
-
-function saveWorkerRates() {
-  if (!_mwCurrentId) { toast('Select a worker first','err'); return; }
-  var w = AD.find(function(d){ return d.__id === _mwCurrentId; });
-  if (!w) return;
-  var newWage = parseFloat(document.getElementById('mw-wage').value) || 0;
-  var newOT   = parseFloat(document.getElementById('mw-ot-rate').value) || 0;
-  var oldWage = parseFloat(w.hourly_wage) || 0;
-  var oldOT   = parseFloat(w.ot_rate) || 0;
-  if (newWage === oldWage && newOT === oldOT) { toast('No changes made','err'); return; }
-
-  // Current month string e.g. "2026-03"
-  var now = new Date();
-  var curMon = now.getFullYear() + '-' + ('0'+(now.getMonth()+1)).slice(-2);
-
-  // Lock past attendance records to old rates (if not already locked)
-  var attRecs = AD.filter(function(d){ return d.type==='attendance' && d.name===w.name; });
-  attRecs.forEach(function(a){
-    var aMonth = (a.date||'').substring(0,7);
-    if (aMonth && aMonth < curMon) {
-      // Past month: lock in old rates if not already stored
-      var updates = {};
-      var needsUpdate = false;
-      if (!a.hourly_wage || parseFloat(a.hourly_wage) === 0) {
-        updates.hourly_wage = oldWage; needsUpdate = true;
-      }
-      if (!a.ot_rate && oldOT > 0) {
-        updates.ot_rate = oldOT; needsUpdate = true;
-      }
-      if (needsUpdate) upd(a.__id, updates);
-    } else if (aMonth && aMonth >= curMon) {
-      // Current/future month: update to new rates and recalculate payment
-      var hrs = parseFloat(a.hours) || 0;
-      var otH = parseFloat(a.ot_hours) || 0;
-      var newPay = hrs * newWage + otH * newOT;
-      upd(a.__id, { hourly_wage: newWage, ot_rate: newOT, payment: newPay });
-    }
-  });
-
-  // Update worker record
-  upd(_mwCurrentId, { hourly_wage: newWage, ot_rate: newOT });
-  AD = ld();
-  toast('Rates updated from ' + curMon.replace('-','/'), 'ok');
-  viewWorkers();
-  updateDash();
-  openManageWorkers(); // refresh modal
-}
-
-function toggleWorkerActive() {
-  if (!_mwCurrentId) return;
-  var w = AD.find(function(d){ return d.__id === _mwCurrentId; });
-  if (!w) return;
-  var nowActive = w.active !== false;
-  upd(_mwCurrentId, { active: !nowActive });
-  AD = ld();
-  toast(w.name + (nowActive ? ' marked inactive' : ' marked active'), 'ok');
-  viewWorkers();
-  openManageWorkers();
-}
-
-function _renderMwPreviewList() {
+function _renderMwWorkerList() {
   var el = document.getElementById('mw-worker-list-preview');
   if (!el) return;
   var workers = AD.filter(function(d){ return d.type==='worker'; });
@@ -4029,15 +4167,118 @@ function _renderMwPreviewList() {
   workers.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
   el.innerHTML = workers.map(function(w){
     var isActive = w.active !== false;
-    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:8px;margin-bottom:4px;background:'+(isActive?'#f9fafb':'#fef2f2')+'">'
-      +'<div>'
-      +'<p style="font-size:11px;font-weight:800;color:'+(isActive?'#1f2937':'#9ca3af')+'">'+w.name+'</p>'
-      +'<p style="font-size:9px;color:#6b7280">'+w.category+' · '+fc(w.hourly_wage)+'/hr'+(parseFloat(w.ot_rate)>0?' | OT: '+fc(w.ot_rate)+'/hr':'')+'</p>'
+    var isSel = _mwSelectedIds.indexOf(w.__id) !== -1;
+    return '<div onclick="mwToggleWorker(\''+w.__id+'\')" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;margin-bottom:4px;cursor:pointer;border:2px solid '+(isSel?'#6366f1':'#e5e7eb')+';background:'+(isSel?'#eef2ff':'#f9fafb')+';transition:all .12s">'
+      +'<div style="width:18px;height:18px;border-radius:5px;border:2px solid '+(isSel?'#6366f1':'#d1d5db')+';background:'+(isSel?'#6366f1':'white')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+      +(isSel?'<span style="color:white;font-size:11px;font-weight:900">✓</span>':'')+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<p style="font-size:12px;font-weight:800;color:'+(isActive?'#1f2937':'#9ca3af')+'">'+w.name+(isActive?'':' <span style="font-size:9px;color:#ef4444">[Inactive]</span>')+'</p>'
+      +'<p style="font-size:9.5px;color:#6b7280">'+w.category+' · '+fc(w.hourly_wage||0)+'/hr'+(parseFloat(w.ot_rate)>0?' | OT: '+fc(w.ot_rate)+'/hr':'')+'</p>'
       +'</div>'
-      +'<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;background:'+(isActive?'#d1fae5':'#fee2e2')+';color:'+(isActive?'#065f46':'#991b1b')+'">'+(isActive?'Active':'Inactive')+'</span>'
+      +'<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;background:'+(isActive?'#d1fae5':'#fee2e2')+';color:'+(isActive?'#065f46':'#991b1b')+';flex-shrink:0">'+(isActive?'Active':'Inactive')+'</span>'
       +'</div>';
   }).join('');
 }
+
+function mwToggleWorker(id) {
+  var idx = _mwSelectedIds.indexOf(id);
+  if (idx === -1) _mwSelectedIds.push(id);
+  else _mwSelectedIds.splice(idx, 1);
+  _renderMwWorkerList();
+  _mwUpdateSelCount();
+  // Show/hide single-worker toggle button
+  var sp = document.getElementById('mw-single-panel');
+  if (sp) {
+    if (_mwSelectedIds.length === 1) {
+      sp.style.display = 'block';
+      var w = AD.find(function(d){ return d.__id === _mwSelectedIds[0]; });
+      var btn = document.getElementById('mw-toggle-btn');
+      if (w && btn) {
+        var isActive = w.active !== false;
+        btn.textContent = isActive ? '⛔ Mark Inactive' : '✅ Mark Active';
+        btn.style.background = isActive ? 'linear-gradient(to right,#fee2e2,#fecaca)' : 'linear-gradient(to right,#d1fae5,#a7f3d0)';
+        btn.style.color = isActive ? '#dc2626' : '#059669';
+      }
+    } else {
+      sp.style.display = 'none';
+    }
+  }
+}
+
+function mwSelectAll(sel) {
+  var workers = AD.filter(function(d){ return d.type==='worker'; });
+  _mwSelectedIds = sel ? workers.map(function(w){ return w.__id; }) : [];
+  _renderMwWorkerList();
+  _mwUpdateSelCount();
+  var sp = document.getElementById('mw-single-panel');
+  if (sp) sp.style.display = 'none';
+}
+
+function _mwUpdateSelCount() {
+  var el = document.getElementById('mw-sel-count');
+  if (el) el.textContent = _mwSelectedIds.length + ' selected';
+}
+
+function saveBulkWorkerRates() {
+  if (!_mwSelectedIds.length) { toast('Select at least one worker','err'); return; }
+  var wageStr = document.getElementById('mw-wage').value.trim();
+  var otStr   = document.getElementById('mw-ot-rate').value.trim();
+  if (!wageStr && !otStr) { toast('Enter at least one rate to update','err'); return; }
+  var newWage = wageStr !== '' ? parseFloat(wageStr) : null;
+  var newOT   = otStr   !== '' ? parseFloat(otStr)   : null;
+  var now = new Date();
+  var curMon = now.getFullYear() + '-' + ('0'+(now.getMonth()+1)).slice(-2);
+  var count = 0;
+  _mwSelectedIds.forEach(function(wid){
+    var w = AD.find(function(d){ return d.__id === wid; });
+    if (!w) return;
+    var applyWage = newWage !== null ? newWage : (parseFloat(w.hourly_wage)||0);
+    var applyOT   = newOT   !== null ? newOT   : (parseFloat(w.ot_rate)||0);
+    // Lock past attendance to old rates
+    var oldWage = parseFloat(w.hourly_wage)||0;
+    var oldOT   = parseFloat(w.ot_rate)||0;
+    var attRecs = AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name; });
+    attRecs.forEach(function(a){
+      var aMonth = (a.date||'').substring(0,7);
+      if (aMonth && aMonth < curMon) {
+        var updates = {};
+        if (!a.hourly_wage || parseFloat(a.hourly_wage)===0) { updates.hourly_wage = oldWage; }
+        if (!a.ot_rate && oldOT > 0) { updates.ot_rate = oldOT; }
+        if (Object.keys(updates).length) upd(a.__id, updates);
+      } else if (aMonth && aMonth >= curMon) {
+        var hrs = parseFloat(a.hours)||0;
+        var otH = parseFloat(a.ot_hours)||0;
+        upd(a.__id, { hourly_wage: applyWage, ot_rate: applyOT, payment: hrs*applyWage+otH*applyOT });
+      }
+    });
+    var wUpdate = {};
+    if (newWage !== null) wUpdate.hourly_wage = applyWage;
+    if (newOT   !== null) wUpdate.ot_rate = applyOT;
+    upd(wid, wUpdate);
+    count++;
+  });
+  AD = ld();
+  toast(count+' worker'+(count>1?'s':'')+' updated ✓', 'ok');
+  viewWorkers(); updateDash();
+  openManageWorkers();
+}
+
+function toggleWorkerActive() {
+  if (_mwSelectedIds.length !== 1) return;
+  _mwCurrentId = _mwSelectedIds[0];
+  var w = AD.find(function(d){ return d.__id === _mwCurrentId; });
+  if (!w) return;
+  var nowActive = w.active !== false;
+  upd(_mwCurrentId, { active: !nowActive });
+  AD = ld();
+  toast(w.name + (nowActive ? ' marked inactive' : ' marked active'), 'ok');
+  viewWorkers(); openManageWorkers();
+}
+
+// Keep stubs for legacy calls
+function loadWorkerForEdit() {}
+function saveWorkerRates() { saveBulkWorkerRates(); }
+function _renderMwPreviewList() { _renderMwWorkerList(); }
 function openAttModal(wid, date) {
   WID=wid; var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
   var d=date||ist();
@@ -4910,16 +5151,29 @@ function printRentalByClient(){
         +'<th style="text-align:center;background:#fee2e2;color:#dc2626;padding:3px 8px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact">Days</th>'
         +'<th style="text-align:right;background:#fee2e2;color:#dc2626;padding:3px 10px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact">Amount</th>'
         +'</tr></thead><tbody>';
+      // Group: same name + same rate + same active-days → merge qty
+      var borrowGroups = {};
+      var borrowOrder  = [];
       mBorrow.forEach(function(r){
         var days = daysActiveInMonth(r, mk);
-        var amt  = days * (parseFloat(r.rate)||0) * (parseFloat(r.qty)||1);
+        var rate = parseFloat(r.rate)||0;
+        var key  = r.rental_name.trim().toLowerCase() + '|' + rate + '|' + days;
+        if (!borrowGroups[key]) {
+          borrowGroups[key] = { name:r.rental_name, rate:rate, days:days, qty:0, start:r.borrowed_date };
+          borrowOrder.push(key);
+        }
+        borrowGroups[key].qty += (parseFloat(r.qty)||1);
+      });
+      borrowOrder.forEach(function(key){
+        var g   = borrowGroups[key];
+        var amt = g.days * g.rate * g.qty;
         mBowExp += amt; grandExp += amt;
         out += '<tr>'
-          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+r.rental_name+'</td>'
-          +'<td style="text-align:center;font-weight:600;padding:5px 8px;font-size:12px">'+(r.qty||1)+'</td>'
-          +'<td style="text-align:center;color:#4f46e5;font-weight:700;padding:5px 8px;font-size:12px">'+fc(parseFloat(r.rate)||0)+'</td>'
-          +'<td style="text-align:center;color:#6b7280;padding:5px 8px;font-size:12px">'+fd(r.borrowed_date)+'</td>'
-          +'<td style="text-align:center;font-weight:700;color:#374151;padding:5px 8px;font-size:12px">'+days+' d</td>'
+          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+g.name+'</td>'
+          +'<td style="text-align:center;font-weight:600;padding:5px 8px;font-size:12px">'+g.qty+'</td>'
+          +'<td style="text-align:center;color:#4f46e5;font-weight:700;padding:5px 8px;font-size:12px">'+fc(g.rate)+'</td>'
+          +'<td style="text-align:center;color:#6b7280;padding:5px 8px;font-size:12px">'+fd(g.start)+'</td>'
+          +'<td style="text-align:center;font-weight:700;color:#374151;padding:5px 8px;font-size:12px">'+g.days+' d</td>'
           +'<td style="text-align:right;font-weight:900;color:#dc2626;font-size:12px;padding:5px 10px">'+fc(amt)+'</td>'
           +'</tr>';
       });
@@ -4940,16 +5194,29 @@ function printRentalByClient(){
         +'<th style="text-align:center;background:#dcfce7;color:#059669;padding:3px 8px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact">Days</th>'
         +'<th style="text-align:right;background:#dcfce7;color:#059669;padding:3px 10px;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact">Amount</th>'
         +'</tr></thead><tbody>';
+      // Group: same name + same rate + same active-days → merge qty
+      var givenGroups = {};
+      var givenOrder  = [];
       mGiven.forEach(function(r){
         var days = daysActiveInMonth(r, mk);
-        var amt  = days * (parseFloat(r.rate)||0) * (parseFloat(r.qty)||1);
+        var rate = parseFloat(r.rate)||0;
+        var key  = r.rental_name.trim().toLowerCase() + '|' + rate + '|' + days;
+        if (!givenGroups[key]) {
+          givenGroups[key] = { name:r.rental_name, rate:rate, days:days, qty:0, start:r.borrowed_date };
+          givenOrder.push(key);
+        }
+        givenGroups[key].qty += (parseFloat(r.qty)||1);
+      });
+      givenOrder.forEach(function(key){
+        var g   = givenGroups[key];
+        var amt = g.days * g.rate * g.qty;
         mGivInc += amt; grandInc += amt;
         out += '<tr>'
-          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+r.rental_name+'</td>'
-          +'<td style="text-align:center;font-weight:600;padding:5px 8px;font-size:12px">'+(r.qty||1)+'</td>'
-          +'<td style="text-align:center;color:#4f46e5;font-weight:700;padding:5px 8px;font-size:12px">'+fc(parseFloat(r.rate)||0)+'</td>'
-          +'<td style="text-align:center;color:#6b7280;padding:5px 8px;font-size:12px">'+fd(r.borrowed_date)+'</td>'
-          +'<td style="text-align:center;font-weight:700;color:#374151;padding:5px 8px;font-size:12px">'+days+' d</td>'
+          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+g.name+'</td>'
+          +'<td style="text-align:center;font-weight:600;padding:5px 8px;font-size:12px">'+g.qty+'</td>'
+          +'<td style="text-align:center;color:#4f46e5;font-weight:700;padding:5px 8px;font-size:12px">'+fc(g.rate)+'</td>'
+          +'<td style="text-align:center;color:#6b7280;padding:5px 8px;font-size:12px">'+fd(g.start)+'</td>'
+          +'<td style="text-align:center;font-weight:700;color:#374151;padding:5px 8px;font-size:12px">'+g.days+' d</td>'
           +'<td style="text-align:right;font-weight:900;color:#059669;font-size:12px;padding:5px 10px">'+fc(amt)+'</td>'
           +'</tr>';
       });
@@ -6199,7 +6466,9 @@ var MS_KEY='cm_milestones';
 function lms(){try{return JSON.parse(safeLS.getItem(MS_KEY)||'[]');}catch(e){return [];}}
 function sms(x){safeLS.setItem(MS_KEY,JSON.stringify(x));}
 
-function loadScheduleTab(){renderSchedule();}
+function loadScheduleTab(){
+  renderSchedule(); setTimeout(renderGantt, 200);
+}
 
 function addMilestone(){
   var title=document.getElementById('ms-title').value.trim();
@@ -6243,6 +6512,939 @@ function markMsDone(id){
   if(m)m.status='✅ Completed';sms(ms);renderSchedule();toast('Marked complete!','ok');
 }
 function delMs(id){askDel('Delete this milestone?',function(){var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');});}
+
+// ============================================================
+// SCHEDULE SUB-TAB SWITCHER
+// ============================================================
+var _schedSub = 'main';
+function switchSchedSub(name){
+  _schedSub = name;
+  var mainEl = document.getElementById('sched-sub-main');
+  var boqEl  = document.getElementById('sched-sub-boq');
+  var btnMain = document.getElementById('sched-sub-btn-main');
+  var btnBoq  = document.getElementById('sched-sub-btn-boq');
+  if(mainEl) mainEl.style.display = name==='main'?'block':'none';
+  if(boqEl)  boqEl.style.display  = name==='boq' ?'block':'none';
+  if(btnMain){
+    btnMain.style.background = name==='main'?'linear-gradient(135deg,#4f46e5,#7c3aed)':'#f3f4f6';
+    btnMain.style.color = name==='main'?'#fff':'#6b7280';
+    btnMain.style.boxShadow = name==='main'?'0 3px 10px rgba(79,70,229,0.3)':'none';
+  }
+  if(btnBoq){
+    btnBoq.style.background = name==='boq'?'linear-gradient(135deg,#0d9488,#0f766e)':'#f3f4f6';
+    btnBoq.style.color = name==='boq'?'#fff':'#6b7280';
+    btnBoq.style.boxShadow = name==='boq'?'0 3px 10px rgba(13,148,136,0.3)':'none';
+  }
+  if(name==='boq') boqRender();
+  else { renderSchedule(); setTimeout(renderGantt,200); }
+}
+
+// ============================================================
+// BOQ SCHEDULE
+// ============================================================
+var BOQ_KEY    = 'cm_boq_schedule';
+var BOQ_PI_KEY = 'cm_boq_project_info';
+var BOQ_TD_KEY = 'cm_boq_today_details'; // today's work details
+
+function boqLoad(){ try{ return JSON.parse(safeLS.getItem(BOQ_KEY)||'{"sections":[]}'); }catch(e){ return {sections:[]}; } }
+function boqSave(d){ safeLS.setItem(BOQ_KEY,JSON.stringify(d)); }
+function loadBoqTab(){ boqRender(); }
+
+/* ── Project Info ── */
+function boqLoadPI(){ try{ return JSON.parse(safeLS.getItem(BOQ_PI_KEY)||'{}'); }catch(e){ return {}; } }
+function boqSaveProjectInfo(){
+  var pi={work:(document.getElementById('boq-pi-work')||{}).value||'',client:(document.getElementById('boq-pi-client')||{}).value||'',
+    contractor:(document.getElementById('boq-pi-contractor')||{}).value||'',consultant:(document.getElementById('boq-pi-consultant')||{}).value||'',
+    wo:(document.getElementById('boq-pi-wo')||{}).value||'',weather:(document.getElementById('boq-pi-weather')||{}).value||'Clear',
+    commDate:(document.getElementById('boq-pi-start')||{}).value||'',stipDate:(document.getElementById('boq-pi-end')||{}).value||''};
+  safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info saved!','ok');
+}
+function boqPopulatePI(pi){
+  var m={'boq-pi-work':pi.work,'boq-pi-client':pi.client,'boq-pi-contractor':pi.contractor,
+    'boq-pi-consultant':pi.consultant,'boq-pi-wo':pi.wo,'boq-pi-start':pi.commDate,'boq-pi-end':pi.stipDate};
+  Object.keys(m).forEach(function(id){ var el=document.getElementById(id); if(el) el.value=m[id]||''; });
+  if(pi.weather){ var ws=document.getElementById('boq-pi-weather'); if(ws) ws.value=pi.weather; }
+}
+function boqFetchProjectInfo(){
+  var keys=['cm_site_info','cm_project','cm_contract','site_info'];
+  for(var k=0;k<keys.length;k++){
+    try{ var v=safeLS.getItem(keys[k]); if(v){ var obj=JSON.parse(v),pi=boqLoadPI();
+      if(obj.name||obj.work_name) pi.work=obj.name||obj.work_name;
+      if(obj.client||obj.owner) pi.client=obj.client||obj.owner;
+      if(obj.contractor) pi.contractor=obj.contractor;
+      if(obj.consultant) pi.consultant=obj.consultant;
+      if(obj.workOrderNo||obj.wo_no) pi.wo=obj.workOrderNo||obj.wo_no;
+      if(obj.startDate||obj.commencement_date) pi.commDate=obj.startDate||obj.commencement_date;
+      if(obj.endDate||obj.completion_date) pi.stipDate=obj.endDate||obj.completion_date;
+      boqPopulatePI(pi); safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info loaded!','ok'); return;
+    }}catch(e){}
+  }
+  var saved=boqLoadPI(); if(saved.work){ boqPopulatePI(saved); toast('Loaded saved info','ok'); }
+  else toast('No project info found. Fill manually.','err');
+}
+
+/* ── Today's Work Details ── */
+function boqLoadTD(date){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; } }
+function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); all[date]=data; safeLS.setItem(BOQ_TD_KEY,JSON.stringify(all)); }catch(e){} }
+function boqOpenTodayModal(){
+  var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
+  var lbl=document.getElementById('boq-modal-date-label');
+  if(lbl) lbl.textContent=boqFmtDateHeading(date);
+  var td=boqLoadTD(date);
+  var wdEl=document.getElementById('boq-td-workdesc'); if(wdEl) wdEl.value=td.workdesc||'';
+  var stEl=document.getElementById('boq-td-status'); if(stEl) stEl.value=td.status||'In Progress';
+  var rmEl=document.getElementById('boq-td-remarks'); if(rmEl) rmEl.value=td.remarks||'';
+  boqRenderLabourRows(td.labour||[]);
+  boqRenderMachRows(td.machinery||[]);
+  document.getElementById('boq-today-modal').style.display='block';
+  document.body.style.overflow='hidden';
+}
+function boqCloseTodayModal(){
+  document.getElementById('boq-today-modal').style.display='none';
+  document.body.style.overflow='';
+}
+function boqSaveTodayDetails(){
+  var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
+  var labRows=document.querySelectorAll('.boq-lab-row');
+  var machRows=document.querySelectorAll('.boq-mach-row');
+  var labour=[]; labRows.forEach(function(row){
+    var cat=row.querySelector('.bl-cat')||{}; var cnt=row.querySelector('.bl-cnt')||{};
+    var hrs=row.querySelector('.bl-hrs')||{}; var wd=row.querySelector('.bl-wd')||{};
+    if(cat.value&&cnt.value) labour.push({category:cat.value,count:parseInt(cnt.value)||0,hours:parseFloat(hrs.value)||0,workDone:wd.value||''});
+  });
+  var machinery=[]; machRows.forEach(function(row){
+    var nm=row.querySelector('.bm-name')||{}; var tp=row.querySelector('.bm-type')||{};
+    var hr=row.querySelector('.bm-hrs')||{}; var st=row.querySelector('.bm-status')||{};
+    if(nm.value) machinery.push({name:nm.value,type:tp.value||'',hours:parseFloat(hr.value)||0,status:st.value||'Working'});
+  });
+  var td={
+    labour:labour,machinery:machinery,
+    workdesc:(document.getElementById('boq-td-workdesc')||{}).value||'',
+    status:(document.getElementById('boq-td-status')||{}).value||'In Progress',
+    remarks:(document.getElementById('boq-td-remarks')||{}).value||''
+  };
+  boqSaveTD(date,td);
+  boqCloseTodayModal();
+  boqRenderTodaySummaryCard(date);
+  toast('Today\'s details saved!','ok');
+}
+
+/* ── Labour rows in modal ── */
+var _labCats=['Mason','Labour','Carpenter','Helper','Fitter','Supervisor','Electrician','Plumber','Tile Mason','Engineer','Guard'];
+function boqRenderLabourRows(arr){
+  var el=document.getElementById('boq-labour-rows'); if(!el) return;
+  if(!arr.length){ el.innerHTML='<p style="font-size:10px;color:#9ca3af;text-align:center;padding:6px">No labour added yet</p>'; return; }
+  el.innerHTML=arr.map(function(row,i){
+    var opts=_labCats.map(function(c){ return '<option value="'+c+'"'+(c===row.category?' selected':'')+'>'+c+'</option>'; }).join('');
+    return '<div class="boq-lab-row" style="display:grid;grid-template-columns:2fr 60px 60px 2fr 28px;gap:4px;margin-bottom:5px;align-items:center">'
+      +'<select class="bl-cat" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;background:#fff">'+opts+'</select>'
+      +'<input class="bl-cnt" type="number" value="'+(row.count||0)+'" placeholder="No." style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;text-align:center;width:100%">'
+      +'<input class="bl-hrs" type="number" step="0.5" value="'+(row.hours||8)+'" placeholder="Hrs" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;text-align:center;width:100%">'
+      +'<input class="bl-wd" value="'+(row.workDone||'')+'" placeholder="Work done..." style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;width:100%">'
+      +'<button onclick="this.parentElement.remove()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;width:26px;height:26px;font-size:14px;cursor:pointer;line-height:1">✕</button>'
+      +'</div>';
+  }).join('');
+}
+function boqAddLabourRow(){
+  var el=document.getElementById('boq-labour-rows'); if(!el) return;
+  var dummy=el.querySelector('p'); if(dummy) el.innerHTML='';
+  var opts=_labCats.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('');
+  var div=document.createElement('div');
+  div.className='boq-lab-row';
+  div.style.cssText='display:grid;grid-template-columns:2fr 60px 60px 2fr 28px;gap:4px;margin-bottom:5px;align-items:center';
+  div.innerHTML='<select class="bl-cat" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;background:#fff">'+opts+'</select>'
+    +'<input class="bl-cnt" type="number" value="1" placeholder="No." style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;text-align:center;width:100%">'
+    +'<input class="bl-hrs" type="number" step="0.5" value="8" placeholder="Hrs" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;text-align:center;width:100%">'
+    +'<input class="bl-wd" placeholder="Work done..." style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;width:100%">'
+    +'<button onclick="this.parentElement.remove()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;width:26px;height:26px;font-size:14px;cursor:pointer;line-height:1">✕</button>';
+  el.appendChild(div);
+}
+function boqFetchAttendanceData(){
+  var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
+  try{
+    var AD=JSON.parse(safeLS.getItem('cm_data')||'[]');
+    var att=AD.filter(function(a){ return a.type==='attendance'&&a.date===date; });
+    if(!att.length){ toast('No attendance data for '+date,'err'); return; }
+    var grp={};
+    att.forEach(function(a){ if(!grp[a.category]) grp[a.category]={count:0,hours:0}; grp[a.category].count++; grp[a.category].hours+=(parseFloat(a.hours)||0); });
+    var labour=Object.keys(grp).map(function(cat){ return {category:cat,count:grp[cat].count,hours:grp[cat].hours,workDone:''}; });
+    boqRenderLabourRows(labour);
+    toast('Attendance fetched: '+labour.length+' categories','ok');
+  }catch(e){ toast('Could not fetch attendance','err'); }
+}
+
+/* ── Machinery rows in modal ── */
+function boqRenderMachRows(arr){
+  var el=document.getElementById('boq-mach-rows'); if(!el) return;
+  if(!arr.length){ el.innerHTML='<p style="font-size:10px;color:#9ca3af;text-align:center;padding:6px">No machinery added yet</p>'; return; }
+  el.innerHTML=arr.map(function(row){
+    var statusOpts=['Working','Standby','Breakdown','Maintenance'].map(function(s){ return '<option'+(s===row.status?' selected':'')+'>'+s+'</option>'; }).join('');
+    return '<div class="boq-mach-row" style="display:grid;grid-template-columns:2fr 1.5fr 60px 1.5fr 28px;gap:4px;margin-bottom:5px;align-items:center">'
+      +'<input class="bm-name" value="'+(row.name||'')+'" placeholder="Machine name" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;width:100%">'
+      +'<input class="bm-type" value="'+(row.type||'')+'" placeholder="Type/model" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;width:100%">'
+      +'<input class="bm-hrs" type="number" step="0.5" value="'+(row.hours||0)+'" placeholder="Hrs" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;text-align:center;width:100%">'
+      +'<select class="bm-status" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;background:#fff">'+statusOpts+'</select>'
+      +'<button onclick="this.parentElement.remove()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;width:26px;height:26px;font-size:14px;cursor:pointer;line-height:1">✕</button>'
+      +'</div>';
+  }).join('');
+}
+function boqAddMachRow(){
+  var el=document.getElementById('boq-mach-rows'); if(!el) return;
+  var dummy=el.querySelector('p'); if(dummy) el.innerHTML='';
+  var div=document.createElement('div');
+  div.className='boq-mach-row';
+  div.style.cssText='display:grid;grid-template-columns:2fr 1.5fr 60px 1.5fr 28px;gap:4px;margin-bottom:5px;align-items:center';
+  div.innerHTML='<input class="bm-name" placeholder="Machine name" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;width:100%">'
+    +'<input class="bm-type" placeholder="Type/model" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;width:100%">'
+    +'<input class="bm-hrs" type="number" step="0.5" value="0" placeholder="Hrs" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;text-align:center;width:100%">'
+    +'<select class="bm-status" style="border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:10px;background:#fff"><option>Working</option><option>Standby</option><option>Breakdown</option><option>Maintenance</option></select>'
+    +'<button onclick="this.parentElement.remove()" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;width:26px;height:26px;font-size:14px;cursor:pointer;line-height:1">✕</button>';
+  el.appendChild(div);
+}
+function boqFetchMachData(){
+  var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
+  try{
+    var store=JSON.parse(safeLS.getItem('cm_machinery')||'{}');
+    var sessions=store[date]||[];
+    if(!sessions.length){ toast('No machinery data for '+date,'err'); return; }
+    var mach=sessions.map(function(s){ return {name:s.name||'Machine',type:s.type||'',hours:s.hours||0,status:'Working'}; });
+    boqRenderMachRows(mach);
+    toast('Machinery fetched: '+mach.length+' items','ok');
+  }catch(e){ toast('Could not fetch machinery','err'); }
+}
+
+/* ── Render today summary card ── */
+function boqRenderTodaySummaryCard(date){
+  var el=document.getElementById('boq-today-summary-card'); if(!el) return;
+  var td=boqLoadTD(date);
+  var totalLabour=td.labour.reduce(function(s,l){return s+(parseInt(l.count)||0);},0);
+  var statusColor={'In Progress':'#4f46e5','Good Progress':'#059669','Delayed':'#f59e0b','Halted':'#dc2626','Completed':'#059669'}[td.status]||'#6b7280';
+  var html='';
+  if(td.workdesc){
+    html+='<div style="background:#f8faff;border-left:3px solid #4f46e5;border-radius:0 8px 8px 0;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#374151">'+_esc(td.workdesc)+'</div>';
+  }
+  html+='<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+  html+='<div style="background:#eff6ff;border-radius:8px;padding:6px 12px;font-size:10px;font-weight:700;color:#1e40af">👷 '+totalLabour+' Workers</div>';
+  html+='<div style="background:#f0fdf4;border-radius:8px;padding:6px 12px;font-size:10px;font-weight:700;color:#065f46">⚙️ '+td.machinery.length+' Machines</div>';
+  html+='<div style="background:#fef9c3;border-radius:8px;padding:6px 12px;font-size:10px;font-weight:700;color:'+(statusColor)+'">'+td.status+'</div>';
+  html+='</div>';
+  if(td.labour.length){
+    html+='<table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px"><thead><tr style="background:#f1f5f9">';
+    html+='<th style="padding:4px 6px;text-align:left;font-size:9px;color:#64748b;font-weight:700">Category</th>';
+    html+='<th style="padding:4px 6px;text-align:center;font-size:9px;color:#64748b;font-weight:700">Count</th>';
+    html+='<th style="padding:4px 6px;text-align:center;font-size:9px;color:#64748b;font-weight:700">Hours</th>';
+    html+='<th style="padding:4px 6px;text-align:left;font-size:9px;color:#64748b;font-weight:700">Work Done</th></tr></thead><tbody>';
+    td.labour.forEach(function(l){
+      html+='<tr style="border-bottom:1px solid #f1f5f9">';
+      html+='<td style="padding:4px 6px;font-weight:600">'+_esc(l.category)+'</td>';
+      html+='<td style="padding:4px 6px;text-align:center;color:#4f46e5;font-weight:700">'+l.count+'</td>';
+      html+='<td style="padding:4px 6px;text-align:center">'+l.hours+'h</td>';
+      html+='<td style="padding:4px 6px;color:#6b7280">'+_esc(l.workDone||'—')+'</td></tr>';
+    });
+    html+='</tbody></table>';
+  }
+  if(td.remarks){
+    html+='<div style="font-size:10px;color:#6b7280;font-style:italic">📝 '+_esc(td.remarks)+'</div>';
+  }
+  el.innerHTML=html||'<p style="font-size:11px;color:#9ca3af;text-align:center;padding:12px 0">Tap "Fill Daily Status" to add today\'s work details</p>';
+}
+
+/* ── DPR Heading ── */
+function boqFmtDateHeading(val){
+  if(!val) return '— Select Date —';
+  try{
+    var d=new Date(val+'T00:00:00');
+    var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return days[d.getDay()]+', '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+  }catch(e){ return val; }
+}
+function boqUpdateDprHeading(val){
+  var el=document.getElementById('boq-dpr-heading-date');
+  if(el) el.textContent=boqFmtDateHeading(val);
+}
+function boqSetTodayDate(){
+  var el=document.getElementById('boq-dpr-date');
+  if(el){ el.value=ist(); boqUpdateDprHeading(ist()); toast('Date set to today','ok'); }
+}
+function boqCopyYesterdayToToday(){
+  askDel("Move today's work → previous cumulative and reset today? (Next day advance)", function(){
+    var data=boqLoad();
+    data.sections.forEach(function(sec){
+      sec.items.forEach(function(item){
+        item.prevQty=(parseFloat(item.prevQty)||0)+(parseFloat(item.todayQty)||0);
+        item.todayQty=0;
+        var tender=parseFloat(item.tenderQty)||0;
+        if(tender>0){
+          item.prevDone=Math.min(100,Math.round(item.prevQty/tender*100*10)/10);
+          item.todayDone=0;
+        }
+      });
+    });
+    boqSave(data); boqRender();
+    var el=document.getElementById('boq-dpr-date');
+    if(el&&el.value){
+      var d=new Date(el.value); d.setDate(d.getDate()+1);
+      el.value=d.toISOString().split('T')[0];
+      boqUpdateDprHeading(el.value);
+    }
+    toast('Advanced to next day!','ok');
+  });
+}
+
+/* ── File input (iOS/Edge fix: pre-load XLSX before picker) ── */
+function boqTriggerFileInput(){
+  if(typeof XLSX==='undefined'){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=function(){ document.getElementById('boq-file-input').click(); };
+    document.head.appendChild(s);
+  } else { document.getElementById('boq-file-input').click(); }
+}
+function boqHandleDrop(e){
+  var files=(e.dataTransfer||{}).files;
+  if(files&&files.length>0) boqProcessFile(files[0]);
+  else toast('Could not read dropped file','err');
+}
+function boqHandleFileChange(input){
+  if(input&&input.files&&input.files.length>0){
+    boqProcessFile(input.files[0]);
+    try{ input.value=''; }catch(e){}
+  }
+}
+function boqProcessFile(file){
+  var ext=file.name.split('.').pop().toLowerCase();
+  var si=document.getElementById('boq-import-status');
+  var di=document.getElementById('boq-drop-icon');
+  var dl=document.getElementById('boq-drop-label');
+  if(si) si.textContent='Reading…';
+  if(di) di.textContent='⏳';
+  if(dl) dl.textContent='Processing '+file.name+'…';
+  if(ext==='pdf') boqImportPDF(file);
+  else boqImportExcelFixed(file);
+}
+function boqImportFile(input){ if(input&&input.files&&input.files.length) boqProcessFile(input.files[0]); }
+
+/* ── Excel import — ArrayBuffer (no iOS stall, no "Preparing file") ── */
+function boqImportExcelFixed(file){
+  var doRead=function(){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        var data=new Uint8Array(e.target.result);
+        var wb=XLSX.read(data,{type:'array',cellDates:true,cellNF:false,cellText:false});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false,blankrows:false});
+        var parsed=boqParseRowsToStructure(rows);
+        var di=document.getElementById('boq-drop-icon'),dl=document.getElementById('boq-drop-label'),si=document.getElementById('boq-import-status');
+        if(parsed.sections.length){
+          boqSave(parsed); boqRender();
+          if(di) di.textContent='✅'; if(dl) dl.textContent='Import Excel or PDF';
+          if(si) si.textContent='✅ '+parsed.sections.reduce(function(s,x){return s+x.items.length;},0)+' items in '+parsed.sections.length+' sections';
+          toast('Imported '+parsed.sections.length+' sections!','ok');
+        } else {
+          if(di) di.textContent='⚠️'; if(si) si.textContent='';
+          if(dl) dl.textContent='Import Excel or PDF';
+          toast('No BOQ structure found. Check format.','err');
+        }
+      } catch(err){
+        var di=document.getElementById('boq-drop-icon');
+        if(di) di.textContent='❌';
+        var dl=document.getElementById('boq-drop-label');
+        if(dl) dl.textContent='Import Excel or PDF';
+        toast('Error: '+err.message,'err'); console.error(err);
+      }
+    };
+    reader.onerror=function(err){ toast('Cannot read file','err'); console.error(err); };
+    reader.readAsArrayBuffer(file);
+  };
+  if(typeof XLSX!=='undefined'){ doRead(); }
+  else {
+    toast('Loading Excel engine…','ok');
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=doRead;
+    s.onerror=function(){ toast('Excel engine failed to load','err'); };
+    document.head.appendChild(s);
+  }
+}
+function boqImportExcel(f,ext){ boqImportExcelFixed(f); }
+
+/* ── PDF import ── */
+function boqImportPDF(file){
+  if(typeof pdfjsLib!=='undefined'){ _boqParsePDFWithLib(file); return; }
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  s.onload=function(){ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; _boqParsePDFWithLib(file); };
+  s.onerror=function(){ toast('Cannot load PDF engine','err'); };
+  document.head.appendChild(s);
+}
+function _boqParsePDFWithLib(file){
+  toast('Reading PDF…','ok');
+  var reader=new FileReader();
+  reader.onload=function(e){
+    pdfjsLib.getDocument({data:new Uint8Array(e.target.result)}).promise.then(function(pdf){
+      var allText='',chain=Promise.resolve();
+      for(var p=1;p<=pdf.numPages;p++){(function(pg){chain=chain.then(function(){return pdf.getPage(pg).then(function(pg){return pg.getTextContent().then(function(tc){allText+=tc.items.map(function(i){return i.str;}).join(' ')+'\n';});});});})(p);}
+      chain.then(function(){
+        var parsed=boqParseTextToStructure(allText);
+        if(parsed.sections.length){ boqSave(parsed); boqRender(); toast('PDF: '+parsed.sections.length+' sections','ok'); }
+        else toast('Could not parse PDF. Try Excel.','err');
+      });
+    }).catch(function(e){ toast('PDF error','err'); console.error(e); });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ── Section / Item CRUD ── */
+function boqNextLetter(d){ var l='ABCDEFGHIJKLMNOPQRSTUVWXYZ'; return l[d.sections.length]||(d.sections.length+1)+''; }
+function boqAddSection(){
+  var inp=document.getElementById('boq-new-sec'); var title=(inp?inp.value.trim():'');
+  if(!title){toast('Enter section name','err');return;}
+  var data=boqLoad();
+  data.sections.push({id:'sec'+Date.now(),letter:boqNextLetter(data),title:title,collapsed:false,items:[]});
+  boqSave(data); if(inp) inp.value=''; boqRender(); toast('Section added!','ok');
+}
+function boqAddItem(secId){
+  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var nextNo = sec.letter+'.'+(sec.items.length+1);
+  var customNo = prompt('Item number (auto-generated, editable):', nextNo);
+  if(customNo===null) return; // cancelled
+  customNo = customNo.trim() || nextNo;
+  sec.items.push({id:'item'+Date.now(),no:customNo,desc:'New Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:'',subItems:[]});
+  boqResequence(data);
+  boqSave(data); boqRender();
+}
+
+function boqAddSubItem(secId, itemId){
+  var data=boqLoad();
+  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item) return;
+  if(!item.subItems) item.subItems=[];
+  var parentNo = item.no;
+  var nextNo = parentNo+'.'+(item.subItems.length+1);
+  var customNo = prompt('Sub-item number (auto-generated, editable):', nextNo);
+  if(customNo===null) return;
+  customNo = customNo.trim() || nextNo;
+  item.subItems.push({id:'sub'+Date.now(),no:customNo,desc:'New Sub-Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:''});
+  boqResequence(data);
+  boqSave(data); boqRender();
+}
+
+function boqDelSubItem(secId, itemId, subId){
+  var data=boqLoad();
+  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item||!item.subItems) return;
+  item.subItems=item.subItems.filter(function(s){return s.id!==subId;});
+  boqResequence(data);
+  boqSave(data); boqRender();
+}
+
+function boqEditSub(secId,itemId,subId,field,val){
+  var data=boqLoad();
+  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item||!item.subItems) return;
+  var sub=item.subItems.find(function(s){return s.id===subId;}); if(!sub) return;
+  if(['tenderQty','prevQty','todayQty'].indexOf(field)>=0){ val=parseFloat(val)||0; if(val<0)val=0; }
+  sub[field]=val;
+  if(field==='todayQty'||field==='prevQty'||field==='tenderQty'){
+    var tender=parseFloat(sub.tenderQty)||0;
+    if(tender>0){
+      sub.prevDone=Math.min(100,Math.round((parseFloat(sub.prevQty)||0)/tender*100*10)/10);
+      sub.todayDone=Math.min(100,Math.round((parseFloat(sub.todayQty)||0)/tender*100*10)/10);
+    }
+  }
+  boqSave(data); boqUpdateBars(); boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
+}
+
+/* ── Add sub-item reading from the inline preview box ── */
+function boqAddSubItemWithBox(secId, itemId){
+  var data=boqLoad();
+  var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item) return;
+  if(!item.subItems) item.subItems=[];
+  var boxEl = document.getElementById('sub-no-preview-'+itemId);
+  var nextNo = item.no + '.' + (item.subItems.length+1);
+  var customNo = (boxEl ? boxEl.value.trim() : '') || nextNo;
+  item.subItems.push({id:'sub'+Date.now(),no:customNo,desc:'New Sub-Item',unit:'',tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:''});
+  boqResequence(data);
+  boqSave(data); boqRender();
+}
+
+/* ── Re-sequence all items and sub-items in order ── */
+function boqResequence(data){
+  data.sections.forEach(function(sec){
+    sec.items.forEach(function(item,i){
+      // Only re-set the numeric part after the letter, preserve letter
+      var letter = sec.letter || 'A';
+      // If item.no starts with letter dot, rewrite ordinal
+      item.no = letter + '.' + (i+1);
+      if(!item.subItems) item.subItems=[];
+      item.subItems.forEach(function(sub,j){
+        sub.no = item.no + '.' + (j+1);
+      });
+    });
+  });
+}
+function boqToggleSec(secId){
+  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;});
+  if(sec) sec.collapsed=!sec.collapsed; boqSave(data); boqRender();
+}
+function boqDelSec(secId){ askDel('Delete this section?',function(){ var data=boqLoad(); data.sections=data.sections.filter(function(s){return s.id!==secId;}); boqSave(data); boqRender(); toast('Deleted','ok'); }); }
+function boqDelItem(secId,itemId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(sec) sec.items=sec.items.filter(function(i){return i.id!==itemId;}); boqResequence(data); boqSave(data); boqRender(); }
+
+function boqEdit(secId,itemId,field,val){
+  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
+  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item) return;
+  if(['tenderQty','prevQty','todayQty'].indexOf(field)>=0){ val=parseFloat(val)||0; if(val<0)val=0; }
+  item[field]=val;
+  if(field==='todayQty'||field==='prevQty'||field==='tenderQty'){
+    var tender=parseFloat(item.tenderQty)||0;
+    if(tender>0){
+      item.prevDone=Math.min(100,Math.round((parseFloat(item.prevQty)||0)/tender*100*10)/10);
+      item.todayDone=Math.min(100,Math.round((parseFloat(item.todayQty)||0)/tender*100*10)/10);
+    }
+  }
+  boqSave(data); boqUpdateBars(); boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
+}
+
+/* ── Computed ── */
+function boqTotalQty(item){ return (parseFloat(item.prevQty)||0)+(parseFloat(item.todayQty)||0); }
+function boqTotalPct(item){
+  var tender=parseFloat(item.tenderQty)||0;
+  if(tender>0) return Math.min(100,Math.round(boqTotalQty(item)/tender*100*10)/10);
+  return Math.min(100,(parseFloat(item.prevDone)||0)+(parseFloat(item.todayDone)||0));
+}
+function boqBarColor(pct,s,e){
+  if(pct>=100) return '#059669';
+  var today=ist(); if(e&&e<today&&pct<100) return '#dc2626';
+  if(pct>=1) return '#4f46e5';
+  return '#d1d5db';
+}
+function boqUpdateBars(){
+  var data=boqLoad();
+  data.sections.forEach(function(sec){ sec.items.forEach(function(item){
+    var bar=document.getElementById('boq-bar-'+item.id),pctEl=document.getElementById('boq-pct-'+item.id);
+    var pct=boqTotalPct(item),col=boqBarColor(pct,item.startDate,item.endDate);
+    if(bar){bar.style.width=pct+'%';bar.style.background=col;}
+    if(pctEl){pctEl.textContent=pct+'%';pctEl.style.color=col;}
+  }); });
+}
+
+function boqUpdateSummaryStats(){
+  var data=boqLoad(); var total=0,todayA=0,pctSum=0;
+  data.sections.forEach(function(sec){ sec.items.forEach(function(item){
+    total++; if((parseFloat(item.todayQty)||0)>0) todayA++; pctSum+=boqTotalPct(item);
+  }); });
+  var avg=total>0?Math.round(pctSum/total):0;
+  var summEl=document.getElementById('boq-dpr-summary'); if(summEl) summEl.style.display=total>0?'block':'none';
+  var t=document.getElementById('boq-stat-total'); if(t) t.textContent=total;
+  var a=document.getElementById('boq-stat-avg'); if(a) a.textContent=avg+'%';
+  var td=document.getElementById('boq-stat-today'); if(td) td.textContent=todayA;
+}
+function boqUpdateDailySummary(){
+  var data=boqLoad(); var tItems=[];
+  data.sections.forEach(function(sec){ sec.items.forEach(function(item){
+    if(!item.desc||item.desc==='New Item') return;
+    if((parseFloat(item.todayQty)||0)>0) tItems.push({no:item.no,desc:item.desc,qty:item.todayQty,unit:item.unit||''});
+    (item.subItems||[]).forEach(function(sub){
+      if(!sub.desc||sub.desc==='New Sub-Item') return;
+      if((parseFloat(sub.todayQty)||0)>0) tItems.push({no:sub.no,desc:sub.desc,qty:sub.todayQty,unit:sub.unit||''});
+    });
+  }); });
+  var summaryEl=document.getElementById('boq-daily-summary'); if(summaryEl) summaryEl.style.display=tItems.length?'block':'none';
+  var tEl=document.getElementById('boq-today-list');
+  if(tEl) tEl.innerHTML=tItems.length?tItems.map(function(x){ return '<div style="padding:3px 0;border-bottom:1px solid #f3f4f6"><span style="color:#4f46e5;font-weight:700">'+x.qty+' '+_esc(x.unit)+'</span> <span>'+_esc(x.no+' '+x.desc)+'</span></div>'; }).join(''):'<p style="color:#9ca3af;font-size:10px">No data</p>';
+}
+function boqUpdateGantt(){
+  var data=boqLoad(); var card=document.getElementById('boq-gantt-card'),el=document.getElementById('boq-gantt-view');
+  if(!card||!el) return;
+  var allItems=[]; data.sections.forEach(function(sec){ sec.items.forEach(function(item){ if(item.startDate&&item.endDate) allItems.push({no:item.no,desc:item.desc,start:item.startDate,end:item.endDate,pct:boqTotalPct(item)}); }); });
+  if(!allItems.length){card.style.display='none';return;}
+  card.style.display='block';
+  var minD=allItems[0].start,maxD=allItems[0].end;
+  allItems.forEach(function(i){if(i.start<minD)minD=i.start;if(i.end>maxD)maxD=i.end;});
+  var totalDays=Math.max(1,(new Date(maxD)-new Date(minD))/86400000),today=ist();
+  var todayPct=Math.max(0,Math.min(100,Math.round((new Date(today)-new Date(minD))/86400000/totalDays*100)));
+  var html='<div style="min-width:300px"><div style="display:flex;justify-content:space-between;font-size:9px;color:#9ca3af;margin-bottom:10px"><span>'+minD+'</span><span style="color:#ef4444">▼ Today</span><span>'+maxD+'</span></div>';
+  allItems.forEach(function(item){
+    var s=Math.round((new Date(item.start)-new Date(minD))/86400000/totalDays*100);
+    var w=Math.max(4,Math.round((new Date(item.end)-new Date(item.start))/86400000/totalDays*100));
+    if(s+w>100) w=100-s;
+    var fillW=Math.round(w*item.pct/100),col=boqBarColor(item.pct,item.start,item.end);
+    var tLine=todayPct>0&&todayPct<100?'<div style="position:absolute;left:'+todayPct+'%;top:0;width:1.5px;height:100%;background:#ef4444;opacity:.7;z-index:3"></div>':'';
+    html+='<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:#1f2937;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(item.no+' '+item.desc)+'</div>';
+    html+='<div style="height:18px;background:#f3f4f6;border-radius:9px;position:relative;overflow:hidden">'+tLine;
+    html+='<div style="position:absolute;left:'+s+'%;width:'+w+'%;height:100%;background:'+(col+'22')+';border-radius:9px"></div>';
+    html+='<div style="position:absolute;left:'+s+'%;width:'+fillW+'%;height:100%;background:'+col+';border-radius:9px;opacity:.9"></div>';
+    html+='<div style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">'+item.pct+'%</div>';
+    html+='</div><div style="display:flex;justify-content:space-between;font-size:9px;color:#9ca3af;margin-top:2px"><span>'+item.start+'</span><span style="color:'+col+';font-weight:700">'+item.pct+'%</span><span>'+item.end+'</span></div></div>';
+  });
+  el.innerHTML=html+'</div>';
+}
+
+/* ── Main render ── */
+var TH='padding:8px 6px;font-size:9px;font-weight:700;color:#0d9488;letter-spacing:.5px;text-align:center;border-bottom:2px solid #ccfbf1;white-space:nowrap;';
+var TD='padding:6px 5px;font-size:11px;';
+function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function boqRender(){
+  var data=boqLoad(); var wrap=document.getElementById('boq-table-wrap'); if(!wrap) return;
+  boqPopulatePI(boqLoadPI());
+  var dprEl=document.getElementById('boq-dpr-date');
+  if(dprEl&&!dprEl.value){ var saved=safeLS.getItem('cm_boq_dpr_date')||ist(); dprEl.value=saved; boqUpdateDprHeading(saved); }
+  else if(dprEl&&dprEl.value) boqUpdateDprHeading(dprEl.value);
+  // Render today summary card
+  var date=dprEl&&dprEl.value?dprEl.value:ist();
+  boqRenderTodaySummaryCard(date);
+  if(!data.sections.length){
+    wrap.innerHTML='<div class="text-center py-10 bg-white rounded-2xl shadow-xl"><span style="font-size:40px">📋</span><p class="font-semibold text-gray-600 mt-2">No BOQ data yet</p><p class="text-gray-400 text-xs mt-1">Import or add a section above</p></div>';
+    boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats(); return;
+  }
+  var html='';
+  data.sections.forEach(function(sec){
+    var avgPct=sec.items.length?Math.round(sec.items.reduce(function(s,i){return s+boqTotalPct(i);},0)/sec.items.length):0;
+    var secColor=avgPct>=100?'#059669':(avgPct>0?'#4f46e5':'#0d9488');
+    html+='<div class="bg-white rounded-2xl shadow-xl mb-2" style="overflow:hidden">';
+    html+='<div onclick="boqToggleSec(\''+sec.id+'\')" style="background:linear-gradient(135deg,#0d2d2a,#0d4a45);padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">';
+    html+='<div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(255,255,255,.15);color:#5eead4;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px">'+sec.letter+'.</span>';
+    html+='<span style="color:#5eead4;font-size:13px;font-weight:700">'+_esc(sec.title.toUpperCase())+'</span>';
+    html+='<span style="background:rgba(94,234,212,.15);color:#5eead4;font-size:10px;padding:1px 7px;border-radius:99px">'+sec.items.length+' items</span></div>';
+    html+='<div style="display:flex;align-items:center;gap:8px"><span style="color:#fbbf24;font-size:12px;font-weight:700">'+avgPct+'%</span><span style="color:#5eead4;font-size:16px">'+(sec.collapsed?'▶':'▼')+'</span></div></div>';
+    html+='<div style="height:4px;background:#1a3a36"><div style="height:100%;width:'+avgPct+'%;background:'+secColor+';transition:width .4s"></div></div>';
+    if(!sec.collapsed){
+      html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:660px"><thead><tr style="background:#f0fdf9">';
+      html+='<th style="'+TH+'width:50px">No.</th>';
+      html+='<th style="'+TH+'min-width:160px;text-align:left">Description</th>';
+      html+='<th style="'+TH+'width:50px">Unit</th>';
+      html+='<th style="'+TH+'width:68px">Tender Qty</th>';
+      html+='<th style="'+TH+'width:70px;background:#fef9c3">Prev. Qty</th>';
+      html+='<th style="'+TH+'width:70px;background:#dcfce7">Today Qty</th>';
+      html+='<th style="'+TH+'width:68px;background:#eff6ff">Total Qty</th>';
+      html+='<th style="'+TH+'width:86px">Start</th>';
+      html+='<th style="'+TH+'width:86px">End</th>';
+      html+='<th style="'+TH+'min-width:100px">Progress</th>';
+      html+='<th style="'+TH+'width:28px"></th>';
+      html+='</tr></thead><tbody>';
+      sec.items.forEach(function(item){
+        var totalQty=boqTotalQty(item),pct=boqTotalPct(item),col=boqBarColor(pct,item.startDate,item.endDate);
+        var hasSubs = item.subItems && item.subItems.length > 0;
+        html+='<tr style="border-bottom:1px solid #f0fdf9" onmouseover="this.style.background=\'#f9fffe\'" onmouseout="this.style.background=\'\'">';
+        html+='<td style="'+TD+'text-align:center;color:#0d9488;font-weight:700;font-size:11px">'+_esc(item.no)+'</td>';
+        html+='<td style="'+TD+'"><input value="'+_esc(item.desc)+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'desc\',this.value)" style="width:100%;border:none;outline:none;font-size:11px;color:#1f2937;background:transparent;padding:2px 0"></td>';
+        html+='<td style="'+TD+'text-align:center"><input value="'+_esc(item.unit||'')+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'unit\',this.value)" style="width:44px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
+        html+='<td style="'+TD+'text-align:center"><input type="number" value="'+(item.tenderQty||0)+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'tenderQty\',this.value)" style="width:58px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
+        html+='<td style="'+TD+'text-align:center;background:#fef9c3"><input type="number" value="'+(item.prevQty||0)+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'prevQty\',this.value)" style="width:60px;border:1px solid #fcd34d;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#fef9c3;font-weight:700"></td>';
+        html+='<td style="'+TD+'text-align:center;background:#dcfce7"><input type="number" value="'+(item.todayQty||0)+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'todayQty\',this.value)" style="width:60px;border:1px solid #86efac;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#dcfce7;font-weight:700;color:#065f46"></td>';
+        html+='<td style="'+TD+'text-align:center;background:#eff6ff;font-weight:800;color:#1e40af;font-size:11px">'+totalQty+'</td>';
+        html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(item.startDate||'')+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'startDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
+        html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(item.endDate||'')+'" onchange="boqEdit(\''+sec.id+'\',\''+item.id+'\',\'endDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
+        html+='<td style="'+TD+'padding:4px 6px">';
+        html+='<div style="height:13px;background:#f3f4f6;border-radius:7px;overflow:hidden;margin-bottom:2px"><div id="boq-bar-'+item.id+'" style="height:100%;width:'+pct+'%;background:'+col+';border-radius:7px;transition:width .3s"></div></div>';
+        html+='<div style="text-align:center"><span id="boq-pct-'+item.id+'" style="font-size:10px;font-weight:800;color:'+col+'">'+pct+'%</span></div></td>';
+        html+='<td style="'+TD+'text-align:center"><button onclick="boqDelItem(\''+sec.id+'\',\''+item.id+'\')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1">✕</button></td>';
+        html+='</tr>';
+
+        /* ── Sub-items (A.1.1, A.1.2…) ── */
+        var nextSubNo = item.no + '.' + ((item.subItems||[]).length+1);
+        if(hasSubs){
+          (item.subItems||[]).forEach(function(sub){
+            var sPct=boqTotalPct(sub),sCol=boqBarColor(sPct,sub.startDate,sub.endDate);
+            var sTot=boqTotalQty(sub);
+            html+='<tr style="border-bottom:1px solid #f0fdf9;background:#f0fdf9" onmouseover="this.style.background=\'#e6fdf8\'" onmouseout="this.style.background=\'#f0fdf9\'">';
+            html+='<td style="'+TD+'text-align:center;padding-left:14px"><span style="color:#9ca3af;font-size:9px">↳</span> <span style="color:#0d9488;font-weight:800;font-size:10px">'+_esc(sub.no)+'</span></td>';
+            html+='<td style="'+TD+'"><input value="'+_esc(sub.desc)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'desc\',this.value)" style="width:100%;border:none;outline:none;font-size:10.5px;color:#374151;background:transparent;padding:2px 0;padding-left:4px"></td>';
+            html+='<td style="'+TD+'text-align:center"><input value="'+_esc(sub.unit||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'unit\',this.value)" style="width:44px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
+            html+='<td style="'+TD+'text-align:center"><input type="number" value="'+(sub.tenderQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'tenderQty\',this.value)" style="width:58px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
+            html+='<td style="'+TD+'text-align:center;background:#fef9c3"><input type="number" value="'+(sub.prevQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'prevQty\',this.value)" style="width:60px;border:1px solid #fcd34d;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#fef9c3;font-weight:700"></td>';
+            html+='<td style="'+TD+'text-align:center;background:#dcfce7"><input type="number" value="'+(sub.todayQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'todayQty\',this.value)" style="width:60px;border:1px solid #86efac;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#dcfce7;font-weight:700;color:#065f46"></td>';
+            html+='<td style="'+TD+'text-align:center;background:#eff6ff;font-weight:800;color:#1e40af;font-size:11px">'+sTot+'</td>';
+            html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(sub.startDate||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'startDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
+            html+='<td style="'+TD+'text-align:center"><input type="date" value="'+(sub.endDate||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'endDate\',this.value)" style="width:82px;border:1px solid #e5e7eb;border-radius:5px;font-size:9px;padding:2px"></td>';
+            html+='<td style="'+TD+'padding:4px 6px">';
+            html+='<div style="height:10px;background:#f3f4f6;border-radius:5px;overflow:hidden;margin-bottom:2px"><div id="boq-bar-'+sub.id+'" style="height:100%;width:'+sPct+'%;background:'+sCol+';border-radius:5px;transition:width .3s"></div></div>';
+            html+='<div style="text-align:center"><span id="boq-pct-'+sub.id+'" style="font-size:9px;font-weight:800;color:'+sCol+'">'+sPct+'%</span></div></td>';
+            html+='<td style="'+TD+'text-align:center"><button onclick="boqDelSubItem(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\')" style="border:none;background:#fee2e2;color:#dc2626;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;line-height:1">✕</button></td>';
+            html+='</tr>';
+          });
+        }
+        /* ── Add sub-item row with next-number preview box ── */
+        html+='<tr style="background:#f8fffe;border-bottom:2px solid #e6fdf8">';
+        html+='<td colspan="11" style="padding:4px 8px">';
+        html+='<div style="display:flex;align-items:center;gap:6px">';
+        html+='<span style="color:#9ca3af;font-size:9px;white-space:nowrap">↳ Next sub-item:</span>';
+        html+='<input id="sub-no-preview-'+item.id+'" value="'+_esc(nextSubNo)+'" style="width:80px;border:1px solid #99f6e4;border-radius:6px;font-size:10px;font-weight:700;color:#0d9488;padding:2px 6px;background:#f0fdf9;text-align:center" title="Edit the number before adding">';
+        html+='<button onclick="boqAddSubItemWithBox(\''+sec.id+'\',\''+item.id+'\')" style="font-size:10px;color:#0d9488;font-weight:700;background:#e6fdf8;border:1px dashed #5eead4;border-radius:6px;padding:3px 10px;cursor:pointer;white-space:nowrap">+ Sub-item</button>';
+        html+='</div></td></tr>';
+      });
+      var totT=sec.items.reduce(function(s,i){return s+(parseFloat(i.tenderQty)||0);},0);
+      var totP=sec.items.reduce(function(s,i){return s+(parseFloat(i.prevQty)||0);},0);
+      var totD=sec.items.reduce(function(s,i){return s+(parseFloat(i.todayQty)||0);},0);
+      var totE=sec.items.reduce(function(s,i){return s+boqTotalQty(i);},0);
+      html+='<tr style="background:#e6fdf8;font-weight:700"><td colspan="3" style="'+TD+'text-align:right;font-size:10px;color:#0d9488">Section Total</td>';
+      html+='<td style="'+TD+'text-align:center;color:#0f2244">'+totT+'</td>';
+      html+='<td style="'+TD+'text-align:center;color:#92400e;background:#fef9c3">'+totP+'</td>';
+      html+='<td style="'+TD+'text-align:center;color:#065f46;background:#dcfce7">'+totD+'</td>';
+      html+='<td style="'+TD+'text-align:center;color:#1e40af;background:#eff6ff;font-weight:800">'+totE+'</td>';
+      html+='<td colspan="4" style="'+TD+'"></td></tr>';
+      html+='</tbody></table></div>';
+      html+='<div style="padding:8px 10px;border-top:1px solid #f0fdf9;display:flex;gap:8px;align-items:center">';
+      html+='<button onclick="boqAddItem(\''+sec.id+'\')" style="font-size:11px;color:#0d9488;font-weight:700;background:#f0fdf9;border:1px dashed #99f6e4;border-radius:8px;padding:6px 14px;cursor:pointer;flex:1">+ Add Item to '+sec.letter+'. '+_esc(sec.title)+'</button>';
+      html+='<button onclick="boqDelSec(\''+sec.id+'\')" style="font-size:10px;color:#9ca3af;background:none;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;cursor:pointer">🗑</button>';
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+  wrap.innerHTML=html;
+  boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
+}
+
+/* ── Print PDF ── */
+function boqPrintDPR(){
+  var data=boqLoad();
+  if(!data.sections.length){toast('No BOQ data to print','err');return;}
+  var pi=boqLoadPI();
+  var dprDate=(document.getElementById('boq-dpr-date')||{}).value||ist();
+  var headDate=boqFmtDateHeading(dprDate);
+  var td=boqLoadTD(dprDate);
+  var w=window.open('','_blank');
+  if(!w){toast('Allow popups to print','err');return;}
+
+  var body='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DPR '+dprDate+'</title><style>';
+  body+='*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#111;font-size:9px}';
+  body+='.hdr{background:linear-gradient(135deg,#0f2244,#1a3a6b);color:#fff;padding:10px 14px 8px;margin-bottom:10px}';
+  body+='.hdr-badge{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:3px}';
+  body+='.hdr-date{font-size:16px;font-weight:900;color:#fbbf24;letter-spacing:1px;margin-bottom:2px}';
+  body+='.hdr-sub{font-size:7.5px;color:rgba(255,255,255,.4);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}';
+  body+='.pi-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;background:#f1f5f9;border-radius:6px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:0}';
+  body+='.pi-cell{padding:5px 8px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0}';
+  body+='.pi-cell:nth-child(4n){border-right:none}.pi-cell.wide{grid-column:1/-1}';
+  body+='.pi-label{font-size:7px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px}';
+  body+='.pi-val{font-size:9.5px;font-weight:700;color:#111;margin-top:1px}';
+  body+='table.boq{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8.5px}';
+  body+='table.boq th{background:#0d2d2a;color:#5eead4;padding:5px;text-align:center;font-size:7.5px;border:1px solid #0d2d2a;white-space:nowrap}';
+  body+='table.boq td{padding:4px 5px;border:1px solid #e2e8f0;text-align:center;vertical-align:middle}';
+  body+='table.boq td.left{text-align:left}.sec-hdr td{background:#0d2d2a;color:#5eead4;font-weight:700;font-size:8.5px;text-align:left!important;padding:5px 8px}';
+  body+='.sub-row td{background:#e6fdf8;font-weight:700;color:#0d9488}';
+  body+='.prev-col{background:#fef9c3}.today-col{background:#dcfce7;font-weight:700}.total-col{background:#eff6ff;font-weight:800;color:#1e40af}';
+  body+='.bar-wrap{height:10px;background:#f1f5f9;border-radius:5px;overflow:hidden;margin-bottom:2px}.bar-fill{height:100%;border-radius:5px}';
+  // Labour table
+  body+='.section-title{background:linear-gradient(135deg,#0f2244,#1a3a6b);color:#fff;padding:7px 10px;border-radius:6px 6px 0 0;font-size:10px;font-weight:800;margin-top:8px}';
+  body+='table.info{width:100%;border-collapse:collapse;font-size:8.5px;margin-bottom:8px}';
+  body+='table.info th{background:#1a3a6b;color:#c7d2fe;padding:4px 6px;font-size:7.5px;font-weight:700}';
+  body+='table.info td{padding:4px 6px;border:1px solid #e2e8f0}';
+  body+='table.info tr:nth-child(even) td{background:#f8faff}';
+  // Machinery table
+  body+='.mach-working{color:#059669;font-weight:700}.mach-standby{color:#f59e0b;font-weight:700}.mach-breakdown{color:#dc2626;font-weight:700}';
+  body+='@media print{@page{size:A4 landscape;margin:10mm}body{font-size:8px}}';
+  body+='</style></head><body>';
+
+  // Header
+  body+='<div class="hdr">';
+  body+='<div class="hdr-badge">📋 Daily Progress Report</div>';
+  body+='<div class="hdr-date">'+headDate+'</div>';
+  body+='<div class="hdr-sub">BOQ Execution Schedule</div>';
+  body+='<div class="pi-grid">';
+  body+='<div class="pi-cell wide"><div class="pi-label">Name of Work</div><div class="pi-val">'+_esc(pi.work||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Client</div><div class="pi-val">'+_esc(pi.client||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Contractor</div><div class="pi-val">'+_esc(pi.contractor||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Consultant</div><div class="pi-val">'+_esc(pi.consultant||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Work Order No.</div><div class="pi-val">'+_esc(pi.wo||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Commencement</div><div class="pi-val">'+_esc(pi.commDate||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Stipulated Completion</div><div class="pi-val">'+_esc(pi.stipDate||'—')+'</div></div>';
+  body+='<div class="pi-cell"><div class="pi-label">Weather</div><div class="pi-val">'+_esc(pi.weather||'Clear')+'</div></div>';
+  body+='</div></div>';
+
+  // BOQ Table
+  body+='<table class="boq"><thead><tr>';
+  body+='<th style="width:50px">BOQ No.</th><th style="min-width:180px;text-align:left">Description of Work</th>';
+  body+='<th>Unit</th><th>Tender Qty</th><th class="prev-col">Prev. Qty</th>';
+  body+='<th class="today-col">Today Qty</th><th class="total-col">Total Qty</th>';
+  body+='<th>Start</th><th>End</th><th style="min-width:80px">Progress</th><th>Remark</th>';
+  body+='</tr></thead><tbody>';
+  data.sections.forEach(function(sec){
+    body+='<tr class="sec-hdr"><td colspan="11">'+_esc(sec.letter+'. '+sec.title.toUpperCase())+'</td></tr>';
+    sec.items.forEach(function(item){
+      var totalQty=boqTotalQty(item),pct=boqTotalPct(item),col=boqBarColor(pct,item.startDate,item.endDate);
+      body+='<tr><td style="color:#0d9488;font-weight:700">'+_esc(item.no)+'</td>';
+      body+='<td class="left">'+_esc(item.desc)+'</td><td>'+_esc(item.unit||'')+'</td><td>'+(item.tenderQty||0)+'</td>';
+      body+='<td class="prev-col">'+(item.prevQty||0)+'</td><td class="today-col">'+(item.todayQty||0)+'</td>';
+      body+='<td class="total-col">'+totalQty+'</td>';
+      body+='<td style="font-size:7.5px">'+(item.startDate||'—')+'</td><td style="font-size:7.5px">'+(item.endDate||'—')+'</td>';
+      body+='<td><div class="bar-wrap"><div class="bar-fill" style="width:'+pct+'%;background:'+col+'"></div></div><div style="text-align:center;font-size:8px;font-weight:700;color:'+col+'">'+pct+'%</div></td>';
+      body+='<td class="left" style="font-size:7.5px">'+_esc(item.remark||'')+'</td></tr>';
+    });
+    var totT=sec.items.reduce(function(s,i){return s+(parseFloat(i.tenderQty)||0);},0);
+    var totP=sec.items.reduce(function(s,i){return s+(parseFloat(i.prevQty)||0);},0);
+    var totD=sec.items.reduce(function(s,i){return s+(parseFloat(i.todayQty)||0);},0);
+    var totE=sec.items.reduce(function(s,i){return s+boqTotalQty(i);},0);
+    body+='<tr class="sub-row"><td colspan="3" style="text-align:right;padding-right:8px">Sub-Total</td><td>'+totT+'</td><td class="prev-col">'+totP+'</td><td class="today-col">'+totD+'</td><td class="total-col">'+totE+'</td><td colspan="4"></td></tr>';
+  });
+  body+='</tbody></table>';
+
+  // Today's Work Details section
+  if(td.workdesc||td.labour.length||td.machinery.length){
+    body+='<div class="section-title">🌅 Today\'s Work Details — '+headDate+'</div>';
+    if(td.workdesc){
+      body+='<div style="background:#f8faff;border-left:3px solid #4f46e5;padding:6px 10px;margin-bottom:8px;font-size:9px;color:#374151;border-radius:0 6px 6px 0">'+_esc(td.workdesc)+'</div>';
+    }
+    // Status badge
+    var sc={'In Progress':'#4f46e5','Good Progress':'#059669','Delayed':'#f59e0b','Halted':'#dc2626','Completed':'#059669'}[td.status]||'#6b7280';
+    body+='<div style="display:inline-block;background:'+sc+';color:#fff;padding:3px 10px;border-radius:99px;font-size:8px;font-weight:700;margin-bottom:8px">'+_esc(td.status)+'</div>';
+
+    // Labour table
+    if(td.labour.length){
+      body+='<div style="margin-bottom:8px"><div style="font-size:9px;font-weight:700;color:#0f2244;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">👷 Daily Worker Summary</div>';
+      body+='<table class="info"><thead><tr><th>Category</th><th>No. of Workers</th><th>Hours</th><th>Work Done</th></tr></thead><tbody>';
+      var totalWorkers=0,totalHrs=0;
+      td.labour.forEach(function(l){
+        totalWorkers+=(parseInt(l.count)||0);
+        totalHrs+=(parseFloat(l.hours)||0);
+        body+='<tr><td style="font-weight:600">'+_esc(l.category)+'</td><td style="text-align:center;color:#4f46e5;font-weight:700">'+l.count+'</td><td style="text-align:center">'+l.hours+'h</td><td>'+_esc(l.workDone||'—')+'</td></tr>';
+      });
+      body+='<tr style="background:#e8edf5;font-weight:700"><td>Total</td><td style="text-align:center;color:#1e40af">'+totalWorkers+'</td><td style="text-align:center">'+totalHrs.toFixed(1)+'h</td><td></td></tr>';
+      body+='</tbody></table></div>';
+    }
+
+    // Machinery table
+    if(td.machinery.length){
+      body+='<div style="margin-bottom:8px"><div style="font-size:9px;font-weight:700;color:#0f2244;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">⚙️ Machinery & Equipment on Site</div>';
+      body+='<table class="info"><thead><tr><th>#</th><th>Machine / Equipment</th><th>Type / Model</th><th>Hours Used</th><th>Status</th></tr></thead><tbody>';
+      td.machinery.forEach(function(m,i){
+        var stCls={'Working':'mach-working','Standby':'mach-standby','Breakdown':'mach-breakdown'}[m.status]||'';
+        body+='<tr><td style="text-align:center;color:#6b7280">'+(i+1)+'</td><td style="font-weight:600">'+_esc(m.name)+'</td><td>'+_esc(m.type||'—')+'</td><td style="text-align:center">'+m.hours+'h</td><td class="'+stCls+'">'+_esc(m.status)+'</td></tr>';
+      });
+      body+='</tbody></table></div>';
+    }
+
+    if(td.remarks){
+      body+='<div style="font-size:8.5px;color:#6b7280;font-style:italic;padding:4px 8px;background:#f8faff;border-radius:5px;margin-bottom:8px">📝 Remarks: '+_esc(td.remarks)+'</div>';
+    }
+  }
+
+  body+='<p style="font-size:7px;color:#999;text-align:right;margin-top:4px">Printed: '+new Date().toLocaleString()+' | Sanjineer BOQ DPR</p>';
+  body+='<script>window.onload=function(){window.print();};<\/script></body></html>';
+  w.document.write(body); w.document.close();
+}
+function boqPrintAll(){ boqPrintDPR(); }
+
+/* ── Export Excel (matching PDF design colours) ── */
+function boqExportExcel(){
+  var doEx=function(){
+    var data=boqLoad();
+    if(!data.sections.length){toast('No data to export','err');return;}
+    var pi=boqLoadPI();
+    var dprDate=(document.getElementById('boq-dpr-date')||{}).value||ist();
+    var td=boqLoadTD(dprDate);
+    var wb=XLSX.utils.book_new();
+    var rows=[];
+    // Title
+    rows.push(['DAILY PROGRESS REPORT']);
+    rows.push(['Date: '+boqFmtDateHeading(dprDate)]);
+    rows.push([]);
+    rows.push(['PROJECT INFORMATION']);
+    rows.push(['Name of Work',pi.work||'—','','','Client',pi.client||'—']);
+    rows.push(['Contractor',pi.contractor||'—','','','Consultant',pi.consultant||'—']);
+    rows.push(['Work Order No.',pi.wo||'—','','','Weather',pi.weather||'Clear']);
+    rows.push(['Commencement',pi.commDate||'—','','','Stipulated Completion',pi.stipDate||'—']);
+    rows.push([]);
+    rows.push(['BOQ EXECUTION SCHEDULE']);
+    rows.push(['BOQ No.','Description of Work','Unit','Tender Qty','Prev. Qty','Today Qty','Total Qty','Start Date','End Date','Progress %','Remark']);
+    data.sections.forEach(function(sec){
+      rows.push([sec.letter+'. '+sec.title.toUpperCase(),'','','','','','','','','','']);
+      sec.items.forEach(function(item){
+        var totalQty=boqTotalQty(item),pct=boqTotalPct(item);
+        rows.push([item.no,item.desc,item.unit||'',item.tenderQty||0,item.prevQty||0,item.todayQty||0,totalQty,item.startDate||'',item.endDate||'',pct+'%',item.remark||'']);
+      });
+      rows.push(['','Sub-Total','',
+        sec.items.reduce(function(s,i){return s+(parseFloat(i.tenderQty)||0);},0),
+        sec.items.reduce(function(s,i){return s+(parseFloat(i.prevQty)||0);},0),
+        sec.items.reduce(function(s,i){return s+(parseFloat(i.todayQty)||0);},0),
+        sec.items.reduce(function(s,i){return s+boqTotalQty(i);},0),'','','','']);
+    });
+    // Today's work details
+    if(td.labour.length||td.machinery.length||td.workdesc){
+      rows.push([]); rows.push(["TODAY'S WORK DETAILS"]);
+      if(td.workdesc) rows.push(['Work Description',td.workdesc]);
+      if(td.status) rows.push(['Status',td.status]);
+      if(td.remarks) rows.push(['Remarks',td.remarks]);
+      if(td.labour.length){
+        rows.push([]); rows.push(['DAILY WORKER SUMMARY']);
+        rows.push(['Category','No. of Workers','Hours','Work Done']);
+        td.labour.forEach(function(l){ rows.push([l.category,l.count,l.hours,l.workDone||'']); });
+        rows.push(['Total',td.labour.reduce(function(s,l){return s+(parseInt(l.count)||0);},0),td.labour.reduce(function(s,l){return s+(parseFloat(l.hours)||0);},0),'']);
+      }
+      if(td.machinery.length){
+        rows.push([]); rows.push(['MACHINERY & EQUIPMENT ON SITE']);
+        rows.push(['#','Machine / Equipment','Type / Model','Hours Used','Status']);
+        td.machinery.forEach(function(m,i){ rows.push([i+1,m.name,m.type||'',m.hours,m.status]); });
+      }
+    }
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    // Column widths
+    ws['!cols']=[{wch:10},{wch:40},{wch:8},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11},{wch:10},{wch:20}];
+    // Apply styling using XLSX styles (where supported)
+    XLSX.utils.book_append_sheet(wb,ws,'DPR '+dprDate);
+    var fname='DPR_'+dprDate.replace(/-/g,'_')+'.xlsx';
+    try{ XLSX.writeFile(wb,fname); toast('Excel exported: '+fname,'ok'); }
+    catch(e){ toast('Export failed: '+e.message,'err'); console.error(e); }
+  };
+  if(typeof XLSX!=='undefined'){ doEx(); }
+  else {
+    toast('Loading Excel engine…','ok');
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=doEx; s.onerror=function(){ toast('Excel engine failed','err'); };
+    document.head.appendChild(s);
+  }
+}
+
+/* ── Parsers ── */
+function boqParseRowsToStructure(rows){
+  var data={sections:[]},letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ',currentSec=null,secIdx=-1;
+  rows.forEach(function(row){
+    if(!row||!row.length) return;
+    var cells=row.map(function(cc){return String(cc||'').trim();});
+    var first=cells.find(function(cc){return cc!==''})||'';
+    if(!first) return;
+    var isSection=/^[A-Z]$/i.test(first)||(/^\d+$/.test(first)&&cells[1]&&!cells[1].match(/^\d/));
+    var isItem=/^[A-Z0-9]+\.\d+$/i.test(first);
+    if(isSection&&cells[1]){ secIdx++; currentSec={id:'sec'+Date.now()+secIdx,letter:letters[secIdx]||String(secIdx+1),title:cells[1]||first,collapsed:false,items:[]}; data.sections.push(currentSec); }
+    else if(isItem&&currentSec){
+      var tqty=parseFloat(cells[3])||0,prevQty=parseFloat(cells[5])||0,todayQty=parseFloat(cells[4])||0;
+      currentSec.items.push({id:'item'+Date.now()+Math.random().toString(36).substr(2,5),no:cells[0],desc:cells[1]||'Item',unit:cells[2]||'',
+        tenderQty:tqty,prevQty:prevQty,todayQty:todayQty,
+        prevDone:tqty>0?Math.min(100,Math.round(prevQty/tqty*100*10)/10):0,
+        todayDone:tqty>0?Math.min(100,Math.round(todayQty/tqty*100*10)/10):0,
+        startDate:_parseExcelDate(cells[6]||''),endDate:_parseExcelDate(cells[7]||''),remark:cells[9]||''});
+    } else if(currentSec&&first&&cells[1]){
+      currentSec.items.push({id:'item'+Date.now()+Math.random().toString(36).substr(2,5),
+        no:currentSec.letter+'.'+(currentSec.items.length+1),desc:cells[1]||first,unit:cells[2]||'',
+        tenderQty:parseFloat(cells[3])||0,prevQty:parseFloat(cells[5])||0,todayQty:parseFloat(cells[4])||0,
+        prevDone:0,todayDone:0,startDate:_parseExcelDate(cells[6]||''),endDate:_parseExcelDate(cells[7]||''),remark:''});
+    }
+  });
+  return data;
+}
+function _parseExcelDate(val){
+  if(!val) return ''; var s=String(val).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){ var yr=m[3].length===2?'20'+m[3]:m[3]; return yr+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); }
+  var n=parseFloat(s);
+  if(!isNaN(n)&&n>40000){ var d=new Date(Math.round((n-25569)*86400*1000)); return d.toISOString().split('T')[0]; }
+  return '';
+}
+function boqParseTextToStructure(text){
+  var lines=text.split(/[\n\r]+/).map(function(l){return l.trim();}).filter(Boolean);
+  var data={sections:[]},letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ',currentSec=null,secIdx=-1;
+  lines.forEach(function(line){
+    var sm=line.match(/^([A-Z])\s*[.\-:]\s*(.+)/),im=line.match(/^([A-Z0-9]+\.\d+)\s+(.+)/);
+    if(sm&&sm[2].length>3){ secIdx++; currentSec={id:'sec'+Date.now()+secIdx,letter:letters[secIdx]||sm[1],title:sm[2].replace(/₹[\d,.]+/g,'').trim(),collapsed:false,items:[]}; data.sections.push(currentSec); }
+    else if(im&&currentSec){ currentSec.items.push({id:'item'+Date.now()+Math.random().toString(36).substr(2,5),no:im[1],desc:im[2].replace(/₹[\d,.]+|\d+\s*(sqm|nos|rm|kg|mt|ls)/gi,'').trim()||'Item',unit:(im[2].match(/(sqm|nos|rm|kg|mt|ls|sqft|cum)/i)||[''])[0],tenderQty:0,prevQty:0,todayQty:0,prevDone:0,todayDone:0,startDate:'',endDate:'',remark:''}); }
+  });
+  return data;
+}
 
 // ============================================================
 // PUNCH LIST
@@ -8499,7 +9701,6 @@ function onSubscriptionPaymentSuccess(response) {
 var VISITS_KEY  = 'cm_visits';
 var QT_KEY      = 'cm_quotations';
 var SCB_KEY     = 'cm_subcon_bills';
-var DASH_MONTH_OFFSET = 0; // 0=current, 1=prev, 2=two months ago, -1=all time
 
 function lvisits(){ try{return JSON.parse(safeLS.getItem(VISITS_KEY)||'[]');}catch(e){return[];} }
 function svisits(x){ safeLS.setItem(VISITS_KEY, JSON.stringify(x)); }
@@ -8508,36 +9709,11 @@ function sqt(x){ safeLS.setItem(QT_KEY, JSON.stringify(x)); }
 function lscb(){ try{return JSON.parse(safeLS.getItem(SCB_KEY)||'[]');}catch(e){return[];} }
 function sscb(x){ safeLS.setItem(SCB_KEY, JSON.stringify(x)); }
 
-// ── Dashboard Month Filter ────────────────────────────────────────
-function setDashMonth(offset) {
-  DASH_MONTH_OFFSET = offset;
-  document.querySelectorAll('[id^="dash-m-"]').forEach(function(b){
-    b.style.background = ''; b.style.color = '#6b7280';
-    b.style.borderColor = '#d1d5db';
-  });
-  var activeId = offset === -1 ? 'dash-m-neg1' : 'dash-m-' + offset;
-  var activeBtn = document.getElementById(activeId);
-  if (activeBtn) { activeBtn.style.background = '#4f46e5'; activeBtn.style.color = 'white'; activeBtn.style.borderColor = '#4f46e5'; }
-  var lbl = document.getElementById('dash-month-label');
-  if (offset === -1) { if(lbl) lbl.textContent = 'All time'; }
-  else {
-    var d = new Date(); d.setMonth(d.getMonth() - offset);
-    if(lbl) lbl.textContent = d.toLocaleString('en-IN',{month:'short',year:'numeric'});
-  }
-  AD = ld(); updateDash();
-}
-
-// Helper: get month key for filter
+// Dashboard always shows current month (month buttons removed)
 function _dashMonthKey() {
-  if (DASH_MONTH_OFFSET === -1) return null; // all time
-  var d = new Date(); d.setMonth(d.getMonth() - DASH_MONTH_OFFSET);
+  var d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 }
-
-// Init month filter label on load
-document.addEventListener('DOMContentLoaded', function(){
-  setTimeout(function(){ setDashMonth(0); }, 500);
-});
 
 // ── Copy Previous Day Attendance ──────────────────────────────────
 function copyPrevDayAttendance() {
@@ -8722,9 +9898,34 @@ function deleteSupplier(id) {
 function renderPOSupplierDropdown() {
   var sel = document.getElementById('po-supplier'); if (!sel) return;
   var cur = sel.value;
-  var sups = lsuppliers();
+  // Saved PO suppliers
+  var saved = lsuppliers();
+  // Pull unique supplier names from Materials purchases (AD)
+  var matSups = [];
+  try {
+    AD.forEach(function(d){
+      if (d.type === 'material' && d.supplier && d.supplier.trim()) matSups.push(d.supplier.trim());
+    });
+    // Also from material store purchase transactions
+    lmat().forEach(function(m){
+      (m.transactions||[]).forEach(function(t){
+        if (t.type === 'purchase' && t.supplier && t.supplier.trim()) matSups.push(t.supplier.trim());
+      });
+    });
+  } catch(e){}
+  // Build merged list: saved PO suppliers first, then unique names from materials/expenses not already present
+  var savedNames = saved.map(function(s){ return s.name.toLowerCase(); });
+  var extraNames = [];
+  matSups.forEach(function(n){
+    if (extraNames.indexOf(n.toLowerCase()) === -1 && savedNames.indexOf(n.toLowerCase()) === -1) extraNames.push(n);
+  });
   sel.innerHTML = '<option value="">Select Supplier</option>'
-    + sups.map(function(s){ return '<option value="'+s.id+'" '+(cur===s.id?'selected':'')+'>'+s.name+'</option>'; }).join('');
+    + (saved.length ? '<optgroup label="── Saved Suppliers">'
+        + saved.map(function(s){ return '<option value="'+s.id+'" '+(cur===s.id?'selected':'')+'>'+s.name+'</option>'; }).join('')
+        + '</optgroup>' : '')
+    + (extraNames.length ? '<optgroup label="── From Materials / Expenses">'
+        + extraNames.map(function(n){ return '<option value="name:'+n+'" '+(cur==='name:'+n?'selected':'')+'>'+n+'</option>'; }).join('')
+        + '</optgroup>' : '');
 }
 
 function addPOLine() {
@@ -8963,10 +10164,10 @@ function renderMasterAttWorkers() {
       +catWorkers.map(function(w){
         var alreadyDone = attended.indexOf(w.name) !== -1;
         var chkId = 'ma-chk-'+w.__id;
-        return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;cursor:pointer;background:'+(alreadyDone?'#f0fdf4':'#f8fafc')+';border:1px solid '+(alreadyDone?'#86efac':'#e5e7eb')+'">'
-          +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" '+(alreadyDone?'checked disabled':'')
+        return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;cursor:pointer;background:'+(alreadyDone?'#fefce8':'#f8fafc')+';border:1px solid '+(alreadyDone?'#fde047':'#e5e7eb')+'">'
+          +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" '+(alreadyDone?'checked':'')
           +' style="width:16px;height:16px;accent-color:#4f46e5;flex-shrink:0;cursor:pointer">'
-          +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#15803d':'#374151')+'">'+w.name+(alreadyDone?' ✓':' ')+'</span>'
+          +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+w.name+(alreadyDone?' ⚠️ Already marked':' ')+'</span>'
           +(w.hourly_wage?'<span style="font-size:9px;color:#9ca3af">₹'+w.hourly_wage+'/hr</span>':'')
           +'</label>';
       }).join('')
@@ -8975,60 +10176,122 @@ function renderMasterAttWorkers() {
 }
 
 function masterAttSelectAll(val) {
-  document.querySelectorAll('#master-att-worker-list input[type="checkbox"]:not(:disabled)').forEach(function(cb){
+  document.querySelectorAll('#master-att-worker-list input[type="checkbox"]').forEach(function(cb){
     cb.checked = val;
   });
 }
 
 function saveMasterAttendance() {
-  var date     = document.getElementById('ma-date').value || DD;
-  var hours    = parseFloat(document.getElementById('ma-hours').value) || 0;
-  var advance  = parseFloat(document.getElementById('ma-advance').value) || 0;
-  var otHours  = parseFloat(document.getElementById('ma-ot-hours').value) || 0;
-  var otRateGlobal = 0; // always use per-worker rate
-  var msg      = document.getElementById('master-att-msg');
+  var date        = document.getElementById('ma-date').value || DD;
+  var hours       = parseFloat(document.getElementById('ma-hours').value) || 0;
+  var advance     = parseFloat(document.getElementById('ma-advance').value) || 0;
+  var otHours     = parseFloat(document.getElementById('ma-ot-hours').value) || 0;
+  var msg         = document.getElementById('master-att-msg');
 
-  if (!hours && !otHours) { if(msg){msg.textContent='Enter working hours first';msg.style.color='#dc2626';msg.style.display='block';} return; }
+  if (!hours && !otHours) {
+    if(msg){msg.textContent='Enter working hours first';msg.style.color='#dc2626';msg.style.display='block';}
+    return;
+  }
 
+  // Collect all checked workers
   var selected = [];
-  document.querySelectorAll('#master-att-worker-list input[type="checkbox"]:not(:disabled):checked').forEach(function(cb){
-    selected.push({ wid: cb.getAttribute('data-wid'), name: cb.getAttribute('data-name') });
+  document.querySelectorAll('#master-att-worker-list input[type="checkbox"]:checked').forEach(function(cb){
+    selected.push({
+      wid:     cb.getAttribute('data-wid'),
+      name:    cb.getAttribute('data-name'),
+      already: cb.getAttribute('data-already') === '1'
+    });
   });
 
-  if (!selected.length) { if(msg){msg.textContent='Select at least one worker';msg.style.color='#dc2626';msg.style.display='block';} return; }
+  if (!selected.length) {
+    if(msg){msg.textContent='Select at least one worker';msg.style.color='#dc2626';msg.style.display='block';}
+    return;
+  }
 
-  // Add / update attendance for each selected worker
-  selected.forEach(function(s){
-    var worker = AD.find(function(w){ return w.__id === s.wid; });
-    // Per-worker OT rate: use global if set, else worker's own ot_rate, else hourly_wage
-    var otRate = worker ? (parseFloat(worker.ot_rate)||0) : 0; // strictly worker's own OT rate only
-    var regRate = worker ? (parseFloat(worker.hourly_wage)||0) : 0;
-    // FIX 5: payment = (hours*rate) + (ot_hours*ot_rate)
-    var payment = (hours * regRate) + (otHours * otRate);
-    var cat = worker ? (worker.category||'') : '';
-    // Update if already exists for this date, else insert
+  // Split into already-marked vs fresh
+  var alreadyMarked = selected.filter(function(s){ return s.already; });
+  var fresh         = selected.filter(function(s){ return !s.already; });
+
+  // Internal function to actually write attendance
+  function _writeAttendance(list, replaceExisting) {
+    list.forEach(function(s){
+      var worker  = AD.find(function(w){ return w.__id === s.wid; });
+      var otRate  = worker ? (parseFloat(worker.ot_rate)||0) : 0;
+      var regRate = worker ? (parseFloat(worker.hourly_wage)||0) : 0;
+      var payment = (hours * regRate) + (otHours * otRate);
+      var cat     = worker ? (worker.category||'') : '';
+      AD = ld();
+      var ex = dedup(AD.filter(function(a){ return a.type==='attendance'&&a.name===s.name&&a.date===date; }));
+      if (ex.length && replaceExisting) {
+        upd(ex[0].__id, {hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate});
+      } else if (!ex.length) {
+        ins({type:'attendance', date:date, name:s.name, category:cat, hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate, work_done:''});
+      }
+    });
+  }
+
+  function _finish(replaceExisting) {
+    // Always write fresh workers
+    _writeAttendance(fresh, false);
+    // Write already-marked workers based on choice
+    if (alreadyMarked.length) _writeAttendance(alreadyMarked, replaceExisting);
+
     AD = ld();
-    var ex = dedup(AD.filter(function(a){ return a.type==='attendance'&&a.name===s.name&&a.date===date; }));
-    if (ex.length) {
-      upd(ex[0].__id, {hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate});
-    } else {
-      ins({ type:'attendance', date:date, name:s.name, category:cat, hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate, work_done:'' });
-    }
-  });
+    var total = fresh.length + (replaceExisting ? alreadyMarked.length : 0);
+    var skipped = replaceExisting ? 0 : alreadyMarked.length;
+    var resultMsg = '✅ ' + total + ' worker' + (total!==1?'s':'') + ' saved';
+    if (skipped) resultMsg += ', ' + skipped + ' skipped (already marked)';
+    toast(resultMsg, 'ok');
+    if(msg){msg.textContent=resultMsg;msg.style.color='#059669';msg.style.display='block';}
+    if (date===DD) viewDaily();
+    updateDash(); viewWorkers();
+    renderMasterAttWorkers();
+    setTimeout(function(){
+      document.querySelectorAll('#master-att-worker-list input[type="checkbox"]').forEach(function(cb){ cb.checked = false; });
+    }, 150);
+  }
 
-  AD = ld();
-  toast('✅ Attendance saved for ' + selected.length + ' workers!', 'ok');
-  if(msg){msg.textContent='✅ '+selected.length+' workers marked present — change date to add more';msg.style.color='#059669';msg.style.display='block';}
-  if (date===DD) viewDaily();
-  // Update dash & workers in background, keep modal open for next entry
-  updateDash();
-  viewWorkers();
-  // Re-render checklist so attended workers show ✓ but modal stays open
-  renderMasterAttWorkers();
-  // Un-check all selectable checkboxes so user can start fresh for another date
-  setTimeout(function(){
-    document.querySelectorAll('#master-att-worker-list input[type="checkbox"]:not(:disabled)').forEach(function(cb){ cb.checked = false; });
-  }, 100);
+  // If any selected workers already have attendance — ask Replace or Skip
+  if (alreadyMarked.length > 0) {
+    // Build custom confirmation overlay
+    var existingOverlay = document.getElementById('ma-confirm-overlay');
+    if (existingOverlay) existingOverlay.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'ma-confirm-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1.5rem;backdrop-filter:blur(4px)';
+
+    var names = alreadyMarked.map(function(s){ return s.name; }).join(', ');
+    overlay.innerHTML =
+      '<div style="background:white;border-radius:18px;padding:18px 16px;max-width:320px;width:100%;box-shadow:0 32px 80px rgba(0,0,0,0.5)">'
+      +'<p style="font-size:14px;font-weight:900;color:#1f2937;margin-bottom:6px">⚠️ Already Marked</p>'
+      +'<p style="font-size:11.5px;color:#374151;margin-bottom:10px;line-height:1.55">'
+      +'<strong>'+alreadyMarked.length+'</strong> worker'+(alreadyMarked.length!==1?'s are':' is')+' already marked for <strong>'+date+'</strong>:</p>'
+      +'<p style="font-size:10.5px;color:#6b7280;background:#f3f4f6;border-radius:8px;padding:6px 10px;margin-bottom:14px;line-height:1.5">'+names+'</p>'
+      +(fresh.length ? '<p style="font-size:10.5px;color:#059669;margin-bottom:12px">✅ '+fresh.length+' fresh worker'+(fresh.length!==1?'s':'')+" will always be saved.</p>" : '')
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +'<button id="ma-skip-btn" style="background:#f0fdf4;color:#15803d;border:2px solid #86efac;border-radius:11px;padding:10px 0;font-size:11px;font-weight:800;cursor:pointer">⏭️ Skip Already Marked<br><span style="font-size:9px;font-weight:500;color:#6b7280">Keep old data</span></button>'
+      +'<button id="ma-replace-btn" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:11px;padding:10px 0;font-size:11px;font-weight:800;cursor:pointer">🔄 Replace All<br><span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.75)">Overwrite existing</span></button>'
+      +'</div>'
+      +'<button id="ma-cancel-btn" style="width:100%;margin-top:8px;background:none;border:none;color:#9ca3af;font-size:11px;cursor:pointer;padding:6px 0">Cancel</button>'
+      +'</div>';
+
+    document.body.appendChild(overlay);
+
+    document.getElementById('ma-skip-btn').onclick = function(){
+      overlay.remove(); _finish(false);
+    };
+    document.getElementById('ma-replace-btn').onclick = function(){
+      overlay.remove(); _finish(true);
+    };
+    document.getElementById('ma-cancel-btn').onclick = function(){
+      overlay.remove();
+    };
+
+  } else {
+    // No conflicts — save directly
+    _finish(false);
+  }
 }
 
 function renderBudgetVisualBars() {
