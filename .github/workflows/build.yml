@@ -6,20 +6,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install PWABuilder CLI
-        run: npm install -g @pwabuilder/cli
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
 
-      - name: Build Android APK
-        run: pwa build --platform android
+      - name: Init TWA Project
+        run: |
+          bubblewrap init \
+            --manifest https://app.sanjineer.in/manifest.json \
+            --directory twa-project \
+            --skipPwaValidation
         env:
-          PWA_URL: https://app.sanjineer.in
+          BUBBLEWRAP_DISABLE_TELEMETRY: true
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Build APK
+        run: |
+          cd twa-project
+          bubblewrap build --skipSigning
+
+      - uses: actions/upload-artifact@v4
         with:
           name: sanjineer-apk
-          path: "**/*.apk"
+          path: twa-project/app/build/outputs/apk/**/*.apk
