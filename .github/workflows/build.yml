@@ -19,11 +19,7 @@ jobs:
         run: npm install -g @bubblewrap/cli
 
       - name: Init TWA Project
-        run: |
-          bubblewrap init \
-            --manifest https://app.sanjineer.in/manifest.json \
-            --directory twa-project \
-            --skipPwaValidation
+        run: echo "n" | bubblewrap init --manifest https://app.sanjineer.in/manifest.json --directory twa-project --skipPwaValidation
         env:
           BUBBLEWRAP_DISABLE_TELEMETRY: true
 
