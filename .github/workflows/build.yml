@@ -11,22 +11,52 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Bubblewrap
-        run: npm install -g @bubblewrap/cli
-
-      - name: Init TWA Project
-        run: echo "n" | bubblewrap init --manifest https://app.sanjineer.in/manifest.json --directory twa-project --skipPwaValidation
+      - name: Install Android SDK
+        run: |
+          sudo apt-get install -y wget unzip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip -d $HOME/android-sdk
+          mkdir -p $HOME/android-sdk/cmdline-tools/latest
+          mv $HOME/android-sdk/cmdline-tools/bin $HOME/android-sdk/cmdline-tools/latest/
+          mv $HOME/android-sdk/cmdline-tools/lib $HOME/android-sdk/cmdline-tools/latest/
+          echo "y" | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
         env:
-          BUBBLEWRAP_DISABLE_TELEMETRY: true
+          ANDROID_HOME: $HOME/android-sdk
+
+      - name: Install Bubblewrap & Init
+        run: |
+          npm install -g @bubblewrap/cli
+          mkdir twa-project && cd twa-project
+          cat > twa-manifest.json << 'EOF'
+          {
+            "packageId": "com.sanjvik.sanjineer",
+            "host": "app.sanjineer.in",
+            "name": "Sanjineer",
+            "launcherName": "Sanjineer",
+            "display": "standalone",
+            "themeColor": "#4f46e5",
+            "backgroundColor": "#ffffff",
+            "startUrl": "/",
+            "iconUrl": "https://app.sanjineer.in/icon-512.png",
+            "maskableIconUrl": "https://app.sanjineer.in/icon-512.png",
+            "appVersion": "1.0.0",
+            "signingKey": {
+              "path": "android.keystore",
+              "alias": "android"
+            },
+            "sdkVersion": 34,
+            "minSdkVersion": 19
+          }
+          EOF
+        env:
+          ANDROID_HOME: $HOME/android-sdk
 
       - name: Build APK
         run: |
           cd twa-project
           bubblewrap build --skipSigning
+        env:
+          ANDROID_HOME: $HOME/android-sdk
 
       - uses: actions/upload-artifact@v4
         with:
