@@ -997,7 +997,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     <h1 class="wa3" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.3rem,9vw,3.2rem);line-height:1.05;text-align:center;color:#fff;letter-spacing:-.02em;margin:0 0 .75rem 0;">Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span></h1>
     <p class="wa3" style="font-size:.88rem;line-height:1.65;color:rgba(255,255,255,0.48);text-align:center;max-width:280px;margin:0 0 1.7rem 0;font-weight:300;font-family:'DM Sans',sans-serif;">Your all-in-one site management tool — built for engineers who get things done.</p>
     <div class="wa4" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:1.9rem;max-width:310px;">
-      <span class="w-chip">📊 Dashboard</span><span class="w-chip">📋 Daily Report</span><span class="w-chip">📅 Attendance</span><span class="w-chip">⚙️ Machinery</span><span class="w-chip">💰 Expenses</span><span class="w-chip">🧱 Materials</span><span class="w-chip">🔧 Tools</span><span class="w-chip">📐 Drawings</span><span class="w-chip">📦 Rentals</span><span class="w-chip">🏗️ Dept Work</span><span class="w-chip">👥 Teams</span><span class="w-chip">📊 Budget</span><span class="w-chip">📅 Schedule</span><span class="w-chip">📋 Punch List</span><span class="w-chip">🧾 Bill</span><span class="w-chip">💼 Quotation</span><span class="w-chip">🏛️ Site Visits</span>
+      <span class="w-chip">📊 Dashboard</span><span class="w-chip">📋 Daily Report</span><span class="w-chip">📅 Attendance</span><span class="w-chip">⚙️ Machinery</span><span class="w-chip">💰 Expenses</span><span class="w-chip">🧱 Materials</span><span class="w-chip">🔧 Tools</span><span class="w-chip">📐 Drawings</span><span class="w-chip">📦 Rentals</span><span class="w-chip">🏗️ Dept Work</span><span class="w-chip">👥 Teams</span><span class="w-chip">📊 Budget</span><span class="w-chip">📅 Schedule</span><span class="w-chip">📋 BOQ DPR</span><span class="w-chip">📋 Punch List</span><span class="w-chip">🧾 Bill</span><span class="w-chip">💼 Quotation</span><span class="w-chip">🏛️ Site Visits</span>
     </div>
     <div class="wa5" style="display:flex;flex-direction:column;gap:11px;width:100%;">
       <button class="w-go" onclick="dismissWelcome()"><span class="wsm"></span>Get Started<span style="width:22px;height:22px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;">→</span></button>
@@ -1008,8 +1008,30 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 </div>
 <script>
 var WELCOME_FLAG='sanj_welcomed';
-function dismissWelcome(){try{localStorage.setItem(WELCOME_FLAG,'1');}catch(e){}var el=document.getElementById('welcome-overlay');if(!el)return;el.style.transition='opacity .4s ease';el.style.opacity='0';setTimeout(function(){el.style.display='none';el.style.opacity='';},430);}
-function checkShowWelcome(){try{if(localStorage.getItem(WELCOME_FLAG))return;var raw=localStorage.getItem('cm_data');var data=raw?JSON.parse(raw):[];if(Array.isArray(data)&&data.length>0){localStorage.setItem(WELCOME_FLAG,'1');return;}var el=document.getElementById('welcome-overlay');if(el)el.style.display='flex';}catch(e){}}
+var WELCOME_VER='sanj_welcome_v2'; // bump this string to re-show welcome on new app version
+function dismissWelcome(){
+  try{
+    localStorage.setItem(WELCOME_FLAG,'1');
+    localStorage.setItem(WELCOME_VER,'1');
+  }catch(e){}
+  var el=document.getElementById('welcome-overlay');
+  if(!el)return;
+  el.style.transition='opacity .4s ease';
+  el.style.opacity='0';
+  setTimeout(function(){el.style.display='none';el.style.opacity='';},430);
+}
+function checkShowWelcome(){
+  if(typeof _IS_VIEWER!=='undefined'&&_IS_VIEWER)return;
+  try{
+    // If this version's flag is already set, never show again
+    if(localStorage.getItem(WELCOME_VER))return;
+    // New version — clear old flag so welcome shows once for this version
+    localStorage.removeItem(WELCOME_FLAG);
+  }catch(e){}
+  try{if(localStorage.getItem(WELCOME_FLAG))return;}catch(e){}
+  var el=document.getElementById('welcome-overlay');
+  if(el)el.style.display='flex';
+}
 document.addEventListener('DOMContentLoaded',checkShowWelcome);
 </script>
 
@@ -2400,9 +2422,16 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">PO No.</label><input type="text" id="po-no" placeholder="PO-001" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="po-date" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Supplier</label>
-          <select id="po-supplier" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-white text-xs focus:outline-none focus:border-emerald-400">
+          <select id="po-supplier" onchange="poSupplierChange()" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-white text-xs focus:outline-none focus:border-emerald-400">
             <option value="">Select Supplier</option>
           </select>
+          <div id="po-supplier-custom-wrap" style="display:none;margin-top:4px">
+            <input type="text" id="po-supplier-custom" placeholder="Type supplier name…" class="w-full px-2 py-1.5 border-2 border-emerald-400 rounded-lg text-xs focus:outline-none" style="background:#f0fdf4">
+            <div style="display:flex;gap:4px;margin-top:3px">
+              <button onclick="poSaveCustomSupplier()" style="flex:1;background:#059669;color:#fff;border:none;border-radius:6px;padding:4px 0;font-size:10px;font-weight:700;cursor:pointer">✅ Save &amp; Use</button>
+              <button onclick="poCustomSupplierCancel()" style="background:#f3f4f6;color:#6b7280;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">✕</button>
+            </div>
+          </div>
         </div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Delivery By</label><input type="date" id="po-delivery" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
         <div class="col-span-2"><label class="text-[10px] font-bold text-gray-500 block mb-1">Site / Delivery Address</label><input type="text" id="po-site" placeholder="Delivery location" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
@@ -3654,9 +3683,26 @@ function switchTab(name) {
     if (canPrint) {
       document.querySelectorAll('button').forEach(function(b) {
         var t = b.textContent.trim();
-        if (t.includes('Print') || t.includes('Export') || t.includes('PDF')) {
+        if (t.includes('Print') || t.includes('Export') || t.includes('PDF') || t.includes('Excel')) {
           b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
         }
+      });
+    }
+    // On BOQ tab: always allow Print PDF and Export Excel regardless of canPrint flag, block all write actions
+    if (name === 'boq') {
+      document.querySelectorAll('#tab-boq button').forEach(function(b){
+        var t = b.textContent.trim();
+        if (t.includes('Print') || t.includes('Export') || t.includes('PDF') || t.includes('Excel') || t.includes('Next Day') || t.includes('Today')) {
+          b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
+        }
+        // Block any add/import/save/delete write buttons
+        if (t.includes('Section') || t.includes('Add') || t.includes('Import') || t.includes('Save') || t.includes('Fill') || t.includes('Fetch') || t === '✕') {
+          b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
+        }
+      });
+      // Disable all inputs and file import on BOQ for viewer
+      document.querySelectorAll('#tab-boq input, #tab-boq textarea, #tab-boq select').forEach(function(el){
+        if (el.type !== 'date') { el.disabled = true; }
       });
     }
   }
@@ -5701,6 +5747,32 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
     +'<tbody>'+rows+'</tbody></table></div>';
 })()
 +(photos.length ? '<div class="sec"><div class="st">📷 Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
++(function(){
+  // Today's BOQ Work In Progress
+  try {
+    var boqData = JSON.parse(safeLS.getItem('cm_boq_schedule') || '{"sections":[]}');
+    var tItems = [];
+    (boqData.sections||[]).forEach(function(sec){
+      (sec.items||[]).forEach(function(item){
+        if((parseFloat(item.todayQty)||0)>0 && item.desc && item.desc!=='New Item')
+          tItems.push({no:item.no, desc:item.desc, qty:item.todayQty, unit:item.unit||''});
+        (item.subItems||[]).forEach(function(sub){
+          if((parseFloat(sub.todayQty)||0)>0 && sub.desc && sub.desc!=='New Sub-Item')
+            tItems.push({no:sub.no, desc:sub.desc, qty:sub.todayQty, unit:sub.unit||''});
+        });
+      });
+    });
+    if(!tItems.length) return '';
+    return '<div class="sec"><div class="st" style="border-left-color:#4f46e5">🔨 Today\'s Work In Progress</div>'
+      +'<table><thead><tr><th style="width:70px;text-align:center">Item No.</th><th>Description</th><th style="width:90px;text-align:center">Qty Today</th></tr></thead><tbody>'
+      +tItems.map(function(x){
+        return '<tr><td style="text-align:center;font-weight:800;color:#4f46e5;padding:5px 8px">'+x.no+'</td>'
+          +'<td style="padding:5px 8px;font-weight:600">'+x.desc+'</td>'
+          +'<td style="text-align:center;padding:5px 8px;font-weight:800;color:#059669">'+x.qty+(x.unit?' '+x.unit:'')+'</td></tr>';
+      }).join('')
+      +'</tbody></table></div>';
+  } catch(e) { return ''; }
+})()
 +pftr()+'</div></body></html>';
 opw(html);
 }
@@ -7263,8 +7335,8 @@ function boqRender(){
         (item.subItems||[]).forEach(function(sub){
           var sPct=boqTotalPct(sub),sCol=boqBarColor(sPct,sub.startDate,sub.endDate),sTot=boqTotalQty(sub);
           html+='<tr style="border-bottom:1px solid #e6fdf8;background:#f7fffe" onmouseover="this.style.background=\'#e6fdf8\'" onmouseout="this.style.background=\'#f7fffe\'">';
-          html+='<td style="'+TD+'text-align:center;padding-left:10px"><span style="color:#0d9488;font-size:9px">↳</span><br><span style="color:#0d9488;font-weight:800;font-size:10px">'+_esc(sub.no)+'</span></td>';
-          html+='<td style="'+TD+'"><span style="color:#9ca3af;font-size:9px;margin-right:3px">┗</span><input value="'+_esc(sub.desc)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'desc\',this.value)" style="width:calc(100% - 14px);border:none;outline:none;font-size:10.5px;color:#374151;background:transparent;padding:2px 0"></td>';
+          html+='<td style="'+TD+'text-align:center"><span style="color:#0d9488;font-weight:800;font-size:10px">'+_esc(sub.no)+'</span></td>';
+          html+='<td style="'+TD+'"><input value="'+_esc(sub.desc)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'desc\',this.value)" style="width:100%;border:none;outline:none;font-size:10.5px;color:#374151;background:transparent;padding:2px 0"></td>';
           html+='<td style="'+TD+'text-align:center"><input value="'+_esc(sub.unit||'')+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'unit\',this.value)" style="width:44px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
           html+='<td style="'+TD+'text-align:center"><input type="number" value="'+(sub.tenderQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'tenderQty\',this.value)" style="width:58px;border:1px solid #e5e7eb;border-radius:5px;text-align:center;font-size:10px;padding:2px"></td>';
           html+='<td style="'+TD+'text-align:center;background:#fef9c3"><input type="number" value="'+(sub.prevQty||0)+'" onchange="boqEditSub(\''+sec.id+'\',\''+item.id+'\',\''+sub.id+'\',\'prevQty\',this.value)" style="width:60px;border:1px solid #fcd34d;border-radius:5px;text-align:center;font-size:10px;padding:2px;background:#fef9c3;font-weight:700"></td>';
@@ -9285,8 +9357,8 @@ function loadViewerAccountsInline() {
       listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
       return;
     }
-    var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️'};
-    var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits'];
+    var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ'};
+    var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq'];
     listEl.innerHTML = list.map(function(v,i) {
       var perms = v.permissions||[];
       var chips = perms.map(function(p){
@@ -9394,8 +9466,8 @@ function renderViewerList(list) {
     listEl.innerHTML = '<div style="text-align:center;padding:20px 0;"><div style="font-size:28px;margin-bottom:6px">\u{1F465}</div><p style="font-size:11px;color:rgba(255,255,255,0.35);">No viewers created yet</p></div>';
     return;
   }
-  var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️'};
-  var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits'];
+  var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ'};
+  var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq'];
   listEl.innerHTML = list.map(function(v, i) {
     var perms = v.permissions || [];
     var chips = perms.map(function(p){
@@ -10049,7 +10121,53 @@ function renderPOSupplierDropdown() {
         + '</optgroup>' : '')
     + (extraNames.length ? '<optgroup label="── From Materials / Expenses">'
         + extraNames.map(function(n){ return '<option value="name:'+n+'" '+(cur==='name:'+n?'selected':'')+'>'+n+'</option>'; }).join('')
-        + '</optgroup>' : '');
+        + '</optgroup>' : '')
+    + '<optgroup label="──────────"><option value="__add_new__">➕ Add New Supplier…</option></optgroup>';
+}
+
+function poSupplierChange() {
+  var sel = document.getElementById('po-supplier');
+  var wrap = document.getElementById('po-supplier-custom-wrap');
+  if (!sel || !wrap) return;
+  if (sel.value === '__add_new__') {
+    wrap.style.display = 'block';
+    var inp = document.getElementById('po-supplier-custom');
+    if (inp) { inp.value = ''; inp.focus(); }
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function poSaveCustomSupplier() {
+  var inp = document.getElementById('po-supplier-custom');
+  var name = inp ? inp.value.trim() : '';
+  if (!name) { toast('Enter supplier name', 'err'); return; }
+  // Save to supplier list
+  var sups = lsuppliers();
+  var existing = sups.find(function(s){ return s.name.toLowerCase() === name.toLowerCase(); });
+  var id;
+  if (existing) {
+    id = existing.id;
+  } else {
+    id = Date.now().toString(36);
+    sups.unshift({ id: id, name: name, contact: '', gst: '', addr: '' });
+    ssuppliers(sups);
+    renderPOSuppliersList();
+  }
+  // Rebuild dropdown and select the new supplier
+  renderPOSupplierDropdown();
+  var sel = document.getElementById('po-supplier');
+  if (sel) sel.value = id;
+  var wrap = document.getElementById('po-supplier-custom-wrap');
+  if (wrap) wrap.style.display = 'none';
+  toast('✅ Supplier "' + name + '" saved!', 'ok');
+}
+
+function poCustomSupplierCancel() {
+  var wrap = document.getElementById('po-supplier-custom-wrap');
+  if (wrap) wrap.style.display = 'none';
+  var sel = document.getElementById('po-supplier');
+  if (sel) sel.value = '';
 }
 
 function addPOLine() {
