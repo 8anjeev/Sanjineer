@@ -11,54 +11,24 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Android SDK
+      - name: Clone TWA Quickstart
         run: |
-          sudo apt-get install -y wget unzip
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-11076708_latest.zip -d $HOME/android-sdk
-          mkdir -p $HOME/android-sdk/cmdline-tools/latest
-          mv $HOME/android-sdk/cmdline-tools/bin $HOME/android-sdk/cmdline-tools/latest/
-          mv $HOME/android-sdk/cmdline-tools/lib $HOME/android-sdk/cmdline-tools/latest/
-          echo "y" | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
-        env:
-          ANDROID_HOME: $HOME/android-sdk
+          git clone https://github.com/GoogleChromeLabs/svgomg-twa.git twa-project
 
-      - name: Install Bubblewrap & Init
+      - name: Update TWA Config
         run: |
-          npm install -g @bubblewrap/cli
-          mkdir twa-project && cd twa-project
-          cat > twa-manifest.json << 'EOF'
-          {
-            "packageId": "com.sanjvik.sanjineer",
-            "host": "app.sanjineer.in",
-            "name": "Sanjineer",
-            "launcherName": "Sanjineer",
-            "display": "standalone",
-            "themeColor": "#4f46e5",
-            "backgroundColor": "#ffffff",
-            "startUrl": "/",
-            "iconUrl": "https://app.sanjineer.in/icon-512.png",
-            "maskableIconUrl": "https://app.sanjineer.in/icon-512.png",
-            "appVersion": "1.0.0",
-            "signingKey": {
-              "path": "android.keystore",
-              "alias": "android"
-            },
-            "sdkVersion": 34,
-            "minSdkVersion": 19
-          }
-          EOF
-        env:
-          ANDROID_HOME: $HOME/android-sdk
+          cd twa-project
+          sed -i 's/jakearchibald.github.io\/svgomg/app.sanjineer.in/g' app/build.gradle
+          sed -i 's/io.jakearchibald.svgomg/com.sanjvik.sanjineer/g' app/build.gradle
+          sed -i 's/SVGOMG/Sanjineer/g' app/src/main/res/values/strings.xml
 
       - name: Build APK
         run: |
           cd twa-project
-          bubblewrap build --skipSigning
-        env:
-          ANDROID_HOME: $HOME/android-sdk
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
           name: sanjineer-apk
-          path: twa-project/app/build/outputs/apk/**/*.apk
+          path: twa-project/app/build/outputs/apk/debug/*.apk
