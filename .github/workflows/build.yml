@@ -5,13 +5,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
-      - run: npm install -g @bubblewrap/cli
-      - run: bubblewrap init --manifest https://app.sanjineer.in/manifest.json
-      - run: bubblewrap build
-      - uses: actions/upload-artifact@v4
+          node-version: 20
+
+      - name: Install PWABuilder CLI
+        run: npm install -g @pwabuilder/cli
+
+      - name: Build Android APK
+        run: pwa build --platform android
+        env:
+          PWA_URL: https://app.sanjineer.in
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: sanjineer-apk
-          path: "*.apk"
+          path: "**/*.apk"
