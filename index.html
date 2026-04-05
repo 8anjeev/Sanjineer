@@ -1420,7 +1420,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   </style>
   <div style="position:relative;z-index:2;width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;">
     <div class="wa1" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);border-radius:99px;padding:5px 14px;font-size:10.5px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.4rem;font-family:'DM Sans',sans-serif;"><span style="width:6px;height:6px;border-radius:50%;background:#6366f1;flex-shrink:0;animation:wPls 2s ease-in-out infinite;"></span>Construction Management App</div>
-    <div class="wa2" style="position:relative;margin-bottom:1.3rem;"><div style="position:absolute;inset:-20px;background:radial-gradient(circle,rgba(99,102,241,0.28) 0%,transparent 70%);z-index:-1;"></div><div style="width:86px;height:86px;background:linear-gradient(145deg,#f97316,#fb923c,#fdba74);border-radius:22px;overflow:hidden;box-shadow:0 0 40px rgba(249,115,22,0.55),0 0 80px rgba(249,115,22,0.2);position:relative;"><img crossorigin="anonymous" src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/IMG_6018.png" style="width:86px;height:86px;object-fit:cover;display:block;" onerror="this.style.display='none'"></div></div>
+    <div class="wa2" style="position:relative;margin-bottom:1.3rem;"><div style="position:absolute;inset:-20px;background:radial-gradient(circle,rgba(99,102,241,0.28) 0%,transparent 70%);z-index:-1;"></div><div style="width:86px;height:86px;background:linear-gradient(145deg,#f97316,#fb923c,#fdba74);border-radius:22px;overflow:hidden;box-shadow:0 0 40px rgba(249,115,22,0.55),0 0 80px rgba(249,115,22,0.2);position:relative;"><img crossorigin="anonymous" src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:86px;height:86px;object-fit:cover;display:block;" onerror="this.style.display='none'"></div></div>
     <h1 class="wa3" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.3rem,9vw,3.2rem);line-height:1.05;text-align:center;color:#fff;letter-spacing:-.02em;margin:0 0 .75rem 0;">Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span></h1>
     <p class="wa3" style="font-size:.88rem;line-height:1.65;color:rgba(255,255,255,0.48);text-align:center;max-width:280px;margin:0 0 1.7rem 0;font-weight:300;font-family:'DM Sans',sans-serif;">Your all-in-one site management tool — built for engineers who get things done.</p>
     <div class="wa4" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:1.9rem;max-width:310px;">
@@ -1464,8 +1464,8 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
 // ── App logo loader — tries multiple CDNs, falls back to emoji ──
 (function(){
   var LOGO_URLS = [
-    'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/IMG_6018.png',
-    'https://raw.githubusercontent.com/8anjeev/Sanjineer/main/IMG_6018.png'
+    'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png',
+    'https://raw.githubusercontent.com/8anjeev/Sanjineer/main/assets/logo.png'
   ];
   function tryLoad(urls, idx) {
     if (idx >= urls.length) { return; } // keep emoji fallback
@@ -4991,15 +4991,15 @@ function snapData(snap) {
 }
 
 function ld(){try{return JSON.parse(safeLS.getItem(DB)||'[]');}catch(e){return [];}}
-function sd(d){safeLS.setItem(DB,JSON.stringify(d));}
+function sd(d){safeLS.setItem(DB,JSON.stringify(d));_scheduleCloudPush();}
 function lm(){try{return JSON.parse(safeLS.getItem(META)||'{}');}catch(e){return {};}}
-function sm(x){safeLS.setItem(META,JSON.stringify(x));}
+function sm(x){safeLS.setItem(META,JSON.stringify(x));_scheduleCloudPush();}
 function lmat(){try{return JSON.parse(safeLS.getItem(MATS)||'[]');}catch(e){return [];}}
-function smat(x){safeLS.setItem(MATS,JSON.stringify(x));}
+function smat(x){safeLS.setItem(MATS,JSON.stringify(x));_scheduleCloudPush();}
 function ldept(){try{return JSON.parse(safeLS.getItem(DEPT)||'{}');}catch(e){return {};}}
-function sdept(x){safeLS.setItem(DEPT,JSON.stringify(x));}
+function sdept(x){safeLS.setItem(DEPT,JSON.stringify(x));_scheduleCloudPush();}
 function lprof(){try{return JSON.parse(safeLS.getItem(PROF)||'null');}catch(e){return null;}}
-function sprof(x){safeLS.setItem(PROF,JSON.stringify(x));}
+function sprof(x){safeLS.setItem(PROF,JSON.stringify(x));_scheduleCloudPush();}
 function lphkeys(){try{return JSON.parse(safeLS.getItem(PHKEYS)||'{}');}catch(e){return {};}}
 function sphkeys(x){safeLS.setItem(PHKEYS,JSON.stringify(x));}
 
@@ -7416,11 +7416,16 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
   var defaultRight='<p style="font-size:13px;font-weight:800;color:white;line-height:1.3">'+reportTitle+'</p>'+'<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:4px">'+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'})+'</p>';
   // PDF logo: user company logo if uploaded, else GitHub app logo
   var companyLogoSrc = prof.logo || '';
-  var appLogoSrc = 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/IMG_6018.png';
+  var appLogoSrc = 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
   var logoSrc = companyLogoSrc || appLogoSrc;
-  var logoHtml = '<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;" onerror="this.style.display=\'none\'">';
-  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
-    +'<div style="text-align:left">'+logoHtml
+  // PNG uploaded logo: 2x size but overflows header — background is transparent so it looks clean
+  var _isPng = (companyLogoSrc && companyLogoSrc.indexOf('data:image/png') === 0);
+  var logoSize = _isPng ? '88px' : '44px';
+  var logoHtml = _isPng
+    ? '<div style="width:44px;height:44px;overflow:visible;flex-shrink:0;position:relative"><img src="'+logoSrc+'" style="width:88px;height:88px;object-fit:contain;display:block;border-radius:0;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:transparent;" onerror="this.style.display=\'none\'"></div>'
+    : '<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;" onerror="this.style.display=\'none\'">';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:visible;">'
+    +'<div style="text-align:left;display:flex;flex-direction:column;align-items:flex-start">'+logoHtml
     +'<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:2px">app.sanjineer.in</p></div>'
     +'<div style="text-align:center"><p style="font-size:16px;font-weight:900;color:white;line-height:1">'+company+'</p>'
     +(showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+prof.address+'</p>' : (!showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:3px">'+prof.address+'</p>' : ''))
@@ -7506,7 +7511,12 @@ var hc=p.headerColor||'linear-gradient(135deg,#4f46e5,#7c3aed)';
 var isGrad=hc.indexOf('gradient')!==-1;
 var solidColor=isGrad?'#4f46e5':hc;
 // PO PDF: show company logo if set, else app logo
-var logoHtml = '<img class="logo" src="'+(companyLogoSrc||'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/IMG_6018.png')+'" style="width:44px;height:44px;object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
+var companyLogoSrc = p.logo || '';
+var _poLogoSrc = companyLogoSrc || 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
+var _isPoPng = (companyLogoSrc && companyLogoSrc.indexOf('data:image/png') === 0);
+var logoHtml = _isPoPng
+  ? '<div style="width:44px;height:44px;overflow:visible;flex-shrink:0;position:relative"><img class="logo" src="'+_poLogoSrc+'" style="width:88px;height:88px;object-fit:contain;display:block;background:transparent;border-radius:0;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);" onerror="this.style.display=\'none\'"></div>'
+  : '<img class="logo" src="'+_poLogoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
 return '<div class="hdr" style="border-bottom:3px solid '+solidColor+'"><div style="display:flex;align-items:center;gap:12px">'+logoHtml+'<div><div class="cn" style="color:'+solidColor+'">app.sanjineer.in</div><div class="csub" style="color:'+solidColor+'">Site Manager</div></div></div>'
 +'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+(p.company||'')+'</div>'+(p.address?'<div style="font-size:10px;color:#6b7280;margin-top:3px;font-weight:400">'+p.address+'</div>':'')+'</div>'
 +'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})+'</div></div></div>';
@@ -7978,7 +7988,7 @@ if (!safeLS.getItem('pwa_dismissed')) { var b=document.getElementById('pwa-banne
 // ============================================================
 var MACH_KEY = 'cm_machinery';
 function lmach(){try{return JSON.parse(safeLS.getItem(MACH_KEY)||'{}');}catch(e){return {};}}
-function smach(x){safeLS.setItem(MACH_KEY,JSON.stringify(x));}
+function smach(x){safeLS.setItem(MACH_KEY,JSON.stringify(x));_scheduleCloudPush();}
 
 function loadMachinery(){
   var t=ist(), sel=document.getElementById('mach-date');
@@ -8180,7 +8190,7 @@ function printMachinery(){
     +'</div>'
     +machCards
     +_pdfFooter()+'</div></body></html>';
-  var w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+  opw(html);
 }
 
 function printMachineryMonth(){
@@ -8259,7 +8269,7 @@ function printMachineryMonth(){
     +'</div>'
     +machCards
     +_pdfFooter()+'</div></body></html>';
-  var w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
+  opw(html);
 }
 
 // ============================================================
@@ -8269,7 +8279,7 @@ var DRW_KEY='cm_drawings';
 var _currentRoom='R1';
 var ROOMS=['R1','R2','R3','R4','R5','R6','R7','R8'];
 function ldrw(){try{return JSON.parse(safeLS.getItem(DRW_KEY)||'{}');}catch(e){return {};}}
-function sdrw(x){safeLS.setItem(DRW_KEY,JSON.stringify(x));}
+function sdrw(x){safeLS.setItem(DRW_KEY,JSON.stringify(x));_scheduleCloudPush();}
 
 function initDrawingsTab(){
   buildRoomTabs();renderDrawings();
@@ -8377,7 +8387,7 @@ function delDrawing(room,id){
 // ============================================================
 var BGT_KEY='cm_budget';
 function lbgt(){try{return JSON.parse(safeLS.getItem(BGT_KEY)||'null');}catch(e){return null;}}
-function sbgt(x){safeLS.setItem(BGT_KEY,JSON.stringify(x));}
+function sbgt(x){safeLS.setItem(BGT_KEY,JSON.stringify(x));_scheduleCloudPush();}
 
 function loadBudgetTab(){
   var b=lbgt();
@@ -8446,7 +8456,7 @@ function renderBudgetStats(){
 // ============================================================
 var MS_KEY='cm_milestones';
 function lms(){try{return JSON.parse(safeLS.getItem(MS_KEY)||'[]');}catch(e){return [];}}
-function sms(x){safeLS.setItem(MS_KEY,JSON.stringify(x));}
+function sms(x){safeLS.setItem(MS_KEY,JSON.stringify(x));_scheduleCloudPush();}
 
 function loadScheduleTab(){
   renderSchedule(); setTimeout(renderGantt, 200);
@@ -9557,7 +9567,7 @@ function boqParseTextToStructure(text){
 // ============================================================
 var PL_KEY='cm_punchlist';
 function lpl(){try{return JSON.parse(safeLS.getItem(PL_KEY)||'[]');}catch(e){return [];}}
-function spl(x){safeLS.setItem(PL_KEY,JSON.stringify(x));}
+function spl(x){safeLS.setItem(PL_KEY,JSON.stringify(x));_scheduleCloudPush();}
 
 function loadPunchTab(){renderPunchList();}
 
@@ -9880,7 +9890,9 @@ function _buildInvoiceHTML(inv){
   var gno = p.gst      || '';
   // Invoice: no app logo, no Sanjineer branding — only company info
   var logoHtml = p.logo
-    ? '<img src="' + p.logo + '" style="width:56px;height:56px;object-fit:contain;display:block;border-radius:8px;margin-bottom:8px;background:transparent">'
+    ? (p.logo.indexOf('data:image/png') === 0
+        ? '<div style="width:56px;height:56px;overflow:visible;position:relative;margin-bottom:8px"><img src="'+p.logo+'" style="width:112px;height:112px;object-fit:contain;display:block;border-radius:0;background:transparent;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);" onerror="this.style.display=\'none\'"></div>'
+        : '<img src="'+p.logo+'" style="width:56px;height:56px;object-fit:contain;display:block;border-radius:8px;margin-bottom:8px;background:transparent" onerror="this.style.display=\'none\'">')
     : '';
 
   var lineRows = inv.lines.map(function(l){
@@ -10225,7 +10237,12 @@ function initFirebase(cfg, cb) {
 function autoInitCloud() {
   if (!_sb) { setTimeout(autoInitCloud, 200); return; }
   updateCloudBtn();
-  if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') { startAutoSync(); }
+  if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') {
+    // Pull from cloud FIRST on every app open — apply if cloud is newer than local
+    // This ensures a device always starts with the latest data from any other device
+    _adminCloudPull(true);
+    startAutoSync();
+  }
 }
 
 // ── MASTER RESTORE: applies ALL backed-up data to local storage ──────────────
@@ -10269,65 +10286,93 @@ function _applyFullBackup(d) {
   }
 }
 
-// -- Backup Now (Supabase) --
+// -- Backup Now (Supabase) — FETCH BEFORE PUSH pattern --
+// Step 1: Fetch latest from cloud
+// Step 2: If cloud is newer, absorb it (apply to local) first
+// Step 3: Read local (now = cloud base + our edits merged)
+// Step 4: Push combined result back
 function cloudBackupNow(silent) {
   if (!_sb) { if (!silent) toast('Supabase not ready', 'err'); return; }
   if (!_adminSBUser) { if (!silent) toast('Login required to backup', 'err'); return; }
   var siteId = getSiteId();
   if (!siteId) { if (!silent) toast('No Site ID configured', 'err'); return; }
-  // ── FULL COMPREHENSIVE BACKUP: every tab, setting, photo, logo, company name ──
-  // Collect ALL cm_ prefixed keys dynamically (BOQ details, visits, quotations, tools, etc.)
-  var _allCmKeys = {};
-  try {
-    var _ls = window.localStorage;
-    for (var _ki = 0; _ki < _ls.length; _ki++) {
-      var _kk = _ls.key(_ki);
-      if (!_kk) continue;
-      // Include all cm_ app data keys
-      if (_kk.indexOf('cm_') === 0) {
-        var _v = safeLS.getItem(_kk);
-        if (_v !== null) _allCmKeys[_kk] = _v;
+
+  function _buildLocalPayload() {
+    var _allCmKeys = {};
+    try {
+      var _ls = window.localStorage;
+      for (var _ki = 0; _ki < _ls.length; _ki++) {
+        var _kk = _ls.key(_ki);
+        if (!_kk) continue;
+        if (_kk.indexOf('cm_') === 0) {
+          var _v = safeLS.getItem(_kk);
+          if (_v !== null) _allCmKeys[_kk] = _v;
+        }
       }
-    }
-  } catch(e2) {}
-  var payload = {
-    // Core tab data (explicit for speed + safety)
-    db:         ld(),
-    meta:       lm(),
-    mats:       lmat(),
-    dept:       ldept(),
-    prof:       lprof(),        // ← company name, logo (base64), address
-    machinery:  lmach(),
-    drawings:   ldrw(),
-    budget:     lbgt(),
-    milestones: lms(),
-    punchlist:  lpl(),
-    rfi: [], safety: [],
-    nid: parseInt(safeLS.getItem('cm_nid') || '1'),
-    // All remaining cm_ keys (BOQ schedule, BOQ today details, BOQ project info,
-    //   visits, quotations, subcon bills, POs, suppliers, invoices, tools, rentals, etc.)
-    cm_all: _allCmKeys,
-    // App settings (dark mode, hidden tabs, dashboard view, signatures/stamps, guide)
-    settings: {
-      dark_mode:    safeLS.getItem('sanj_dark_mode') || '0',
-      dash_view:    safeLS.getItem('sanj_dash_view') || 'current',
-      hidden_tabs:  safeLS.getItem('sanj_hidden_tabs') || '[]',
-      guide:        safeLS.getItem('sanj_guide_enabled') || '1',
-      swipe:        safeLS.getItem('sanj_swipe_enabled') || '1',
-      signatures:   safeLS.getItem('sanj_signatures') || '[]'
-    },
-    lastSync: Date.now(), syncedBy: _adminSBUser.email, version: '3.0'
-  };
-  _sb.from('cloud_backups').upsert({
-    admin_id: _adminSBUser.id, backup_key: siteId, data: payload
-  }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
-    if (r.error) { toast('Backup failed: ' + r.error.message, 'err'); return; }
-    var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
-    var el = document.getElementById('cloud-sync-time');
-    if (el) el.textContent = 'Pushed: ' + now;
-    if (!silent) toast('☁️ Backed up to cloud!', 'ok');
-    updateCloudBtn();
-  });
+    } catch(e2) {}
+    return {
+      db:         ld(),
+      meta:       lm(),
+      mats:       lmat(),
+      dept:       ldept(),
+      prof:       lprof(),
+      machinery:  lmach(),
+      drawings:   ldrw(),
+      budget:     lbgt(),
+      milestones: lms(),
+      punchlist:  lpl(),
+      rfi: [], safety: [],
+      nid: parseInt(safeLS.getItem('cm_nid') || '1'),
+      cm_all: _allCmKeys,
+      settings: {
+        dark_mode:    safeLS.getItem('sanj_dark_mode') || '0',
+        dash_view:    safeLS.getItem('sanj_dash_view') || 'current',
+        hidden_tabs:  safeLS.getItem('sanj_hidden_tabs') || '[]',
+        guide:        safeLS.getItem('sanj_guide_enabled') || '1',
+        swipe:        safeLS.getItem('sanj_swipe_enabled') || '1',
+        signatures:   safeLS.getItem('sanj_signatures') || '[]'
+      },
+      lastSync: Date.now(),
+      syncedBy: _adminSBUser.email,
+      version: '3.0'
+    };
+  }
+
+  function _doPush(payload) {
+    _sb.from('cloud_backups').upsert({
+      admin_id: _adminSBUser.id, backup_key: siteId, data: payload
+    }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
+      if (r.error) { if (!silent) toast('Backup failed: ' + r.error.message, 'err'); return; }
+      _lastCloudTimestamp = payload.lastSync;
+      var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
+      var el = document.getElementById('cloud-sync-time');
+      if (el) el.textContent = 'Synced: ' + now;
+      if (!silent) toast('☁️ Backed up to cloud!', 'ok');
+      updateCloudBtn();
+    });
+  }
+
+  // Step 1: Fetch latest cloud data first
+  _sb.from('cloud_backups')
+    .select('data,updated_at')
+    .eq('admin_id', _adminSBUser.id)
+    .eq('backup_key', siteId)
+    .single()
+    .then(function(fetchResult) {
+      var cloudData = (fetchResult.data && fetchResult.data.data) ? fetchResult.data.data : null;
+      var cloudTs   = cloudData ? (cloudData.lastSync || 0) : 0;
+      // Step 2: If cloud has changes we haven't seen, absorb them silently first
+      if (cloudTs > _lastCloudTimestamp) {
+        _applyFullBackup(cloudData);
+        _lastCloudTimestamp = cloudTs;
+      }
+      // Step 3+4: Build payload from local (which now includes merged cloud base) and push
+      _doPush(_buildLocalPayload());
+    })
+    .catch(function() {
+      // Offline or first backup — push local directly
+      _doPush(_buildLocalPayload());
+    });
 }
 
 // -- Restore from Cloud (Supabase) --
@@ -10393,7 +10438,9 @@ function _adminCloudPull(silent) {
     .then(function(r) {
       if (r.error || !r.data || !r.data.data) return;
       var remoteTs = r.data.data.lastSync || 0;
-      if (remoteTs > _lastCloudTimestamp + 5000) { // remote is >5s newer → pull
+      // Apply cloud data if it's strictly newer than what we last applied.
+      // On first open _lastCloudTimestamp is 0 so this always pulls on startup.
+      if (remoteTs > _lastCloudTimestamp) {
         _applyCloudData(r.data.data, !!silent);
       }
     }).catch(function(e) {});
@@ -10433,17 +10480,28 @@ function _startAdminRealtime() {
 
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
-  // FIX: 10s interval (was 25s) so polling fallback is near-instant when realtime misses
+  // PULL only every 10s — pushing is now done on every data save (debounced)
   var SYNC_MS = 10000;
   _cloudSyncTimer = setInterval(function() {
     if (!_getAdminDb() || !isCloudActivated()) return;
-    // PUSH: always push local changes up
-    cloudBackupNow(true); // silent push
-    // PULL: fetch remote and apply if newer
-    _adminCloudPull(true);
+    _adminCloudPull(true); // pull-only: check if another device pushed newer data
   }, SYNC_MS);
   // Start Realtime for instant push notifications from other devices
   _startAdminRealtime();
+  // Pull immediately on start to get latest cloud data before user edits
+  setTimeout(function() { _adminCloudPull(true); }, 1500);
+}
+
+// ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
+var _cloudPushTimer = null;
+function _scheduleCloudPush() {
+  if (!isCloudActivated || typeof isCloudActivated !== 'function') return;
+  if (!isCloudActivated()) return;
+  if (_cloudPushTimer) clearTimeout(_cloudPushTimer);
+  _cloudPushTimer = setTimeout(function() {
+    _cloudPushTimer = null;
+    cloudBackupNow(true); // silent push after user finishes editing
+  }, 3000); // 3s debounce — waits until user stops making changes
 }
 
 // -- Supabase credential viewer --
