@@ -10188,18 +10188,95 @@ function autoInitCloud() {
   if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') { startAutoSync(); }
 }
 
+// ── MASTER RESTORE: applies ALL backed-up data to local storage ──────────────
+function _applyFullBackup(d) {
+  if (!d) return;
+  // Core tab data
+  if (d.db)         { sd(d.db); AD = ld(); }
+  if (d.meta)       sm(d.meta);
+  if (d.mats)       smat(d.mats);
+  if (d.dept)       sdept(d.dept);
+  if (d.prof)       sprof(d.prof);       // company name + logo (base64 image)
+  if (d.machinery)  smach(d.machinery);
+  if (d.drawings)   sdrw(d.drawings);
+  if (d.budget)     sbgt(d.budget);
+  if (d.milestones) sms(d.milestones);
+  if (d.punchlist)  spl(d.punchlist);
+  if (d.nid)        safeLS.setItem('cm_nid', String(d.nid));
+  // All cm_ keys (BOQ schedule, BOQ today data per date, BOQ project info,
+  //   visits, quotations, subcon bills, PO, suppliers, invoices, tools, rentals, etc.)
+  if (d.cm_all && typeof d.cm_all === 'object') {
+    Object.keys(d.cm_all).forEach(function(k) {
+      var v = d.cm_all[k];
+      if (v !== null && v !== undefined) safeLS.setItem(k, v);
+    });
+  }
+  // Legacy: old backup format (v2.1) used separate boq_schedule + extra keys
+  if (d.boq_schedule) safeLS.setItem('cm_boq_schedule', d.boq_schedule);
+  if (d.extra && typeof d.extra === 'object') {
+    Object.keys(d.extra).forEach(function(k) { if (d.extra[k] !== null && d.extra[k] !== undefined) safeLS.setItem(k, d.extra[k]); });
+  }
+  // App settings (dark mode, dashboard view, hidden tabs, signatures, guide, swipe)
+  if (d.settings) {
+    if (d.settings.dark_mode   !== undefined) safeLS.setItem('sanj_dark_mode', d.settings.dark_mode);
+    if (d.settings.dash_view   !== undefined) safeLS.setItem('sanj_dash_view', d.settings.dash_view);
+    if (d.settings.hidden_tabs !== undefined) safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
+    if (d.settings.guide       !== undefined) safeLS.setItem('sanj_guide_enabled', d.settings.guide);
+    if (d.settings.swipe       !== undefined) safeLS.setItem('sanj_swipe_enabled', d.settings.swipe);
+    if (d.settings.signatures  !== undefined && d.settings.signatures !== '[]') {
+      safeLS.setItem('sanj_signatures', d.settings.signatures);
+    }
+  }
+}
+
 // -- Backup Now (Supabase) --
-function cloudBackupNow() {
-  if (!_sb) { toast('Supabase not ready', 'err'); return; }
-  if (!_adminSBUser) { toast('Login required to backup', 'err'); return; }
+function cloudBackupNow(silent) {
+  if (!_sb) { if (!silent) toast('Supabase not ready', 'err'); return; }
+  if (!_adminSBUser) { if (!silent) toast('Login required to backup', 'err'); return; }
   var siteId = getSiteId();
-  if (!siteId) { toast('No Site ID configured', 'err'); return; }
+  if (!siteId) { if (!silent) toast('No Site ID configured', 'err'); return; }
+  // ── FULL COMPREHENSIVE BACKUP: every tab, setting, photo, logo, company name ──
+  // Collect ALL cm_ prefixed keys dynamically (BOQ details, visits, quotations, tools, etc.)
+  var _allCmKeys = {};
+  try {
+    var _ls = window.localStorage;
+    for (var _ki = 0; _ki < _ls.length; _ki++) {
+      var _kk = _ls.key(_ki);
+      if (!_kk) continue;
+      // Include all cm_ app data keys
+      if (_kk.indexOf('cm_') === 0) {
+        var _v = safeLS.getItem(_kk);
+        if (_v !== null) _allCmKeys[_kk] = _v;
+      }
+    }
+  } catch(e2) {}
   var payload = {
-    db: ld(), meta: lm(), mats: lmat(), dept: ldept(), prof: lprof(),
-    machinery: lmach(), drawings: ldrw(), budget: lbgt(), milestones: lms(),
-    rfi: [], punchlist: lpl(), safety: [],
+    // Core tab data (explicit for speed + safety)
+    db:         ld(),
+    meta:       lm(),
+    mats:       lmat(),
+    dept:       ldept(),
+    prof:       lprof(),        // ← company name, logo (base64), address
+    machinery:  lmach(),
+    drawings:   ldrw(),
+    budget:     lbgt(),
+    milestones: lms(),
+    punchlist:  lpl(),
+    rfi: [], safety: [],
     nid: parseInt(safeLS.getItem('cm_nid') || '1'),
-    lastSync: Date.now(), syncedBy: _adminSBUser.email, version: '2.0'
+    // All remaining cm_ keys (BOQ schedule, BOQ today details, BOQ project info,
+    //   visits, quotations, subcon bills, POs, suppliers, invoices, tools, rentals, etc.)
+    cm_all: _allCmKeys,
+    // App settings (dark mode, hidden tabs, dashboard view, signatures/stamps, guide)
+    settings: {
+      dark_mode:    safeLS.getItem('sanj_dark_mode') || '0',
+      dash_view:    safeLS.getItem('sanj_dash_view') || 'current',
+      hidden_tabs:  safeLS.getItem('sanj_hidden_tabs') || '[]',
+      guide:        safeLS.getItem('sanj_guide_enabled') || '1',
+      swipe:        safeLS.getItem('sanj_swipe_enabled') || '1',
+      signatures:   safeLS.getItem('sanj_signatures') || '[]'
+    },
+    lastSync: Date.now(), syncedBy: _adminSBUser.email, version: '3.0'
   };
   _sb.from('cloud_backups').upsert({
     admin_id: _adminSBUser.id, backup_key: siteId, data: payload
@@ -10207,8 +10284,8 @@ function cloudBackupNow() {
     if (r.error) { toast('Backup failed: ' + r.error.message, 'err'); return; }
     var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
     var el = document.getElementById('cloud-sync-time');
-    if (el) el.textContent = 'Last sync: ' + now;
-    toast('☁️ Backed up to cloud!', 'ok');
+    if (el) el.textContent = 'Pushed: ' + now;
+    if (!silent) toast('☁️ Backed up to cloud!', 'ok');
     updateCloudBtn();
   });
 }
@@ -10223,28 +10300,96 @@ function cloudRestoreNow() {
   _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', siteId).single().then(function(r) {
     if (r.error || !r.data) { toast('No cloud data found for this Site ID', 'err'); return; }
     var d = r.data.data;
-    if (d.db) sd(d.db);
-    if (d.meta) sm(d.meta);
-    if (d.mats) smat(d.mats);
-    if (d.dept) sdept(d.dept);
-    if (d.prof) sprof(d.prof);
-    if (d.machinery) smach(d.machinery);
-    if (d.drawings) sdrw(d.drawings);
-    if (d.budget) sbgt(d.budget);
-    if (d.milestones) sms(d.milestones);
-    if (d.punchlist) spl(d.punchlist);
+    _applyFullBackup(d);
+    // also keep legacy field compat for very old backups
     if (d.nid) safeLS.setItem('cm_nid', d.nid);
     AD = ld(); applyProfile(); renderDashboard();
     toast('✅ Data restored from cloud!', 'ok');
   });
 }
 
-// -- Auto Sync (every 2 min) --
+// -- Auto Sync (bidirectional: push changes + pull remote changes every 25s) --
+var _adminRealtimeChannel = null;
+var _lastCloudTimestamp = 0;  // track remote lastSync to detect remote changes
+
+function _applyCloudData(d, silent) {
+  if (!d) return;
+  var remoteTs = d.lastSync || 0;
+  if (remoteTs && remoteTs <= _lastCloudTimestamp) return; // already applied
+  _lastCloudTimestamp = remoteTs;
+  _applyFullBackup(d);
+  applyProfile();
+  try { renderDashboard(); } catch(e) {}
+  var el = document.getElementById('cloud-sync-time');
+  var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
+  if (el) el.textContent = 'Pulled: ' + now;
+  if (!silent) toast('🔄 Cloud data updated from another device!', 'ok');
+}
+
+function _adminCloudPull(silent) {
+  if (!_sb || !_adminSBUser) return;
+  var siteId = getSiteId();
+  if (!siteId) return;
+  _sb.from('cloud_backups')
+    .select('data,updated_at')
+    .eq('admin_id', _adminSBUser.id)
+    .eq('backup_key', siteId)
+    .single()
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.data) return;
+      var remoteTs = r.data.data.lastSync || 0;
+      if (remoteTs > _lastCloudTimestamp + 5000) { // remote is >5s newer → pull
+        _applyCloudData(r.data.data, !!silent);
+      }
+    }).catch(function(e) {});
+}
+
+function _startAdminRealtime() {
+  if (!_sb || !_adminSBUser) return;
+  if (_adminRealtimeChannel) {
+    try { _sb.removeChannel(_adminRealtimeChannel); } catch(e) {}
+    _adminRealtimeChannel = null;
+  }
+  try {
+    _adminRealtimeChannel = _sb
+      .channel('admin-sync-' + _adminSBUser.id)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'cloud_backups',
+        filter: 'admin_id=eq.' + _adminSBUser.id
+      }, function(payload) {
+        try {
+          if (payload && payload.new && payload.new.data) {
+            _applyCloudData(payload.new.data, true);
+            var el = document.getElementById('cloud-sync-dot');
+            if (el) { el.style.background = '#a78bfa'; setTimeout(function(){ el.style.background='#22c55e'; }, 1500); }
+          }
+        } catch(e) {}
+      })
+      .subscribe(function(status) {
+        var dot = document.getElementById('cloud-sync-dot');
+        if (dot) dot.style.background = (status === 'SUBSCRIBED') ? '#22c55e' : '#fbbf24';
+      });
+  } catch(e) {
+    console.warn('Admin realtime subscription failed (ok in offline):', e);
+  }
+}
+
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
+  // Sync interval: 25s for everyone (≤30s = true real-time sync)
+  var SYNC_MS = 25000;
+  var _lastPushTs = 0;
   _cloudSyncTimer = setInterval(function() {
-    if (_getAdminDb() && isCloudActivated()) cloudBackupNow();
-  }, 120000);
+    if (!_getAdminDb() || !isCloudActivated()) return;
+    // PUSH: always push local changes up
+    cloudBackupNow(true); // silent push
+    // PULL: fetch remote and apply if newer
+    _adminCloudPull(true);
+  }, SYNC_MS);
+  // Start Realtime for instant push notifications from other devices
+  _startAdminRealtime();
 }
 
 // -- Supabase credential viewer --
@@ -10428,6 +10573,7 @@ function _viewerLogout() {
     _viewerRealtimeChannel = null;
   }
   // Stop safety-net poll
+  try { if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; } } catch(e) {}
   try { if (typeof _viewerPollTimer !== 'undefined' && _viewerPollTimer) { clearInterval(_viewerPollTimer); } } catch(e) {}
   safeLS.removeItem('sj_viewer_perms');
   safeLS.removeItem('sj_viewer_print');
@@ -10457,21 +10603,12 @@ function _viewerLoadData(adminId, projId) {
   if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
 
   function applyViewerData(d, silent) {
-    var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist);
+    var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist || d.cm_all);
     if (!hasData) {
       if (!silent) toast('No backup data found. Ask admin to run Backup Now.', 'err');
       return;
     }
-    if (d.db)         { sd(d.db); AD = ld(); }
-    if (d.meta)       sm(d.meta);
-    if (d.mats)       smat(d.mats);
-    if (d.dept)       sdept(d.dept);
-    if (d.prof)       sprof(d.prof);
-    if (d.machinery)  smach(d.machinery);
-    if (d.drawings)   sdrw(d.drawings);
-    if (d.budget)     sbgt(d.budget);
-    if (d.milestones) sms(d.milestones);
-    if (d.punchlist)  spl(d.punchlist);
+    _applyFullBackup(d);
     applyProfile();
     var rawPerms = safeLS.getItem('sj_viewer_perms');
     var perms = []; var canPrint = safeLS.getItem('sj_viewer_print') === '1';
@@ -10501,6 +10638,10 @@ function _viewerLoadData(adminId, projId) {
   }
 
   // ── Pull latest backup once ────────────────────────────────
+  if (typeof window._viewerPollTimer !== 'undefined' && window._viewerPollTimer) {
+    clearInterval(window._viewerPollTimer);
+    window._viewerPollTimer = null;
+  }
   var _viewerPollTimer = null;
 
   function fetchLatest(silent) {
@@ -10536,10 +10677,10 @@ function _viewerLoadData(adminId, projId) {
   // Initial load
   fetchLatest(false);
 
-  // Safety-net polling every 45s in case WebSocket realtime doesn't work
-  // (iOS Safari PWA background mode, restrictive networks, etc.)
+  // Safety-net polling every 25s (true cloud sync — ≤30s as required)
   if (_viewerPollTimer) clearInterval(_viewerPollTimer);
-  _viewerPollTimer = setInterval(function() { fetchLatest(true); }, 45000);
+  _viewerPollTimer = setInterval(function() { fetchLatest(true); }, 25000);
+  window._viewerPollTimer = _viewerPollTimer; // expose for logout cleanup
 
   // ── Realtime subscription — auto-refresh when admin saves ─────
   // Only create one channel; tear down old one if re-called
@@ -13629,45 +13770,25 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // ══════════════════════════════════════════════════════════════
-// 5. CLOUD SYNC — 10s FOR SUBSCRIBERS
+// 5. CLOUD SYNC — BIDIRECTIONAL PUSH + PULL ≤30s
 // ══════════════════════════════════════════════════════════════
 (function(){
-  // After login, check subscription; patch startAutoSync interval
-  var _origStartSync = window.startAutoSync;
-  window.startAutoSync = function() {
-    var freq = window._sbHasPro ? 10000 : 120000;
-    if (window._cloudSyncTimer) clearInterval(window._cloudSyncTimer);
-    window._cloudSyncTimer = setInterval(function() {
-      if (typeof _getAdminDb==='function' && _getAdminDb() && typeof isCloudActivated==='function' && isCloudActivated()) {
-        if (typeof cloudBackupNow==='function') cloudBackupNow();
-      }
-    }, freq);
-    // Show subscriber badge — hidden from UI, element kept for JS compat
-    var badge = document.getElementById('sett-sync-badge');
-    if (badge) {
-      // badge text intentionally not shown in UI
-    }
-  };
-  // Detect subscription from Supabase user metadata after auth check
+  // startAutoSync is already defined above with 25s bidirectional sync.
+  // This block just ensures subscription state is detected and sync starts.
   document.addEventListener('DOMContentLoaded', function(){
-    var _origCheck = window._checkSubscription || null;
-    // Sync badge element kept hidden in DOM for JS compat — not shown in UI
     var badge = document.createElement('div');
     badge.id = 'sett-sync-badge';
     badge.style.cssText = 'display:none';
     document.body.appendChild(badge);
   });
-  // Hook into post-login to detect pro
+  // Hook into post-login to auto-start sync when admin is verified
   var _origRefreshState = window.refreshCloudModalState;
   window.refreshCloudModalState = function() {
     if (_origRefreshState) _origRefreshState.apply(this, arguments);
     try {
-      var meta = window._adminSBUser && window._adminSBUser.user_metadata;
-      var isPro = meta && (meta.pro === true || meta.subscription === 'pro' || meta.plan === 'pro');
-      // Also check payment ID as proxy for subscription
-      var hasPaid = localStorage.getItem('cm_rzp_payment_id') || '';
-      if (isPro || hasPaid) {
-        window._sbHasPro = true;
+      var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+      var subActive = window._sbSubActive;
+      if (isAdmin && subActive) {
         if (typeof window.startAutoSync === 'function') window.startAutoSync();
       }
     } catch(e){}
