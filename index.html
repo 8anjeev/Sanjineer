@@ -5204,24 +5204,14 @@ function applyProfile() {
   var box = document.getElementById('app-logo-box');
   var logoImg = document.getElementById('app-logo-img');
   var logoFb  = document.getElementById('app-logo-fallback');
-  if (p && p.logo) {
-    if (logoImg) { logoImg.src = p.logo; logoImg.style.display = 'block'; logoImg.style.width='38px'; logoImg.style.height='38px'; logoImg.style.objectFit='cover'; }
-    if (logoFb)  { logoFb.style.display = 'none'; }
-    if (box) {
-      box.style.background  = 'transparent';
-      box.style.border      = 'none';
-      box.style.boxShadow   = 'none';
-      box.style.borderRadius = '12px';
-      box.style.padding     = '0';
-    }
-  } else {
-    // Reset to transparent (no bg on logo)
-    if (box) {
-      box.style.background  = 'transparent';
-      box.style.border      = 'none';
-      box.style.boxShadow   = 'none';
-      box.style.borderRadius = '12px';
-    }
+  // App UI header always shows GitHub app logo — user uploaded logo never appears here
+  // (user logo only appears on PDFs)
+  if (box) {
+    box.style.background  = 'transparent';
+    box.style.border      = 'none';
+    box.style.boxShadow   = 'none';
+    box.style.borderRadius = '12px';
+    box.style.padding     = '0';
   }
   // Apply saved header colour to app header
   setTimeout(applyHeaderColor, 50);
@@ -7414,18 +7404,13 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
   var prof=lprof()||{};
   var hColor = prof.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)';
   var defaultRight='<p style="font-size:13px;font-weight:800;color:white;line-height:1.3">'+reportTitle+'</p>'+'<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:4px">'+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'})+'</p>';
-  // PDF logo: user company logo if uploaded, else GitHub app logo
+  // PDF logo: user uploaded logo if set, else GitHub app logo — always 44px
   var companyLogoSrc = prof.logo || '';
   var appLogoSrc = 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
   var logoSrc = companyLogoSrc || appLogoSrc;
-  // PNG uploaded logo: 2x size but overflows header — background is transparent so it looks clean
-  var _isPng = (companyLogoSrc && companyLogoSrc.indexOf('data:image/png') === 0);
-  var logoSize = _isPng ? '88px' : '44px';
-  var logoHtml = _isPng
-    ? '<div style="width:44px;height:44px;overflow:visible;flex-shrink:0;position:relative"><img src="'+logoSrc+'" style="width:88px;height:88px;object-fit:contain;display:block;border-radius:0;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:transparent;" onerror="this.style.display=\'none\'"></div>'
-    : '<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;" onerror="this.style.display=\'none\'">';
-  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:visible;">'
-    +'<div style="text-align:left;display:flex;flex-direction:column;align-items:flex-start">'+logoHtml
+  var logoHtml = '<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
+    +'<div style="text-align:left">'+logoHtml
     +'<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:2px">app.sanjineer.in</p></div>'
     +'<div style="text-align:center"><p style="font-size:16px;font-weight:900;color:white;line-height:1">'+company+'</p>'
     +(showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+prof.address+'</p>' : (!showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:3px">'+prof.address+'</p>' : ''))
@@ -7510,13 +7495,10 @@ var p=pp(), now=new Date();
 var hc=p.headerColor||'linear-gradient(135deg,#4f46e5,#7c3aed)';
 var isGrad=hc.indexOf('gradient')!==-1;
 var solidColor=isGrad?'#4f46e5':hc;
-// PO PDF: show company logo if set, else app logo
+// PO PDF: user uploaded logo if set, else GitHub app logo — always 44px
 var companyLogoSrc = p.logo || '';
 var _poLogoSrc = companyLogoSrc || 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
-var _isPoPng = (companyLogoSrc && companyLogoSrc.indexOf('data:image/png') === 0);
-var logoHtml = _isPoPng
-  ? '<div style="width:44px;height:44px;overflow:visible;flex-shrink:0;position:relative"><img class="logo" src="'+_poLogoSrc+'" style="width:88px;height:88px;object-fit:contain;display:block;background:transparent;border-radius:0;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);" onerror="this.style.display=\'none\'"></div>'
-  : '<img class="logo" src="'+_poLogoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
+var logoHtml = '<img class="logo" src="'+_poLogoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
 return '<div class="hdr" style="border-bottom:3px solid '+solidColor+'"><div style="display:flex;align-items:center;gap:12px">'+logoHtml+'<div><div class="cn" style="color:'+solidColor+'">app.sanjineer.in</div><div class="csub" style="color:'+solidColor+'">Site Manager</div></div></div>'
 +'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+(p.company||'')+'</div>'+(p.address?'<div style="font-size:10px;color:#6b7280;margin-top:3px;font-weight:400">'+p.address+'</div>':'')+'</div>'
 +'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})+'</div></div></div>';
@@ -9889,10 +9871,9 @@ function _buildInvoiceHTML(inv){
   var adr = p.address  || '';
   var gno = p.gst      || '';
   // Invoice: no app logo, no Sanjineer branding — only company info
+  // Invoice: user uploaded logo if set — 56px, no branding otherwise
   var logoHtml = p.logo
-    ? (p.logo.indexOf('data:image/png') === 0
-        ? '<div style="width:56px;height:56px;overflow:visible;position:relative;margin-bottom:8px"><img src="'+p.logo+'" style="width:112px;height:112px;object-fit:contain;display:block;border-radius:0;background:transparent;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);" onerror="this.style.display=\'none\'"></div>'
-        : '<img src="'+p.logo+'" style="width:56px;height:56px;object-fit:contain;display:block;border-radius:8px;margin-bottom:8px;background:transparent" onerror="this.style.display=\'none\'">')
+    ? '<img src="'+p.logo+'" style="width:56px;height:56px;object-fit:contain;display:block;border-radius:8px;margin-bottom:8px;background:transparent" onerror="this.style.display=\'none\'">'
     : '';
 
   var lineRows = inv.lines.map(function(l){
