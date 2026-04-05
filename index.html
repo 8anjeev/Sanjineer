@@ -8774,6 +8774,46 @@ function boqCopyYesterdayToToday(){
   });
 }
 
+/* ── BOQ Auto Daily Reset at Midnight ── */
+// Runs on startup and every minute. At 00:00 AM when date changes,
+// today's qty is automatically added to prevQty and todayQty is reset to 0.
+function boqCheckAndRunDailyReset() {
+  try {
+    var today = ist(); // IST today's date string e.g. "2025-04-05"
+    var lastResetDate = safeLS.getItem('cm_boq_last_reset_date') || '';
+    if (!lastResetDate) {
+      // First launch — just record today, no rollover yet
+      safeLS.setItem('cm_boq_last_reset_date', today);
+      return;
+    }
+    if (lastResetDate === today) return; // same day, nothing to do
+    // Date has changed — run the rollover (same logic as manual "Next Day" button)
+    var data = boqLoad();
+    var hadWork = false;
+    data.sections.forEach(function(sec) {
+      sec.items.forEach(function(item) {
+        var tq = parseFloat(item.todayQty) || 0;
+        if (tq > 0) hadWork = true;
+        item.prevQty = (parseFloat(item.prevQty) || 0) + tq;
+        item.todayQty = 0;
+        var tender = parseFloat(item.tenderQty) || 0;
+        if (tender > 0) {
+          item.prevDone = Math.min(100, Math.round(item.prevQty / tender * 100 * 10) / 10);
+          item.todayDone = 0;
+        }
+      });
+    });
+    boqSave(data);
+    safeLS.setItem('cm_boq_last_reset_date', today);
+    if (hadWork) {
+      try { boqRender(); } catch(e) {}
+      // Trigger cloud backup so other devices get the reset too
+      setTimeout(function() { if (typeof cloudBackupNow === 'function') cloudBackupNow(true); }, 1000);
+      toast('📅 BOQ daily reset: Yesterday\'s work moved to cumulative!', 'ok');
+    }
+  } catch(e) {}
+}
+
 /* ── File input (iOS/Edge fix: pre-load XLSX before picker) ── */
 function boqTriggerFileInput(){
   if(typeof XLSX==='undefined'){
@@ -10315,15 +10355,30 @@ var _lastCloudTimestamp = 0;  // track remote lastSync to detect remote changes
 function _applyCloudData(d, silent) {
   if (!d) return;
   var remoteTs = d.lastSync || 0;
-  if (remoteTs && remoteTs <= _lastCloudTimestamp) return; // already applied
+  // FIX: use strict less-than so equal timestamps still apply (avoids skipping same-ms pushes)
+  if (remoteTs && remoteTs < _lastCloudTimestamp) return; // already applied
   _lastCloudTimestamp = remoteTs;
   _applyFullBackup(d);
   applyProfile();
   try { renderDashboard(); } catch(e) {}
+  // FIX: re-render the currently visible tab so changes appear instantly without tab-switch
+  try {
+    var curTab = document.querySelector('.tab-btn.active');
+    if (curTab) {
+      var tabName = curTab.getAttribute('data-tab');
+      if (tabName && typeof switchTab === 'function') switchTab(tabName);
+    }
+  } catch(e) {}
   var el = document.getElementById('cloud-sync-time');
   var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
   if (el) el.textContent = 'Pulled: ' + now;
-  if (!silent) toast('🔄 Cloud data updated from another device!', 'ok');
+  if (!silent) {
+    toast('🔄 Cloud data updated from another device!', 'ok');
+  } else {
+    // Flash sync dot amber → green to show silent pull happened
+    var dot = document.getElementById('cloud-sync-dot');
+    if (dot) { dot.style.background = '#a78bfa'; setTimeout(function(){ dot.style.background = '#22c55e'; }, 1500); }
+  }
 }
 
 function _adminCloudPull(silent) {
@@ -10378,9 +10433,8 @@ function _startAdminRealtime() {
 
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
-  // Sync interval: 25s for everyone (≤30s = true real-time sync)
-  var SYNC_MS = 25000;
-  var _lastPushTs = 0;
+  // FIX: 10s interval (was 25s) so polling fallback is near-instant when realtime misses
+  var SYNC_MS = 10000;
   _cloudSyncTimer = setInterval(function() {
     if (!_getAdminDb() || !isCloudActivated()) return;
     // PUSH: always push local changes up
@@ -13999,6 +14053,12 @@ document.addEventListener('DOMContentLoaded', function(){
   document.addEventListener('sanjineer-tab-changed', function(e) {
     if (_tourOpen) setTimeout(_renderTour, 150);
   });
+
+  // BOQ Auto Daily Reset — check immediately on load then every minute
+  setTimeout(function() {
+    boqCheckAndRunDailyReset();
+    setInterval(boqCheckAndRunDailyReset, 60000); // every 60 seconds
+  }, 3000); // small delay to let app fully initialise
 });
 
 // ══════════════════════════════════════════════════════════════
