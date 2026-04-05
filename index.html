@@ -5141,10 +5141,12 @@ function ins(o) {
 }
 function upd(id, o) {
   var i = AD.findIndex(function(d){ return d.__id === id; });
-  if (i >= 0) { Object.keys(o).forEach(function(k){ AD[i][k] = o[k]; }); sd(AD); }
+  if (i >= 0) { Object.keys(o).forEach(function(k){ AD[i][k] = o[k]; }); AD[i].__ts = Date.now(); sd(AD); }
   return AD[i];
 }
 function del(id) {
+  // Record tombstone BEFORE removing — so other devices know this was intentionally deleted
+  _addTombstone(id, Date.now());
   AD = AD.filter(function(d){ return d.__id !== id; }); sd(AD);
 }
 
@@ -8031,7 +8033,7 @@ function addMachineSession(){
   if(st&&en){var s=st.split(':'),e=en.split(':');hrs=Math.max(0,(parseInt(e[0])*60+parseInt(e[1]))-(parseInt(s[0])*60+parseInt(s[1])))/60;}
   var store=lmach();
   if(!store[d])store[d]=[];
-  store[d].push({id:'m'+Date.now(),name:name,operator:op,start:st,end:en,hours:hrs,rate:rate,cost:hrs*rate,notes:notes});
+  var _mts=Date.now(); store[d].push({id:'m'+_mts,__ts:_mts,name:name,operator:op,start:st,end:en,hours:hrs,rate:rate,cost:hrs*rate,notes:notes});
   smach(store);
   ['mach-name','mach-operator','mach-start','mach-end','mach-rate','mach-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   renderMachSessions(d);
@@ -8066,6 +8068,8 @@ function renderMachSessions(d){
 function delMachSession(d,id){
   askDel('Delete this machinery session?', function(){
     var store=lmach();
+    // Record tombstone so other devices respect this delete
+    _addTombstone('mach__'+id, Date.now());
     if(store[d])store[d]=store[d].filter(function(s){return s.id!==id;});
     smach(store);renderMachSessions(d);renderMachMonthly();toast('Deleted','ok');
   });
@@ -10267,6 +10271,86 @@ function _applyFullBackup(d) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+// TOMBSTONE STORE — tracks intentional deletes with timestamps
+// So Device B's delete always wins over Device A's old data push
+// ══════════════════════════════════════════════════════════════
+var TOMB_KEY = 'cm_tombstones';
+function _loadTombstones() {
+  try { return JSON.parse(safeLS.getItem(TOMB_KEY) || '{}'); } catch(e) { return {}; }
+}
+function _saveTombstones(t) {
+  safeLS.setItem(TOMB_KEY, JSON.stringify(t));
+}
+function _addTombstone(id, ts) {
+  var t = _loadTombstones();
+  // Only update if this delete is newer than a previously recorded delete
+  if (!t[id] || ts > t[id]) { t[id] = ts; _saveTombstones(t); }
+}
+function _mergeTombstones(localT, remoteT) {
+  // Union: keep the newest delete timestamp for each id
+  var merged = JSON.parse(JSON.stringify(localT || {}));
+  Object.keys(remoteT || {}).forEach(function(id) {
+    if (!merged[id] || remoteT[id] > merged[id]) merged[id] = remoteT[id];
+  });
+  return merged;
+}
+
+// ── Smart per-record merge for array data (attendance, expenses, etc.) ──
+// Rule: newest __ts wins; if tombstone for that id is newer than __ts → deleted wins
+function _mergeRecordArrays(localArr, remoteArr, tombstones) {
+  var map = {};
+  // Index local records by __id
+  (localArr || []).forEach(function(r) {
+    if (r.__id) map[r.__id] = r;
+  });
+  // Merge remote: keep if newer __ts and not tombstoned
+  (remoteArr || []).forEach(function(r) {
+    if (!r.__id) return;
+    var tomb = tombstones[r.__id] || 0;
+    if (tomb >= (r.__ts || 0)) return; // deleted — skip
+    var local = map[r.__id];
+    if (!local || (r.__ts || 0) > (local.__ts || 0)) {
+      map[r.__id] = r; // remote is newer
+    }
+  });
+  // Filter out anything tombstoned
+  return Object.values(map).filter(function(r) {
+    var tomb = tombstones[r.__id] || 0;
+    return tomb < (r.__ts || 0);
+  });
+}
+
+// ── Smart merge for machinery store (keyed by date → array of sessions) ──
+function _mergeMachinery(local, remote, tombstones) {
+  var merged = JSON.parse(JSON.stringify(local || {}));
+  Object.keys(remote || {}).forEach(function(date) {
+    var rSessions = remote[date] || [];
+    var lSessions = merged[date] || [];
+    // Build map of local sessions by id
+    var lMap = {};
+    lSessions.forEach(function(s) { if (s.id) lMap[s.id] = s; });
+    rSessions.forEach(function(s) {
+      if (!s.id) return;
+      var tombKey = 'mach__' + s.id;
+      var tomb = tombstones[tombKey] || 0;
+      if (tomb >= (s.__ts || 0)) return; // deleted on another device — skip
+      var local = lMap[s.id];
+      if (!local || (s.__ts || 0) > (local.__ts || 0)) {
+        lMap[s.id] = s; // remote session is newer
+      }
+    });
+    // Filter out tombstoned sessions
+    merged[date] = Object.values(lMap).filter(function(s) {
+      var tombKey = 'mach__' + s.id;
+      var tomb = tombstones[tombKey] || 0;
+      return tomb < (s.__ts || 0);
+    });
+    if (merged[date].length === 0) delete merged[date];
+  });
+  return merged;
+}
+
 // -- Backup Now (Supabase) — FETCH BEFORE PUSH pattern --
 // Step 1: Fetch latest from cloud
 // Step 2: If cloud is newer, absorb it (apply to local) first
@@ -10315,7 +10399,8 @@ function cloudBackupNow(silent) {
       },
       lastSync: Date.now(),
       syncedBy: _adminSBUser.email,
-      version: '3.0'
+      version: '3.0',
+      tombstones: _loadTombstones()  // send tombstones so other devices respect deletes
     };
   }
 
@@ -10341,13 +10426,38 @@ function cloudBackupNow(silent) {
     .single()
     .then(function(fetchResult) {
       var cloudData = (fetchResult.data && fetchResult.data.data) ? fetchResult.data.data : null;
-      var cloudTs   = cloudData ? (cloudData.lastSync || 0) : 0;
-      // Step 2: If cloud has changes we haven't seen, absorb them silently first
-      if (cloudTs > _lastCloudTimestamp) {
-        _applyFullBackup(cloudData);
-        _lastCloudTimestamp = cloudTs;
+
+      if (cloudData) {
+        // Step 2: Merge tombstones first — union of local + remote deletes
+        var localTombs  = _loadTombstones();
+        var remoteTombs = cloudData.tombstones || {};
+        var mergedTombs = _mergeTombstones(localTombs, remoteTombs);
+        _saveTombstones(mergedTombs); // save merged tombstones locally
+
+        // Step 3: Smart per-record merge — newest timestamp wins, tombstone beats all
+        // Main records array (attendance, expenses, materials log)
+        var localDb    = ld();
+        var remoteDb   = cloudData.db || [];
+        var mergedDb   = _mergeRecordArrays(localDb, remoteDb, mergedTombs);
+        // Only write back if merge changed something (avoid triggering push loop)
+        if (JSON.stringify(mergedDb) !== JSON.stringify(localDb)) {
+          // Write directly to storage — bypass sd() to avoid triggering _scheduleCloudPush
+          try { safeLS.setItem('cm_db', JSON.stringify(mergedDb)); AD = mergedDb; } catch(e) {}
+        }
+
+        // Machinery — keyed by date
+        var localMach  = lmach();
+        var remoteMach = cloudData.machinery || {};
+        var mergedMach = _mergeMachinery(localMach, remoteMach, mergedTombs);
+        if (JSON.stringify(mergedMach) !== JSON.stringify(localMach)) {
+          try { safeLS.setItem('cm_machinery', JSON.stringify(mergedMach)); } catch(e) {}
+        }
+
+        // Update _lastCloudTimestamp so _adminCloudPull doesn't re-apply this
+        _lastCloudTimestamp = cloudData.lastSync || _lastCloudTimestamp;
       }
-      // Step 3+4: Build payload from local (which now includes merged cloud base) and push
+
+      // Step 4: Build payload from merged local state and push
       _doPush(_buildLocalPayload());
     })
     .catch(function() {
@@ -10381,10 +10491,28 @@ var _lastCloudTimestamp = 0;  // track remote lastSync to detect remote changes
 function _applyCloudData(d, silent) {
   if (!d) return;
   var remoteTs = d.lastSync || 0;
-  // FIX: use strict less-than so equal timestamps still apply (avoids skipping same-ms pushes)
   if (remoteTs && remoteTs < _lastCloudTimestamp) return; // already applied
   _lastCloudTimestamp = remoteTs;
-  _applyFullBackup(d);
+
+  // Smart merge: tombstones + per-record timestamps — same logic as cloudBackupNow
+  var localTombs  = _loadTombstones();
+  var remoteTombs = d.tombstones || {};
+  var mergedTombs = _mergeTombstones(localTombs, remoteTombs);
+  _saveTombstones(mergedTombs);
+
+  // Merge main records
+  var mergedDb = _mergeRecordArrays(ld(), d.db || [], mergedTombs);
+  try { safeLS.setItem('cm_db', JSON.stringify(mergedDb)); AD = mergedDb; } catch(e) {}
+
+  // Merge machinery
+  var mergedMach = _mergeMachinery(lmach(), d.machinery || {}, mergedTombs);
+  try { safeLS.setItem('cm_machinery', JSON.stringify(mergedMach)); } catch(e) {}
+
+  // Apply everything else (settings, profile, BOQ, etc.) from cloud as before
+  var dMerged = JSON.parse(JSON.stringify(d));
+  dMerged.db = mergedDb;
+  dMerged.machinery = mergedMach;
+  _applyFullBackup(dMerged);
   applyProfile();
   try { renderDashboard(); } catch(e) {}
   // FIX: re-render the currently visible tab so changes appear instantly without tab-switch
