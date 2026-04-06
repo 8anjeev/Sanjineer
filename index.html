@@ -1511,7 +1511,7 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
 <header class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
-    <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:-3px">
+    <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:2px">
       <div style="display:flex;align-items:center;gap:4px">
         <!-- Logo box -->
         <div id="app-logo-box" style="width:38px;height:38px;flex-shrink:0;background:transparent;padding:0;overflow:hidden;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:12px;">
@@ -7397,9 +7397,12 @@ function pp(){ return lprof()||{company:'',engineer:''}; }
 // ============================================================
 function _pdfBaseStyle(){
   return '*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}'+
-    'body{background:#fff;color:#1f2937;font-size:12px;padding:10px 28px 24px 28px;max-width:900px;margin:0 auto}'+
+    'body{background:#fff;color:#1f2937;font-size:12px;padding:6px 18px 12px 18px;max-width:900px;margin:0 auto}'+
     '.no-print{display:block}'+
-    '@media print{.no-print{display:none!important}html,body{margin:0!important;padding:0!important;max-width:none!important}.content{zoom:0.62}@page{margin:10mm;size:A4}'+
+    '.sec-title{text-align:center;font-size:14px;font-weight:700;padding:3px 14px;margin:5px auto 3px;width:fit-content;display:block}'+
+    'table th{font-size:12px!important;font-weight:700!important;padding:4px 6px!important}'+
+    'table td{font-size:12px!important;font-weight:400!important;padding:4px 6px!important}'+
+    '@media print{.no-print{display:none!important}html,body{margin:0!important;padding:0!important;max-width:none!important}.content{zoom:0.62}@page{margin:8mm;size:A4}'+
     '*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}}';
 }
 function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
@@ -7409,8 +7412,10 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
   // PDF logo: user uploaded logo if set, else GitHub app logo — always 44px
   var companyLogoSrc = prof.logo || '';
   var appLogoSrc = 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
+  var _isUserLogo = !!companyLogoSrc;
   var logoSrc = companyLogoSrc || appLogoSrc;
-  var logoHtml = '<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">';
+  var _logoSz = _isUserLogo ? '44px' : '52px';
+  var logoHtml = '<img src="'+logoSrc+'" style="width:'+_logoSz+';height:'+_logoSz+';object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">';
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
     +'<div style="text-align:left">'+logoHtml
     +'<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:2px">app.sanjineer.in</p></div>'
@@ -7458,14 +7463,14 @@ var _barBg=(_p.headerColor&&_p.headerColor.indexOf('gradient')!==-1)?_p.headerCo
 return ':root{--hc:'+_hc+'}'
 +'*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}'
 /* Screen: 50% bigger than before (was zoom:0.65 font:8px → now font:12px no zoom) */
-+'body{background:#fff;color:#1f2937;font-size:12px;padding:10px 28px 24px 28px}'
++'body{background:#fff;color:#1f2937;font-size:12px;padding:6px 18px 12px 18px}'
 +'.bar{position:fixed;top:0;left:0;right:0;background:'+_barBg+';color:white;display:flex;align-items:center;gap:12px;padding:18px 24px;z-index:9999}'
 +'.bar button{padding:12px 28px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700}'
 +'.bb{background:rgba(255,255,255,.2);color:white}.bp{background:#f59e0b;color:#1f2937}.bx{background:rgba(239,68,68,.25);color:white;border:1px solid rgba(239,68,68,.5)!important;min-width:52px;}'
 /* Extra space so content clears the taller bar */
 +'@media screen{.content{margin-top:126px}}'
 +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--hc,#4f46e5);padding-bottom:12px;margin-bottom:16px}'
-+'.logo{width:44px;height:44px;background:transparent;border-radius:10px;overflow:hidden;padding:0;display:flex;align-items:center;justify-content:center;font-size:22px}.logo img{width:44px;height:44px;object-fit:contain;display:block;border-radius:0}'
++'.logo{background:transparent;border-radius:10px;overflow:hidden;padding:0;display:flex;align-items:center;justify-content:center;font-size:22px}.logo img{object-fit:contain;display:block;border-radius:0}.logo-user img{width:44px;height:44px}.logo-app img{width:88px;height:88px}'
 +'.cn{font-size:18px;font-weight:900;color:var(--hc,#4f46e5)}.csub{font-size:9px;color:var(--hc,#7c3aed);font-weight:700}'
 +'.hcname{font-size:16px;font-weight:900;color:#1e1b4b;text-align:center}.hceng{font-size:11px;font-weight:700;color:#7c3aed;text-align:center}'
 +'.rt{font-size:14px;font-weight:800;color:#1e1b4b;text-align:right}.rd{font-size:12px;font-weight:700;text-align:right;margin-top:3px}'
@@ -7476,14 +7481,15 @@ return ':root{--hc:'+_hc+'}'
 +'.scv{font-size:18px;font-weight:900;margin-top:2px}'
 +'.sec{margin-bottom:16px}'
 +'.st{font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;padding:4px 10px;border-left:3px solid #9ca3af;margin-bottom:0}'
-+'table{width:100%;border-collapse:collapse;font-size:11px}'
++'table{width:100%;border-collapse:collapse;font-size:12px}'
++'.sec-title,.st{text-align:center;font-size:14px;font-weight:700;padding:3px 14px;margin:5px auto 3px;width:fit-content;display:block}'
 +'thead tr{background:#f3f4f6;color:#374151}'
-+'thead th{padding:5px 10px;text-align:left;font-weight:700;font-size:10px;border-bottom:1.5px solid #d1d5db}'
++'thead th{padding:4px 6px;text-align:left;font-weight:700;font-size:12px;border-bottom:1.5px solid #d1d5db}'
 +'tbody tr{border-bottom:1px solid #f3f4f6}'
 +'tbody tr:nth-child(even){background:#f9fafb}'
-+'tbody td{padding:6px 10px;color:#374151}'
++'tbody td{padding:4px 6px;color:#374151;font-size:12px;font-weight:400}'
 +'tfoot tr{background:#f3f4f6;font-weight:700}'
-+'tfoot td{padding:5px 10px;color:#374151}'
++'tfoot td{padding:4px 6px;color:#374151;font-size:12px}'
 +'.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}'
 +'.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}'
 +'.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}'
@@ -7499,8 +7505,10 @@ var isGrad=hc.indexOf('gradient')!==-1;
 var solidColor=isGrad?'#4f46e5':hc;
 // PO PDF: user uploaded logo if set, else GitHub app logo — always 44px
 var companyLogoSrc = p.logo || '';
+var _isUserLogo2 = !!companyLogoSrc;
 var _poLogoSrc = companyLogoSrc || 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
-var logoHtml = '<img class="logo" src="'+_poLogoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
+var _poLogoSz = _isUserLogo2 ? '44px' : '88px';
+var logoHtml = '<img class="logo" src="'+_poLogoSrc+'" style="width:'+_poLogoSz+';height:'+_poLogoSz+';object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
 return '<div class="hdr" style="border-bottom:3px solid '+solidColor+'"><div style="display:flex;align-items:center;gap:12px">'+logoHtml+'<div><div class="cn" style="color:'+solidColor+'">app.sanjineer.in</div><div class="csub" style="color:'+solidColor+'">Site Manager</div></div></div>'
 +'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+(p.company||'')+'</div>'+(p.address?'<div style="font-size:10px;color:#6b7280;margin-top:3px;font-weight:400">'+p.address+'</div>':'')+'</div>'
 +'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})+'</div></div></div>';
@@ -7679,16 +7687,16 @@ var company=profData.company||'Sanjineer';
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+worker.name+'</title><style>'+pcs()+'\n'
 +'body{font-size:12px}*{font-family:\'Outfit\',Arial,sans-serif}'
 +'table{width:100%;border-collapse:collapse}'
-+'th{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:8px 10px;font-weight:700;text-align:left}'
-+'td{padding:7px 10px;border-bottom:1px solid #e5e7eb}'
-+'tfoot td{background:#f0f4ff;font-weight:700}'
++'th{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:4px 6px;font-weight:700;font-size:12px;text-align:left}'
++'td{padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:400}'
++'tfoot td{background:#f0f4ff;font-weight:700;font-size:12px}'
 +'</style></head><body>'
 +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance \u2014 '+worker.name+'</span><button class="bp" onclick="window.print()">\u2756 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
 +'<div class="content">'
 +_pdfHeader('app.sanjineer.in',company,'',
   '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+worker.name+'</p>'
   +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+worker.category+(worker.team_name?' &middot; '+worker.team_name:'')+'</p>'
-  +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Reg: '+fc(parseFloat(worker.hourly_wage)||0)+'/hr'+(parseFloat(worker.ot_rate)>0?' &nbsp;|&nbsp; OT: '+fc(parseFloat(worker.ot_rate))+'/hr':'')+'</p>'
+  +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Reg- '+fc((parseFloat(worker.hourly_wage)||0)*8)+'/day'+(parseFloat(worker.ot_rate)>0?' &nbsp;|&nbsp; OT- '+fc(parseFloat(worker.ot_rate))+'/hr':'')+'</p>'
   +'<p style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px">'+mL+'</p>'
 )
 +(allAtt.length
@@ -7708,24 +7716,24 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2
   var rowBal=pay-adv;
   var hrsDisplay=otHrs>0?hrs+'<span style="color:#7c3aed;font-weight:700">+'+otHrs+'h</span>':''+hrs+'h';
   return '<tr>'
-    +'<td style="padding:7px 10px;font-weight:700;color:#1f2937">'+fdl(a.date)+'</td>'
-    +'<td style="text-align:center;padding:7px 10px;color:#4f46e5;font-weight:700">'+hrsDisplay+'</td>'
-    +'<td style="text-align:right;padding:7px 10px;color:#059669;font-weight:700">'+fc(pay)+'</td>'
-    +'<td style="text-align:right;padding:7px 10px;color:#dc2626;font-weight:600">'+fc(adv)+'</td>'
-    +'<td style="text-align:right;padding:7px 10px;font-weight:700;color:'+(rowBal>=0?'#1d4ed8':'#dc2626')+'">'+fc(rowBal)+'</td>'
+    +'<td style="padding:4px 6px;font-weight:700;color:#1f2937;font-size:12px">'+fdl(a.date)+'</td>'
+    +'<td style="text-align:center;padding:4px 6px;color:#4f46e5;font-weight:700;font-size:12px">'+hrsDisplay+'</td>'
+    +'<td style="text-align:right;padding:4px 6px;color:#059669;font-weight:400;font-size:12px">'+fc(pay)+'</td>'
+    +'<td style="text-align:right;padding:4px 6px;color:#dc2626;font-weight:400;font-size:12px">'+fc(adv)+'</td>'
+    +'<td style="text-align:right;padding:4px 6px;font-weight:700;font-size:12px;color:'+(rowBal>=0?'#1d4ed8':'#dc2626')+'">'+fc(rowBal)+'</td>'
     +'</tr>';
 }).join('')+'</tbody>'
 +'<tfoot>'
 +'<tr style="background:#f0f4ff">'
-+'<td style="padding:8px 10px;font-weight:900;color:#1e1b4b">TOTAL</td>'
-+'<td style="text-align:center;padding:8px 10px;font-weight:900;color:#4f46e5">'+(totalOtHrs>0?totalHrs.toFixed(1)+'+'+totalOtHrs.toFixed(1)+'h':totalHrs.toFixed(1)+'h')+'</td>'
-+'<td style="text-align:right;padding:8px 10px;font-weight:900;color:#059669">'+fc(totalPay)+'</td>'
-+'<td style="text-align:right;padding:8px 10px;font-weight:900;color:#dc2626">'+fc(totalAdv)+'</td>'
-+'<td style="text-align:right;padding:8px 10px;font-weight:900;color:'+(bal>=0?'#1d4ed8':'#dc2626')+'">'+fc(bal)+'</td>'
++'<td style="padding:4px 6px;font-weight:900;color:#1e1b4b;font-size:12px">TOTAL</td>'
++'<td style="text-align:center;padding:4px 6px;font-weight:900;color:#4f46e5;font-size:12px">'+(totalOtHrs>0?totalHrs.toFixed(1)+'+'+totalOtHrs.toFixed(1)+'h':totalHrs.toFixed(1)+'h')+'</td>'
++'<td style="text-align:right;padding:4px 6px;font-weight:900;color:#059669;font-size:12px">'+fc(totalPay)+'</td>'
++'<td style="text-align:right;padding:4px 6px;font-weight:900;color:#dc2626;font-size:12px">'+fc(totalAdv)+'</td>'
++'<td style="text-align:right;padding:4px 6px;font-weight:900;color:'+(bal>=0?'#1d4ed8':'#dc2626')+';font-size:12px">'+fc(bal)+'</td>'
 +'</tr>'
 +'<tr style="background:'+(bal>=0?'#f0fdf4':'#fff1f2')+'">'
-+'<td colspan="4" style="padding:10px;font-weight:900;font-size:13px;color:#1e1b4b">NET PAYABLE</td>'
-+'<td style="text-align:right;padding:10px;font-weight:900;font-size:16px;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</td>'
++'<td colspan="4" style="padding:5px 6px;font-weight:900;font-size:14px;text-align:center;color:#1e1b4b">NET PAYABLE</td>'
++'<td style="text-align:right;padding:5px 6px;font-weight:900;font-size:14px;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</td>'
 +'</tr></tfoot></table>'
 : '<p style="padding:16px;color:#9ca3af;text-align:center">No attendance records for '+mL+'</p>')
 +pftr()+'</div></body></html>';
