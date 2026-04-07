@@ -1511,7 +1511,7 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
 <header class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
-    <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:2px">
+    <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:-3px">
       <div style="display:flex;align-items:center;gap:4px">
         <!-- Logo box -->
         <div id="app-logo-box" style="width:38px;height:38px;flex-shrink:0;background:transparent;padding:0;overflow:hidden;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:12px;">
@@ -6468,23 +6468,12 @@ function printExpenses(){
     +'<button class="bp" onclick="window.print()">&#128438; Print</button>'
     +'<button class="bx" onclick="window.close()">&#x2715;</button></div>'
     +'<div class="content">'
-    // Header: Logo+AppName LEFT | Company CENTER | Expenses/Month/Total RIGHT
-    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:linear-gradient(135deg,#059669,#10b981,#14b8a6);border-radius:12px;margin-bottom:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact">'
-    +'<div style="text-align:left">'
-    +'<div style="width:32px;height:32px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:3px">&#127959;&#65039;</div>'
-    +'<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-bottom:2px">app.sanjineer.in</p>'
-    +'<p style="font-size:9px;color:rgba(255,255,255,0.75);line-height:1;margin-top:2px">Site Manager</p>'
-    +'</div>'
-    +'<div style="text-align:center">'
-    +'<p style="font-size:15px;font-weight:900;color:white;line-height:1">'+(prof.company||'')+'</p>'
-    +(prof.engineer?'<p style="font-size:10px;color:rgba(255,255,255,0.85);margin-top:3px">'+prof.engineer+'</p>':'')
-    +'</div>'
-    +'<div style="text-align:right">'
-    +'<p style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:.04em;line-height:1">Expenses</p>'
-    +'<p style="font-size:14px;font-weight:900;color:white;line-height:1.3;margin-top:3px">'+monthLabel+'</p>'
-    +'<p style="font-size:11px;font-weight:700;color:#d1fae5;margin-top:3px">Total: '+fc(totalMat)+'</p>'
-    +'</div>'
-    +'</div>'
+    // Header: use shared _pdfHeader (logo rule + user header color)
+    +_pdfHeader('app.sanjineer.in', prof.company||'Sanjineer', 'Expenses',
+      '<p style="font-size:13px;font-weight:800;color:white;line-height:1">Expense Ledger</p>'
+      +'<p style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.9);margin-top:3px">'+monthLabel+'</p>'
+      +'<p style="font-size:11px;color:#d1fae5;margin-top:3px">Total: '+fc(totalMat)+'</p>'
+    )
     // Table
     +'<table><thead><tr>'
     +'<th>Date</th>'
@@ -7399,7 +7388,7 @@ function _pdfBaseStyle(){
   return '*{margin:0;padding:0;box-sizing:border-box;font-family:"Segoe UI",Arial,sans-serif}'+
     'body{background:#fff;color:#1f2937;font-size:12px;padding:6px 18px 12px 18px;max-width:900px;margin:0 auto}'+
     '.no-print{display:block}'+
-    '.sec-title{text-align:center;font-size:14px;font-weight:700;padding:3px 14px;margin:5px auto 3px;width:fit-content;display:block}'+
+    '.sec-title{display:table;margin:7px auto 4px auto;font-size:13px;font-weight:700;color:#374151;background:#f0f2f5;padding:3px 14px 3px 10px;border-left:4px solid #9ca3af;border-radius:0 99px 99px 0;white-space:nowrap}'+
     'table th{font-size:12px!important;font-weight:700!important;padding:4px 6px!important}'+
     'table td{font-size:12px!important;font-weight:400!important;padding:4px 6px!important}'+
     '@media print{.no-print{display:none!important}html,body{margin:0!important;padding:0!important;max-width:none!important}.content{zoom:0.62}@page{margin:8mm;size:A4}'+
@@ -7409,20 +7398,26 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
   var prof=lprof()||{};
   var hColor = prof.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)';
   var defaultRight='<p style="font-size:13px;font-weight:800;color:white;line-height:1.3">'+reportTitle+'</p>'+'<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:4px">'+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'})+'</p>';
-  // PDF logo: user uploaded logo if set, else GitHub app logo — always 44px
   var companyLogoSrc = prof.logo || '';
   var appLogoSrc = 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
   var _isUserLogo = !!companyLogoSrc;
   var logoSrc = companyLogoSrc || appLogoSrc;
-  var _logoSz = _isUserLogo ? '44px' : '52px';
-  var logoHtml = '<img src="'+logoSrc+'" style="width:'+_logoSz+';height:'+_logoSz+';object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">';
-  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
-    +'<div style="text-align:left">'+logoHtml
-    +'<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:2px">app.sanjineer.in</p></div>'
-    +'<div style="text-align:center"><p style="font-size:16px;font-weight:900;color:white;line-height:1">'+company+'</p>'
+  var logoHtml, leftStyle;
+  if(_isUserLogo){
+    logoHtml = '<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">'
+             + '<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:3px">app.sanjineer.in</p>';
+    leftStyle = 'display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;flex-shrink:0;';
+  } else {
+    logoHtml = '<img src="'+logoSrc+'" style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:125%;width:auto;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">'
+             + '<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;position:relative;z-index:1;margin-top:auto;">app.sanjineer.in</p>';
+    leftStyle = 'display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;align-self:stretch;margin:-14px 0;padding:14px 0 4px 0;position:relative;overflow:visible;min-width:80px;flex-shrink:0;';
+  }
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:14px;overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
+    +'<div style="'+leftStyle+'">'+logoHtml+'</div>'
+    +'<div style="text-align:center;flex:1;padding:0 12px"><p style="font-size:16px;font-weight:900;color:white;line-height:1">'+company+'</p>'
     +(showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+prof.address+'</p>' : (!showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:3px">'+prof.address+'</p>' : ''))
     +(showEngineer && prof.engineer ? '<p style="font-size:10px;color:rgba(255,255,255,0.85);margin-top:2px">'+prof.engineer+'</p>' : '')
-    +'</div><div style="text-align:right">'+(rightHtml||defaultRight)+'</div></div>';
+    +'</div><div style="text-align:right;flex-shrink:0">'+(rightHtml||defaultRight)+'</div></div>';
 }
 function _pdfFooter(){
   // Encode saved signatures as JSON for print window use
@@ -7480,9 +7475,9 @@ return ':root{--hc:'+_hc+'}'
 +'.scl{font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase}'
 +'.scv{font-size:18px;font-weight:900;margin-top:2px}'
 +'.sec{margin-bottom:16px}'
-+'.st{font-size:11px;font-weight:700;color:#374151;background:#f3f4f6;padding:4px 10px;border-left:3px solid #9ca3af;margin-bottom:0}'
++'.st{display:table;margin:7px auto 4px auto;font-size:13px;font-weight:700;color:#374151;background:#f0f2f5;padding:3px 14px 3px 10px;border-left:4px solid #9ca3af;border-radius:0 99px 99px 0;white-space:nowrap}'
 +'table{width:100%;border-collapse:collapse;font-size:12px}'
-+'.sec-title,.st{text-align:center;font-size:14px;font-weight:700;padding:3px 14px;margin:5px auto 3px;width:fit-content;display:block}'
++'.sec-title{display:table;margin:7px auto 4px auto;font-size:13px;font-weight:700;color:#374151;background:#f0f2f5;padding:3px 14px 3px 10px;border-left:4px solid #9ca3af;border-radius:0 99px 99px 0;white-space:nowrap}'
 +'thead tr{background:#f3f4f6;color:#374151}'
 +'thead th{padding:4px 6px;text-align:left;font-weight:700;font-size:12px;border-bottom:1.5px solid #d1d5db}'
 +'tbody tr{border-bottom:1px solid #f3f4f6}'
@@ -7583,14 +7578,14 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
 +(meta.weather||meta.status ? '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">'+(meta.weather?'<strong>'+meta.weather+'</strong> — ':'')+meta.status+'</div></div>' : '')
 +'<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Advances</div><div class="scv" style="color:#dc2626">'+fc(adv)+'</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material</div><div class="scv" style="color:#d97706">'+fc(mc)+'</div></div><div class="sc" style="border-color:#a5b4fc"><div class="scl">Worker Cost</div><div class="scv" style="color:#4f46e5">'+fc(wc)+'</div></div></div>'
 +(low.length ? '<div style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px"><strong>⚠ Low Stock:</strong> '+low.map(function(i){ return i.name+' ('+getbal(i)+' left)'; }).join(', ')+'</div>' : '')
-+'<div class="sec"><div class="st">👷 Labour Summary</div>'
++'<div class="sec"><div class="st" style="border-left-color:#4f46e5;background:#eef2ff;color:#3730a3">👷 Labour Summary</div>'
 +(cats.length ? '<table><thead><tr><th>Category</th><th style="text-align:center">Count</th><th style="text-align:center">Hours</th><th>Work Done</th></tr></thead><tbody>'
 +cats.map(function(cat){ var wks=grp[cat],hrs=wks.reduce(function(s,w){ return s+(parseFloat(w.hours)||0); },0),otHrs=wks.reduce(function(s,w){return s+(parseFloat(w.ot_hours)||0);},0),wd=(wks.find(function(w){ return w.work_done; })||{}).work_done||'–'; var hrsStr=otHrs>0?hrs.toFixed(1)+'+'+otHrs.toFixed(1)+'h':hrs.toFixed(1)+'h'; return '<tr><td style="font-weight:700;padding:6px 10px">'+cat+'</td><td style="text-align:center;padding:6px 10px;font-weight:700;color:#4f46e5">'+wks.length+'</td><td style="text-align:center;padding:6px 10px">'+hrsStr+'</td><td style="padding:6px 10px">'+wd+'</td></tr>'; }).join('')
 +'</tbody></table>' : '<p style="padding:10px;color:#9ca3af">No attendance.</p>')+'</div>'
-+(dept.length ? '<div class="sec"><div class="st" style="border-left-color:#7c3aed">🏗 Departmental Work</div><table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++(dept.length ? '<div class="sec"><div class="st" style="border-left-color:#7c3aed;background:#f5f3ff;color:#5b21b6">🏗 Departmental Work</div><table><thead><tr style="background:#7c3aed"><th>Category</th><th style="text-align:center">Workers</th><th style="text-align:center">Hours</th><th>Work Done</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
 +dept.map(function(e){ return '<tr><td style="font-weight:700;padding:6px 10px">'+e.cat+'</td><td style="text-align:center;padding:6px 10px;color:#7c3aed;font-weight:700">'+e.workers+'</td><td style="text-align:center;padding:6px 10px">'+(e.hours||'–')+'h</td><td style="padding:6px 10px">'+(e.work||'–')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+(e.amount?fc(e.amount):'–')+'</td></tr>'; }).join('')
 +'</tbody><tfoot><tr><td style="padding:7px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dW+'</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+dH+'h</td><td></td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(dA)+'</td></tr></tfoot></table></div>' : '')
-+(mats.length ? '<div class="sec"><div class="st" style="border-left-color:#059669">🧱 Materials Purchased</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
++(mats.length ? '<div class="sec"><div class="st" style="border-left-color:#059669;background:#f0fdf4;color:#065f46">🧱 Materials Purchased</div><table><thead><tr><th>Material</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
 +mats.map(function(m){ return '<tr><td style="font-weight:600;padding:6px 10px">'+m.material_name+'</td><td style="text-align:center;padding:6px 10px">'+(m.quantity||'–')+'</td><td style="text-align:right;padding:6px 10px;font-weight:700">'+fc(m.cost)+'</td></tr>'; }).join('')
 +'</tbody><tfoot><tr><td colspan="2" style="padding:7px 10px;font-weight:900">Total</td><td style="text-align:right;padding:7px 10px;font-weight:900">'+fc(mc)+'</td></tr></tfoot></table></div>' : '')
 +(function(){
@@ -7614,11 +7609,11 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
       +'<td style="text-align:center;padding:5px 8px;color:'+(usedToday>0?'#d97706':'#9ca3af')+';font-weight:'+(usedToday>0?'700':'400')+'">'+(usedToday>0?usedToday+' '+item.unit:'—')+'</td>'
       +'<td style="text-align:center;padding:5px 8px">'+remCell+'</td></tr>';
   }).join('');
-  return '<div class="sec"><div class="st" style="border-left-color:#d97706">📦 Materials Stock</div>'
+  return '<div class="sec"><div class="st" style="border-left-color:#d97706;background:#fffbeb;color:#92400e">📦 Materials Stock</div>'
     +'<table><thead><tr><th>Material</th><th style="text-align:center">Prev Stock</th><th style="text-align:center">Used Today</th><th style="text-align:center">Remaining</th></tr></thead>'
     +'<tbody>'+rows+'</tbody></table></div>';
 })()
-+(photos.length ? '<div class="sec"><div class="st">📷 Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
++(photos.length ? '<div class="sec"><div class="st" style="border-left-color:#0891b2;background:#ecfeff;color:#164e63">📷 Site Photos</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+photos.map(function(p){ return '<img src="'+p+'" style="width:120px;height:90px;object-fit:cover;border-radius:8px">'; }).join('')+'</div></div>' : '')
 +(function(){
   // Today's BOQ Work In Progress
   try {
@@ -7635,7 +7630,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
       });
     });
     if(!tItems.length) return '';
-    return '<div class="sec"><div class="st" style="border-left-color:#4f46e5">🔨 Today\'s Work In Progress</div>'
+    return '<div class="sec"><div class="st" style="border-left-color:#4f46e5;background:#eef2ff;color:#3730a3">🔨 Today\'s Work In Progress</div>'
       +'<table><thead><tr><th style="width:70px;text-align:center">Item No.</th><th>Description</th><th style="width:90px;text-align:center">Qty Today</th></tr></thead><tbody>'
       +tItems.map(function(x){
         return '<tr><td style="text-align:center;font-weight:800;color:#4f46e5;padding:5px 8px">'+x.no+'</td>'
@@ -7696,7 +7691,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2
 +_pdfHeader('app.sanjineer.in',company,'',
   '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+worker.name+'</p>'
   +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+worker.category+(worker.team_name?' &middot; '+worker.team_name:'')+'</p>'
-  +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Reg- '+fc((parseFloat(worker.hourly_wage)||0)*8)+'/day'+(parseFloat(worker.ot_rate)>0?' &nbsp;|&nbsp; OT- '+fc(parseFloat(worker.ot_rate))+'/hr':'')+'</p>'
+  +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Reg: '+fc((parseFloat(worker.hourly_wage)||0)*8)+'/day'+(parseFloat(worker.ot_rate)>0?' &nbsp;|&nbsp; OT: '+fc(parseFloat(worker.ot_rate))+'/hr':'')+'</p>'
   +'<p style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px">'+mL+'</p>'
 )
 +(allAtt.length
