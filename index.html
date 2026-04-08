@@ -1437,15 +1437,219 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 var WELCOME_FLAG='sanj_welcomed';
 var WELCOME_VER='sanj_welcome_v2'; // bump this string to re-show welcome on new app version
 function dismissWelcome(){
-  try{
-    localStorage.setItem(WELCOME_FLAG,'1');
-    localStorage.setItem(WELCOME_VER,'1');
-  }catch(e){}
-  var el=document.getElementById('welcome-overlay');
-  if(!el)return;
-  el.style.transition='opacity .4s ease';
-  el.style.opacity='0';
-  setTimeout(function(){el.style.display='none';el.style.opacity='';},430);
+  try{localStorage.setItem(WELCOME_FLAG,'1');localStorage.setItem(WELCOME_VER,'1');}catch(e){}
+  var overlay=document.getElementById('welcome-overlay');
+  if(!overlay)return;
+
+  var W=window.innerWidth, H=window.innerHeight;
+
+  // ── STEP 1: Spin chips 360° one-by-one before everything else ──────────────
+  var chips=Array.prototype.slice.call(overlay.querySelectorAll('.w-chip'));
+  chips.forEach(function(chip,i){
+    chip.style.transition='transform 0.35s cubic-bezier(.34,1.56,.64,1), opacity 0.35s ease';
+    chip.style.transformOrigin='center center';
+    chip.style.display='inline-flex';
+    setTimeout(function(){
+      chip.style.transform='rotate(360deg) scale(1.18)';
+      chip.style.opacity='0.6';
+      setTimeout(function(){
+        chip.style.transform='rotate(720deg) scale(0)';
+        chip.style.opacity='0';
+      },200);
+    }, i*55);
+  });
+  var chipDelay = chips.length*55 + 250;
+
+  // ── After chips done, run wall-break animation ──────────────────────────────
+  setTimeout(function(){
+
+  // Collect tab button positions for brick flight targets
+  var tabBtns=Array.prototype.slice.call(document.querySelectorAll('nav .tab-btn'));
+  var tabTargets=tabBtns.slice(0,9).map(function(b){
+    var r=b.getBoundingClientRect();
+    return {x:r.left+r.width/2, y:r.top+r.height/2};
+  });
+  if(!tabTargets.length) tabTargets=[{x:W/2,y:H-30}];
+
+  // Canvas overlay
+  var cvs=document.createElement('canvas');
+  cvs.width=W; cvs.height=H;
+  cvs.style.cssText='position:fixed;inset:0;z-index:999999;pointer-events:none;';
+  document.body.appendChild(cvs);
+  var ctx=cvs.getContext('2d');
+
+  // ── BUILD BRICK GRID ────────────────────────────────────────────────────────
+  // Standard brick: wide rectangle. Each row offset by half-brick (running bond)
+  var BW=Math.floor(W/7);   // brick width
+  var BH=Math.floor(H/14);  // brick height (taller rows = chunky wall feel)
+  var bricks=[];
+  var row=0, y=0;
+  while(y < H+BH){
+    var offset=(row%2===0)?0:BW/2;
+    var x=-offset;
+    while(x < W+BW){
+      var bx=x, by=y, bw=BW-3, bh=BH-3; // -3 for mortar gap
+      var cx2=bx+bw/2, cy2=by+bh/2;
+      // Assign tab target based on column
+      var ti=Math.round((cx2/W)*(tabTargets.length-1));
+      ti=Math.min(Math.max(ti,0),tabTargets.length-1);
+      var tgt=tabTargets[ti];
+      // Brick colour: reddish/crimson radial palette
+      var rnd=Math.random();
+      var fill= rnd<0.15 ? 'hsl(0,'+(65+Math.random()*20)+'%,'+(28+Math.random()*10)+'%)' :  // deep crimson
+                rnd<0.40 ? 'hsl(355,'+(60+Math.random()*18)+'%,'+(38+Math.random()*10)+'%)' :  // rose red
+                rnd<0.65 ? 'hsl(8,'+(58+Math.random()*15)+'%,'+(45+Math.random()*10)+'%)' :    // brick red
+                           'hsl(348,'+(55+Math.random()*18)+'%,'+(42+Math.random()*8)+'%)';    // dark rose
+      // Physics: bricks closer to bottom fall faster, gravity-ish
+      var fallSpeed=2.5+Math.random()*2+(by/H)*3;
+      var spinDir=(Math.random()<0.5)?1:-1;
+      bricks.push({
+        x:bx,y:by,w:bw,h:bh,cx:cx2,cy:cy2,
+        tx:tgt.x,ty:tgt.y,
+        fill:fill,
+        // Gravity fall params
+        vy:fallSpeed,          // fall velocity (grows with gravity)
+        vx:(Math.random()-.5)*1.8, // slight sideways drift
+        vr:spinDir*(1.5+Math.random()*3), // spin deg/frame
+        rot:0,
+        // Arc-to-tab params (phase 2)
+        launched:false,
+        delay:0.05+Math.random()*0.30
+      });
+      x+=BW;
+    }
+    y+=BH; row++;
+  }
+
+  // Hide welcome content
+  overlay.style.visibility='hidden';
+  setTimeout(function(){ overlay.style.display='none'; overlay.style.visibility=''; },2400);
+
+  // ── 3D dashboard card build-in ──────────────────────────────────────────────
+  var styleTag=document.createElement('style');
+  styleTag.id='_dash3d_style';
+  styleTag.textContent='@keyframes _dci{from{opacity:0;transform:perspective(600px) rotateX(-40deg) translateY(55px) scale(.86);}to{opacity:1;transform:perspective(600px) rotateX(0deg) translateY(0) scale(1);}}#tab-dashboard .rounded-2xl{animation:_dci .5s cubic-bezier(.34,1.1,.64,1) both;}';
+  document.head.appendChild(styleTag);
+  var cards=document.querySelectorAll('#tab-dashboard .rounded-2xl');
+  cards.forEach(function(el,i){ el.style.animationDelay=(i*0.055+1.9)+'s'; el.style.animationFillMode='both'; });
+  setTimeout(function(){
+    if(document.getElementById('_dash3d_style')) document.getElementById('_dash3d_style').remove();
+    cards.forEach(function(el){ el.style.animation=''; el.style.animationDelay=''; });
+  },3400);
+
+  // ── ANIMATION LOOP ──────────────────────────────────────────────────────────
+  var TOTAL=2400;
+  var t0=performance.now();
+  var GRAV=0.18; // gravity acceleration per frame
+
+  function easeOut3(t){var u=1-t;return 1-u*u*u;}
+  function easeInOut3(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+  function frame(now){
+    var elapsed=now-t0;
+    var p=Math.min(elapsed/TOTAL,1);
+    ctx.clearRect(0,0,W,H);
+
+    // Dust/dark overlay
+    if(p<0.25){
+      ctx.fillStyle='rgba(8,5,18,'+(p/0.25*0.55)+')';
+      ctx.fillRect(0,0,W,H);
+    } else if(p<0.75){
+      ctx.fillStyle='rgba(8,5,18,0.55)';
+      ctx.fillRect(0,0,W,H);
+    } else {
+      ctx.fillStyle='rgba(8,5,18,'+(1-(p-0.75)/0.25)*0.55+')';
+      ctx.fillRect(0,0,W,H);
+    }
+
+    // Draw mortar background (light grey wall base)
+    if(p<0.35){
+      ctx.fillStyle='rgba(180,160,140,'+(p/0.35*0.3)+')';
+      ctx.fillRect(0,0,W,H);
+    }
+
+    for(var i=0;i<bricks.length;i++){
+      var b=bricks[i];
+      var localP=Math.max(0,Math.min((p-b.delay)/(1-b.delay),1));
+      if(localP<=0) continue;
+
+      var tx,ty,rot,alpha;
+
+      if(localP<0.65){
+        // Phase 1: FALL — bricks drop with gravity & spin, like wall crumbling
+        var fp=localP/0.65;
+        var ge=fp*fp; // accelerate (gravity)
+        // Bricks fall downward + slight sideways
+        ty = b.vy * ge * H * 0.75;
+        tx = b.vx * fp * W * 0.14;
+        // Add shake/vibration at start
+        tx += (Math.random()-.5)*(1-fp)*4;
+        b.rot += b.vr*(1+ge*2);
+        rot=b.rot;
+        alpha=fp<0.55?1:Math.max(0,1-(fp-0.55)/0.45);
+
+      } else {
+        // Phase 2: FADE OUT — bricks vanish, do not fly to tab names
+        var fp2=(localP-0.65)/0.35;
+        ty = b.vy * H * 0.75 + fp2*H*0.2;
+        tx = b.vx * W * 0.14;
+        b.rot += b.vr*0.5;
+        rot=b.rot;
+        alpha=Math.max(0,1-fp2);
+      }
+
+      ctx.save();
+      ctx.globalAlpha=Math.max(0,alpha);
+      ctx.translate(b.cx+tx, b.cy+ty);
+      ctx.rotate(rot*Math.PI/180);
+      ctx.translate(-b.cx,-b.cy);
+
+      // Brick rectangle
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(b.x,b.y,b.w,b.h,3) : ctx.rect(b.x,b.y,b.w,b.h);
+      ctx.fillStyle=b.fill;
+      ctx.fill();
+
+      // Mortar/highlight top edge
+      ctx.strokeStyle='rgba(255,245,235,0.28)';
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(b.x+3,b.y+1); ctx.lineTo(b.x+b.w-3,b.y+1);
+      ctx.stroke();
+      // Shadow bottom edge
+      ctx.strokeStyle='rgba(0,0,0,0.4)';
+      ctx.lineWidth=1.5;
+      ctx.beginPath();
+      ctx.moveTo(b.x+2,b.y+b.h-1); ctx.lineTo(b.x+b.w-2,b.y+b.h-1);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // Dust particles during crumble phase
+    if(p>0.05 && p<0.55){
+      var dp=(p-0.05)/0.50;
+      var numDust=Math.floor(dp*18);
+      for(var k=0;k<numDust;k++){
+        var px=Math.random()*W;
+        var py=Math.random()*H*0.8+H*0.1;
+        var pr=Math.random()*3+0.5;
+        ctx.beginPath();
+        ctx.arc(px,py,pr,0,Math.PI*2);
+        ctx.fillStyle='rgba(200,180,150,'+(Math.random()*0.4+0.1)+')';
+        ctx.fill();
+      }
+    }
+
+    // No sparks at tab targets — bricks fall and disappear cleanly
+
+    if(p<1){ requestAnimationFrame(frame); }
+    else { cvs.remove(); }
+  }
+
+  requestAnimationFrame(frame);
+
+  }, chipDelay); // end setTimeout for chip stagger
 }
 function checkShowWelcome(){
   if(typeof _IS_VIEWER!=='undefined'&&_IS_VIEWER)return;
@@ -1471,13 +1675,12 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
     if (idx >= urls.length) { return; } // keep emoji fallback
     var img = new Image();
     img.onload = function() {
-      // Header logo
+      // Header logo — unchanged, no background changes
       var el = document.getElementById('app-logo-img');
       var fb = document.getElementById('app-logo-fallback');
       var box = document.getElementById('app-logo-box');
       if (el) { el.src = urls[idx]; el.style.display = 'block'; el.style.width='38px'; el.style.height='38px'; el.style.objectFit='cover'; }
       if (fb) { fb.style.display = 'none'; }
-      // Logo: transparent bg, raw image only
       var isUserLogo = urls[idx] && (urls[idx].startsWith('data:') || (typeof lprof === 'function' && lprof() && lprof().logo && urls[idx] === lprof().logo));
       if (box) {
         if (isUserLogo) {
@@ -1490,7 +1693,7 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
           box.style.boxShadow = 'none';
         }
       }
-      // Welcome logo — update the hardcoded img src if CDN loads
+      // Welcome logo
       var wImg = document.querySelector('#welcome-overlay .wa2 > div > img');
       if (wImg) { wImg.src = urls[idx]; wImg.style.display = 'block'; }
     };
@@ -1511,7 +1714,7 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
 <header class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
-    <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:-3px">
+    <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
       <div style="display:flex;align-items:center;gap:4px">
         <!-- Logo box -->
         <div id="app-logo-box" style="width:38px;height:38px;flex-shrink:0;background:transparent;padding:0;overflow:hidden;box-sizing:border-box;display:flex;align-items:center;justify-content:center;border-radius:12px;">
@@ -7350,7 +7553,7 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
              + '<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:3px">app.sanjineer.in</p>';
     leftStyle = 'display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;flex-shrink:0;';
   } else {
-    logoHtml = '<img src="'+logoSrc+'" style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:125%;width:auto;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">'
+    logoHtml = '<img src="'+logoSrc+'" style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:110%;width:auto;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">'
              + '<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;position:relative;z-index:1;margin-top:auto;">app.sanjineer.in</p>';
     leftStyle = 'display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;align-self:stretch;margin:-14px 0;padding:14px 0 4px 0;position:relative;overflow:visible;min-width:80px;flex-shrink:0;';
   }
@@ -7431,7 +7634,7 @@ return ':root{--hc:'+_hc+'}'
 +'.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}'
 +'.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}'
 +'.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}'
-+'@media print{.bar{display:none!important}.content{margin-top:0;zoom:0.62}html,body{margin:0!important;padding:0!important;max-width:none!important}@page{margin:12mm 10mm 18mm 10mm;size:A4}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}'
++'@media print{.bar{display:none!important}.no-print{display:none!important}.content{margin-top:0;zoom:0.62}html,body{margin:0!important;padding:0!important;max-width:none!important}@page{margin:12mm 10mm 18mm 10mm;size:A4}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}'
 /* Page number bottom-right on every page */
 +'@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:8px;color:#9ca3af;font-family:Arial,sans-serif}}'
 +'}';
@@ -7451,14 +7654,141 @@ return '<div class="hdr" style="border-bottom:3px solid '+solidColor+'"><div sty
 +'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+(p.company||'')+'</div>'+(p.address?'<div style="font-size:10px;color:#6b7280;margin-top:3px;font-weight:400">'+p.address+'</div>':'')+'</div>'
 +'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})+'</div></div></div>';
 }
+// ── Print Authority Slots ─────────────────────────────────────
+// Stores {middle:'Approved By', right:'Project Manager'} in localStorage
+var _PRINT_AUTH_KEY = 'sanj_print_auth_slots';
+function _getPrintAuthSlots(){
+  try { return JSON.parse(localStorage.getItem(_PRINT_AUTH_KEY)||'{}'); } catch(e){ return {}; }
+}
+function _setPrintAuthSlots(obj){
+  try { localStorage.setItem(_PRINT_AUTH_KEY, JSON.stringify(obj)); } catch(e){}
+}
+// All available roles (same 8 the user can save sigs for)
+var _AUTH_ROLES = ['Site Engineer','Site Incharge','Prepared By','Approved By','Project Manager','Checked By','Contractor / Owner','Client'];
+
+// Build one signature cell HTML for PDF footer
+function _buildSigCell(role, align, sigs, isInteractive, slotKey){
+  var sig = null;
+  sigs.forEach(function(s){ if(s.role===role && !sig) sig = s; });
+  var hasSig = sig && sig.img && sig.img.length > 50;
+  var justifyMap = {left:'flex-start', center:'center', right:'flex-end'};
+  var justify = justifyMap[align] || 'flex-start';
+  var marginAuto = align==='right'?'margin-left:auto':align==='center'?'margin:0 auto':'';
+
+  var html = '<div style="flex:1;text-align:'+align+'">';
+
+  // Signature image area (48px tall)
+  html += '<div style="min-height:48px;display:flex;align-items:flex-end;justify-content:'+justify+';padding-bottom:4px">';
+  if(hasSig){
+    html += '<img src="'+sig.img+'" style="max-width:130px;height:42px;object-fit:contain;display:block;'+(align==='right'?'margin-left:auto':align==='center'?'margin:0 auto':'')+'" />';
+  } else {
+    // Dashed line only — no helper text
+    html += '<div style="max-width:140px;width:100%;border-bottom:1.5px dashed #aaa;'+(marginAuto||'')+'"></div>';
+  }
+  html += '</div>';
+
+  // Role label line
+  html += '<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;'+(marginAuto||'')+'">';
+  html += '<div style="font-size:9px;color:#6b7280;font-weight:700;letter-spacing:.02em">'+role+'</div>';
+  // (name not shown — role only)
+  // Interactive change button (only in preview, hidden in print)
+  if(isInteractive){
+    var opts = _AUTH_ROLES.map(function(r){
+      return '<option value="'+r+'"'+(r===role?' selected':'')+'>'+r+'</option>';
+    }).join('');
+    html += '<div class="no-print" style="margin-top:4px">'
+      +'<select onchange="_changeSlot(\''+slotKey+'\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px">'
+      +'<option value="">— change role —</option>'+opts
+      +'</select></div>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
 function pftr(){
-return '<div class="footer">'
-+'<div class="sig"><div class="sl"></div><div class="slb">Site Supervisor</div></div>'
-+'<div class="sig" style="text-align:center"><div class="sl" style="margin:0 auto"></div><div class="slb">Prepared By</div></div>'
-+'<div class="sig" style="text-align:right"><div class="sl" style="margin-left:auto"></div><div class="slb">Authorized</div></div>'
-+'</div>'
-/* Normal flow — appears once at end of document only, never repeats */
-+'<div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">app.sanjineer.in</div>';
+  var sigs = [];
+  try { sigs = JSON.parse(localStorage.getItem('sanj_signatures')||'[]'); } catch(e){ sigs=[]; }
+  var slots = _getPrintAuthSlots();
+  var leftRole  = 'Site Engineer';             // always fixed
+  var midRole   = slots.middle || '';
+  var rightRole = slots.right  || '';
+
+  // Serialise sigs + slots into the PDF so interactive JS inside the popup can read them
+  var sigsJson  = JSON.stringify(sigs).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
+  var slotsJson = JSON.stringify(slots).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
+  var rolesJson = JSON.stringify(_AUTH_ROLES);
+
+  // Build footer HTML — 3 columns always
+  var leftHtml  = _buildSigCell(leftRole,  'left',   sigs, true, 'left');
+  var midHtml   = midRole
+    ? _buildSigCell(midRole, 'center', sigs, true, 'middle')
+    : '<div style="flex:1;text-align:center">'
+        +'<div style="min-height:48px"></div>'
+        +'<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin:0 auto">'
+        +'<div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div>'
+        +'<div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'middle\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'
+        +_AUTH_ROLES.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('')
+        +'</select></div></div></div>';
+  var rightHtml = rightRole
+    ? _buildSigCell(rightRole, 'right',  sigs, true, 'right')
+    : '<div style="flex:1;text-align:right">'
+        +'<div style="min-height:48px"></div>'
+        +'<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin-left:auto">'
+        +'<div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div>'
+        +'<div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'right\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'
+        +_AUTH_ROLES.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('')
+        +'</select></div></div></div>';
+
+  // Inline JS injected into the PDF popup to handle live slot changes
+  var inlineJs = '<sc'+'ript>'
+    +'var _pSigs='+sigsJson+';'
+    +'var _pSlots='+slotsJson+';'
+    +'var _pRoles='+rolesJson+';'
+    // Save slot change back to parent localStorage and re-render
+    +'function _changeSlot(slot,role){'
+    +'  if(!role)return;'
+    +'  _pSlots[slot]=role;'
+    // Save to parent/opener localStorage (works in both iframe and popup)
+    +'  try{window.parent&&window.parent.localStorage&&window.parent.localStorage.setItem(\'sanj_print_auth_slots\',JSON.stringify(_pSlots));}catch(ex){}'
+    +'  try{window.opener&&window.opener.localStorage&&window.opener.localStorage.setItem(\'sanj_print_auth_slots\',JSON.stringify(_pSlots));}catch(ex){}'
+    // Re-render just that column
+    +'  var sig=null;'
+    +'  _pSigs.forEach(function(s){if(s.role===role&&!sig)sig=s;});'
+    +'  var hasSig=sig&&sig.img&&sig.img.length>50;'
+    +'  var alignMap={left:\'flex-start\',middle:\'center\',right:\'flex-end\'};'
+    +'  var textMap={left:\'left\',middle:\'center\',right:\'right\'};'
+    +'  var align=textMap[slot]||\'left\';'
+    +'  var justify=alignMap[slot]||\'flex-start\';'
+    +'  var marginAuto=slot===\'right\'?\'margin-left:auto\':slot===\'middle\'?\'margin:0 auto\':\'\';'
+    +'  var col=document.getElementById(\'_sig_col_\'+slot);'
+    +'  if(!col)return;'
+    +'  var opts=_pRoles.map(function(r){return\'<option value="\'+r+\'"\'+( r===role?\' selected\':\'\')+\'>\'+r+\'</option>\';}).join(\'\');'
+    +'  col.style.textAlign=align;'
+    +'  col.innerHTML=\'<div style="min-height:48px;display:flex;align-items:flex-end;justify-content:\'+justify+\';padding-bottom:4px">\''
+    +'    +(hasSig?\'<img src="\'+sig.img+\'" style="max-width:130px;height:42px;object-fit:contain;display:block;\'+( slot===\'right\'?\'margin-left:auto\':slot===\'middle\'?\'margin:0 auto\':\'\')+\'" />\''
+    +'           :\'<div style="max-width:140px;width:100%;border-bottom:1.5px dashed #aaa;\'+marginAuto+\'"></div>\')'
+    +'    +\'</div>\''
+    +'    +\'<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;\'+marginAuto+\'">\''
+    +'    +\'<div style="font-size:9px;color:#6b7280;font-weight:700;">\'+role+\'</div>\''
+    +'    +\'<div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\\\'\'+slot+\'\\\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— change role —</option>\'+opts+\'</select></div>\''
+    +'    +\'</div>\';'
+    +'}'
+    +'<\/sc'+'ript>';
+
+  return '<div style="margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb">'
+    +'<div style="font-size:8px;color:#9ca3af;text-align:right;margin-bottom:6px" class="no-print">✏️ Double-tap dropdown to change signing authority</div>'
+    +'<div style="display:flex;justify-content:space-between;gap:16px">'
+    +'<div id="_sig_col_left"   style="flex:1;text-align:left">'+_buildSigCell(leftRole,'left',sigs,true,'left').replace('<div style="flex:1;text-align:left">','').replace(/<\/div>$/,'')+'</div>'
+    +'<div id="_sig_col_middle" style="flex:1;text-align:center">'+(midRole?_buildSigCell(midRole,'center',sigs,true,'middle').replace('<div style="flex:1;text-align:center">','').replace(/<\/div>$/,'')
+      :'<div style="min-height:48px"></div><div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin:0 auto"><div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div><div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'middle\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'+_AUTH_ROLES.map(function(r){return'<option value="'+r+'">'+r+'</option>';}).join('')+'</select></div></div>')
+    +'</div>'
+    +'<div id="_sig_col_right"  style="flex:1;text-align:right">'+(rightRole?_buildSigCell(rightRole,'right',sigs,true,'right').replace('<div style="flex:1;text-align:right">','').replace(/<\/div>$/,'')
+      :'<div style="min-height:48px"></div><div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin-left:auto"><div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div><div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'right\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'+_AUTH_ROLES.map(function(r){return'<option value="'+r+'">'+r+'</option>';}).join('')+'</select></div></div>')
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +inlineJs
+    +'<div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">app.sanjineer.in</div>';
 }
 function opw(html){
   function _patchClose(h,fn){
@@ -7930,10 +8260,75 @@ document.head.appendChild(s);
 // PWA setup runs after DOM ready (inside boot)
 function _setupPWA() {
 try {
-var m={name:'Sanjineer',short_name:'Sanjineer',start_url:'.',display:'standalone',background_color:'#0f172a',theme_color:'#4f46e5',
-icons:[{src:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="36" fill="%234f46e5"/><text x="96" y="130" font-size="100" text-anchor="middle">%F0%9F%8F%97</text></svg>',sizes:'192x192',type:'image/svg+xml'}]};
-var el=document.getElementById('pwa-manifest');
-if (el) el.href=URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
+  // Build PWA icon: royal green background + GitHub Sanjineer crane logo
+  function _buildManifestWithIcon(iconDataUrl) {
+    var icons = [];
+    if (iconDataUrl) {
+      icons = [
+        {src:iconDataUrl, sizes:'192x192', type:'image/png', purpose:'any maskable'},
+        {src:iconDataUrl, sizes:'512x512', type:'image/png', purpose:'any maskable'}
+      ];
+    } else {
+      // Fallback SVG with correct gradient
+      var svgFallback = 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">' +
+        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#4f46e5"/>' +
+        '</linearGradient></defs>' +
+        '<rect width="192" height="192" rx="38" fill="url(#g)"/>' +
+        '<text x="96" y="130" font-size="100" text-anchor="middle">&#127959;</text>' +
+        '</svg>'
+      );
+      icons = [{src:svgFallback, sizes:'192x192', type:'image/svg+xml', purpose:'any maskable'}];
+    }
+    var m = {
+      name:'Sanjineer', short_name:'Sanjineer',
+      start_url:'.', display:'standalone',
+      background_color:'#1e293b', theme_color:'#4f46e5',
+      icons: icons
+    };
+    var el = document.getElementById('pwa-manifest');
+    if (el) el.href = URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/json'}));
+  }
+
+  // Try to draw logo onto canvas with royal green background
+  var logoUrl = 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
+  var logoImg = new Image();
+  logoImg.crossOrigin = 'anonymous';
+  logoImg.onload = function() {
+    try {
+      var SZ = 512;
+      var cvs = document.createElement('canvas');
+      cvs.width = SZ; cvs.height = SZ;
+      var ctx = cvs.getContext('2d');
+      // linear-gradient(135deg,#1e293b,#4f46e5)
+      var grad = ctx.createLinearGradient(0,0,SZ,SZ); // 135deg ≈ TL→BR
+      grad.addColorStop(0, '#1e293b');
+      grad.addColorStop(1, '#4f46e5');
+      // Rounded rect background
+      var r = 96;
+      ctx.beginPath();
+      ctx.moveTo(r, 0); ctx.lineTo(SZ-r, 0);
+      ctx.quadraticCurveTo(SZ, 0, SZ, r);
+      ctx.lineTo(SZ, SZ-r);
+      ctx.quadraticCurveTo(SZ, SZ, SZ-r, SZ);
+      ctx.lineTo(r, SZ);
+      ctx.quadraticCurveTo(0, SZ, 0, SZ-r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+      // Draw logo 2x bigger — 1.25x increase from previous 1.6x — fills icon more
+      var pad = 20;
+      ctx.drawImage(logoImg, pad, pad, SZ-pad*2, SZ-pad*2);
+      var dataUrl = cvs.toDataURL('image/png');
+      _buildManifestWithIcon(dataUrl);
+    } catch(e) { _buildManifestWithIcon(null); }
+  };
+  logoImg.onerror = function() { _buildManifestWithIcon(null); };
+  logoImg.src = logoUrl;
+
 } catch(e) {}
 window.addEventListener('beforeinstallprompt',function(e){
 e.preventDefault(); PWA=e;
@@ -13997,7 +14392,7 @@ function placeSig(targetId, sigIdx) {
 document.addEventListener('DOMContentLoaded', function(){
   var modal = document.createElement('div');
   modal.id = 'sig-modal';
-  var _roleOpts = '<option value="">— Select authority role —</option><option value="Site Supervisor">Site Supervisor</option><option value="Prepared By">Prepared By</option><option value="Authorized">Authorized</option><option value="Authorised By">Authorised By</option><option value="Client Acceptance">Client Acceptance</option><option value="Supplier Acknowledgement">Supplier Acknowledgement</option><option value="Site Engineer">Site Engineer</option><option value="Project Manager">Project Manager</option><option value="Site Incharge">Site Incharge</option><option value="Checked By">Checked By</option><option value="Approved By">Approved By</option><option value="Contractor">Contractor</option><option value="Consultant">Consultant</option><option value="Director / Owner">Director / Owner</option><option value="Witness">Witness</option>';
+  var _roleOpts = '<option value="">— Select authority role —</option><option value="Site Engineer">Site Engineer</option><option value="Site Incharge">Site Incharge</option><option value="Prepared By">Prepared By</option><option value="Approved By">Approved By</option><option value="Project Manager">Project Manager</option><option value="Checked By">Checked By</option><option value="Contractor / Owner">Contractor / Owner</option><option value="Client">Client</option>';
   modal.innerHTML = '<div style="background:linear-gradient(160deg,#1a1740,#312e81);border-radius:20px;padding:18px;width:92%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.6)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
     +'<p style="font-size:14px;font-weight:900;color:#fff;margin:0">✍️ Add Signature</p>'
