@@ -1737,16 +1737,6 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
     </div>
 
     <!-- Dashboard View -->
-    <div class="sett-row" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="display:flex;align-items:center;gap:7px"><span style="font-size:14px">📊</span><span style="font-size:11px;font-weight:700;color:#fff">Dashboard View</span></div>
-        <div class="view-seg" style="padding:3px;margin-bottom:0">
-          <button class="view-btn active" id="dashview-current-btn" onclick="setDashView('current')">📋 Current</button>
-          <button class="view-btn" id="dashview-chart-btn" onclick="setDashView('chart')">📈 Charts</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Signatures section -->
     <div id="sett-sig-section" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
@@ -2295,61 +2285,11 @@ document.addEventListener('DOMContentLoaded', function() {
   _applyHiddenTabs();
 });
 
-// ── Dashboard View ────────────────────────────────────────────
+// Dashboard chart view removed — current mode only
 var _dashView = 'current';
-try { _dashView = localStorage.getItem('sanj_dash_view') || 'current'; } catch(e) {}
-
-function setDashView(mode) {
-  _dashView = mode;
-  try { localStorage.setItem('sanj_dash_view', mode); } catch(e) {}
-  _syncDashViewUI();
-  _applyDashView(mode);
-  closeSettingsPanel();
-}
-
-function _syncDashViewUI() {
-  var cb  = document.getElementById('dashview-current-btn');
-  var chb = document.getElementById('dashview-chart-btn');
-  if (!cb || !chb) return;
-  if (_dashView === 'chart') { cb.classList.remove('active'); chb.classList.add('active'); }
-  else                       { cb.classList.add('active');   chb.classList.remove('active'); }
-}
-
-function _applyDashView(mode) {
-  var dash = document.getElementById('tab-dashboard');
-  if (!dash) return;
-  // Show/hide the stat cards area
-  var statsArea = document.getElementById('dash-stats-area');
-  var chartArea = document.getElementById('dash-chart-area');
-  if (!statsArea || !chartArea) return;
-  if (mode === 'chart') {
-    statsArea.style.transition = 'opacity .22s ease';
-    statsArea.style.opacity = '0';
-    setTimeout(function(){
-      statsArea.style.display = 'none';
-      chartArea.style.display = 'block';
-      chartArea.style.opacity = '0';
-      chartArea.innerHTML = _buildDashCharts();
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        chartArea.style.transition = 'opacity .28s ease,transform .28s cubic-bezier(.34,1.1,.64,1)';
-        chartArea.style.opacity = '1';
-        chartArea.style.transform = 'scale(1)';
-      }); });
-    }, 200);
-  } else {
-    chartArea.style.transition = 'opacity .18s ease';
-    chartArea.style.opacity = '0';
-    setTimeout(function(){
-      chartArea.style.display = 'none';
-      statsArea.style.display = 'block';
-      statsArea.style.opacity = '0';
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        statsArea.style.transition = 'opacity .28s ease';
-        statsArea.style.opacity = '1';
-      }); });
-    }, 180);
-  }
-}
+function setDashView(mode) { /* chart view removed */ }
+function _syncDashViewUI() {}
+function _applyDashView(mode) {}
 
 function _buildDashCharts() {
   function txt(id) {
@@ -2807,7 +2747,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="tab-dashboard" class="tab-content" style="display:none">
 
-<div id="dash-chart-area" style="display:none;opacity:0;transform:scale(.97)"></div>
+
 <div id="dash-stats-area">
   <!-- Row 1: Advances + Remaining (two large equal cards) -->
   <div class="grid grid-cols-2 gap-1.5 mb-1.5">
@@ -6412,6 +6352,7 @@ function viewExpenses(){
 }
 
 function printExpenses(){
+try{
   AD=ld();
   var prof=lprof()||{};
   var sel=document.getElementById('exp-month-filter');
@@ -6495,6 +6436,7 @@ function printExpenses(){
     +'</table>'
     +_pdfFooter()+'</div></body></html>';
   opw(html);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printExpenses',err);}
 }
 
 // ============================================================
@@ -7425,20 +7367,21 @@ function _pdfFooter(){
   try { sigs = JSON.parse(localStorage.getItem('sanj_signatures')||'[]'); } catch(e) {}
   var sigsJson = JSON.stringify(sigs).replace(/'/g,"\\'").replace(/"/g,'&quot;');
   var sigDropHtml = sigs.length > 0
-    ? '<div id="pdf-sig-drop" style="display:none;position:absolute;bottom:40px;right:20px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:6px 0;z-index:999;min-width:180px">'
+    ? '<div id="pdf-sig-drop" style="display:none;position:absolute;bottom:40px;right:20px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:6px 0;z-index:999;min-width:200px">'
       + sigs.map(function(s,i){
-        return '<div onclick="placePdfSig('+i+')" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#374151;border-bottom:1px solid #f3f4f6" onmouseover="this.style.background=\'#eef2ff\'" onmouseout="this.style.background=\'\'">'
-          + '<img src="'+s.img+'" style="height:22px;max-width:80px;object-fit:contain">'
-          + '<span>'+s.name+'</span></div>';
+        return '<div onclick="placePdfSig('+i+')" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6" onmouseover="this.style.background=\'#eef2ff\'" onmouseout="this.style.background=\'\'">'
+          + '<img src="'+s.img+'" style="height:22px;max-width:70px;object-fit:contain;flex-shrink:0">'
+          + '<div><p style="font-size:11px;font-weight:700;color:#374151;margin:0">'+s.name+'</p>'+(s.role?'<p style="font-size:9px;color:#6b7280;margin:1px 0 0">'+s.role+'</p>':'')+'</div>'
+          + '</div>';
       }).join('')
       + '</div>'
     : '';
   var sigJs = sigs.length > 0
     ? '<script>var _pdfSigs='+JSON.stringify(sigs).replace(/<\/script>/g,'')+';'
       + 'function toggleSigDrop(){var d=document.getElementById("pdf-sig-drop");if(d)d.style.display=d.style.display==="none"?"block":"none";}'
-      + 'function placePdfSig(i){var s=_pdfSigs[i];if(!s)return;var zone=document.getElementById("pdf-sig-zone");if(!zone)return;'
-      + 'zone.innerHTML=\'<div style="text-align:center"><img src="'+s.img+'" style="max-width:130px;max-height:44px;object-fit:contain"><div style="font-size:9px;color:#374151;font-weight:700;margin-top:2px">'+s.name+'</div></div>\';'
-      + 'document.getElementById("pdf-sig-drop").style.display="none";}'
+      + 'function placePdfSig(i){var sig=_pdfSigs[i];if(!sig)return;var zone=document.getElementById("pdf-sig-zone");if(!zone)return;'
+      + 'zone.innerHTML="<div style=\'text-align:center\'><img src=\'"+(sig.img)+"\' style=\'max-width:130px;max-height:44px;object-fit:contain\'><div style=\'font-size:9px;color:#374151;font-weight:700;margin-top:2px\'>"+(sig.name)+"<\/div><\/div>";'
+      + 'var drop=document.getElementById("pdf-sig-drop");if(drop)drop.style.display="none";}'
       + 'document.addEventListener("dblclick",function(e){if(e.target.closest("#pdf-sig-zone,#pdf-sig-drop"))return;toggleSigDrop();});'
       + '<\/script>'
     : '';
@@ -7518,40 +7461,66 @@ return '<div class="footer">'
 +'<div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">app.sanjineer.in</div>';
 }
 function opw(html){
-  // Try blob URL first — avoids popup blocker on iOS Safari
-  try {
-    var blob = new Blob([html], {type:'text/html'});
-    var burl = URL.createObjectURL(blob);
-    var pw   = window.open(burl, '_blank');
-    if (pw) { setTimeout(function(){ URL.revokeObjectURL(burl); }, 10000); return; }
-  } catch(e) {}
-  // Fallback 1: write directly
-  var pw2 = window.open('', '_blank', 'width=900,height=700');
-  if (pw2) { pw2.document.write(html); pw2.document.close(); return; }
-  // Fallback 2: inline iframe overlay (works even when popups fully blocked)
-  var pfr = document.getElementById('_print_frame');
-  if (pfr) pfr.remove();
-  pfr = document.createElement('iframe');
-  pfr.id = '_print_frame';
-  pfr.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:0;z-index:99999;background:white;';
-  document.body.appendChild(pfr);
-  var cs = '<scr'+'ipt>function _closePF(){parent.document.getElementById("_print_frame").remove();}<\/scr'+'ipt>';
-  pfr.contentDocument.write(html
-    .replace(/onclick="window\.close\(\)"/g, 'onclick="_closePF()"')
-    .replace('</head>', '</head>' + cs));
-  pfr.contentDocument.close();
+  function _patchClose(h,fn){
+    return h.replace(/onclick="window\.close\(\)"/g,'onclick="'+fn+'"')
+            .replace(/onclick='window\.close\(\)'/g,"onclick='"+fn+"'");
+  }
+  function _injectClose(h,fn,impl){
+    var tag='<sc'+'ript>function '+fn+'(){'+impl+'}<\/sc'+'ript>';
+    return h.replace(/<\/body>/i,tag+'</body>');
+  }
+  // Method 1: blob URL popup
+  try{
+    var blob=new Blob([html],{type:'text/html'});
+    var burl=URL.createObjectURL(blob);
+    var pw=window.open(burl,'_blank');
+    if(pw){setTimeout(function(){URL.revokeObjectURL(burl);},60000);return;}
+    URL.revokeObjectURL(burl);
+  }catch(e){}
+  // Method 2: direct write popup
+  try{
+    var pw2=window.open('','_blank');
+    if(pw2&&pw2.document){pw2.document.open();pw2.document.write(html);pw2.document.close();return;}
+  }catch(e2){}
+  // Method 3: srcdoc overlay — no contentDocument needed, works on all mobile browsers
+  var _old=document.getElementById('_pf_overlay');if(_old)_old.remove();
+  var ov=document.createElement('div');
+  ov.id='_pf_overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:999999;background:#fff;display:flex;flex-direction:column;';
+  var topbar=document.createElement('div');
+  topbar.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1e1b4b;flex-shrink:0;';
+  topbar.innerHTML='<button id="_pf_back" style="padding:7px 16px;border-radius:8px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">&#8592; Back</button>'
+    +'<span style="flex:1;color:#fff;font-size:13px;font-weight:700;">Print Preview</span>'
+    +'<button id="_pf_print" style="padding:7px 16px;border-radius:8px;border:none;background:#f59e0b;color:#1f2937;font-size:13px;font-weight:700;cursor:pointer;">&#128438; Print</button>'
+    +'<button id="_pf_x" style="padding:7px 14px;border-radius:8px;border:none;background:rgba(239,68,68,.3);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">&#x2715;</button>';
+  ov.appendChild(topbar);
+  var ifr=document.createElement('iframe');
+  ifr.style.cssText='flex:1;border:0;width:100%;';
+  var closeImpl='try{var o=parent.document.getElementById("_pf_overlay");if(o)o.remove();}catch(ex){}';
+  var pHtml=_injectClose(_patchClose(html,'_cpf()'),'_cpf',closeImpl);
+  ifr.setAttribute('srcdoc',pHtml);
+  ov.appendChild(ifr);
+  document.body.appendChild(ov);
+  function _closeOv(){var o=document.getElementById('_pf_overlay');if(o)o.remove();}
+  document.getElementById('_pf_back').onclick=_closeOv;
+  document.getElementById('_pf_x').onclick=_closeOv;
+  document.getElementById('_pf_print').onclick=function(){try{ifr.contentWindow.print();}catch(e){window.print();}};
 }
 
 // ============================================================
 // PRINT: DAILY
 // ============================================================
 function printDailyReport(){
+try{
 AD=ld();
 var photoKeys = lphkeys()[DD] || [];
 idbGetAll(photoKeys, function(photos) {
+try{
 photos = photos.filter(Boolean);
 _printDailyReportInner(photos);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printDailyReport inner',err);}
 });
+}catch(err){toast('Print error: '+err.message,'err');console.error('printDailyReport',err);}
 }
 function _printDailyReportInner(photos){
 AD=ld(); var d=DD, dl=fdl(d), meta=lm()[d]||{};
@@ -7739,6 +7708,7 @@ opw(html);
 // PRINT: MONTHLY PAYMENT REPORT (Teams tab)
 // ============================================================
 function printMonthlyReport(){
+try{
 AD=ld();
 var selEl=document.getElementById('print-month'), selMs=selEl?selEl.value:mkey(VM);
 var mL=mlabel(new Date(selMs+'-01T00:00:00'));
@@ -7847,6 +7817,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Report
 +'</div>'
 +pftr()+'</div></body></html>';
 opw(html);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printMonthlyReport',err);}
 }
 
 // ============================================================
@@ -8126,6 +8097,7 @@ function renderMachMonthly(){
 }
 
 function printMachinery(){
+try{
   var dateEl=document.getElementById('mach-date');var d=dateEl?dateEl.value:ist();
   var store=lmach(),sessions=store[d]||[];
   var p=lprof()||{};
@@ -8136,19 +8108,19 @@ function printMachinery(){
     if(!machMap[s.name])machMap[s.name]=[];
     machMap[s.name].push(s);
   });
-  var totalH=sessions.reduce(function(a,s){return a+(s.hours||0);},0);
-  var totalC=sessions.reduce(function(a,s){return a+(s.cost||0);},0);
+  var totalH=sessions.reduce(function(a,s){return a+(parseFloat(s.hours)||0);},0);
+  var totalC=sessions.reduce(function(a,s){return a+(parseFloat(s.cost)||0);},0);
   var machCards=Object.keys(machMap).map(function(mName){
     var list=machMap[mName];
-    var mH=list.reduce(function(a,s){return a+(s.hours||0);},0);
-    var mC=list.reduce(function(a,s){return a+(s.cost||0);},0);
+    var mH=list.reduce(function(a,s){return a+(parseFloat(s.hours)||0);},0);
+    var mC=list.reduce(function(a,s){return a+(parseFloat(s.cost)||0);},0);
     var rows=list.map(function(s){
       return '<tr>'
         +'<td style="padding:7px 10px;font-weight:700;color:#1f2937">'+s.name+'</td>'
         +'<td style="padding:7px 10px;color:#4f46e5;font-weight:600">'+(s.operator||'—')+'</td>'
         +'<td style="padding:7px 10px;text-align:center">'+(s.start||'—')+(s.end?' – '+s.end:'')+'</td>'
-        +'<td style="padding:7px 10px;text-align:center;font-weight:700;color:#059669">'+(s.hours||0).toFixed(1)+'h</td>'
-        +'<td style="padding:7px 10px;text-align:right;font-weight:700;color:#059669">'+fc(s.cost||0)+'</td>'
+        +'<td style="padding:7px 10px;text-align:center;font-weight:700;color:#059669">'+(parseFloat(s.hours)||0).toFixed(1)+'h</td>'
+        +'<td style="padding:7px 10px;text-align:right;font-weight:700;color:#059669">'+fc(parseFloat(s.cost)||0)+'</td>'
         +'<td style="padding:7px 10px;color:#6b7280;font-size:11px">'+(s.notes||'—')+'</td>'
         +'</tr>';
     }).join('');
@@ -8180,9 +8152,11 @@ function printMachinery(){
     +machCards
     +_pdfFooter()+'</div></body></html>';
   opw(html);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printMachinery',err);}
 }
 
 function printMachineryMonth(){
+try{
   var sel=document.getElementById('mach-month-sel');var m=sel?sel.value:mkey(VM);
   var machFilter=document.getElementById('mach-filter-machine');
   var opFilter=document.getElementById('mach-filter-operator');
@@ -8199,15 +8173,15 @@ function printMachineryMonth(){
     if(selOp&&s.operator!==selOp)return;
     var key=s.name;
     if(!machMap[key])machMap[key]={name:s.name,rows:[]};
-    machMap[key].rows.push({date:d,operator:s.operator||'—',start:s.start||'',end:s.end||'',hours:s.hours||0,cost:s.cost||0,notes:s.notes||''});
-    grandH+=(s.hours||0);grandC+=(s.cost||0);
+    machMap[key].rows.push({date:d,operator:s.operator||'—',start:s.start||'',end:s.end||'',hours:parseFloat(s.hours)||0,cost:parseFloat(s.cost)||0,notes:s.notes||''});
+    grandH+=(parseFloat(s.hours)||0);grandC+=(parseFloat(s.cost)||0);
   });});
   if(!Object.keys(machMap).length){toast('No records for selected filters','err');return;}
   // Build machine cards
   var machCards=Object.keys(machMap).map(function(mName){
     var mc=machMap[mName];
-    var mH=mc.rows.reduce(function(a,r){return a+r.hours;},0);
-    var mC=mc.rows.reduce(function(a,r){return a+r.cost;},0);
+    var mH=mc.rows.reduce(function(a,r){return a+(parseFloat(r.hours)||0);},0);
+    var mC=mc.rows.reduce(function(a,r){return a+(parseFloat(r.cost)||0);},0);
     var rows=mc.rows.map(function(r){
       return '<tr>'
         +'<td style="padding:6px 10px;font-weight:600;color:#374151">'+fd(r.date)+'</td>'
@@ -8259,6 +8233,7 @@ function printMachineryMonth(){
     +machCards
     +_pdfFooter()+'</div></body></html>';
   opw(html);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printMachineryMonth',err);}
 }
 
 // ============================================================
@@ -11399,11 +11374,36 @@ function doAdminLogout() {
   _adminUser = null; _adminApp = null; _adminSBUser = null;
   window._sbSubActive = false;
   window._sbSubChecked = true;
-  safeLS.removeItem(ADMIN_ROLE_KEY);
-  safeLS.removeItem(ADMIN_EMAIL_KEY);
-  safeLS.removeItem('cm_sub_end');
   if (_cloudSyncTimer) { clearInterval(_cloudSyncTimer); _cloudSyncTimer = null; }
-  toast('Logged out', 'ok');
+  // Stop any viewer polling
+  if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; }
+  // Clear ALL app + cloud data from localStorage so a new login starts fresh
+  var _allKeys = [
+    'cm_data','cm_db','cm_meta','cm_matstore','cm_dept','cm_profile','cm_phkeys',
+    'cm_machinery','cm_drawings','cm_budget','cm_milestones','cm_punchlist',
+    'cm_tombstones','cm_visits','cm_contract','cm_invoices','cm_quotations',
+    'cm_suppliers','cm_subcon_bills','cm_po','cm_project','cm_site_info',
+    'cm_site_id','cm_nid','cm_photos','cm_fb_cfg','cm_fb_config',
+    'cm_boq_schedule','cm_boq_today_details','cm_boq_dpr_date',
+    'cm_boq_last_reset_date','cm_boq_project_info',
+    'cm_admin_role','cm_admin_email',
+    'cm_cloud','cm_cloud_activated','cm_cloud_site',
+    'cm_sub_end','cm_rzp_payment_id',
+    ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, CLOUD_KEY
+  ];
+  // deduplicate and remove
+  var _seen = {};
+  _allKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; safeLS.removeItem(k); } });
+  // Also wipe any supabase auth tokens stored by gotrue
+  try {
+    var _lsKeys = Object.keys(localStorage);
+    _lsKeys.forEach(function(k){
+      if(k.indexOf('sb-')===0 || k.indexOf('supabase.')===0){ localStorage.removeItem(k); }
+    });
+  } catch(e){}
+  // Reset in-memory data
+  AD = [];
+  toast('Logged out. All local data cleared.', 'ok');
   updateCloudBtn();
   refreshCloudModalState();
   openCloudModal();
@@ -13810,7 +13810,14 @@ function openSignatureModal(editIdx) {
   var modal = document.getElementById('sig-modal');
   if (!modal) return;
   var nameInp = document.getElementById('sig-name-inp');
-  if (nameInp) nameInp.value = (editIdx >= 0 && _sigData[editIdx]) ? _sigData[editIdx].name : '';
+  var roleSel = document.getElementById('sig-role-sel');
+  if (editIdx >= 0 && _sigData[editIdx]) {
+    if (nameInp) nameInp.value = _sigData[editIdx].name || '';
+    if (roleSel) roleSel.value = _sigData[editIdx].role || '';
+  } else {
+    if (nameInp) nameInp.value = '';
+    if (roleSel) roleSel.value = '';
+  }
   var canvas = document.getElementById('sig-canvas');
   if (canvas) {
     _sigCtx = canvas.getContext('2d');
@@ -13827,6 +13834,14 @@ function openSignatureModal(editIdx) {
 }
 function closeSigModal() {
   document.getElementById('sig-modal').classList.remove('show');
+}
+function _onSigRoleChange() {
+  var sel = document.getElementById('sig-role-sel');
+  var inp = document.getElementById('sig-name-inp');
+  if (sel && inp && sel.value && !inp.value.trim()) {
+    // Only auto-fill name if user hasn't typed anything yet
+    inp.value = sel.value;
+  }
 }
 function _initSigCanvas(canvas) {
   canvas.removeEventListener('mousedown',_smdown);
@@ -13883,16 +13898,19 @@ function loadSigPhoto(evt) {
 
 function saveSignature() {
   var nameInp = document.getElementById('sig-name-inp');
+  var roleSel = document.getElementById('sig-role-sel');
   var name = nameInp ? nameInp.value.trim() : '';
-  if (!name) { toast('Enter a name','err'); return; }
+  var role = roleSel ? roleSel.value.trim() : '';
+  if (!role) { toast('Select an authority role first','err'); return; }
+  if (!name) { name = role; } // fallback: use role as display name
   var canvas = document.getElementById('sig-canvas');
   var img = canvas ? canvas.toDataURL() : '';
   var editIdx = parseInt(canvas ? canvas.dataset.editIdx : -1);
   _loadSigs();
   if (editIdx >= 0 && _sigData[editIdx]) {
-    _sigData[editIdx] = { name:name, img:img };
+    _sigData[editIdx] = { name:name, role:role, img:img };
   } else {
-    _sigData.push({ name:name, img:img });
+    _sigData.push({ name:name, role:role, img:img });
   }
   _saveSigs();
   closeSigModal();
@@ -13919,7 +13937,10 @@ function renderSigList() {
   wrap.innerHTML = _sigData.map(function(s,i){
     return '<div style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:6px 10px;margin-bottom:6px">'
       +'<img src="'+s.img+'" style="width:50px;height:24px;object-fit:contain;border-radius:4px;background:#fff">'
-      +'<span style="flex:1;font-size:11px;font-weight:700;color:#c7d2fe">'+s.name+'</span>'
+      +'<div style="flex:1;min-width:0">'
+      +'<p style="font-size:11px;font-weight:800;color:#c7d2fe;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+s.name+'</p>'
+      +(s.role ? '<p style="font-size:9px;color:rgba(167,139,250,.7);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+s.role+'</p>' : '')
+      +'</div>'
       +'<button onclick="openSignatureModal('+i+')" style="font-size:10px;padding:2px 7px;background:rgba(99,102,241,.2);color:#818cf8;border:none;border-radius:5px;cursor:pointer">Edit</button>'
       +'<button onclick="deleteSignature('+i+')" style="font-size:10px;padding:2px 7px;background:rgba(239,68,68,.15);color:#fca5a5;border:none;border-radius:5px;cursor:pointer">✕</button>'
       +'</div>';
@@ -13976,13 +13997,18 @@ function placeSig(targetId, sigIdx) {
 document.addEventListener('DOMContentLoaded', function(){
   var modal = document.createElement('div');
   modal.id = 'sig-modal';
-  modal.innerHTML = '<div style="background:linear-gradient(160deg,#1a1740,#312e81);border-radius:20px;padding:18px;width:90%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,.6)">'
+  var _roleOpts = '<option value="">— Select authority role —</option><option value="Site Supervisor">Site Supervisor</option><option value="Prepared By">Prepared By</option><option value="Authorized">Authorized</option><option value="Authorised By">Authorised By</option><option value="Client Acceptance">Client Acceptance</option><option value="Supplier Acknowledgement">Supplier Acknowledgement</option><option value="Site Engineer">Site Engineer</option><option value="Project Manager">Project Manager</option><option value="Site Incharge">Site Incharge</option><option value="Checked By">Checked By</option><option value="Approved By">Approved By</option><option value="Contractor">Contractor</option><option value="Consultant">Consultant</option><option value="Director / Owner">Director / Owner</option><option value="Witness">Witness</option>';
+  modal.innerHTML = '<div style="background:linear-gradient(160deg,#1a1740,#312e81);border-radius:20px;padding:18px;width:92%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.6)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
-    +'<p style="font-size:14px;font-weight:900;color:#fff;margin:0">✍️ Draw Signature</p>'
+    +'<p style="font-size:14px;font-weight:900;color:#fff;margin:0">✍️ Add Signature</p>'
     +'<button onclick="closeSigModal()" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.1);border:none;color:#fff;cursor:pointer">✕</button>'
     +'</div>'
-    +'<input id="sig-name-inp" placeholder="Signatory name (e.g. Site Engineer)" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);border-radius:9px;color:#fff;font-size:12px;font-weight:600;margin-bottom:10px;box-sizing:border-box;outline:none" />'
-    +'<canvas id="sig-canvas" width="300" height="110" style="width:100%;display:block;margin-bottom:8px"></canvas>'
+    +'<p style="font-size:9px;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Authority Role</p>'
+    +'<select id="sig-role-sel" onchange="_onSigRoleChange()" style="width:100%;padding:8px 10px;background:rgba(30,27,74,.9);border:1.5px solid rgba(255,255,255,.2);border-radius:9px;color:#fff;font-size:12px;font-weight:600;margin-bottom:8px;box-sizing:border-box;outline:none">'+_roleOpts+'</select>'
+    +'<p style="font-size:9px;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Display Name</p>'
+    +'<input id="sig-name-inp" placeholder="e.g. Ramesh Kumar" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);border-radius:9px;color:#fff;font-size:12px;font-weight:600;margin-bottom:10px;box-sizing:border-box;outline:none" />'
+    +'<p style="font-size:9px;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Draw Signature <span style="font-weight:400;opacity:.6">(or upload photo)</span></p>'
+    +'<canvas id="sig-canvas" width="300" height="100" style="width:100%;display:block;background:rgba(255,255,255,.96);border-radius:8px;margin-bottom:8px"></canvas>'
     +'<input type="file" id="sig-photo-input" accept="image/*" style="display:none" onchange="loadSigPhoto(event)">'
     +'<div style="display:flex;gap:8px">'
     +'<button onclick="clearSigCanvas()" style="flex:1;padding:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer">🗑 Clear</button>'
