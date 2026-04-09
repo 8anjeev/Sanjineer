@@ -4355,6 +4355,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ===== QUOTATION / ESTIMATE ===== -->
 <div id="tab-quotation" class="tab-content" style="display:none">
+  <!-- Sub-tab buttons -->
+  <div class="flex gap-2 mb-3">
+    <button id="qtab-btn-quote" onclick="switchQtSubTab('quote')" class="flex-1 py-2 rounded-xl text-sm font-bold text-white active:scale-95" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">💼 Quotation</button>
+    <button id="qtab-btn-meas" onclick="switchQtSubTab('meas')" class="flex-1 py-2 rounded-xl text-sm font-bold active:scale-95 border-2 border-indigo-300 text-indigo-700 bg-white">📐 Measurement</button>
+  </div>
+
+  <!-- ── Quotation sub-section ── -->
+  <div id="qtab-sec-quote">
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">💼 New Quotation / Estimate</p>
@@ -4400,6 +4408,59 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div id="qt-records-list"><p class="text-gray-400 text-center py-3 text-xs">No quotations saved yet</p></div>
   </div>
+  </div><!-- end qtab-sec-quote -->
+
+  <!-- ── Measurement sub-section ── -->
+  <div id="qtab-sec-meas" style="display:none">
+  <!-- New Measurement Sheet -->
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">📐 New Measurement Sheet</p>
+      <button onclick="printMeasurementSheet()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Sheet No.</label><input type="text" id="ms-no" placeholder="MS-001" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="ms-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Item / Description</label><input type="text" id="ms-title" placeholder="e.g. Brick Masonry — First Floor" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Location / Notes</label><input type="text" id="ms-location" placeholder="Location / Remarks" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+    </div>
+    <!-- Measurement rows table -->
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-xs font-bold text-gray-600">Measurement Items</p>
+      <button onclick="addMsRow()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:2px 10px">+ Add Row</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs mb-1" style="min-width:560px">
+        <thead>
+          <tr class="bg-indigo-50">
+            <th class="px-1 py-1.5 text-center text-gray-600 font-bold" style="width:28px">S.No</th>
+            <th class="px-1 py-1.5 text-left text-gray-600 font-bold" style="min-width:110px">Description</th>
+            <th class="px-1 py-1.5 text-center text-gray-600 font-bold" style="width:72px">Unit</th>
+            <th class="px-1 py-1.5 text-center text-gray-600 font-bold" style="width:40px">Nos</th>
+            <th class="px-1 py-1.5 text-center text-gray-600 font-bold" style="width:52px">Length</th>
+            <th class="px-1 py-1.5 text-center text-gray-600 font-bold" style="width:52px">Width</th>
+            <th class="px-1 py-1.5 text-center text-gray-600 font-bold" style="width:52px">Height</th>
+            <th class="px-1 py-1.5 text-right text-gray-600 font-bold" style="width:70px">Qty (unit)</th>
+            <th class="px-1 py-1.5" style="width:20px"></th>
+          </tr>
+        </thead>
+        <tbody id="ms-rows-body"></tbody>
+      </table>
+    </div>
+    <div class="flex justify-between items-center border-t pt-2 mt-1">
+      <p class="text-xs text-gray-500">Total quantity is sum of all rows in their respective units.</p>
+    </div>
+    <button onclick="saveMeasurementSheet()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95 mt-2">💾 Save Sheet</button>
+  </div>
+  <!-- Saved Measurement Sheets -->
+  <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">📁 Saved Measurement Sheets</p>
+      <button onclick="renderMsRecords()" class="bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold px-3 py-1">🔄 Refresh</button>
+    </div>
+    <div id="ms-records-list"><p class="text-gray-400 text-center py-3 text-xs">No sheets saved yet</p></div>
+  </div>
+  </div><!-- end qtab-sec-meas -->
 </div>
 
 <!-- ===== SITE VISITS / INSPECTION LOG ===== -->
@@ -7564,39 +7625,8 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
     +(showEngineer && prof.engineer ? '<p style="font-size:10px;color:rgba(255,255,255,0.85);margin-top:2px">'+prof.engineer+'</p>' : '')
     +'</div><div style="text-align:right;flex-shrink:0">'+(rightHtml||defaultRight)+'</div></div>';
 }
-function _pdfFooter(){
-  // Encode saved signatures as JSON for print window use
-  var sigs = [];
-  try { sigs = JSON.parse(localStorage.getItem('sanj_signatures')||'[]'); } catch(e) {}
-  var sigsJson = JSON.stringify(sigs).replace(/'/g,"\\'").replace(/"/g,'&quot;');
-  var sigDropHtml = sigs.length > 0
-    ? '<div id="pdf-sig-drop" style="display:none;position:absolute;bottom:40px;right:20px;background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:6px 0;z-index:999;min-width:200px">'
-      + sigs.map(function(s,i){
-        return '<div onclick="placePdfSig('+i+')" style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6" onmouseover="this.style.background=\'#eef2ff\'" onmouseout="this.style.background=\'\'">'
-          + '<img src="'+s.img+'" style="height:22px;max-width:70px;object-fit:contain;flex-shrink:0">'
-          + '<div><p style="font-size:11px;font-weight:700;color:#374151;margin:0">'+s.name+'</p>'+(s.role?'<p style="font-size:9px;color:#6b7280;margin:1px 0 0">'+s.role+'</p>':'')+'</div>'
-          + '</div>';
-      }).join('')
-      + '</div>'
-    : '';
-  var sigJs = sigs.length > 0
-    ? '<script>var _pdfSigs='+JSON.stringify(sigs).replace(/<\/script>/g,'')+';'
-      + 'function toggleSigDrop(){var d=document.getElementById("pdf-sig-drop");if(d)d.style.display=d.style.display==="none"?"block":"none";}'
-      + 'function placePdfSig(i){var sig=_pdfSigs[i];if(!sig)return;var zone=document.getElementById("pdf-sig-zone");if(!zone)return;'
-      + 'zone.innerHTML="<div style=\'text-align:center\'><img src=\'"+(sig.img)+"\' style=\'max-width:130px;max-height:44px;object-fit:contain\'><div style=\'font-size:9px;color:#374151;font-weight:700;margin-top:2px\'>"+(sig.name)+"<\/div><\/div>";'
-      + 'var drop=document.getElementById("pdf-sig-drop");if(drop)drop.style.display="none";}'
-      + 'document.addEventListener("dblclick",function(e){if(e.target.closest("#pdf-sig-zone,#pdf-sig-drop"))return;toggleSigDrop();});'
-      + '<\/script>'
-    : '';
-  return '<div style="position:relative;margin-top:20px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:flex-end;font-size:10px;color:#9ca3af">'
-    + '<span>app.sanjineer.in · '+(lprof()||{company:''}).company+'</span>'
-    + '<div id="pdf-sig-zone" ondblclick="toggleSigDrop()" title="Double-tap to add signature" style="min-width:140px;height:44px;border:1.5px dashed #d1d5db;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#9ca3af;font-size:9px;font-weight:600;position:relative">'
-    + (sigs.length > 0 ? '✍️ Double-tap to sign' : 'Signature: _______________________')
-    + '</div>'
-    + sigDropHtml
-    + '</div>'
-    + sigJs;
-}
+function _pdfFooter(){ return pftr(); }
+
 function pcs(){
 var _p=lprof()||{};
 var _hc=(_p.headerColor&&_p.headerColor.indexOf('gradient')===-1)?_p.headerColor:'#4f46e5';
@@ -7634,7 +7664,7 @@ return ':root{--hc:'+_hc+'}'
 +'.footer{margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb;display:flex;justify-content:space-between}'
 +'.sig .sl{width:140px;border-top:1.5px solid #374151;margin-top:28px}'
 +'.sig .slb{font-size:9px;color:#6b7280;margin-top:3px}'
-+'@media print{.bar{display:none!important}.no-print{display:none!important}.content{margin-top:0;zoom:0.62}html,body{margin:0!important;padding:0!important;max-width:none!important}@page{margin:12mm 10mm 18mm 10mm;size:A4}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}'
++'@media print{.bar{display:none!important}.no-print{display:none!important}.sig-zone{border:none!important;padding:0!important;min-height:0!important}.content{margin-top:0;zoom:0.62}html,body{margin:0!important;padding:0!important;max-width:none!important}@page{margin:12mm 10mm 18mm 10mm;size:A4}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}'
 /* Page number bottom-right on every page */
 +'@page{@bottom-right{content:"Page " counter(page) " of " counter(pages);font-size:8px;color:#9ca3af;font-family:Arial,sans-serif}}'
 +'}';
@@ -7666,128 +7696,106 @@ function _setPrintAuthSlots(obj){
 // All available roles (same 8 the user can save sigs for)
 var _AUTH_ROLES = ['Site Engineer','Site Incharge','Prepared By','Approved By','Project Manager','Checked By','Contractor / Owner','Client'];
 
-// Build one signature cell HTML for PDF footer
+// Build one signature cell HTML for PDF footer — dotted box, click to set
 function _buildSigCell(role, align, sigs, isInteractive, slotKey){
   var sig = null;
-  sigs.forEach(function(s){ if(s.role===role && !sig) sig = s; });
+  if(role) sigs.forEach(function(s){ if(s.role===role && !sig) sig = s; });
   var hasSig = sig && sig.img && sig.img.length > 50;
-  var justifyMap = {left:'flex-start', center:'center', right:'flex-end'};
-  var justify = justifyMap[align] || 'flex-start';
-  var marginAuto = align==='right'?'margin-left:auto':align==='center'?'margin:0 auto':'';
-
-  var html = '<div style="flex:1;text-align:'+align+'">';
-
-  // Signature image area (48px tall)
-  html += '<div style="min-height:48px;display:flex;align-items:flex-end;justify-content:'+justify+';padding-bottom:4px">';
-  if(hasSig){
-    html += '<img src="'+sig.img+'" style="max-width:130px;height:42px;object-fit:contain;display:block;'+(align==='right'?'margin-left:auto':align==='center'?'margin:0 auto':'')+'" />';
-  } else {
-    // Dashed line only — no helper text
-    html += '<div style="max-width:140px;width:100%;border-bottom:1.5px dashed #aaa;'+(marginAuto||'')+'"></div>';
+  var justMap = {left:'flex-start', center:'center', right:'flex-end'};
+  var justify  = justMap[align] || 'flex-start';
+  var mAuto    = align==='right'?'margin-left:auto':align==='center'?'margin:0 auto':'';
+  if(!role){
+    return '<div style="flex:1;text-align:'+align+'">'
+      +(isInteractive
+        ? '<div class="sig-zone" onclick="_openRoleList(\''+slotKey+'\',this)" style="min-height:58px;border:1.5px dashed #a5b4fc;border-radius:8px;display:flex;align-items:center;justify-content:'+justify+';padding:6px 8px;cursor:pointer" title="Click to set authority">'
+          +'<span style="font-size:8px;color:#c4b5fd;font-weight:600">tap to set</span></div>'
+        : '')
+      +'</div>';
   }
-  html += '</div>';
-
-  // Role label line
-  html += '<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;'+(marginAuto||'')+'">';
-  html += '<div style="font-size:9px;color:#6b7280;font-weight:700;letter-spacing:.02em">'+role+'</div>';
-  // (name not shown — role only)
-  // Interactive change button (only in preview, hidden in print)
-  if(isInteractive){
-    var opts = _AUTH_ROLES.map(function(r){
-      return '<option value="'+r+'"'+(r===role?' selected':'')+'>'+r+'</option>';
-    }).join('');
-    html += '<div class="no-print" style="margin-top:4px">'
-      +'<select onchange="_changeSlot(\''+slotKey+'\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px">'
-      +'<option value="">— change role —</option>'+opts
-      +'</select></div>';
-  }
-  html += '</div></div>';
-  return html;
+  var inner = '';
+  if(hasSig) inner += '<img src="'+sig.img+'" style="max-width:120px;height:40px;object-fit:contain;display:block;'+(align==='right'?'margin-left:auto':align==='center'?'margin:0 auto':'')+'">';
+  inner += '<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;'+mAuto+'">'
+    +'<div style="font-size:9px;color:#6b7280;font-weight:700;letter-spacing:.02em">'+role+'</div></div>';
+  return '<div style="flex:1;text-align:'+align+'">'
+    +(isInteractive
+      ? '<div class="sig-zone" onclick="_openRoleList(\''+slotKey+'\',this)" style="min-height:58px;border:1.5px dashed #a5b4fc;border-radius:8px;display:flex;flex-direction:column;align-items:'+justify+';justify-content:flex-end;padding:6px 8px;cursor:pointer">'+inner+'</div>'
+      : '<div style="min-height:58px;display:flex;flex-direction:column;align-items:'+justify+';justify-content:flex-end;padding-bottom:2px">'+inner+'</div>')
+    +'</div>';
 }
 
 function pftr(){
   var sigs = [];
   try { sigs = JSON.parse(localStorage.getItem('sanj_signatures')||'[]'); } catch(e){ sigs=[]; }
   var slots = _getPrintAuthSlots();
-  var leftRole  = 'Site Engineer';             // always fixed
-  var midRole   = slots.middle || '';
-  var rightRole = slots.right  || '';
+  if(!slots.left) slots.left = 'Site Engineer';
 
-  // Serialise sigs + slots into the PDF so interactive JS inside the popup can read them
   var sigsJson  = JSON.stringify(sigs).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
   var slotsJson = JSON.stringify(slots).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
   var rolesJson = JSON.stringify(_AUTH_ROLES);
 
-  // Build footer HTML — 3 columns always
-  var leftHtml  = _buildSigCell(leftRole,  'left',   sigs, true, 'left');
-  var midHtml   = midRole
-    ? _buildSigCell(midRole, 'center', sigs, true, 'middle')
-    : '<div style="flex:1;text-align:center">'
-        +'<div style="min-height:48px"></div>'
-        +'<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin:0 auto">'
-        +'<div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div>'
-        +'<div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'middle\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'
-        +_AUTH_ROLES.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('')
-        +'</select></div></div></div>';
-  var rightHtml = rightRole
-    ? _buildSigCell(rightRole, 'right',  sigs, true, 'right')
-    : '<div style="flex:1;text-align:right">'
-        +'<div style="min-height:48px"></div>'
-        +'<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin-left:auto">'
-        +'<div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div>'
-        +'<div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'right\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'
-        +_AUTH_ROLES.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('')
-        +'</select></div></div></div>';
+  var leftHtml  = _buildSigCell(slots.left   || '', 'left',   sigs, true, 'left');
+  var midHtml   = _buildSigCell(slots.middle || '', 'center', sigs, true, 'middle');
+  var rightHtml = _buildSigCell(slots.right  || '', 'right',  sigs, true, 'right');
 
-  // Inline JS injected into the PDF popup to handle live slot changes
+  // Role picker modal + inline JS injected into PDF popup
+  var roleMenu = '<div id="_role_menu" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.45);align-items:center;justify-content:center" class="no-print">'
+    +'<div style="background:#fff;border-radius:14px;padding:16px;min-width:210px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">'
+    +'<p style="font-size:12px;font-weight:800;color:#1f2937;margin-bottom:10px;text-align:center">Select Authority Role</p>'
+    +_AUTH_ROLES.map(function(r){
+      return '<div onclick="_pickRole(\''+r+'\')" style="padding:9px 12px;border-radius:8px;font-size:11px;font-weight:600;color:#374151;cursor:pointer;border:1px solid #e5e7eb;margin-bottom:5px" onmouseover="this.style.background=\'#eef2ff\'" onmouseout="this.style.background=\'\'">'+r+'</div>';
+    }).join('')
+    +'<div onclick="_pickRole(\'\')" style="padding:7px 12px;border-radius:8px;font-size:10px;font-weight:600;color:#9ca3af;cursor:pointer;text-align:center;margin-top:4px;border:1px dashed #e5e7eb" onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'\'">✕ Clear / None</div>'
+    +'</div></div>';
+
   var inlineJs = '<sc'+'ript>'
     +'var _pSigs='+sigsJson+';'
     +'var _pSlots='+slotsJson+';'
     +'var _pRoles='+rolesJson+';'
-    // Save slot change back to parent localStorage and re-render
-    +'function _changeSlot(slot,role){'
-    +'  if(!role)return;'
-    +'  _pSlots[slot]=role;'
-    // Save to parent/opener localStorage (works in both iframe and popup)
-    +'  try{window.parent&&window.parent.localStorage&&window.parent.localStorage.setItem(\'sanj_print_auth_slots\',JSON.stringify(_pSlots));}catch(ex){}'
-    +'  try{window.opener&&window.opener.localStorage&&window.opener.localStorage.setItem(\'sanj_print_auth_slots\',JSON.stringify(_pSlots));}catch(ex){}'
-    // Re-render just that column
+    +'var _activeSlot=null;'
+    +'function _openRoleList(slot){'
+    +'  _activeSlot=slot;'
+    +'  var m=document.getElementById("_role_menu");if(m){m.style.display="flex";}'
+    +'}'
+    +'function _closeRoleList(){var m=document.getElementById("_role_menu");if(m)m.style.display="none";_activeSlot=null;}'
+    +'document.addEventListener("click",function(e){if(e.target===document.getElementById("_role_menu"))_closeRoleList();});'
+    +'function _pickRole(role){'
+    +'  if(_activeSlot===null)return;'
+    +'  _pSlots[_activeSlot]=role;'
+    +'  try{window.parent&&window.parent.localStorage&&window.parent.localStorage.setItem("sanj_print_auth_slots",JSON.stringify(_pSlots));}catch(ex){}'
+    +'  try{window.opener&&window.opener.localStorage&&window.opener.localStorage.setItem("sanj_print_auth_slots",JSON.stringify(_pSlots));}catch(ex){}'
+    +'  _renderCol(_activeSlot,role);'
+    +'  _closeRoleList();'
+    +'}'
+    +'function _renderCol(slot,role){'
+    +'  var col=document.getElementById("_sig_col_"+slot);if(!col)return;'
     +'  var sig=null;'
-    +'  _pSigs.forEach(function(s){if(s.role===role&&!sig)sig=s;});'
+    +'  if(role)_pSigs.forEach(function(s){if(s.role===role&&!sig)sig=s;});'
     +'  var hasSig=sig&&sig.img&&sig.img.length>50;'
-    +'  var alignMap={left:\'flex-start\',middle:\'center\',right:\'flex-end\'};'
-    +'  var textMap={left:\'left\',middle:\'center\',right:\'right\'};'
-    +'  var align=textMap[slot]||\'left\';'
-    +'  var justify=alignMap[slot]||\'flex-start\';'
-    +'  var marginAuto=slot===\'right\'?\'margin-left:auto\':slot===\'middle\'?\'margin:0 auto\':\'\';'
-    +'  var col=document.getElementById(\'_sig_col_\'+slot);'
-    +'  if(!col)return;'
-    +'  var opts=_pRoles.map(function(r){return\'<option value="\'+r+\'"\'+( r===role?\' selected\':\'\')+\'>\'+r+\'</option>\';}).join(\'\');'
-    +'  col.style.textAlign=align;'
-    +'  col.innerHTML=\'<div style="min-height:48px;display:flex;align-items:flex-end;justify-content:\'+justify+\';padding-bottom:4px">\''
-    +'    +(hasSig?\'<img src="\'+sig.img+\'" style="max-width:130px;height:42px;object-fit:contain;display:block;\'+( slot===\'right\'?\'margin-left:auto\':slot===\'middle\'?\'margin:0 auto\':\'\')+\'" />\''
-    +'           :\'<div style="max-width:140px;width:100%;border-bottom:1.5px dashed #aaa;\'+marginAuto+\'"></div>\')'
-    +'    +\'</div>\''
-    +'    +\'<div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;\'+marginAuto+\'">\''
-    +'    +\'<div style="font-size:9px;color:#6b7280;font-weight:700;">\'+role+\'</div>\''
-    +'    +\'<div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\\\'\'+slot+\'\\\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— change role —</option>\'+opts+\'</select></div>\''
-    +'    +\'</div>\';'
+    +'  var taMap={left:"left",middle:"center",right:"right"};'
+    +'  var juMap={left:"flex-start",middle:"center",right:"flex-end"};'
+    +'  var maMap={left:"",middle:"margin:0 auto",right:"margin-left:auto"};'
+    +'  var ta=taMap[slot]||"left",ju=juMap[slot]||"flex-start",ma=maMap[slot]||"";'
+    +'  col.style.textAlign=ta;'
+    +'  var inner="";'
+    +'  if(role){'
+    +'    if(hasSig)inner+="<img src=\'"+sig.img+"\' style=\'max-width:120px;height:40px;object-fit:contain;display:block;"+(slot==="right"?"margin-left:auto":slot==="middle"?"margin:0 auto":"")+"\' />";'
+    +'    inner+="<div style=\'border-top:1.5px solid #374151;padding-top:3px;max-width:140px;"+ma+"\'><div style=\'font-size:9px;color:#6b7280;font-weight:700\'>"+role+"</div></div>";'
+    +'  }'
+    +'  col.innerHTML="<div class=\'sig-zone\' onclick=\'_openRoleList(\\""+slot+"\\")\'"+\' style=\'+"\'min-height:58px;border:1.5px dashed #a5b4fc;border-radius:8px;display:flex;flex-direction:column;align-items:"+ju+";justify-content:flex-end;padding:6px 8px;cursor:pointer\'"+">"'
+    +'    +(role?inner:"<span style=\'font-size:8px;color:#c4b5fd;font-weight:600\'>tap to set</span>")'
+    +'    +"</div>";'
     +'}'
     +'<\/sc'+'ript>';
 
   return '<div style="margin-top:24px;padding-top:12px;border-top:2px solid #e5e7eb">'
-    +'<div style="font-size:8px;color:#9ca3af;text-align:right;margin-bottom:6px" class="no-print">✏️ Double-tap dropdown to change signing authority</div>'
-    +'<div style="display:flex;justify-content:space-between;gap:16px">'
-    +'<div id="_sig_col_left"   style="flex:1;text-align:left">'+_buildSigCell(leftRole,'left',sigs,true,'left').replace('<div style="flex:1;text-align:left">','').replace(/<\/div>$/,'')+'</div>'
-    +'<div id="_sig_col_middle" style="flex:1;text-align:center">'+(midRole?_buildSigCell(midRole,'center',sigs,true,'middle').replace('<div style="flex:1;text-align:center">','').replace(/<\/div>$/,'')
-      :'<div style="min-height:48px"></div><div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin:0 auto"><div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div><div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'middle\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'+_AUTH_ROLES.map(function(r){return'<option value="'+r+'">'+r+'</option>';}).join('')+'</select></div></div>')
-    +'</div>'
-    +'<div id="_sig_col_right"  style="flex:1;text-align:right">'+(rightRole?_buildSigCell(rightRole,'right',sigs,true,'right').replace('<div style="flex:1;text-align:right">','').replace(/<\/div>$/,'')
-      :'<div style="min-height:48px"></div><div style="border-top:1.5px solid #374151;padding-top:3px;max-width:140px;margin-left:auto"><div style="font-size:9px;color:#bbb;font-weight:600">— not set —</div><div class="no-print" style="margin-top:4px"><select onchange="_changeSlot(\'right\',this.value)" style="font-size:9px;padding:2px 4px;border:1px solid #a5b4fc;border-radius:5px;color:#4f46e5;background:#eef2ff;cursor:pointer;max-width:130px"><option value="">— add authority —</option>'+_AUTH_ROLES.map(function(r){return'<option value="'+r+'">'+r+'</option>';}).join('')+'</select></div></div>')
-    +'</div>'
-    +'</div>'
-    +'</div>'
+    +'<p style="font-size:8px;color:#c4b5fd;text-align:center;margin-bottom:8px" class="no-print">⬇ click any box to set signing authority</p>'
+    +'<div style="display:flex;justify-content:space-between;gap:12px">'
+    +'<div id="_sig_col_left"   style="flex:1;text-align:left">'+leftHtml.replace(/^<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>'
+    +'<div id="_sig_col_middle" style="flex:1;text-align:center">'+midHtml.replace(/^<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>'
+    +'<div id="_sig_col_right"  style="flex:1;text-align:right">'+rightHtml.replace(/^<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>'
+    +'</div></div>'
     +inlineJs
+    +roleMenu
     +'<div style="text-align:center;margin-top:8px;font-size:8px;color:#d1d5db">app.sanjineer.in</div>';
 }
 function opw(html){
@@ -13749,6 +13757,242 @@ function loadQuotationTab() {
   if (!document.getElementById('qt-lines-body').children.length) addQtLine();
   renderQuotationRecords();
   calcQtTotal();
+  // init measurement sub-tab
+  var msDate = document.getElementById('ms-date');
+  if(msDate && !msDate.value) msDate.value = ist();
+  var msNo = document.getElementById('ms-no');
+  if(msNo && !msNo.value){ msNo.value = 'MS-' + String((lms().length+1)).padStart(3,'0'); }
+  if(!document.getElementById('ms-rows-body').children.length) addMsRow();
+  renderMsRecords();
+}
+function switchQtSubTab(tab){
+  document.getElementById('qtab-sec-quote').style.display = tab==='quote'?'':'none';
+  document.getElementById('qtab-sec-meas').style.display  = tab==='meas' ?'':'none';
+  var qb=document.getElementById('qtab-btn-quote'), mb=document.getElementById('qtab-btn-meas');
+  if(qb){ if(tab==='quote'){qb.style.background='linear-gradient(135deg,#4f46e5,#7c3aed)';qb.style.color='#fff';qb.style.border='none';}else{qb.style.background='#fff';qb.style.color='#4338ca';qb.style.border='2px solid #a5b4fc';} }
+  if(mb){ if(tab==='meas'){mb.style.background='linear-gradient(135deg,#4f46e5,#7c3aed)';mb.style.color='#fff';mb.style.border='none';}else{mb.style.background='#fff';mb.style.color='#4338ca';mb.style.border='2px solid #a5b4fc';} }
+}
+
+// ── Measurement Sheet ──────────────────────────────────────────
+var MS_KEY = 'cm_measurements';
+var _msRowCount = 0;
+function lms(){ try{return JSON.parse(localStorage.getItem(MS_KEY)||'[]');}catch(e){return[];} }
+function sms(arr){ try{localStorage.setItem(MS_KEY,JSON.stringify(arr));}catch(e){} }
+
+// Unit definitions: {label, base (base unit type: len/area/vol/cnt), factor (to SI base)}
+var MS_UNITS = [
+  // Length
+  {g:'Length', u:'mm',   base:'len', f:0.001},
+  {g:'Length', u:'cm',   base:'len', f:0.01},
+  {g:'Length', u:'m',    base:'len', f:1},
+  {g:'Length', u:'ft',   base:'len', f:0.3048},
+  {g:'Length', u:'inch', base:'len', f:0.0254},
+  // Area
+  {g:'Area', u:'sqmm',  base:'area', f:0.000001},
+  {g:'Area', u:'sqcm',  base:'area', f:0.0001},
+  {g:'Area', u:'sqm',   base:'area', f:1},
+  {g:'Area', u:'sqft',  base:'area', f:0.092903},
+  {g:'Area', u:'sqin',  base:'area', f:0.00064516},
+  // Volume
+  {g:'Volume', u:'cucm', base:'vol', f:0.000001},
+  {g:'Volume', u:'cum',  base:'vol', f:1},
+  {g:'Volume', u:'cuft', base:'vol', f:0.0283168},
+  {g:'Volume', u:'litre',base:'vol', f:0.001},
+  // Count / Weight
+  {g:'Count',  u:'nos',  base:'cnt', f:1},
+  {g:'Count',  u:'kg',   base:'cnt', f:1},
+  {g:'Count',  u:'MT',   base:'cnt', f:1},
+  {g:'Count',  u:'RM',   base:'cnt', f:1}
+];
+
+function _msUnitDef(u){ return MS_UNITS.find(function(x){return x.u===u;})||{base:'cnt',f:1}; }
+
+function _msUnitOptions(sel){
+  var html = '';
+  var grp = '';
+  MS_UNITS.forEach(function(x){
+    if(x.g!==grp){ if(grp) html+='</optgroup>'; html+='<optgroup label="'+x.g+'">'; grp=x.g; }
+    html += '<option value="'+x.u+'"'+(x.u===sel?' selected':'')+'>'+x.u+'</option>';
+  });
+  if(grp) html+='</optgroup>';
+  return html;
+}
+
+function addMsRow(data){
+  var tbody = document.getElementById('ms-rows-body'); if(!tbody) return;
+  var id = ++_msRowCount;
+  var d = data||{};
+  var selUnit = d.unit||'m';
+  var tr = document.createElement('tr');
+  tr.id = 'ms-row-'+id;
+  tr.innerHTML =
+    '<td class="px-1 py-1 text-center text-xs text-gray-500 font-bold" id="ms-sno-'+id+'"></td>'
+   +'<td class="px-1 py-1"><input type="text" id="ms-desc-'+id+'" value="'+(d.desc||'')+'" placeholder="Description" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none"></td>'
+   +'<td class="px-1 py-1"><select id="ms-unit-'+id+'" onchange="msCvtUnit('+id+')" class="w-full px-1 py-1 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none">'+_msUnitOptions(selUnit)+'</select></td>'
+   +'<td class="px-1 py-1"><input type="number" id="ms-nos-'+id+'" value="'+(d.nos||'')+'" placeholder="1" step="any" class="w-full px-1 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcMsRow('+id+')"></td>'
+   +'<td class="px-1 py-1"><input type="number" id="ms-len-'+id+'" value="'+(d.len||'')+'" placeholder="—" step="any" class="w-full px-1 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcMsRow('+id+')"></td>'
+   +'<td class="px-1 py-1"><input type="number" id="ms-wid-'+id+'" value="'+(d.wid||'')+'" placeholder="—" step="any" class="w-full px-1 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcMsRow('+id+')"></td>'
+   +'<td class="px-1 py-1"><input type="number" id="ms-hgt-'+id+'" value="'+(d.hgt||'')+'" placeholder="—" step="any" class="w-full px-1 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcMsRow('+id+')"></td>'
+   +'<td class="px-1 py-1 text-right text-xs font-bold text-indigo-700" id="ms-qty-'+id+'">—</td>'
+   +'<td class="px-1 py-1"><button onclick="removeMsRow('+id+')" class="text-red-400 text-sm font-bold">✕</button></td>';
+  tbody.appendChild(tr);
+  updateMsSnos();
+  calcMsRow(id);
+}
+function removeMsRow(id){
+  var r=document.getElementById('ms-row-'+id); if(r)r.remove();
+  updateMsSnos();
+}
+function updateMsSnos(){
+  var tbody=document.getElementById('ms-rows-body');if(!tbody)return;
+  var rows=tbody.querySelectorAll('tr');
+  rows.forEach(function(tr,i){
+    var id=tr.id.replace('ms-row-','');
+    var el=document.getElementById('ms-sno-'+id);
+    if(el) el.textContent=i+1;
+  });
+}
+function _msVal(id,field){ return parseFloat((document.getElementById('ms-'+field+'-'+id)||{}).value)||0; }
+function calcMsRow(id){
+  var nos=_msVal(id,'nos')||1, len=_msVal(id,'len'), wid=_msVal(id,'wid'), hgt=_msVal(id,'hgt');
+  var unit=(document.getElementById('ms-unit-'+id)||{}).value||'m';
+  var qty=0;
+  if(hgt>0 && wid>0 && len>0) qty=nos*len*wid*hgt;
+  else if(wid>0 && len>0) qty=nos*len*wid;
+  else if(len>0) qty=nos*len;
+  else qty=nos;
+  var el=document.getElementById('ms-qty-'+id);
+  if(el) el.textContent = qty.toFixed(3).replace(/\.?0+$/,'') + ' ('+unit+')';
+}
+function msCvtUnit(id){
+  // When unit changes, convert L/W/H values to new unit
+  var sel=document.getElementById('ms-unit-'+id); if(!sel) return;
+  var newUnit=sel.value;
+  var oldUnit=sel.dataset.prev||newUnit;
+  if(oldUnit===newUnit){ sel.dataset.prev=newUnit; return; }
+  var od=_msUnitDef(oldUnit), nd=_msUnitDef(newUnit);
+  // Only convert if same base type (len→len, area→area etc.)
+  if(od.base===nd.base && od.base!=='cnt'){
+    var factor = od.f / nd.f;
+    ['len','wid','hgt'].forEach(function(f){
+      var inp=document.getElementById('ms-'+f+'-'+id);
+      if(inp&&inp.value){ var v=parseFloat(inp.value); if(!isNaN(v)) inp.value=parseFloat((v*factor).toPrecision(6)); }
+    });
+  }
+  sel.dataset.prev=newUnit;
+  calcMsRow(id);
+}
+function _getMsRows(){
+  var tbody=document.getElementById('ms-rows-body');if(!tbody)return[];
+  var rows=[];
+  tbody.querySelectorAll('tr').forEach(function(tr){
+    var id=tr.id.replace('ms-row-','');
+    var desc=(document.getElementById('ms-desc-'+id)||{}).value||'';
+    var unit=(document.getElementById('ms-unit-'+id)||{}).value||'m';
+    var nos=_msVal(id,'nos'), len=_msVal(id,'len'), wid=_msVal(id,'wid'), hgt=_msVal(id,'hgt');
+    var qty=0;
+    if(hgt>0&&wid>0&&len>0) qty=nos*len*wid*hgt;
+    else if(wid>0&&len>0) qty=nos*len*wid;
+    else if(len>0) qty=nos*len;
+    else qty=nos;
+    rows.push({desc:desc,unit:unit,nos:nos,len:len,wid:wid,hgt:hgt,qty:qty});
+  });
+  return rows;
+}
+function saveMeasurementSheet(){
+  var sheetNo=(document.getElementById('ms-no')||{}).value||'MS-001';
+  var date=(document.getElementById('ms-date')||{}).value||ist();
+  var title=(document.getElementById('ms-title')||{}).value||'';
+  var location=(document.getElementById('ms-location')||{}).value||'';
+  var rows=_getMsRows().filter(function(r){return r.desc||r.nos;});
+  if(!rows.length){toast('Add at least one row','err');return;}
+  var arr=lms();
+  arr.unshift({id:Date.now().toString(36),sheetNo:sheetNo,date:date,title:title,location:location,rows:rows});
+  sms(arr); renderMsRecords(); toast('Sheet saved','ok');
+}
+function renderMsRecords(){
+  var el=document.getElementById('ms-records-list');if(!el)return;
+  var arr=lms();
+  if(!arr.length){el.innerHTML='<p class="text-gray-400 text-center py-3 text-xs">No sheets saved yet</p>';return;}
+  el.innerHTML=arr.map(function(r){
+    return '<div style="background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:7px 10px;margin-bottom:6px;box-shadow:0 2px 6px rgba(0,0,0,0.07)">'
+     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+     +'<p style="font-weight:800;color:#1f2937;font-size:12px">'+r.sheetNo+(r.title?' — '+r.title:'')+'</p>'
+     +'<div style="display:flex;gap:5px">'
+     +'<button onclick="reprintMsSheet(\''+r.id+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:5px;cursor:pointer;font-weight:700">Print</button>'
+     +'<button onclick="deleteMsSheet(\''+r.id+'\')" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;font-size:11px">×</button>'
+     +'</div></div>'
+     +'<p style="font-size:10px;color:#9ca3af">'+fd(r.date)+(r.location?' · '+r.location:'')+'</p>'
+     +'</div>';
+  }).join('');
+}
+function deleteMsSheet(id){
+  askDel('Delete this measurement sheet?',function(){
+    sms(lms().filter(function(r){return r.id!==id;}));
+    renderMsRecords(); toast('Deleted','ok');
+  });
+}
+function reprintMsSheet(id){
+  var r=lms().find(function(x){return x.id===id;}); if(!r){toast('Not found','err');return;}
+  _printMsHtml(r);
+}
+function printMeasurementSheet(){
+  var sheetNo=(document.getElementById('ms-no')||{}).value||'MS-001';
+  var date=(document.getElementById('ms-date')||{}).value||ist();
+  var title=(document.getElementById('ms-title')||{}).value||'';
+  var location=(document.getElementById('ms-location')||{}).value||'';
+  var rows=_getMsRows().filter(function(r){return r.desc||r.nos;});
+  if(!rows.length){toast('Add at least one row','err');return;}
+  _printMsHtml({sheetNo:sheetNo,date:date,title:title,location:location,rows:rows});
+}
+function _printMsHtml(r){
+  var p=lprof()||{};
+  var hc=p.headerColor||'linear-gradient(135deg,#4f46e5,#7c3aed)';
+  var hSolid=hc.indexOf('gradient')!==-1?'#4f46e5':hc;
+  var rowsHtml=r.rows.map(function(row,i){
+    var nos=row.nos||''; var len=row.len||''; var wid=row.wid||''; var hgt=row.hgt||'';
+    var qtyDisp=parseFloat(row.qty||0).toFixed(3).replace(/\.?0+$/,'');
+    return '<tr style="background:'+(i%2?'#f9fafb':'white')+'">'
+     +'<td style="padding:5px 8px;text-align:center;color:#6b7280;font-weight:700">'+(i+1)+'</td>'
+     +'<td style="padding:5px 8px;font-weight:600;color:#1f2937">'+( row.desc||'—')+'</td>'
+     +'<td style="padding:5px 8px;text-align:center;color:#4f46e5;font-weight:700">'+row.unit+'</td>'
+     +'<td style="padding:5px 8px;text-align:center">'+( nos||'—')+'</td>'
+     +'<td style="padding:5px 8px;text-align:center">'+( len||'—')+'</td>'
+     +'<td style="padding:5px 8px;text-align:center">'+( wid||'—')+'</td>'
+     +'<td style="padding:5px 8px;text-align:center">'+( hgt||'—')+'</td>'
+     +'<td style="padding:5px 8px;text-align:right;font-weight:800;color:#1e1b4b">'+qtyDisp+' <span style="font-size:9px;color:#6b7280;font-weight:600">('+row.unit+')</span></td>'
+     +'</tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Measurement Sheet '+r.sheetNo+'</title><style>'+pcs()
+    +'table{width:100%;border-collapse:collapse}thead th{padding:6px 8px;text-align:left;font-size:11px;font-weight:800;background:'+hSolid+';color:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    +'tbody td{border-bottom:1px solid #f3f4f6}tbody tr:hover{background:#f0f4ff}'
+    +'</style></head><body>'
+    +'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button><span style="flex:1;font-weight:700">Measurement Sheet &#8212; '+r.sheetNo+'</span><button class="bp" onclick="window.print()">&#128438; Print</button><button class="bx" onclick="window.close()">&#x2715;</button></div>'
+    +'<div class="content">'
+    +_pdfHeader('app.sanjineer.in',p.company||'','',
+      '<p style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:.04em">Measurement Sheet</p>'
+      +'<p style="font-size:14px;font-weight:900;color:white;margin-top:3px">'+r.sheetNo+'</p>'
+      +'<p style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px">'+fd(r.date)+'</p>'
+    )
+    +(r.title||r.location?'<div style="background:#f0f4ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;gap:20px">'
+      +(r.title?'<div><p style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase">Work Item</p><p style="font-size:13px;font-weight:800;color:#1e1b4b;margin-top:2px">'+r.title+'</p></div>':'')
+      +(r.location?'<div><p style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase">Location / Notes</p><p style="font-size:12px;color:#374151;margin-top:2px">'+r.location+'</p></div>':'')
+      +'</div>':'')
+    +'<table><thead><tr>'
+    +'<th style="width:32px;text-align:center">S.No</th>'
+    +'<th>Description</th>'
+    +'<th style="width:52px;text-align:center">Unit</th>'
+    +'<th style="width:36px;text-align:center">Nos</th>'
+    +'<th style="width:52px;text-align:center">Length</th>'
+    +'<th style="width:52px;text-align:center">Width</th>'
+    +'<th style="width:52px;text-align:center">Height</th>'
+    +'<th style="width:90px;text-align:right">Quantity</th>'
+    +'</tr></thead><tbody>'
+    +rowsHtml
+    +'</tbody></table>'
+    +pftr()
+    +'</div></body></html>';
+  opw(html);
 }
 
 function addQtLine() {
