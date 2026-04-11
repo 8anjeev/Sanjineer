@@ -850,8 +850,8 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     main .space-y-2 > * + * { margin-top: 5px !important; }
     main .space-y-4 > * + * { margin-top: 9px !important; }
 
-    /* ── 7. Nav tab bar ── */
-    nav .tab-btn { font-size: 11px !important; font-weight: 600 !important; padding: 4px 8px !important; }
+    /* ── 7. Nav tab bar — height/padding locked by #nav-ratio-lock above ── */
+    nav .tab-btn { font-size: 11px !important; font-weight: 600 !important; }
 
     /* ── 8. Bill tab selector — compact single-row nav ── */
     #tab-bill > div:first-child button {
@@ -1244,6 +1244,29 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     /* ══ 10. PRINT AREA BUTTONS — hide in print ══ */
     @media print {
       main button { display: none !important; }
+      /* Android WebView: when _pf_overlay is full-screen during print, hide everything else */
+      body > *:not(#_pf_overlay) { }
+      #_pf_topbar { display: none !important; }
+    }
+    /* ══════════════════════════════════════════
+       TABLET LAYOUT  (640px – 1023px) — fill full screen
+       ══════════════════════════════════════════ */
+    @media (min-width: 640px) and (max-width: 1023px) {
+      #main-app {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+      }
+      #main-app > header {
+        padding: 0 20px !important;
+      }
+      #main-app > nav {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+      }
+      #main-app > main {
+        padding: 12px 20px 28px 20px !important;
+      }
     }
     /* ══════════════════════════════════════════
        DESKTOP / LAPTOP LAYOUT  (>= 1024px)
@@ -1393,6 +1416,120 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+
+<!-- ═══ NAV + HEADER RATIO LOCK ═══
+     Pins the nav to an exact pixel height so that header:nav ratio
+     stays constant at every zoom level and screen size.
+     Header inner div = 44px + 3px top + 4px bottom = 51px total.
+     Nav = 30px total (incl. border-b 1px). Ratio ≈ 1.7 : 1  (locked).
+     Chips fill full nav height with zero wasted background on all 3 sides.
+-->
+<style id="nav-ratio-lock">
+/* ── Header: explicitly lock inner height ── */
+#main-app > header {
+  padding-top: 3px !important;
+  padding-bottom: 4px !important;
+  flex-shrink: 0 !important;
+}
+#main-app > header > div {
+  height: 44px !important;
+  min-height: 44px !important;
+  max-height: 44px !important;
+}
+
+/* ── Nav: tighter height, horizontal-scroll only ── */
+#main-app > nav {
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── Inner scroll row: horizontal only, no vertical movement ── */
+#main-app > nav > div {
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 1px 6px !important;
+  margin: 0 !important;
+  align-items: center !important;
+  gap: 2px !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  touch-action: pan-x !important;
+  overscroll-behavior-x: contain !important;
+  overscroll-behavior-y: none !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* ── Tab chips ── */
+#main-app > nav .tab-btn {
+  height: 23px !important;
+  min-height: 23px !important;
+  padding: 0 7px !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  touch-action: manipulation !important;
+}
+
+/* ── iOS landscape: fill full width (phones ~667–926px wide in landscape) ── */
+@media (orientation: landscape) and (min-width: 500px) and (max-width: 1023px) {
+  #main-app {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  #main-app > header {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+  #main-app > nav {
+    padding: 0 !important;
+  }
+  #main-app > main {
+    padding: 10px 20px 24px 20px !important;
+  }
+}
+
+/* ── Desktop sidebar nav: override ratio-lock for vertical layout ── */
+@media (min-width: 1024px) {
+  #main-app > nav {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    max-height: 100vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    touch-action: pan-y !important;
+  }
+  #main-app > nav > div {
+    height: auto !important;
+    min-height: unset !important;
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    padding: 0 8px !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    touch-action: pan-y !important;
+  }
+  #main-app > nav .tab-btn {
+    height: auto !important;
+    min-height: auto !important;
+    padding: 8px 12px !important;
+    border-radius: 10px !important;
+    width: 100% !important;
+  }
+}
+</style>
 </head>
 <body>
 
@@ -1460,194 +1597,24 @@ function dismissWelcome(){
   });
   var chipDelay = chips.length*55 + 250;
 
-  // ── After chips done, run wall-break animation ──────────────────────────────
+  // ── After chips done, fade overlay out cleanly ──────────────────────────────
   setTimeout(function(){
+    // ── 3D dashboard card build-in ──────────────────────────────────────────
+    var styleTag=document.createElement('style');
+    styleTag.id='_dash3d_style';
+    styleTag.textContent='@keyframes _dci{from{opacity:0;transform:perspective(600px) rotateX(-40deg) translateY(55px) scale(.86);}to{opacity:1;transform:perspective(600px) rotateX(0deg) translateY(0) scale(1);}}#tab-dashboard .rounded-2xl{animation:_dci .5s cubic-bezier(.34,1.1,.64,1) both;}';
+    document.head.appendChild(styleTag);
+    var cards=document.querySelectorAll('#tab-dashboard .rounded-2xl');
+    cards.forEach(function(el,i){ el.style.animationDelay=(i*0.055+0.3)+'s'; el.style.animationFillMode='both'; });
+    setTimeout(function(){
+      if(document.getElementById('_dash3d_style')) document.getElementById('_dash3d_style').remove();
+      cards.forEach(function(el){ el.style.animation=''; el.style.animationDelay=''; });
+    },2000);
 
-  // Collect tab button positions for brick flight targets
-  var tabBtns=Array.prototype.slice.call(document.querySelectorAll('nav .tab-btn'));
-  var tabTargets=tabBtns.slice(0,9).map(function(b){
-    var r=b.getBoundingClientRect();
-    return {x:r.left+r.width/2, y:r.top+r.height/2};
-  });
-  if(!tabTargets.length) tabTargets=[{x:W/2,y:H-30}];
-
-  // Canvas overlay
-  var cvs=document.createElement('canvas');
-  cvs.width=W; cvs.height=H;
-  cvs.style.cssText='position:fixed;inset:0;z-index:999999;pointer-events:none;';
-  document.body.appendChild(cvs);
-  var ctx=cvs.getContext('2d');
-
-  // ── BUILD BRICK GRID ────────────────────────────────────────────────────────
-  // Standard brick: wide rectangle. Each row offset by half-brick (running bond)
-  var BW=Math.floor(W/7);   // brick width
-  var BH=Math.floor(H/14);  // brick height (taller rows = chunky wall feel)
-  var bricks=[];
-  var row=0, y=0;
-  while(y < H+BH){
-    var offset=(row%2===0)?0:BW/2;
-    var x=-offset;
-    while(x < W+BW){
-      var bx=x, by=y, bw=BW-3, bh=BH-3; // -3 for mortar gap
-      var cx2=bx+bw/2, cy2=by+bh/2;
-      // Assign tab target based on column
-      var ti=Math.round((cx2/W)*(tabTargets.length-1));
-      ti=Math.min(Math.max(ti,0),tabTargets.length-1);
-      var tgt=tabTargets[ti];
-      // Brick colour: reddish/crimson radial palette
-      var rnd=Math.random();
-      var fill= rnd<0.15 ? 'hsl(0,'+(65+Math.random()*20)+'%,'+(28+Math.random()*10)+'%)' :  // deep crimson
-                rnd<0.40 ? 'hsl(355,'+(60+Math.random()*18)+'%,'+(38+Math.random()*10)+'%)' :  // rose red
-                rnd<0.65 ? 'hsl(8,'+(58+Math.random()*15)+'%,'+(45+Math.random()*10)+'%)' :    // brick red
-                           'hsl(348,'+(55+Math.random()*18)+'%,'+(42+Math.random()*8)+'%)';    // dark rose
-      // Physics: bricks closer to bottom fall faster, gravity-ish
-      var fallSpeed=2.5+Math.random()*2+(by/H)*3;
-      var spinDir=(Math.random()<0.5)?1:-1;
-      bricks.push({
-        x:bx,y:by,w:bw,h:bh,cx:cx2,cy:cy2,
-        tx:tgt.x,ty:tgt.y,
-        fill:fill,
-        // Gravity fall params
-        vy:fallSpeed,          // fall velocity (grows with gravity)
-        vx:(Math.random()-.5)*1.8, // slight sideways drift
-        vr:spinDir*(1.5+Math.random()*3), // spin deg/frame
-        rot:0,
-        // Arc-to-tab params (phase 2)
-        launched:false,
-        delay:0.05+Math.random()*0.30
-      });
-      x+=BW;
-    }
-    y+=BH; row++;
-  }
-
-  // Hide welcome content
-  overlay.style.visibility='hidden';
-  setTimeout(function(){ overlay.style.display='none'; overlay.style.visibility=''; },2400);
-
-  // ── 3D dashboard card build-in ──────────────────────────────────────────────
-  var styleTag=document.createElement('style');
-  styleTag.id='_dash3d_style';
-  styleTag.textContent='@keyframes _dci{from{opacity:0;transform:perspective(600px) rotateX(-40deg) translateY(55px) scale(.86);}to{opacity:1;transform:perspective(600px) rotateX(0deg) translateY(0) scale(1);}}#tab-dashboard .rounded-2xl{animation:_dci .5s cubic-bezier(.34,1.1,.64,1) both;}';
-  document.head.appendChild(styleTag);
-  var cards=document.querySelectorAll('#tab-dashboard .rounded-2xl');
-  cards.forEach(function(el,i){ el.style.animationDelay=(i*0.055+1.9)+'s'; el.style.animationFillMode='both'; });
-  setTimeout(function(){
-    if(document.getElementById('_dash3d_style')) document.getElementById('_dash3d_style').remove();
-    cards.forEach(function(el){ el.style.animation=''; el.style.animationDelay=''; });
-  },3400);
-
-  // ── ANIMATION LOOP ──────────────────────────────────────────────────────────
-  var TOTAL=2400;
-  var t0=performance.now();
-  var GRAV=0.18; // gravity acceleration per frame
-
-  function easeOut3(t){var u=1-t;return 1-u*u*u;}
-  function easeInOut3(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
-
-  function frame(now){
-    var elapsed=now-t0;
-    var p=Math.min(elapsed/TOTAL,1);
-    ctx.clearRect(0,0,W,H);
-
-    // Dust/dark overlay
-    if(p<0.25){
-      ctx.fillStyle='rgba(8,5,18,'+(p/0.25*0.55)+')';
-      ctx.fillRect(0,0,W,H);
-    } else if(p<0.75){
-      ctx.fillStyle='rgba(8,5,18,0.55)';
-      ctx.fillRect(0,0,W,H);
-    } else {
-      ctx.fillStyle='rgba(8,5,18,'+(1-(p-0.75)/0.25)*0.55+')';
-      ctx.fillRect(0,0,W,H);
-    }
-
-    // Draw mortar background (light grey wall base)
-    if(p<0.35){
-      ctx.fillStyle='rgba(180,160,140,'+(p/0.35*0.3)+')';
-      ctx.fillRect(0,0,W,H);
-    }
-
-    for(var i=0;i<bricks.length;i++){
-      var b=bricks[i];
-      var localP=Math.max(0,Math.min((p-b.delay)/(1-b.delay),1));
-      if(localP<=0) continue;
-
-      var tx,ty,rot,alpha;
-
-      if(localP<0.65){
-        // Phase 1: FALL — bricks drop with gravity & spin, like wall crumbling
-        var fp=localP/0.65;
-        var ge=fp*fp; // accelerate (gravity)
-        // Bricks fall downward + slight sideways
-        ty = b.vy * ge * H * 0.75;
-        tx = b.vx * fp * W * 0.14;
-        // Add shake/vibration at start
-        tx += (Math.random()-.5)*(1-fp)*4;
-        b.rot += b.vr*(1+ge*2);
-        rot=b.rot;
-        alpha=fp<0.55?1:Math.max(0,1-(fp-0.55)/0.45);
-
-      } else {
-        // Phase 2: FADE OUT — bricks vanish, do not fly to tab names
-        var fp2=(localP-0.65)/0.35;
-        ty = b.vy * H * 0.75 + fp2*H*0.2;
-        tx = b.vx * W * 0.14;
-        b.rot += b.vr*0.5;
-        rot=b.rot;
-        alpha=Math.max(0,1-fp2);
-      }
-
-      ctx.save();
-      ctx.globalAlpha=Math.max(0,alpha);
-      ctx.translate(b.cx+tx, b.cy+ty);
-      ctx.rotate(rot*Math.PI/180);
-      ctx.translate(-b.cx,-b.cy);
-
-      // Brick rectangle
-      ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(b.x,b.y,b.w,b.h,3) : ctx.rect(b.x,b.y,b.w,b.h);
-      ctx.fillStyle=b.fill;
-      ctx.fill();
-
-      // Mortar/highlight top edge
-      ctx.strokeStyle='rgba(255,245,235,0.28)';
-      ctx.lineWidth=1;
-      ctx.beginPath();
-      ctx.moveTo(b.x+3,b.y+1); ctx.lineTo(b.x+b.w-3,b.y+1);
-      ctx.stroke();
-      // Shadow bottom edge
-      ctx.strokeStyle='rgba(0,0,0,0.4)';
-      ctx.lineWidth=1.5;
-      ctx.beginPath();
-      ctx.moveTo(b.x+2,b.y+b.h-1); ctx.lineTo(b.x+b.w-2,b.y+b.h-1);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
-    // Dust particles during crumble phase
-    if(p>0.05 && p<0.55){
-      var dp=(p-0.05)/0.50;
-      var numDust=Math.floor(dp*18);
-      for(var k=0;k<numDust;k++){
-        var px=Math.random()*W;
-        var py=Math.random()*H*0.8+H*0.1;
-        var pr=Math.random()*3+0.5;
-        ctx.beginPath();
-        ctx.arc(px,py,pr,0,Math.PI*2);
-        ctx.fillStyle='rgba(200,180,150,'+(Math.random()*0.4+0.1)+')';
-        ctx.fill();
-      }
-    }
-
-    // No sparks at tab targets — bricks fall and disappear cleanly
-
-    if(p<1){ requestAnimationFrame(frame); }
-    else { cvs.remove(); }
-  }
-
-  requestAnimationFrame(frame);
+    // Fade out overlay
+    overlay.style.transition='opacity 0.5s ease';
+    overlay.style.opacity='0';
+    setTimeout(function(){ overlay.style.display='none'; overlay.style.opacity=''; overlay.style.transition=''; }, 520);
 
   }, chipDelay); // end setTimeout for chip stagger
 }
@@ -1707,7 +1674,7 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
 
 <!-- ========== MAIN APP ========== -->
 
-<div id="main-app" class="flex flex-col min-h-screen" style="max-width:480px;margin:0 auto;">
+<div id="main-app" class="flex flex-col min-h-screen" style="width:100%;max-width:480px;margin:0 auto;">
 
 <!-- HEADER -->
 
@@ -1744,10 +1711,17 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
         <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;transition:opacity .3s">Set your name</p>
       </div>
     </div>
-    <!-- RIGHT: Total Spends -->
+    <!-- RIGHT: Calculator + Total Spends -->
     <div class="text-right flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
-      <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <!-- Compact calculator trigger — left of spend amount -->
+        <button onclick="openCalcModal()" style="display:flex;align-items:center;gap:3px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:7px;padding:2px 6px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;" ontouchstart="this.style.background='rgba(255,255,255,0.25)'" ontouchend="this.style.background='rgba(255,255,255,0.15)'">
+          <span style="font-size:11px;line-height:1">🖩</span>
+          <span style="font-size:9px;color:#fff;font-weight:700;letter-spacing:.01em">Calc</span>
+        </button>
+        <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
+      </div>
     </div>
   </div>
 </header>
@@ -1952,6 +1926,7 @@ document.addEventListener('DOMContentLoaded',checkShowWelcome);
       <div id="sig-list-wrap" style="max-height:120px;overflow-y:auto"><p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:4px 0">No signatures yet</p></div>
     </div>
 
+    <!-- Calculator -->
     <!-- Storage badge — hidden from UI; element kept for JS compat -->
     <div style="display:none;">
       <span id="sett-storage-badge"></span>
@@ -2921,30 +2896,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- NAV -->
 
-<nav class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky top-0 z-30 px-2">
-  <div class="flex overflow-x-auto gap-0.5 py-1" style="scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="daily" onclick="switchTab('daily')">📋 Report</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="attendance" onclick="switchTab('attendance')">📅 Attendance</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="boq" onclick="switchTab('boq')">📋 BOQ DPR</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="machinery" onclick="switchTab('machinery')">⚙️ Machinery</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="expenses" onclick="switchTab('expenses')">💰 Expenses</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="materials" onclick="switchTab('materials')">🧱 Materials</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="tools" onclick="switchTab('tools')">🔧 Tools</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="drawings" onclick="switchTab('drawings')">📐 Drawings</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="rentals" onclick="switchTab('rentals')">📦 Rentals</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="departmental" onclick="switchTab('departmental')">🏗️ Dept Work</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="contractors" onclick="switchTab('contractors')">👥 Teams</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="budget" onclick="switchTab('budget')">📊 Budget</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="schedule" onclick="switchTab('schedule')">📅 Schedule</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="punchlist" onclick="switchTab('punchlist')">📋 Punch List</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="bill" onclick="switchTab('bill')">🧾 Bill</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="quotation" onclick="switchTab('quotation')">💼 Quotation</button>
-    <button class="tab-btn flex-shrink-0 px-2.5 py-1 text-xs font-semibold text-white/70 rounded-lg" data-tab="visits" onclick="switchTab('visits')">🏛️ Site Visits</button>
+<nav class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky top-0 z-30">
+  <div class="flex overflow-x-auto" style="scrollbar-width:none;overflow-y:hidden;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;">
+    <button class="tab-btn text-white/70" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn text-white/70" data-tab="daily" onclick="switchTab('daily')">📋 Report</button>
+    <button class="tab-btn text-white/70" data-tab="attendance" onclick="switchTab('attendance')">📅 Attendance</button>
+    <button class="tab-btn text-white/70" data-tab="boq" onclick="switchTab('boq')">📋 BOQ DPR</button>
+    <button class="tab-btn text-white/70" data-tab="machinery" onclick="switchTab('machinery')">⚙️ Machinery</button>
+    <button class="tab-btn text-white/70" data-tab="expenses" onclick="switchTab('expenses')">💰 Expenses</button>
+    <button class="tab-btn text-white/70" data-tab="materials" onclick="switchTab('materials')">🧱 Materials</button>
+    <button class="tab-btn text-white/70" data-tab="tools" onclick="switchTab('tools')">🔧 Tools</button>
+    <button class="tab-btn text-white/70" data-tab="drawings" onclick="switchTab('drawings')">📐 Drawings</button>
+    <button class="tab-btn text-white/70" data-tab="rentals" onclick="switchTab('rentals')">📦 Rentals</button>
+    <button class="tab-btn text-white/70" data-tab="departmental" onclick="switchTab('departmental')">🏗️ Dept Work</button>
+    <button class="tab-btn text-white/70" data-tab="contractors" onclick="switchTab('contractors')">👥 Teams</button>
+    <button class="tab-btn text-white/70" data-tab="budget" onclick="switchTab('budget')">📊 Budget</button>
+    <button class="tab-btn text-white/70" data-tab="schedule" onclick="switchTab('schedule')">📅 Schedule</button>
+    <button class="tab-btn text-white/70" data-tab="punchlist" onclick="switchTab('punchlist')">📋 Punch List</button>
+    <button class="tab-btn text-white/70" data-tab="bill" onclick="switchTab('bill')">🧾 Bill</button>
+    <button class="tab-btn text-white/70" data-tab="quotation" onclick="switchTab('quotation')">💼 Quotation</button>
+    <button class="tab-btn text-white/70" data-tab="visits" onclick="switchTab('visits')">🏛️ Site Visits</button>
   </div>
 </nav>
 
-<main class="flex-1 overflow-y-auto p-3 pb-6">
+<main class="flex-1 overflow-y-auto pb-6" style="padding:6px 6px 24px 6px;">
 
 <!-- ===== DASHBOARD ===== -->
 
@@ -7846,7 +7821,28 @@ function opw(html){
   function _closeOv(){var o=document.getElementById('_pf_overlay');if(o)o.remove();}
   document.getElementById('_pf_back').onclick=_closeOv;
   document.getElementById('_pf_x').onclick=_closeOv;
-  document.getElementById('_pf_print').onclick=function(){try{ifr.contentWindow.print();}catch(e){window.print();}};
+  topbar.id='_pf_topbar';
+  document.getElementById('_pf_print').onclick=function(){
+    var ua=navigator.userAgent||'';
+    var isAndroid=/Android/i.test(ua);
+    // Strategy 1: iframe print (works in desktop Chrome/Firefox/Safari)
+    var s1ok=false;
+    try{ifr.contentWindow.focus();ifr.contentWindow.print();s1ok=true;}catch(e1){s1ok=false;}
+    // Strategy 2: full-screen iframe + window.print() — Android WebView or if Strategy 1 silently failed
+    if(!s1ok||isAndroid){
+      var origStyle=ifr.style.cssText;
+      var tb=document.getElementById('_pf_topbar');
+      if(tb)tb.style.display='none';
+      ifr.style.cssText='position:fixed;inset:0;top:0;left:0;width:100vw;height:100vh;border:none;z-index:999997;background:#fff;display:block;';
+      setTimeout(function(){
+        try{window.print();}catch(e2){}
+        setTimeout(function(){
+          ifr.style.cssText=origStyle;
+          if(tb)tb.style.display='';
+        },600);
+      },250);
+    }
+  };
 }
 
 // ============================================================
@@ -13909,7 +13905,7 @@ function _getMsRows(){
     var id=tr.id.replace('ms-row-','');
     var desc=(document.getElementById('ms-desc-'+id)||{}).value||'';
     var unit=(document.getElementById('ms-unit-'+id)||{}).value||'m';
-    var nos=_msVal(id,'nos'), len=_msVal(id,'len'), wid=_msVal(id,'wid'), hgt=_msVal(id,'hgt');
+    var nos=_msVal(id,'nos')||1, len=_msVal(id,'len'), wid=_msVal(id,'wid'), hgt=_msVal(id,'hgt');
     var cv=_msBaseConv(unit);
     var L=len*cv.f, W=wid*cv.f, H=hgt*cv.f;
     var qty=0, dispUnit=cv.d;
@@ -15020,6 +15016,421 @@ function toggleSwipeFromSettings(row) {
     }, 6000);
   });
 })();
+</script>
+<!-- CALCULATOR POPUP -->
+<style>
+#calc-modal{display:none;position:fixed;left:0;right:0;bottom:0;z-index:600;height:82vh;max-height:82vh;background:#f2f3f5;border-radius:22px 22px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,0.28);flex-direction:column;overflow:hidden;}
+#calc-modal.show{display:flex!important;}
+#calc-overlay{display:none;position:fixed;inset:0;z-index:599;background:rgba(0,0,0,0.4);}
+#calc-overlay.show{display:block!important;}
+.calc-btn{border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:500;transition:filter .08s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;line-height:1;border-radius:50%;}
+.calc-btn:active{filter:brightness(0.85);}
+.cb-num{background:#fff;color:#1c1c1e;}
+.cb-op {background:#ff9500;color:#fff;}
+.cb-fn {background:#d1d1d6;color:#1c1c1e;}
+.cb-eq {background:#4f46e5;color:#fff;}
+.cb-util{background:#d1d1d6;color:#1c1c1e;}
+.cb-sci{background:#e5e5ea;color:#4f46e5;font-size:11px!important;border-radius:8px!important;}
+.cb-mem{background:#e5e5ea;color:#9333ea;font-size:11px!important;border-radius:8px!important;}
+.calc-tab-btn{flex:1;padding:6px 0;font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;transition:all .15s;}
+.calc-tab-btn.on{background:#4f46e5;color:#fff;}
+.calc-tab-btn.off{background:transparent;color:#6b7280;}
+.cu-inp{background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;color:#1c1c1e;font-size:18px;font-weight:400;padding:8px 12px;width:100%;box-sizing:border-box;outline:none;}
+.cu-inp:focus{border-color:#4f46e5;}
+.cu-inp.result{background:#f0f4ff;color:#4f46e5;border-color:#c7d2fe;}
+.cu-sel{background:#fff;border:1.5px solid #e5e7eb;border-radius:8px;color:#374151;padding:6px 8px;font-size:12px;outline:none;width:100%;box-sizing:border-box;}
+</style>
+
+<div id="calc-overlay" onclick="closeCalcModal()"></div>
+<div id="calc-modal">
+  <!-- Handle -->
+  <div style="flex-shrink:0;padding:8px 0 4px;text-align:center;">
+    <div style="width:36px;height:4px;background:#d1d5db;border-radius:99px;margin:0 auto;"></div>
+  </div>
+
+  <!-- Tabs + close -->
+  <div style="flex-shrink:0;display:flex;gap:5px;align-items:center;padding:4px 12px 6px;background:#f2f3f5;">
+    <button id="calc-tab-std"  class="calc-tab-btn on"  onclick="calcSetMode('std')">Standard</button>
+    <button id="calc-tab-sci"  class="calc-tab-btn off" onclick="calcSetMode('sci')">Scientific</button>
+    <button id="calc-tab-unit" class="calc-tab-btn off" onclick="calcSetMode('unit')">Converter</button>
+    <button onclick="closeCalcModal()" style="width:28px;height:28px;border-radius:50%;background:#e5e7eb;border:none;color:#6b7280;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>
+  </div>
+
+  <!-- Display (hidden for unit converter) -->
+  <div id="calc-display-wrap" style="flex-shrink:0;padding:4px 18px 6px;background:#f2f3f5;text-align:right;">
+    <div id="calc-hist" style="font-size:12px;color:#9ca3af;min-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">&nbsp;</div>
+    <div id="calc-disp" style="font-size:46px;font-weight:300;color:#1c1c1e;letter-spacing:-1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.05;">0</div>
+    <div id="calc-mem-ind" style="font-size:10px;color:#9333ea;text-align:left;min-height:12px;"></div>
+  </div>
+
+  <!-- Scientific extra rows -->
+  <div id="calc-sci-rows" style="display:none;flex-shrink:0;padding:2px 10px 2px;background:#f2f3f5;overflow-x:auto;">
+    <div id="calc-sci-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;"></div>
+  </div>
+
+  <!-- Standard numpad -->
+  <div id="calc-std-wrap" style="flex:1;padding:6px 10px 8px;background:#f2f3f5;overflow:hidden;">
+    <div id="calc-std-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;height:100%;"></div>
+  </div>
+
+  <!-- Unit Converter (compact, with numpad) -->
+  <div id="calc-unit-wrap" style="display:none;flex:1;overflow:hidden;display:none;flex-direction:column;">
+    <!-- Compact converter inputs -->
+    <div style="flex-shrink:0;padding:8px 12px 4px;background:#f2f3f5;">
+      <select id="calc-unit-cat" class="cu-sel" onchange="calcUnitCatChange()" style="margin-bottom:8px;">
+        <option value="len">📏 Length</option>
+        <option value="area">⬛ Area</option>
+        <option value="vol">🧊 Volume</option>
+        <option value="mass">⚖️ Mass</option>
+        <option value="temp">🌡️ Temperature</option>
+        <option value="spd">💨 Speed</option>
+        <option value="time">⏱️ Time</option>
+        <option value="dig">💾 Digital</option>
+        <option value="energy">⚡ Energy</option>
+        <option value="pres">🔵 Pressure</option>
+        <option value="ang">📐 Angle</option>
+        <option value="cur">💱 Currency</option>
+      </select>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <div style="flex:1;">
+          <select id="calc-unit-from-sel" class="cu-sel" onchange="calcUnitConvert()" style="margin-bottom:5px;"></select>
+          <input id="calc-unit-from-val" class="cu-inp" type="number" placeholder="0" oninput="calcUnitConvert()" readonly>
+        </div>
+        <button onclick="calcUnitSwap()" style="width:34px;height:34px;background:#4f46e5;border:none;border-radius:50%;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;">⇅</button>
+        <div style="flex:1;">
+          <select id="calc-unit-to-sel" class="cu-sel" onchange="calcUnitConvert()" style="margin-bottom:5px;"></select>
+          <input id="calc-unit-to-val" class="cu-inp result" type="number" placeholder="0" readonly>
+        </div>
+      </div>
+      <div id="calc-unit-formula" style="text-align:center;font-size:10px;color:#9ca3af;padding:3px 0;"></div>
+    </div>
+    <!-- Numpad for unit input -->
+    <div style="flex:1;padding:4px 10px 8px;background:#f2f3f5;">
+      <div id="calc-unit-numgrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;height:100%;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  FULL CALCULATOR ENGINE
+// ══════════════════════════════════════════
+var _cMode    = 'std';
+var _cDisp    = '0';
+var _cExpr    = '';
+var _cNewNum  = true;
+var _cDot     = false;
+var _cPend    = null;
+var _cMem     = 0;
+var _cDeg     = true;
+var _cUnitActive = 'from'; // which unit field is being edited
+
+function openCalcModal(){
+  var m=document.getElementById('calc-modal');
+  var ov=document.getElementById('calc-overlay');
+  if(!m) return;
+  m.style.display='flex';
+  if(ov) ov.style.display='block';
+  _cBuildStd();
+  _cBuildSci();
+  _cBuildUnitNumpad();
+  calcUnitCatChange();
+}
+function closeCalcModal(){
+  var m=document.getElementById('calc-modal');
+  var ov=document.getElementById('calc-overlay');
+  if(m) m.style.display='none';
+  if(ov) ov.style.display='none';
+}
+
+// ── Display ──
+function _cRefresh(){
+  var d=document.getElementById('calc-disp');
+  var h=document.getElementById('calc-hist');
+  var mi=document.getElementById('calc-mem-ind');
+  if(d){
+    var v=_cDisp;
+    if(v.length>14){try{v=parseFloat(v).toExponential(6);}catch(e){}}
+    d.textContent=v;
+    d.style.fontSize=v.length>12?'28px':v.length>9?'36px':'46px';
+  }
+  if(h) h.textContent=_cExpr||'\u00a0';
+  if(mi) mi.textContent=_cMem!==0?'M: '+_cMem:'';
+}
+
+// ── Calculator input ──
+function _cDigit(d){
+  if(_cNewNum){_cDisp=(d==='.'?'0.':String(d));_cNewNum=false;_cDot=(d==='.');}
+  else{
+    if(d==='.'&&_cDot) return;
+    if(d==='.') _cDot=true;
+    if(_cDisp==='0'&&d!=='.') _cDisp=String(d);
+    else _cDisp+=String(d);
+  }
+  _cRefresh();
+}
+function _cOp(op){
+  _cPend={val:parseFloat(_cDisp),op:op};
+  _cExpr=_cDisp+' '+op;
+  _cNewNum=true;_cDot=false;
+  _cRefresh();
+}
+function _cEquals(){
+  if(!_cPend){_cExpr='';_cRefresh();return;}
+  var a=_cPend.val,b=parseFloat(_cDisp),r,op=_cPend.op;
+  switch(op){
+    case '+':r=a+b;break;case '−':r=a-b;break;
+    case '×':r=a*b;break;case '÷':r=b!==0?a/b:NaN;break;
+    case 'yˣ':r=Math.pow(a,b);break;
+    case 'ˣ√y':r=Math.pow(b,1/a);break;
+    case 'EE':r=a*Math.pow(10,b);break;
+    default:r=b;
+  }
+  _cExpr=_cPend.val+' '+op+' '+b+' =';
+  _cPend=null;
+  _cSet(isNaN(r)||!isFinite(r)?'Error':_cFmt(r));
+}
+function _cFmt(v){return String(parseFloat(v.toPrecision(12)));}
+function _cSet(v){_cDisp=String(v);_cNewNum=true;_cDot=_cDisp.indexOf('.')!==-1;_cRefresh();}
+function _cClear(){_cDisp='0';_cExpr='';_cPend=null;_cNewNum=true;_cDot=false;_cBracketExpr='';_cInBracket=0;_cRefresh();}
+function _cBack(){if(_cNewNum){_cClear();return;}_cDisp=_cDisp.slice(0,-1)||'0';_cDot=_cDisp.indexOf('.')!==-1;_cRefresh();}
+function _cSign(){_cSet(_cFmt(parseFloat(_cDisp)*-1));}
+function _cPct(){if(_cPend)_cOp('%');else _cSet(_cFmt(parseFloat(_cDisp)/100));}
+// ── bracket expression accumulator ──
+var _cBracketExpr = '';   // holds the full expr being built inside parens
+var _cInBracket   = 0;    // depth counter
+
+function _cSci(fn){
+  var v=parseFloat(_cDisp),r,toR=_cDeg?Math.PI/180:1,fromR=_cDeg?180/Math.PI:1;
+
+  // ── Bracket logic ──────────────────────────────────────────────────────────
+  if(fn==='lp'){
+    // Opening bracket: start accumulating; show current value in expr if non-zero
+    _cInBracket++;
+    if(_cBracketExpr==='' && !_cNewNum) _cBracketExpr = (_cDisp!=='0'?_cDisp:'') + '(';
+    else _cBracketExpr += '(';
+    _cExpr = _cBracketExpr;
+    _cNewNum=true; _cDot=false;
+    _cRefresh(); return;
+  }
+  if(fn==='rp'){
+    // Closing bracket: append current display value, close, try evaluate
+    if(_cInBracket<=0){ return; } // no open bracket — ignore
+    _cInBracket--;
+    _cBracketExpr += (_cNewNum?'':_cDisp) + ')';
+    // If all brackets closed → evaluate
+    if(_cInBracket===0){
+      try{
+        // safe eval: only numbers, basic ops, parens
+        var expr=_cBracketExpr.replace(/[^0-9+\-*/().eE]/g,'');
+        var res=Function('"use strict";return ('+expr+')')();
+        _cExpr=_cBracketExpr+' =';
+        _cBracketExpr='';
+        _cSet(isNaN(res)||!isFinite(res)?'Error':_cFmt(res));
+      }catch(ex){
+        _cExpr=_cBracketExpr; _cBracketExpr=''; _cInBracket=0;
+        _cSet('Error');
+      }
+    } else {
+      _cExpr=_cBracketExpr;
+      _cNewNum=true; _cDot=false;
+      _cRefresh();
+    }
+    return;
+  }
+  // While inside brackets, append typed digits to bracket expr automatically
+  if(_cInBracket>0 && fn!=='deg' && fn!=='m+' && fn!=='m-'){
+    // append the current display to bracket expr before applying fn
+    if(!_cNewNum) _cBracketExpr += _cDisp;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  switch(fn){
+    case 'sin':r=Math.sin(v*toR);break;case 'cos':r=Math.cos(v*toR);break;
+    case 'tan':r=Math.tan(v*toR);break;case 'asin':r=Math.asin(v)*fromR;break;
+    case 'acos':r=Math.acos(v)*fromR;break;case 'atan':r=Math.atan(v)*fromR;break;
+    case 'sinh':r=Math.sinh(v);break;case 'cosh':r=Math.cosh(v);break;
+    case 'tanh':r=Math.tanh(v);break;
+    case 'log':r=Math.log10(v);break;case 'ln':r=Math.log(v);break;
+    case 'log2':r=Math.log2(v);break;
+    case 'sqrt':r=Math.sqrt(v);break;case 'cbrt':r=Math.cbrt(v);break;
+    case 'x2':r=v*v;break;case 'x3':r=v*v*v;break;
+    case '1/x':r=v!==0?1/v:NaN;break;
+    case '10x':r=Math.pow(10,v);break;case 'ex':r=Math.exp(v);break;
+    case '2x':r=Math.pow(2,v);break;
+    case 'abs':r=Math.abs(v);break;
+    case 'pi':r=Math.PI;break;case 'e':r=Math.E;break;
+    case 'rand':r=Math.random();break;
+    case 'fact':r=1;for(var i=2;i<=Math.round(Math.abs(v));i++)r*=i;break;
+    case 'floor':r=Math.floor(v);break;case 'ceil':r=Math.ceil(v);break;
+    case 'round':r=Math.round(v);break;
+    case 'deg':_cDeg=!_cDeg;_cBuildSci();return;
+    case 'm+':_cMem+=parseFloat(_cDisp);_cRefresh();return;
+    case 'm-':_cMem-=parseFloat(_cDisp);_cRefresh();return;
+    default:return;
+  }
+  _cExpr=fn+'('+v+')';
+  _cSet(isNaN(r)||!isFinite(r)?'Error':_cFmt(r));
+}
+
+// ── Button builder ──
+function _cBtn(label,action,type,extraStyle){
+  var bg={'num':'#fff','op':'#ff9500','fn':'#d1d1d6','eq':'#4f46e5','util':'#d1d1d6','sci':'#e5e5ea','mem':'#ede9fe'}[type]||'#fff';
+  var col={'op':'#fff','eq':'#fff','sci':'#4f46e5','mem':'#7c3aed'}[type]||'#1c1c1e';
+  var fs=label.length>4?'10px':label.length>3?'11px':label.length>2?'13px':'20px';
+  var br=(type==='sci'||type==='mem')?'8px':'50%';
+  var esc=action.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  return '<button class="calc-btn" data-ca="'+esc+'" style="background:'+bg+';color:'+col+';font-size:'+fs+';border-radius:'+br+';'+( extraStyle||'')+'">'
+    +'<span style="pointer-events:none">'+label+'</span></button>';
+}
+
+// ── Standard pad ──
+function _cBuildStd(){
+  var rows=[
+    [{l:'AC',a:'_cClear()',t:'util'},{l:'+/−',a:'_cSign()',t:'util'},{l:'%',a:'_cPct()',t:'util'},{l:'÷',a:'_cOp("÷")',t:'op'}],
+    [{l:'7',a:'_cDigit(7)',t:'num'},{l:'8',a:'_cDigit(8)',t:'num'},{l:'9',a:'_cDigit(9)',t:'num'},{l:'×',a:'_cOp("×")',t:'op'}],
+    [{l:'4',a:'_cDigit(4)',t:'num'},{l:'5',a:'_cDigit(5)',t:'num'},{l:'6',a:'_cDigit(6)',t:'num'},{l:'−',a:'_cOp("−")',t:'op'}],
+    [{l:'1',a:'_cDigit(1)',t:'num'},{l:'2',a:'_cDigit(2)',t:'num'},{l:'3',a:'_cDigit(3)',t:'num'},{l:'+',a:'_cOp("+")',t:'op'}],
+    [{l:'⌫',a:'_cBack()',t:'fn'},{l:'0',a:'_cDigit(0)',t:'num'},{l:'.',a:"_cDigit('.')",t:'num'},{l:'=',a:'_cEquals()',t:'eq'}]
+  ];
+  var g=document.getElementById('calc-std-grid');
+  if(!g) return;
+  g.innerHTML='';
+  g.style.gridTemplateRows='repeat(5,1fr)';
+  rows.forEach(function(row){row.forEach(function(b){g.innerHTML+=_cBtn(b.l,b.a,b.t,'min-height:52px;');});});
+}
+
+// ── Scientific pad ──
+function _cBuildSci(){
+  var dl=_cDeg?'DEG':'RAD';
+  var rows=[
+    [{l:'(',a:"_cSci('lp')",t:'sci'},{l:'m+',a:"_cSci('m+')",t:'mem'},{l:'m−',a:"_cSci('m-')",t:'mem'},{l:')',a:"_cSci('rp')",t:'sci'},{l:dl,a:"_cSci('deg')",t:'sci'}],
+    [{l:'sin',a:"_cSci('sin')",t:'sci'},{l:'cos',a:"_cSci('cos')",t:'sci'},{l:'tan',a:"_cSci('tan')",t:'sci'},{l:'log',a:"_cSci('log')",t:'sci'},{l:'ln',a:"_cSci('ln')",t:'sci'}],
+    [{l:'x²',a:"_cSci('x2')",t:'sci'},{l:'x³',a:"_cSci('x3')",t:'sci'},{l:'√',a:"_cSci('sqrt')",t:'sci'},{l:'∛',a:"_cSci('cbrt')",t:'sci'},{l:'1/x',a:"_cSci('1/x')",t:'sci'}],
+    [{l:'yˣ',a:"_cOp('yˣ')",t:'sci'},{l:'eˣ',a:"_cSci('ex')",t:'sci'},{l:'π',a:"_cSci('pi')",t:'sci'},{l:'e',a:"_cSci('e')",t:'sci'},{l:'n!',a:"_cSci('fact')",t:'sci'}]
+  ];
+  var g=document.getElementById('calc-sci-grid');
+  if(!g) return;
+  g.innerHTML='';
+  rows.forEach(function(row){row.forEach(function(b){g.innerHTML+=_cBtn(b.l,b.a,b.t,'min-height:32px;');});});
+}
+
+function calcSetMode(mode){
+  _cMode=mode;
+  var isCalc=mode!=='unit';
+  document.getElementById('calc-display-wrap').style.display=isCalc?'block':'none';
+  document.getElementById('calc-sci-rows').style.display=mode==='sci'?'block':'none';
+  document.getElementById('calc-std-wrap').style.display=isCalc?'block':'none';
+  var uw=document.getElementById('calc-unit-wrap');
+  if(uw){uw.style.display=mode==='unit'?'flex':'none';}
+  ['std','sci','unit'].forEach(function(m){
+    var b=document.getElementById('calc-tab-'+m);
+    if(b){b.className='calc-tab-btn '+(m===mode?'on':'off');}
+  });
+}
+
+// ── Unit data ──
+var _cUD={
+  len:{units:['mm','cm','m','km','in','ft','yd','mi','nmi'],toBase:{'mm':0.001,'cm':0.01,'m':1,'km':1000,'in':0.0254,'ft':0.3048,'yd':0.9144,'mi':1609.344,'nmi':1852}},
+  area:{units:['mm²','cm²','m²','km²','in²','ft²','ac','ha'],toBase:{'mm²':1e-6,'cm²':1e-4,'m²':1,'km²':1e6,'in²':6.4516e-4,'ft²':0.092903,'ac':4046.86,'ha':10000}},
+  vol:{units:['mL','L','m³','in³','ft³','gal(US)','gal(UK)','cup','tbsp','tsp'],toBase:{'mL':0.001,'L':1,'m³':1000,'in³':0.016387,'ft³':28.3168,'gal(US)':3.78541,'gal(UK)':4.54609,'cup':0.236588,'tbsp':0.014787,'tsp':0.004929}},
+  mass:{units:['mg','g','kg','MT','lb','oz','stone'],toBase:{'mg':1e-6,'g':0.001,'kg':1,'MT':1000,'lb':0.453592,'oz':0.028350,'stone':6.35029}},
+  temp:{units:['°C','°F','K']},
+  spd:{units:['m/s','km/h','mph','knot','ft/s'],toBase:{'m/s':1,'km/h':0.277778,'mph':0.44704,'knot':0.514444,'ft/s':0.3048}},
+  time:{units:['ms','s','min','hr','day','wk','mo','yr'],toBase:{'ms':0.001,'s':1,'min':60,'hr':3600,'day':86400,'wk':604800,'mo':2628000,'yr':31536000}},
+  dig:{units:['bit','B','KB','MB','GB','TB'],toBase:{'bit':0.125,'B':1,'KB':1024,'MB':1048576,'GB':1073741824,'TB':1099511627776}},
+  energy:{units:['J','kJ','cal','kcal','Wh','kWh','BTU'],toBase:{'J':1,'kJ':1000,'cal':4.184,'kcal':4184,'Wh':3600,'kWh':3600000,'BTU':1055.06}},
+  pres:{units:['Pa','kPa','MPa','bar','psi','atm','mmHg'],toBase:{'Pa':1,'kPa':1000,'MPa':1e6,'bar':1e5,'psi':6894.76,'atm':101325,'mmHg':133.322}},
+  ang:{units:['°','rad','grad','turn','arcmin','arcsec'],toBase:{'°':1,'rad':57.2958,'grad':0.9,'turn':360,'arcmin':1/60,'arcsec':1/3600}},
+  cur:{units:['INR','USD','EUR','GBP','AED','JPY','CNY','SGD','AUD'],toBase:{'INR':1,'USD':83.5,'EUR':90.2,'GBP':105.3,'AED':22.7,'JPY':0.554,'CNY':11.5,'SGD':61.8,'AUD':54.2}}
+};
+
+function calcUnitCatChange(){
+  var cat=document.getElementById('calc-unit-cat').value;
+  var def=_cUD[cat];if(!def)return;
+  function fill(id,units,di){var s=document.getElementById(id);if(!s)return;s.innerHTML=units.map(function(u,i){return'<option value="'+u+'"'+(i===di?' selected':'')+'>'+u+'</option>';}).join('');}
+  fill('calc-unit-from-sel',def.units,0);fill('calc-unit-to-sel',def.units,1);
+  var fv=document.getElementById('calc-unit-from-val');var tv=document.getElementById('calc-unit-to-val');
+  if(fv)fv.value='';if(tv)tv.value='';
+  document.getElementById('calc-unit-formula').textContent='';
+  calcUnitConvert();
+}
+function calcUnitConvert(){
+  var cat=document.getElementById('calc-unit-cat').value;
+  var def=_cUD[cat];if(!def)return;
+  var fU=document.getElementById('calc-unit-from-sel').value;
+  var tU=document.getElementById('calc-unit-to-sel').value;
+  var fV=parseFloat(document.getElementById('calc-unit-from-val').value);
+  if(isNaN(fV)){document.getElementById('calc-unit-to-val').value='';return;}
+  var r;
+  if(cat==='temp'){
+    var inC;
+    if(fU==='°C')inC=fV;else if(fU==='°F')inC=(fV-32)*5/9;else inC=fV-273.15;
+    if(tU==='°C')r=inC;else if(tU==='°F')r=inC*9/5+32;else r=inC+273.15;
+  }else{var fB=def.toBase[fU]||1,tB=def.toBase[tU]||1;r=fV*fB/tB;}
+  document.getElementById('calc-unit-to-val').value=parseFloat(r.toPrecision(10));
+  var fEl=document.getElementById('calc-unit-formula');
+  if(fEl&&cat!=='temp'){fEl.textContent='1 '+fU+' = '+parseFloat(((def.toBase[fU]||1)/(def.toBase[tU]||1)).toPrecision(6))+' '+tU;}
+}
+function calcUnitSwap(){
+  var fs=document.getElementById('calc-unit-from-sel');var ts=document.getElementById('calc-unit-to-sel');
+  var fv=document.getElementById('calc-unit-from-val');var tv=document.getElementById('calc-unit-to-val');
+  if(!fs||!ts)return;
+  var tmp=fs.value;fs.value=ts.value;ts.value=tmp;
+  fv.value=tv.value||'';  calcUnitConvert();
+}
+
+// ── Unit numpad ──
+function _cUnitDigit(d){
+  var inp=document.getElementById('calc-unit-from-val');if(!inp)return;
+  var cur=inp.value;
+  if(d==='C'){inp.value='';calcUnitConvert();return;}
+  if(d==='⌫'){inp.value=cur.slice(0,-1);calcUnitConvert();return;}
+  if(d==='.' && cur.indexOf('.')!==-1)return;
+  if(d==='.' && cur==='') inp.value='0.';
+  else inp.value=cur+String(d);
+  calcUnitConvert();
+}
+function _cBuildUnitNumpad(){
+  var rows=[
+    [{l:'7',a:'_cUnitDigit(7)',t:'num'},{l:'8',a:'_cUnitDigit(8)',t:'num'},{l:'9',a:'_cUnitDigit(9)',t:'num'},{l:'C',a:"_cUnitDigit('C')",t:'util'}],
+    [{l:'4',a:'_cUnitDigit(4)',t:'num'},{l:'5',a:'_cUnitDigit(5)',t:'num'},{l:'6',a:'_cUnitDigit(6)',t:'num'},{l:'⌫',a:"_cUnitDigit('⌫')",t:'fn'}],
+    [{l:'1',a:'_cUnitDigit(1)',t:'num'},{l:'2',a:'_cUnitDigit(2)',t:'num'},{l:'3',a:'_cUnitDigit(3)',t:'num'},{l:'',a:'',t:'fn'}],
+    [{l:'-',a:"_cUnitDigit('-')",t:'fn'},{l:'0',a:'_cUnitDigit(0)',t:'num'},{l:'.',a:"_cUnitDigit('.')",t:'num'},{l:'⇅',a:'calcUnitSwap()',t:'eq'}]
+  ];
+  var g=document.getElementById('calc-unit-numgrid');if(!g)return;
+  g.innerHTML='';
+  g.style.gridTemplateRows='repeat(4,1fr)';
+  rows.forEach(function(row){row.forEach(function(b){g.innerHTML+=_cBtn(b.l,b.a,b.t,'min-height:46px;');});});
+}
+
+// ── Delegation ──
+document.addEventListener('click',function(e){
+  var btn=e.target.closest?e.target.closest('[data-ca]'):null;
+  if(!btn)return;
+  var m=document.getElementById('calc-modal');
+  if(!m||m.style.display==='none')return;
+  var action=btn.getAttribute('data-ca');
+  if(!action)return;
+  try{eval(action);}catch(ex){console.error('calc:',action,ex);}
+});
+
+// keyboard
+document.addEventListener('keydown',function(e){
+  var m=document.getElementById('calc-modal');
+  if(!m||m.style.display==='none')return;
+  if(_cMode==='unit')return;
+  var k=e.key;
+  if(k>='0'&&k<='9')_cDigit(parseInt(k));
+  else if(k==='.')_cDigit('.');
+  else if(k==='+')_cOp('+');else if(k==='-')_cOp('−');
+  else if(k==='*')_cOp('×');else if(k==='/'){e.preventDefault();_cOp('÷');}
+  else if(k==='Enter'||k==='=')_cEquals();
+  else if(k==='Backspace')_cBack();
+  else if(k==='Escape')_cClear();
+});
+
+document.addEventListener('DOMContentLoaded',function(){_cBuildStd();_cBuildSci();_cBuildUnitNumpad();calcUnitCatChange();});
 </script>
 </body>
 </html>
