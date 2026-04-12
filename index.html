@@ -627,8 +627,30 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   function _initSB() {
     if (_sb) return;
     if (!window.supabase) { setTimeout(_initSB, 100); return; }
-    _sb = window.supabase.createClient(_SB_URL, _SB_ANON);
+    _sb = window.supabase.createClient(_SB_URL, _SB_ANON, {
+      auth: {
+        detectSessionInUrl: false,  // Prevent magic link auto-login loop
+        persistSession: true,
+        autoRefreshToken: true
+      }
+    });
     window._supa = _sb; // alias so OTP auth functions can find the client
+
+    // Clean magic link tokens from URL to prevent loop
+    (function() {
+      try {
+        var url = new URL(window.location.href);
+        var dirty = false;
+        ['access_token','refresh_token','token_type','expires_in','expires_at','type'].forEach(function(p){
+          if(url.searchParams.has(p)||url.hash.indexOf(p)!==-1){ dirty=true; }
+        });
+        if(url.hash&&url.hash.indexOf('access_token')!==-1){
+          url.hash=''; dirty=true;
+        }
+        if(dirty){ window.history.replaceState({},document.title, url.pathname+url.search); }
+      }catch(e){}
+    })();
+
     // Restore session
     _sb.auth.getSession().then(function(r) {
       if (r.data && r.data.session) { _onSBAuthReady(r.data.session.user); }
