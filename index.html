@@ -664,12 +664,105 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 
   function _onSBAuthReady(user) {
     _adminSBUser = user;
-    // Restore cached session UI without relogin
-    var role = safeLS ? safeLS.getItem('cm_admin_role') : null;
-    if (role === 'admin') {
+    _adminUser = user;
+    updateCloudBtn && updateCloudBtn();
+    refreshCloudModalState && refreshCloudModalState();
+
+    // ── CRITICAL FIX: Verify subscription from DB & load cloud data on every session restore ──
+    // Without this, returning Pro users see app but no cloud data (looks like new/offline user)
+    if (!_sb) return;
+    _sb.from('admins').select('subscribed,subscription_end_date,email').eq('id', user.id).single().then(function(r) {
+      if (!r.error && r.data) {
+        var d = r.data;
+        var endDate = d.subscription_end_date ? new Date(d.subscription_end_date).getTime() : 0;
+        var isActive = d.subscribed && endDate > Date.now();
+        window._sbSubActive = isActive;
+        window._sbSubChecked = true;
+
+        if (isActive) {
+          // Mark role and sync localStorage Pro flags
+          safeLS && safeLS.setItem('cm_admin_role', 'admin');
+          safeLS && safeLS.setItem('cm_admin_email', d.email || user.email || '');
+          safeLS && safeLS.setItem('cm_sub_end', String(endDate));
+          try {
+            var s = JSON.parse(localStorage.getItem('sanj_auth_session') || '{}');
+            s.plan = 'pro'; s.email = d.email || user.email || s.email || '';
+            localStorage.setItem('sanj_auth_session', JSON.stringify(s));
+            localStorage.setItem('sanj_pro', '1');
+          } catch(e) {}
+
+          // Activate cloud and load data
+          if (!isCloudActivated()) safeLS && safeLS.setItem('cm_cloud', '1');
+          var siteId = 'user-' + user.id.replace(/-/g,'').slice(0,12);
+          safeLS && safeLS.setItem('cm_cloud_site', siteId);
+
+          function _applyCloudData(d2) {
+            if (!d2) return;
+            if (d2.db)         { sd(d2.db); AD = ld(); }
+            if (d2.meta)       sm(d2.meta);
+            if (d2.mats)       smat(d2.mats);
+            if (d2.dept)       sdept(d2.dept);
+            if (d2.prof)       sprof(d2.prof);
+            if (d2.machinery)  smach(d2.machinery);
+            if (d2.drawings)   sdrw(d2.drawings);
+            if (d2.budget)     sbgt(d2.budget);
+            if (d2.milestones) sms(d2.milestones);
+            if (d2.punchlist)  spl(d2.punchlist);
+            try { applyProfile(); } catch(e) {}
+            try { updateDash(); } catch(e) {}
+            if (typeof toast === 'function') toast('☁️ Cloud data restored!', 'ok');
+          }
+
+          _sb.from('cloud_backups').select('data').eq('admin_id', user.id).eq('backup_key', siteId).maybeSingle().then(function(r2) {
+            if (r2 && !r2.error && r2.data && r2.data.data) {
+              _applyCloudData(r2.data.data);
+            } else {
+              // Fallback: most recent backup for this admin
+              _sb.from('cloud_backups').select('data,backup_key').eq('admin_id', user.id).order('created_at', {ascending: false}).limit(1).then(function(r3) {
+                if (r3 && !r3.error && r3.data && r3.data.length > 0) {
+                  var foundKey = r3.data[0].backup_key;
+                  if (foundKey) safeLS && safeLS.setItem('cm_cloud_site', foundKey);
+                  _applyCloudData(r3.data[0].data);
+                }
+              }).catch(function(){});
+            }
+          }).catch(function(){});
+
+          try { loadViewerAccountsInline && loadViewerAccountsInline(); } catch(e) {}
+          try { startAutoSync && startAutoSync(); } catch(e) {}
+          updateCloudBtn && updateCloudBtn();
+          // Refresh all UI that depends on Pro status
+          try { _clRefreshUI && _clRefreshUI(); } catch(e) {}
+          try { _updateSettSubText && _updateSettSubText(); } catch(e) {}
+
+        } else {
+          // Subscription expired — clear Pro flags so UI is accurate
+          window._sbSubActive = false;
+          try {
+            localStorage.removeItem('sanj_pro');
+            var s2 = JSON.parse(localStorage.getItem('sanj_auth_session') || '{}');
+            s2.plan = 'free';
+            localStorage.setItem('sanj_auth_session', JSON.stringify(s2));
+          } catch(e) {}
+          updateCloudBtn && updateCloudBtn();
+          refreshCloudModalState && refreshCloudModalState();
+        }
+      } else {
+        window._sbSubActive = false;
+        window._sbSubChecked = true;
+        updateCloudBtn && updateCloudBtn();
+      }
+    }).catch(function() {
+      // Network error — trust cached localStorage as fallback (offline mode)
+      window._sbSubChecked = true;
+      var cachedPro = localStorage.getItem('sanj_pro') === '1';
+      window._sbSubActive = cachedPro;
+      if (cachedPro) {
+        safeLS && safeLS.setItem('cm_admin_role', 'admin');
+        if (!isCloudActivated()) safeLS && safeLS.setItem('cm_cloud', '1');
+      }
       updateCloudBtn && updateCloudBtn();
-      refreshCloudModalState && refreshCloudModalState();
-    }
+    });
   }
   function _onSBSignedOut() {
     _adminSBUser = null;
@@ -1649,7 +1742,16 @@ function dismissWelcome(){
       if(sess&&sess.email){
         var isPro=(sess.plan==='pro')||!!localStorage.getItem('sanj_pro');
         var proOk=isPro&&(!sess.pro_expires||sess.pro_expires>Date.now());
-        if(proOk){_launchApp();return;}
+        if(proOk){
+          _launchApp();
+          // Also trigger cloud data load via Supabase session restore
+          if(_sb){
+            _sb.auth.getSession().then(function(r){
+              if(r.data&&r.data.session){ _onSBAuthReady(r.data.session.user); }
+            }).catch(function(){});
+          }
+          return;
+        }
       }
       // New user or non-pro: slide to Login (animate=true → gallery slide left)
       _obGo(1, true);
@@ -1761,7 +1863,7 @@ function _launchApp_animate(){
     <div id="auth-step-email" style="width:100%;">
       <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.28);border-radius:99px;padding:4px 14px;margin-bottom:12px;">
         <span style="width:5px;height:5px;border-radius:50%;background:#34d399;flex-shrink:0;animation:wPls 2s ease-in-out infinite;"></span>
-        <span style="font-size:11px;font-weight:600;color:#6ee7b7;letter-spacing:.03em;">Free to login</span>
+        <span style="font-size:11px;font-weight:600;color:#6ee7b7;letter-spacing:.03em;">Login or create new account for Free</span>
       </div>
       <input id="auth-email-inp" class="auth-inp" type="email" placeholder="your@email.com" style="margin-bottom:8px;" oninput="document.getElementById('auth-email-err').style.display='none'">
       <p id="auth-email-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;text-align:center;"></p>
@@ -2034,47 +2136,51 @@ function restoreProPurchase(){
     return;
   }
   if(typeof toast==='function') toast('🔄 Checking subscription for '+email+'…','');
-  // Check if sanj_pro is already stored locally (e.g. different session on same device)
-  if(localStorage.getItem('sanj_pro')==='1'){
-    try{
-      var s2=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');
-      s2.plan='pro';
-      if(!s2.pro_expires) s2.pro_expires=Date.now()+(30*24*60*60*1000);
-      localStorage.setItem('sanj_auth_session',JSON.stringify(s2));
-    }catch(e){}
-    setTimeout(function(){
-      if(typeof toast==='function') toast('✅ Pro restored! Launching…','ok');
-      setTimeout(_launchApp, 800);
-    },600);
-    return;
-  }
-  // Check Supabase session for pro metadata
-  try{
-    if(typeof window._supa!=='undefined'&&window._supa){
-      window._supa.auth.getUser().then(function(res){
-        var meta=(res&&res.data&&res.data.user&&res.data.user.user_metadata)||{};
-        if(meta.plan==='pro'||meta.is_pro){
-          try{
-            var s3=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');
-            s3.plan='pro';
-            s3.pro_expires=Date.now()+(30*24*60*60*1000);
-            localStorage.setItem('sanj_auth_session',JSON.stringify(s3));
-            localStorage.setItem('sanj_pro','1');
-          }catch(e){}
-          if(typeof toast==='function') toast('✅ Pro restored! Launching…','ok');
-          setTimeout(_launchApp, 800);
+
+  // ── FIXED: Check admins TABLE (source of truth), not user_metadata ──
+  var sb = window._supa || window._sb || null;
+  if(sb){
+    sb.auth.getUser().then(function(res){
+      var user = res&&res.data&&res.data.user;
+      if(!user){ if(typeof toast==='function') toast('⚠️ Session not found. Please log in again.',''); return; }
+      // Check admins table — this is where subscribed/subscription_end_date lives
+      sb.from('admins').select('subscribed,subscription_end_date,email').eq('id',user.id).single().then(function(aRes){
+        if(!aRes.error&&aRes.data){
+          var d=aRes.data;
+          var endDate=d.subscription_end_date?new Date(d.subscription_end_date).getTime():0;
+          var isActive=d.subscribed&&endDate>Date.now();
+          if(isActive){
+            // Restore all Pro flags
+            try{
+              var s3=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');
+              s3.plan='pro'; s3.email=d.email||email;
+              s3.pro_expires=endDate;
+              localStorage.setItem('sanj_auth_session',JSON.stringify(s3));
+              localStorage.setItem('sanj_pro','1');
+            }catch(e){}
+            window._sbSubActive=true; window._sbSubChecked=true;
+            safeLS&&safeLS.setItem('cm_admin_role','admin');
+            safeLS&&safeLS.setItem('cm_sub_end',String(endDate));
+            if(typeof toast==='function') toast('✅ Pro restored! Launching…','ok');
+            setTimeout(function(){ _onSBAuthReady(user); _launchApp(); },600);
+          } else {
+            window._sbSubActive=false; window._sbSubChecked=true;
+            if(typeof toast==='function') toast('ℹ️ No active Pro subscription found for '+email+'. Please purchase.','');
+          }
         } else {
-          if(typeof toast==='function') toast('ℹ️ No active Pro subscription found for '+email+'. Please purchase.','');
+          if(typeof toast==='function') toast('ℹ️ No subscription record found. Please purchase.','');
         }
       }).catch(function(){
-        if(typeof toast==='function') toast('ℹ️ No active Pro subscription found. Please purchase.','');
+        if(typeof toast==='function') toast('⚠️ Network error — check internet and try again.','');
       });
-      return;
-    }
-  }catch(ex){}
-  // Fallback
+    }).catch(function(){
+      if(typeof toast==='function') toast('⚠️ Could not verify session. Please log in again.','');
+    });
+    return;
+  }
+  // Fallback if Supabase not ready
   setTimeout(function(){
-    if(typeof toast==='function') toast('ℹ️ No active Pro subscription found. Please purchase.','');
+    if(typeof toast==='function') toast('⚠️ App not ready — please reload and try again.','');
   },1000);
 }
 
@@ -2092,7 +2198,17 @@ function checkShowWelcomeAndAuth(){
   if(sess&&sess.email){
     var isPro=(sess.plan==='pro')||!!localStorage.getItem('sanj_pro');
     var proOk=isPro&&(!sess.pro_expires||sess.pro_expires>Date.now());
-    if(proOk){ _launchApp(); return; }  // Pro subscriber → launch app directly
+    if(proOk){
+      // Launch app immediately (fast UI), cloud data loads via _onSBAuthReady
+      _launchApp();
+      // Ensure Supabase session restore triggers _onSBAuthReady (handles timing race)
+      if(_sb){
+        _sb.auth.getSession().then(function(r){
+          if(r.data&&r.data.session){ _onSBAuthReady(r.data.session.user); }
+        }).catch(function(){});
+      }
+      return;
+    }  // Pro subscriber → launch app directly
     // Non-pro existing user: skip Welcome, go straight to Login page
     plShowWelcomePill();
     _obShowShell();
@@ -2525,9 +2641,11 @@ function _clRefreshUI(){
   var sess={};
   try{sess=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');}catch(e){}
   var email=sess.email||'';
-  var isPro=(sess.plan==='pro')||!!localStorage.getItem('sanj_pro');
-  var proExpires=sess.pro_expires||0;
-  var proOk=isPro&&proExpires&&proExpires>Date.now();
+  // Use DB-verified _sbSubActive as primary truth; localStorage as fallback
+  var isPro=(sess.plan==='pro')||!!localStorage.getItem('sanj_pro')||!!window._sbSubActive;
+  var proExpires=sess.pro_expires||parseInt(localStorage.getItem('cm_sub_end')||'0')||0;
+  // Fix: !proExpires allows Pro users whose pro_expires was never set (old accounts)
+  var proOk=(window._sbSubChecked ? !!window._sbSubActive : isPro)&&(!proExpires||proExpires>Date.now());
 
   // Avatar
   var av=document.getElementById('cl-avatar');
@@ -2553,14 +2671,15 @@ function _clRefreshUI(){
   // Valid row
   var vt=document.getElementById('cl-valid-txt');
   if(vt){
-    if(proOk&&proExpires){
-      var d=new Date(proExpires);
+    var subEndMs = parseInt(safeLS && safeLS.getItem('cm_sub_end')||'0')||proExpires||0;
+    if(proOk&&subEndMs&&subEndMs>Date.now()){
+      var d=new Date(subEndMs);
       var dStr=d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-      var dLeft=Math.max(0,Math.ceil((proExpires-Date.now())/(86400000)));
+      var dLeft=Math.max(0,Math.ceil((subEndMs-Date.now())/(86400000)));
       vt.textContent='Valid till '+dStr+' ('+dLeft+' days left)';
       vt.style.color=dLeft<7?'#fca5a5':'#34d399';
-    } else if(isPro){
-      vt.textContent='Pro Active';vt.style.color='#34d399';
+    } else if(proOk){
+      vt.textContent='Pro Active ⭐';vt.style.color='#34d399';
     } else {
       vt.textContent='Free Plan — No expiry';vt.style.color='#a5b4fc';
     }
@@ -2739,16 +2858,24 @@ function acctRestorePurchase(){
   setTimeout(function(){if(typeof toast==='function')toast('ℹ️ No active Pro subscription found.','');},1800);
 }
 
-// ── settings sub-text on load ──
-document.addEventListener('DOMContentLoaded',function(){
+// ── settings sub-text on load + re-update after Supabase session verified ──
+function _updateSettSubText(){
   try{
     var sess=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');
     var sub=document.getElementById('sett-cloud-sub');
     if(sub){
-      var isPro=sess.plan==='pro'||!!localStorage.getItem('sanj_pro');
+      var isPro=(window._sbSubChecked?!!window._sbSubActive:false)||(sess.plan==='pro')||!!localStorage.getItem('sanj_pro');
       sub.textContent=sess.email?(isPro?'⭐ Pro · '+sess.email:'Free · '+sess.email):'Tap to manage account';
     }
   }catch(e){}
+}
+document.addEventListener('DOMContentLoaded',function(){
+  _updateSettSubText();
+  // Re-update once Supabase DB check finishes (max 10s wait)
+  var poll=setInterval(function(){
+    if(window._sbSubChecked){ clearInterval(poll); _updateSettSubText(); }
+  },500);
+  setTimeout(function(){clearInterval(poll);},10000);
 });
 </script>
 
