@@ -665,6 +665,8 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   function _onSBAuthReady(user) {
     _adminSBUser = user;
     _adminUser = user;
+    // Detect account switch on session restore (e.g. after page reload)
+    _handleAccountSwitch(user.id);
     updateCloudBtn && updateCloudBtn();
     refreshCloudModalState && refreshCloudModalState();
 
@@ -772,9 +774,23 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     });
   }
   function _onSBSignedOut() {
+    // Clear auth state only — DO NOT touch project/app data
     _adminSBUser = null;
+    _adminUser = null;
+    window._sbSubActive = false;
+    window._sbSubChecked = true;
     safeLS && safeLS.removeItem('cm_admin_role');
     safeLS && safeLS.removeItem('cm_admin_email');
+    safeLS && safeLS.removeItem('cm_sub_end');
+    safeLS && safeLS.removeItem(CLOUD_KEY || 'cm_cloud_activated');
+    // Clear supabase session tokens only
+    try {
+      var _ks = Object.keys(localStorage);
+      _ks.forEach(function(k){ if(k.indexOf('sb-')===0||k.indexOf('supabase.')===0){ localStorage.removeItem(k); } });
+    } catch(e) {}
+    // Keep project data (proj__*, sanj_*, cm_db_*, etc.) INTACT
+    updateCloudBtn && updateCloudBtn();
+    refreshCloudModalState && refreshCloudModalState();
   }
 
   // ── SHA-256 password hash (for viewer passwords) ────────────────
@@ -3068,7 +3084,7 @@ document.addEventListener('DOMContentLoaded',function(){
         <span id="hdr-proj-chip" style="display:none;"></span>
       </div>
     </div>
-    <!-- RIGHT: Calculator + Total Spends — absolutely pinned to extreme right, never overlaps center -->
+    <!-- RIGHT: Calculator + Total Spends — pinned absolute right, never overlaps center -->
     <div style="position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;align-items:flex-end;">
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
       <div style="display:flex;align-items:center;gap:6px;">
@@ -6404,13 +6420,16 @@ document.addEventListener('DOMContentLoaded', function() {
         <button onclick="closeCloudModal()" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
       </div>
 
-      <!-- Admin status bar (only when logged in) -->
+      <!-- Admin status bar (only when logged in as Pro) -->
       <div id="cloud-admin-bar" style="display:none;margin:0 .9rem .5rem;background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(139,92,246,.14));border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:.45rem .7rem;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
           <div style="display:flex;align-items:center;gap:6px;">
-            <div style="width:22px;height:22px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;">&#128100;</div>
+            <div style="width:22px;height:22px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;">⭐</div>
             <div>
-              <p style="font-size:9px;font-weight:800;color:#c7d2fe;line-height:1;">Admin</p>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <p style="font-size:9px;font-weight:800;color:#fde68a;line-height:1;">Pro</p>
+                <span style="font-size:7px;background:rgba(245,158,11,.25);border:1px solid rgba(245,158,11,.4);border-radius:4px;padding:0 4px;color:#fcd34d;font-weight:800;">ACTIVE</span>
+              </div>
               <p id="cloud-admin-email" style="font-size:8px;color:#a78bfa;">&mdash;</p>
             </div>
           </div>
@@ -6771,51 +6790,54 @@ service cloud.firestore {
 </div>
 
 <!-- ====== PAYMENT LANDING MODAL ====== -->
-<div id="pay-landing-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] items-center justify-center p-3" style="display:none" onclick="if(event.target===this)closePayLanding()">
-  <div style="background:linear-gradient(135deg,#0f172a,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.18);border-radius:1.25rem;padding:1rem;width:100%;max-width:380px;max-height:92vh;overflow-y:auto;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;">
+<div id="pay-landing-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] items-center justify-center p-3" style="display:none" onclick="if(event.target===this)_continueAsFreeUser()">
+  <div style="background:linear-gradient(145deg,#0f172a,#1e1b4b);border:1px solid rgba(255,255,255,.15);border-radius:1.25rem;padding:.9rem;width:100%;max-width:360px;">
+    <!-- Title row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div style="width:36px;height:36px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 3px 10px rgba(245,158,11,.4);">🏗️</div>
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;">🏗️</div>
         <div>
-          <p style="font-size:14px;font-weight:900;color:white;line-height:1;">Sanjineer Cloud</p>
-          <p style="font-size:9px;color:#c4b5fd;">Pro Subscription Required</p>
+          <p style="font-size:13px;font-weight:900;color:white;line-height:1;">Sanjineer Pro</p>
+          <p style="font-size:8px;color:#a78bfa;margin-top:1px;">₹30/month · Cancel anytime</p>
         </div>
       </div>
-      <button id="pay-close-btn" onclick="_safeClosePayLanding()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);font-size:16px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:auto;">✕</button>
+      <p style="font-size:26px;font-weight:900;color:white;line-height:1;">₹30<span style="font-size:10px;font-weight:400;color:#a78bfa">/mo</span></p>
     </div>
-    <div id="pay-locked-msg" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:9px;padding:6px 10px;margin-bottom:.6rem;display:none;">
-      <p style="font-size:10px;color:#fca5a5;font-weight:700;">🔒 Subscription required to use Cloud</p>
-      <p style="font-size:9px;color:#fca5a5;margin-top:1px;opacity:.8;">Pay to activate, or <button onclick="_continueAsFreeUser()" style="background:none;border:none;color:#fbbf24;font-size:9px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">continue as free user</button></p>
+    <!-- Locked notice (shown only when gated) -->
+    <div id="pay-locked-msg" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 9px;margin-bottom:.6rem;">
+      <p style="font-size:9px;color:#fca5a5;font-weight:700;">🔒 Subscribe to unlock Cloud features</p>
     </div>
-    <div style="text-align:center;padding:.65rem 0;margin-bottom:.7rem;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);">
-      <p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>
-      <p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>
+    <!-- Compact 2-col feature grid -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:.7rem;">
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 9px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:15px">🔄</span><p style="font-size:9px;font-weight:700;color:#c7d2fe;line-height:1.2">Real-time Cloud Sync</p>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 9px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:15px">👥</span><p style="font-size:9px;font-weight:700;color:#c7d2fe;line-height:1.2">Create Viewers</p>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 9px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:15px">📱</span><p style="font-size:9px;font-weight:700;color:#c7d2fe;line-height:1.2">Multi-device Sync</p>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 9px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:15px">📂</span><p style="font-size:9px;font-weight:700;color:#c7d2fe;line-height:1.2">Multi-project</p>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 9px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:15px">🖼️</span><p style="font-size:9px;font-weight:700;color:#c7d2fe;line-height:1.2">Your Own Logo</p>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 9px;display:flex;align-items:center;gap:6px;">
+        <span style="font-size:15px">🔐</span><p style="font-size:9px;font-weight:700;color:#c7d2fe;line-height:1.2">Tab Permissions</p>
+      </div>
     </div>
-    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.75rem;padding:.65rem;margin-bottom:.75rem;">
-      <div class="cloud-feature-row"><span style="font-size:14px">🔄</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Real-time Cloud Sync</p><p style="font-size:9px;color:#a78bfa">All devices stay in sync automatically</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">👁️</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Viewer Accounts (Free)</p><p style="font-size:9px;color:#a78bfa">Create unlimited read-only users</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">🔒</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Tab-level Permissions</p><p style="font-size:9px;color:#a78bfa">Control what each viewer can see & print</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">💾</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Auto Backup</p><p style="font-size:9px;color:#a78bfa">Never lose a day's data</p></div></div>
-    </div>
-    <button onclick="startSubscriptionPayment()" id="sub-pay-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.75rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.4rem;box-shadow:0 4px 16px rgba(79,70,229,.5);min-height:auto;height:auto;">
+    <!-- Pay button -->
+    <button onclick="startSubscriptionPayment()" id="sub-pay-btn" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.7rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem;margin-bottom:.4rem;box-shadow:0 4px 16px rgba(79,70,229,.5);">
       💳 Subscribe ₹30/month
     </button>
-    <button onclick="_continueAsFreeUser()" style="width:100%;padding:.55rem;background:transparent;color:rgba(255,255,255,0.45);border:1px solid rgba(255,255,255,0.12);border-radius:.75rem;font-weight:600;font-size:.8rem;cursor:pointer;margin-bottom:.4rem;">
-      ← Back to Dashboard (free)
+    <!-- Cancel button -->
+    <button onclick="_continueAsFreeUser()" style="width:100%;padding:.55rem;background:transparent;color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.1);border-radius:.7rem;font-size:.8rem;font-weight:600;cursor:pointer;">
+      ← Continue without Cloud (free)
     </button>
-    <p style="text-align:center;font-size:9px;color:#7c3aed">🔒 Powered by Razorpay · UPI / Card / NetBanking accepted</p>
-    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:.35rem;">
-      <img src="https://razorpay.com/assets/razorpay-glyph.svg" onerror="this.style.display='none'" style="height:14px;opacity:0.6">
-      <span style="font-size:9px;color:rgba(255,255,255,0.4)">Secured payment · India's #1 payment gateway</span>
-    </div>
-    <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.45);margin-top:.55rem">
-      Need help? DM
-      <a href="https://ig.me/m/sanjineer" target="_blank" rel="noopener"
-         style="color:#f59e0b;font-weight:700;text-decoration:none">
-        @Sanjineer
-      </a>
-      on Instagram 📩
-    </p>
+    <!-- Trust line -->
+    <p style="text-align:center;font-size:8px;color:rgba(255,255,255,.25);margin-top:.5rem;">🔒 Razorpay · UPI / Card / NetBanking</p>
   </div>
 </div>
 
@@ -12882,16 +12904,29 @@ function refreshCloudModalState() {
       }
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
-    // Logged in but subscription expired/not paid — show renew screen
+    // Logged in but FREE user (no active subscription) — show account info + upgrade option
     var adminPanel = document.getElementById('ctab-admin');
+    var adminEmail = safeLS.getItem('cm_admin_email') || ((_adminSBUser && _adminSBUser.email) ? _adminSBUser.email : '');
     if (adminPanel) {
       adminPanel.style.display = 'block';
-      adminPanel.innerHTML = '<div style="text-align:center;padding:2rem 1rem;">'
-        + '<p style="font-size:32px;margin-bottom:12px">🔒</p>'
-        + '<p style="font-size:16px;font-weight:800;color:#fca5a5;margin-bottom:6px">Subscription Required</p>'
-        + '<p style="font-size:12px;color:#a78bfa;margin-bottom:1.5rem">Pay ₹30/month to activate Cloud Backup, Sync & Viewers</p>'
-        + '<button onclick="openPayLanding(true)" style="width:100%;padding:.9rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;margin-bottom:.75rem;">💳 Subscribe — ₹30/month</button>'
-        + '<button onclick="doAdminLogout()" style="width:100%;padding:.65rem;background:transparent;border:1px solid rgba(239,68,68,.3);color:rgba(239,68,68,.7);border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;">Logout</button>'
+      adminPanel.innerHTML =
+        '<div style="padding:.5rem 0;">'
+        // User info chip
+        + '<div style="background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.25);border-radius:10px;padding:.55rem .7rem;margin-bottom:.6rem;display:flex;align-items:center;justify-content:space-between;">'
+          + '<div style="display:flex;align-items:center;gap:7px;">'
+            + '<div style="width:28px;height:28px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;">👤</div>'
+            + '<div><p style="font-size:10px;font-weight:800;color:#c7d2fe;line-height:1;">Free Account</p>'
+            + '<p style="font-size:8px;color:#a78bfa;margin-top:1px;">' + (adminEmail || 'Logged in') + '</p></div>'
+          + '</div>'
+          + '<button onclick="doAdminLogout()" style="padding:3px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;">Logout</button>'
+        + '</div>'
+        // Local-only notice
+        + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.5rem .7rem;margin-bottom:.65rem;">'
+          + '<p style="font-size:9px;color:rgba(255,255,255,.6);line-height:1.5;">✅ Your data is saved locally on this device.<br>Subscribe to unlock Cloud Sync, Viewers, Multi-project & Logo.</p>'
+        + '</div>'
+        // Upgrade button
+        + '<button onclick="openPayLanding(true)" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#f59e0b,#ea580c);color:white;border:none;border-radius:10px;font-weight:800;font-size:.9rem;cursor:pointer;margin-bottom:.35rem;box-shadow:0 4px 14px rgba(245,158,11,.35);">⭐ Upgrade to Pro — ₹30/month</button>'
+        + '<button onclick="closeCloudModal()" style="width:100%;padding:.5rem;background:transparent;border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.4);border-radius:9px;font-size:.8rem;cursor:pointer;">Back to Dashboard</button>'
         + '</div>';
     }
     var tabSwitcher2 = document.getElementById('cloud-tab-switcher');
@@ -13424,9 +13459,7 @@ function copyViewerLink() {
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(txt).then(function() { toast('Link copied!', 'ok'); }).catch(function() { _fbCopy(txt); });
-  } else {
-    _fbCopy(txt);
-  }
+  } else { _fbCopy(txt); }
 }
 function shareViewerLink() {
   var txt = document.getElementById('viewer-link-text').textContent;
@@ -13951,11 +13984,19 @@ function doSmartLogin() {
           safeLS.setItem('cm_sub_end', String(endDate)); // cache for display only, not for auth
           onAdminLoginSuccess(email, user, null);
         } else {
+          // Free user (never subscribed or expired) — still log them in, just no cloud
           window._sbSubActive = false;
+          window._sbSubChecked = true;
+          safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
+          safeLS.setItem(ADMIN_EMAIL_KEY, email);
+          _handleAccountSwitch(user.id); // isolate data if different user
           closeAuthModal();
-          _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null;
-          if (data.subscribed && endDate <= now) toast('⚠️ Subscription expired! Renew karo.', 'err');
-          openPayLanding(true);
+          if (data.subscribed && endDate <= now) {
+            toast('⚠️ Subscription expired — renew to restore Cloud.', 'err');
+          } else {
+            toast('✅ Logged in as free user.', 'ok');
+          }
+          openPayLanding(true); // show upgrade offer (has "Continue free" button)
         }
         btn.textContent = '🔑 Login'; btn.disabled = false;
       });
@@ -14005,6 +14046,10 @@ function doAdminSignup() {
     if (r.error) throw r.error;
     var user = r.data.user;
     _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null; _adminSBUser = user;
+    window._sbSubActive = false; window._sbSubChecked = true;
+    safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
+    safeLS.setItem(ADMIN_EMAIL_KEY, email);
+    _handleAccountSwitch(user.id); // clear any previous user's local data
     Promise.resolve(_sb.from('admins').upsert({ id: user.id, email: email, subscribed: false }, { onConflict: 'id' })).catch(function(){});
     closeAuthModal();
     openPayLanding(true);
@@ -14022,26 +14067,63 @@ function showAuthErr(tab, msg) {
   if (el) { el.textContent = '⚠️ ' + msg; el.style.display = 'block'; }
 }
 
+// ── Account Switch: wipe local app data when a different user logs in ──
+// Same user → data kept. New user → local data cleared (their cloud backup loads instead).
+function _handleAccountSwitch(newUid) {
+  if (!newUid) return;
+  var lastUid = '';
+  try { lastUid = localStorage.getItem('sanj_last_uid') || ''; } catch(e) {}
+  if (lastUid && lastUid !== newUid) {
+    // Different user — clear local app data (projects, entries, settings)
+    try {
+      var _ls = window.localStorage;
+      var _toDelete = [];
+      for (var _i = 0; _i < _ls.length; _i++) {
+        var _k = _ls.key(_i);
+        if (!_k) continue;
+        // Clear project data and app entries — NOT auth/session keys
+        if (_k.indexOf('proj__') === 0 || _k.indexOf('cm_db') === 0 ||
+            _k.indexOf('cm_meta') === 0 || _k.indexOf('cm_mats') === 0 ||
+            _k.indexOf('cm_dept') === 0 || _k.indexOf('cm_prof') === 0 ||
+            _k.indexOf('cm_mach') === 0 || _k.indexOf('cm_drw') === 0 ||
+            _k.indexOf('cm_bgt') === 0 || _k.indexOf('cm_ms') === 0 ||
+            _k.indexOf('cm_pl') === 0 || _k.indexOf('sanj_projects') === 0 ||
+            _k.indexOf('sanj_active_proj') === 0 || _k.indexOf('sanj_pro') === 0 ||
+            _k.indexOf('sanj_auth_session') === 0) {
+          _toDelete.push(_k);
+        }
+      }
+      _toDelete.forEach(function(k){ try { _ls.removeItem(k); } catch(e){} });
+      // Reset in-memory data
+      AD = []; try { NID = 1; } catch(e) {}
+    } catch(e) {}
+    toast('🔄 New account — loading your data…', 'ok');
+  }
+  // Record current user ID for future switch detection
+  try { localStorage.setItem('sanj_last_uid', newUid); } catch(e) {}
+}
+
 function onAdminLoginSuccess(email, user, app) {
   // CRITICAL: always clear viewer state on admin login
   _IS_VIEWER = false;
-  // Remove any lingering viewer bar
   try { var _vbar = document.getElementById('viewer-top-bar'); if (_vbar) _vbar.remove(); } catch(e) {}
-  // Re-enable any buttons disabled by viewer mode
   try { document.querySelectorAll('button[disabled]').forEach(function(b){ b.disabled=false; b.style.opacity=''; b.style.cursor=''; }); } catch(e) {}
+
+  // ── ACCOUNT SWITCH: if a different user logs in, wipe local app data ──
+  // so they never see another user's projects. Cloud data loads fresh below.
+  _handleAccountSwitch(user.id);
+
   _adminUser = user;
   _adminApp  = null;
   _adminSBUser = user;
-  window._sbSubActive = true; // Set by login (already verified from DB before calling this)
-  window._sbSubChecked = true; // DB already verified during login
+  window._sbSubActive = true;
+  window._sbSubChecked = true;
   safeLS._raw.setItem(ADMIN_ROLE_KEY,  'admin');
   safeLS._raw.setItem(ADMIN_EMAIL_KEY, email);
-  // Always ensure admin row exists — prevents foreign key issues when creating viewers
   Promise.resolve(_sb.from('admins').upsert({ id: user.id, email: email }, { onConflict: 'id' })).catch(function(){});
   closeAuthModal();
   var emailEl = document.getElementById('cloud-admin-email');
   if (emailEl) emailEl.textContent = email;
-  // Fetch subscription expiry from Supabase
   _sb.from('admins').select('subscription_end_date,subscribed').eq('id', user.id).single().then(function(r) {
     if (!r.error && r.data) {
       var endDate = r.data.subscription_end_date;
@@ -14066,17 +14148,14 @@ function onAdminLoginSuccess(email, user, app) {
   if (!isCloudActivated()) safeLS._raw.setItem(CLOUD_KEY, '1');
   updateCloudBtn();
   startAutoSync();
-  // Restore latest cloud data scoped to the active project's backup_key
-  var siteId = getSiteId(); // includes active project slug
+  var siteId = getSiteId();
   safeLS._raw.setItem(CLOUD_SITE_ID, siteId);
-  // Re-init NID for this project's namespace
   try { _initProjectNID(); } catch(e) { NID = 1; }
 
   function _doLoginRestore(d, foundKey) {
     if (foundKey) safeLS._raw.setItem(CLOUD_SITE_ID, foundKey);
     _applyFullBackup(d);
     applyProfile(); updateDash();
-    // Re-init NID after restore (backup nid may be higher)
     try { _initProjectNID(); } catch(e) {}
     toast('☁️ Cloud data restored!', 'ok');
   }
@@ -14085,7 +14164,6 @@ function onAdminLoginSuccess(email, user, app) {
     if (r && !r.error && r.data && r.data.data) {
       _doLoginRestore(r.data.data, siteId);
     } else {
-      // No backup with that key — try most recent backup for this admin
       _sb.from('cloud_backups').select('data,backup_key').eq('admin_id', user.id).order('created_at', {ascending: false}).limit(1).then(function(r2) {
         if (r2 && !r2.error && r2.data && r2.data.length > 0) {
           _doLoginRestore(r2.data[0].data, r2.data[0].backup_key);
@@ -14136,35 +14214,36 @@ function doUnsubscribe() {
 }
 
 function doAdminLogout() {
-  _sb && _sb.auth.signOut().catch(function(){});
+  if (_sb) _sb.auth.signOut().catch(function(){});
   _adminUser = null; _adminApp = null; _adminSBUser = null;
-  window._sbSubActive = false;
-  window._sbSubChecked = true;
+  window._sbSubActive = false; window._sbSubChecked = true;
   if (_cloudSyncTimer) { clearInterval(_cloudSyncTimer); _cloudSyncTimer = null; }
-  // Stop any viewer polling
   if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; }
-  // ── SAFE LOGOUT: only clear auth/cloud/subscription keys ──
-  // Project data (proj__*, sanj_projects, sanj_active_proj, cm_db_*, etc.) is PRESERVED
-  // so the user can log back in and their data is still there.
-  var _authOnlyKeys = [
-    'cm_admin_role', 'cm_admin_email', 'cm_cloud', 'cm_cloud_activated', 'cm_cloud_site',
-    'cm_site_id', 'cm_sub_end', 'cm_rzp_payment_id', 'cm_fb_cfg', 'cm_fb_config',
-    ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, CLOUD_KEY
+
+  // ── SAFE: clear auth/subscription keys only — ALL project data stays intact ──
+  var _authKeys = [
+    'cm_admin_role','cm_admin_email','cm_cloud','cm_cloud_activated','cm_cloud_site',
+    'cm_site_id','cm_sub_end','cm_rzp_payment_id','cm_fb_cfg','cm_fb_config',
+    typeof ADMIN_ROLE_KEY!=='undefined'?ADMIN_ROLE_KEY:'',
+    typeof ADMIN_EMAIL_KEY!=='undefined'?ADMIN_EMAIL_KEY:'',
+    typeof CLOUD_KEY!=='undefined'?CLOUD_KEY:''
   ];
   var _seen = {};
-  _authOnlyKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; try { window.localStorage.removeItem(k); } catch(e){} } });
-  // Clear Supabase auth tokens only (sb-* and supabase.* keys)
+  _authKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; try { window.localStorage.removeItem(k); } catch(e){} } });
+  // Clear Supabase session tokens only
   try {
-    var _lsKeys2 = Object.keys(localStorage);
-    _lsKeys2.forEach(function(k){
-      if(k.indexOf('sb-')===0 || k.indexOf('supabase.')===0){ localStorage.removeItem(k); }
+    Object.keys(localStorage).forEach(function(k){
+      if(k.indexOf('sb-')===0||k.indexOf('supabase.')===0){ localStorage.removeItem(k); }
     });
   } catch(e){}
-  // Do NOT clear project data — AD stays loaded from localStorage
+  // sanj_pro flag cleared since we're logged out
+  try { localStorage.removeItem('sanj_pro'); } catch(e){}
+
   toast('Logged out. Your local data is safe.', 'ok');
   updateCloudBtn();
-  refreshCloudModalState();
-  openCloudModal();
+  // Show welcome/login screen
+  closeCloudModal && closeCloudModal();
+  setTimeout(function(){ refreshCloudModalState(); openCloudModal(); }, 200);
 }
 
 // Restore admin session on page load (Supabase)
@@ -14748,21 +14827,19 @@ function closePayLanding() {
   if (lockedMsg) lockedMsg.style.display = 'none';
 }
 function _safeClosePayLanding() {
-  // Only allow close if NOT in afterAuth gate
   if (_payLandingAfterAuth) {
-    toast('Subscribe to unlock Cloud, or tap "Back to Dashboard" to use the app free', 'err');
+    toast('Subscribe for Cloud, or tap "Continue without Cloud" to use free', 'err');
     return;
   }
   closePayLanding();
 }
 function _continueAsFreeUser() {
-  // Close pay modal and return to dashboard — stays logged in, no data lost
   _payLandingAfterAuth = false;
   closePayLanding();
-  toast('Using app as free user. Cloud sync not active.', 'ok');
+  toast('Using app as free user — data saved locally.', 'ok');
 }
 function _cancelAndLogout() {
-  // Legacy alias — now redirects to free user flow instead of logging out
+  // Legacy alias → now just returns to free dashboard (no logout)
   _continueAsFreeUser();
 }
 
