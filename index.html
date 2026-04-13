@@ -2917,17 +2917,24 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
     <!-- CENTER: Company + Engineer name -->
     <div class="flex-1 flex items-center justify-center min-w-0">
-      <!-- Hidden kept for JS compat -->
+      <!-- Cloud btn hidden — access via Settings panel. Spans kept for JS compat. -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
-      <button id="cloud-hdr-btn" class="cloud-btn flex-shrink-0" onclick="openCloudModal()" title="Cloud" style="display:none">
-        <span id="cloud-hdr-icon" style="font-size:17px;line-height:1">🔒</span>
-        <span id="cloud-hdr-label" style="font-size:9px!important;color:rgba(255,255,255,0.8);line-height:1;margin-top:1px">Cloud</span>
-      </button>
+      <span id="cloud-hdr-btn" style="display:none"></span>
+      <span id="cloud-hdr-icon" style="display:none">🔒</span>
+      <span id="cloud-hdr-label" style="display:none">Cloud</span>
       <div class="min-w-0" style="text-align:center;display:flex;flex-direction:column;gap:1px">
         <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s">Tap Edit Profile</p>
-        <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;transition:opacity .3s">Set your name</p>
-        <!-- Active project chip — tapping opens cloud modal on project tab -->
-        <button id="hdr-proj-chip" onclick="openCloudModal();setTimeout(function(){switchCloudTab('admin');},120);" style="display:none;background:rgba(99,102,241,0.22);border:1px solid rgba(99,102,241,0.38);border-radius:99px;padding:1px 8px;font-size:8px;font-weight:700;color:#a5b4fc;cursor:pointer;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;margin:0 auto;-webkit-tap-highlight-color:transparent;outline:none;">📂 —</button>
+        <!-- Project selector replaces engineer name — tap to switch project instantly -->
+        <div style="position:relative;width:100%;max-width:160px;margin:0 auto;">
+          <select id="hdr-proj-select" onchange="_hdrProjSwitch(this.value)"
+            style="width:100%;appearance:none;-webkit-appearance:none;background:transparent;border:none;color:rgba(251,191,36,0.9);font-size:10px;font-weight:700;font-family:inherit;outline:none;cursor:pointer;text-align:center;text-align-last:center;padding:0 14px 0 2px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            <option value="" style="background:#1e1b4b;color:#fff;">📂 No project</option>
+          </select>
+          <span style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:7px;color:rgba(251,191,36,0.6);pointer-events:none;">▾</span>
+        </div>
+        <!-- hdr-engineer kept hidden for JS compat (applyProfile writes to it) -->
+        <p id="hdr-engineer" class="text-amber-300 truncate" style="display:none;font-size:10px!important;line-height:1;margin:0;">Set your name</p>
+        <span id="hdr-proj-chip" style="display:none;"></span>
       </div>
     </div>
     <!-- RIGHT: Calculator + Total Spends -->
@@ -2935,8 +2942,8 @@ document.addEventListener('DOMContentLoaded',function(){
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
       <div style="display:flex;align-items:center;gap:6px;">
         <!-- Compact calculator trigger — left of spend amount -->
-        <button onclick="openCalcModal()" style="display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:8px;padding:4px 7px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;" ontouchstart="this.style.background='rgba(255,255,255,0.18)'" ontouchend="this.style.background='transparent'">
-          <span style="font-size:15px;line-height:1">🖩</span>
+        <button onclick="openCalcModal()" style="display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:6px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s,transform .12s;" ontouchstart="this.style.background='rgba(255,255,255,0.22)';this.style.transform='scale(0.92)'" ontouchend="this.style.background='rgba(255,255,255,0.08)';this.style.transform='scale(1)'">
+          <span style="font-size:16px;line-height:1">🖩</span>
         </button>
         <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
       </div>
@@ -3057,6 +3064,31 @@ document.addEventListener('DOMContentLoaded',function(){
         <p style="font-size:13px;font-weight:900;color:#fff;margin:0;">Settings</p>
       </div>
       <button onclick="closeAllAndSettings()" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;" ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">✕</button>
+    </div>
+
+    <!-- ── PROJECT SELECTOR (inline in Settings) ── -->
+    <div id="sett-proj-section" style="background:linear-gradient(135deg,rgba(99,102,241,0.14),rgba(168,85,247,0.1));border:1px solid rgba(99,102,241,0.28);border-radius:10px;padding:8px 10px;margin-bottom:5px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:14px;">📂</span>
+          <span style="font-size:11px;font-weight:800;color:#a5b4fc;">Project</span>
+        </div>
+        <button id="sett-proj-add-btn" onclick="_settOpenAddProject()" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;">＋ New</button>
+      </div>
+      <!-- Project list (tappable chips) -->
+      <div id="sett-proj-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;">
+        <p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:2px 0;">No projects yet — tap ＋ New</p>
+      </div>
+      <!-- Hidden select kept for JS compat with _onProjectChange -->
+      <select id="sett-proj-select" onchange="_onProjectChange(this.value)" style="display:none;"></select>
+      <!-- Add project inline form -->
+      <div id="sett-proj-add-form" style="display:none;margin-top:5px;">
+        <input id="sett-proj-name-inp" type="text" placeholder="e.g. Site Goa Phase 2" onkeydown="if(event.key==='Enter')_settSaveProject()" style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:7px;color:#fff;font-size:11px;outline:none;box-sizing:border-box;margin-bottom:6px;">
+        <div style="display:flex;gap:5px;">
+          <button onclick="_settSaveProject()" style="flex:1;padding:6px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:7px;font-size:10px;font-weight:800;cursor:pointer;">✓ Create</button>
+          <button onclick="document.getElementById('sett-proj-add-form').style.display='none'" style="padding:6px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);border-radius:7px;font-size:10px;cursor:pointer;">Cancel</button>
+        </div>
+      </div>
     </div>
 
     <!-- ☁️ Cloud & Account -->
@@ -3307,7 +3339,141 @@ function _settRipple(e, btn) {
   setTimeout(function(){ r.remove(); }, 520);
 }
 
+// ── Settings panel project helpers ──────────────────────────
+function _settLoadProjDropdown() {
+  var listEl = document.getElementById('sett-proj-list');
+  var addBtn  = document.getElementById('sett-proj-add-btn');
+  var hdrSel  = document.getElementById('hdr-proj-select');
+  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  var active = '';
+  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var isPro = !!window._sbSubActive;
+
+  // ── Settings panel: render as tappable chip list ──
+  if (listEl) {
+    if (projects.length === 0) {
+      listEl.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:2px 0;">No projects yet — tap ＋ New</p>';
+    } else {
+      listEl.innerHTML = '';
+      projects.forEach(function(p) {
+        var isActive = p.name === active;
+        var chip = document.createElement('button');
+        chip.setAttribute('onclick', '_onProjectChange(' + JSON.stringify(p.name) + ');_settLoadProjDropdown();');
+        chip.style.cssText = [
+          'width:100%;display:flex;align-items:center;gap:7px;',
+          'background:' + (isActive ? 'linear-gradient(135deg,rgba(99,102,241,0.35),rgba(168,85,247,0.25))' : 'rgba(255,255,255,0.05)') + ';',
+          'border:1px solid ' + (isActive ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.1)') + ';',
+          'border-radius:8px;padding:6px 9px;cursor:pointer;',
+          'color:' + (isActive ? '#a5b4fc' : 'rgba(255,255,255,0.65)') + ';',
+          'font-size:11px;font-weight:' + (isActive ? '800' : '600') + ';',
+          'text-align:left;-webkit-tap-highlight-color:transparent;outline:none;',
+          'transition:background .15s,border-color .15s;'
+        ].join('');
+        chip.innerHTML = '<span style="font-size:12px;flex-shrink:0;">' + (isActive ? '✅' : '📂') + '</span>'
+          + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + p.name + '</span>'
+          + (isActive ? '<span style="font-size:8px;color:#6ee7b7;font-weight:700;flex-shrink:0;">Active</span>' : '');
+        listEl.appendChild(chip);
+      });
+    }
+  }
+
+  // ── Header dropdown: populate options ──
+  if (hdrSel) {
+    hdrSel.innerHTML = '<option value="" style="background:#1e1b4b;color:#fff;">📂 No project</option>';
+    projects.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = '📂 ' + p.name;
+      opt.style.background = '#1e1b4b';
+      opt.style.color = '#fff';
+      if (p.name === active) opt.selected = true;
+      hdrSel.appendChild(opt);
+    });
+    // If active not in list, reset
+    if (active && !projects.find(function(p){ return p.name === active; })) {
+      hdrSel.value = '';
+    }
+  }
+
+  // ── Add button state ──
+  if (addBtn) {
+    if (!isPro && projects.length >= 1) {
+      addBtn.textContent = '⭐ Pro';
+      addBtn.style.background = 'rgba(245,158,11,0.18)';
+      addBtn.style.borderColor = 'rgba(245,158,11,0.35)';
+      addBtn.style.color = '#fcd34d';
+    } else {
+      addBtn.textContent = '＋ New';
+      addBtn.style.background = 'rgba(16,185,129,0.2)';
+      addBtn.style.borderColor = 'rgba(16,185,129,0.35)';
+      addBtn.style.color = '#6ee7b7';
+    }
+  }
+}
+
+// Called when user picks a project from the header dropdown
+function _hdrProjSwitch(name) {
+  if (!name) return;
+  // Call the existing project switch logic
+  if (typeof _onProjectChange === 'function') _onProjectChange(name);
+  // Refresh the settings list too (in case it's open)
+  try { _settLoadProjDropdown(); } catch(e) {}
+}
+
+function _settOpenAddProject() {
+  var isPro = !!window._sbSubActive;
+  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  if (!isPro && projects.length >= 1) {
+    if (typeof toast === 'function') toast('⭐ Pro needed for multiple projects', '');
+    if (typeof openPayLanding === 'function') { closeSettingsPanel(); openPayLanding(true); }
+    return;
+  }
+  var f = document.getElementById('sett-proj-add-form');
+  if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  var inp = document.getElementById('sett-proj-name-inp');
+  if (inp && f && f.style.display !== 'none') { inp.value = ''; inp.focus(); }
+}
+
+function _settSaveProject() {
+  var inp = document.getElementById('sett-proj-name-inp');
+  var name = inp ? inp.value.trim() : '';
+  if (!name) { if (typeof toast === 'function') toast('Enter project name', 'err'); return; }
+  var isPro = !!window._sbSubActive;
+  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  if (!isPro && projects.length >= 1) {
+    if (typeof toast === 'function') toast('⭐ Upgrade to Pro for multiple projects', '');
+    return;
+  }
+  if (projects.find(function(p){ return p.name === name; })) {
+    if (typeof toast === 'function') toast('Project already exists', 'err'); return;
+  }
+  projects.push({ name: name, logo: null, createdAt: Date.now() });
+  if (typeof _saveProjects === 'function') _saveProjects(projects);
+  var f = document.getElementById('sett-proj-add-form');
+  if (f) f.style.display = 'none';
+  // Set as active
+  try { localStorage.setItem('sanj_active_proj', name); } catch(e) {}
+  try { if (typeof _initProjectNID === 'function') _initProjectNID(); } catch(e) {}
+  _settLoadProjDropdown();
+  if (typeof toast === 'function') toast('✅ Project created: ' + name, 'ok');
+  // For Pro: trigger cloud pull for this new project
+  if (isPro && typeof _onProjectChange === 'function') {
+    if (typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
+    _onProjectChange(name);
+  } else {
+    // Free: just update profile name
+    if (typeof lprof === 'function' && typeof sprof === 'function') {
+      var prof = lprof() || {};
+      prof.address = name;
+      sprof(prof);
+      try { if (typeof applyProfile === 'function') applyProfile(); } catch(e) {}
+    }
+  }
+}
+
 function openSettingsPanel() {
+  // Refresh project dropdown every time settings opens
+  try { _settLoadProjDropdown(); } catch(e) {}
   var panel   = document.getElementById('settings-panel');
   var backdrop= document.getElementById('sett-backdrop');
   var drawer  = document.getElementById('sett-drawer');
@@ -11932,18 +12098,21 @@ function _slugify(str) {
 function getSiteId() {
   if (_adminSBUser && _adminSBUser.id) {
     var uid = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
-    var activeProj = localStorage.getItem(_ACTIVE_PROJ_KEY || 'sanj_active_proj') || '';
+    var activeProj = '';
+    try { activeProj = localStorage.getItem(_ACTIVE_PROJ_KEY || 'sanj_active_proj') || ''; } catch(e) {}
     var key;
     if (activeProj) {
       key = uid + '-proj-' + _slugify(activeProj);
     } else {
-      key = uid; // default project key = just uid (backward compat)
+      // No project set yet — use uid-based default (auto-creates "default" project namespace)
+      // This is still isolated per user so each user always pulls their own data
+      key = uid + '-proj-default';
     }
-    safeLS.setItem(CLOUD_SITE_ID, key); // always write canonical key
+    safeLS._raw && safeLS._raw.setItem(CLOUD_SITE_ID, key);
     return key;
   }
   // Fallback: read from canonical storage key only
-  return safeLS.getItem(CLOUD_SITE_ID) || '';
+  try { return (safeLS._raw || safeLS).getItem(CLOUD_SITE_ID) || ''; } catch(e) { return ''; }
 }
 // Expose as window alias so early-script shim can call it safely
 window._getSiteId = getSiteId;
@@ -11956,32 +12125,15 @@ function updateCloudBtn() {
   var centerIcon = document.getElementById('cloud-hdr-icon-center');
   var isAdmin = safeLS._raw.getItem(ADMIN_ROLE_KEY) === 'admin';
   if (btn) {
-    btn.style.display = 'flex';
-    if (isAdmin) {
-      btn.classList.add('active-cloud');
-      if (icon) icon.textContent = '☁️';
-      if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = '#86efac'; }
-    } else {
-      btn.classList.remove('active-cloud');
-      if (icon) icon.textContent = '🔒';
-      if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = 'rgba(255,255,255,0.6)'; }
-    }
+    // Cloud button removed from header — keep hidden, update span content for JS compat
+    btn.style.display = 'none';
+    if (icon) icon.textContent = isAdmin ? '☁️' : '🔒';
+    if (lbl)  lbl.textContent = 'Cloud';
   }
   // Update the visible center icon too
   if (centerIcon) centerIcon.textContent = isAdmin ? '☁️' : '🔒';
-  // Update the project chip in header
-  var chip = document.getElementById('hdr-proj-chip');
-  if (chip) {
-    var activeProj = '';
-    try { activeProj = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
-    if (activeProj) {
-      chip.style.display = 'inline-block';
-      chip.textContent = '📂 ' + activeProj;
-      chip.title = 'Active project: ' + activeProj + ' — tap to switch';
-    } else {
-      chip.style.display = 'none';
-    }
-  }
+  // Refresh header project dropdown + settings list
+  try { _settLoadProjDropdown(); } catch(e) {}
 }
 
 // -- Open / Close Cloud Modal --
