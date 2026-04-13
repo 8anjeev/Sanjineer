@@ -2218,11 +2218,16 @@ function checkShowWelcomeAndAuth(){
         }).catch(function(){});
       }
       return;
-    }  // Pro subscriber → launch app directly
-    // Non-pro existing user: skip Welcome, go straight to Login page
-    plShowWelcomePill();
-    _obShowShell();
-    _obGo(1, false);  // false = instant, no slide animation on first show
+    }
+    // Non-pro but has session — still go directly to dashboard (free user)
+    // Skip welcome & auth screens for returning users
+    _launchApp();
+    // Try to restore Supabase session in background to check for pro
+    if(_sb){
+      _sb.auth.getSession().then(function(r){
+        if(r.data&&r.data.session){ _onSBAuthReady(r.data.session.user); }
+      }).catch(function(){});
+    }
     return;
   }
 
@@ -2437,12 +2442,63 @@ function authVerifyOTP(){
       e.style.display='block';
       return;
     }
-    // Save session (plan chosen later on plans page)
+    // Save session (plan will be determined after Supabase sub check)
     try{
       localStorage.setItem('sanj_auth_session', JSON.stringify({email:_authEmail,plan:'free',ts:Date.now(),user:user||null}));
     }catch(ex){}
-    // Slide to plans panel
-    setTimeout(function(){ _showPlansOverlay(); }, 200);
+
+    // ── Wait for Supabase to confirm pro status before routing ──
+    var verifyLabel = document.getElementById('auth-verify-label');
+    if (verifyLabel) verifyLabel.textContent = 'Checking subscription…';
+
+    function _routeAfterLogin(supaUser) {
+      // Check if pro from DB
+      if (supaUser && window._supa) {
+        window._supa.from('admins')
+          .select('subscribed,subscription_end_date,email')
+          .eq('id', supaUser.id).single()
+          .then(function(r) {
+            if (!r.error && r.data) {
+              var endDate = r.data.subscription_end_date ? new Date(r.data.subscription_end_date).getTime() : 0;
+              var isActive = r.data.subscribed && endDate > Date.now();
+              if (isActive) {
+                // Pro user — launch app directly, skip plans page
+                try {
+                  var s = JSON.parse(localStorage.getItem('sanj_auth_session') || '{}');
+                  s.plan = 'pro'; s.pro_expires = endDate;
+                  localStorage.setItem('sanj_auth_session', JSON.stringify(s));
+                  localStorage.setItem('sanj_pro', '1');
+                } catch(ex) {}
+                window._sbSubActive = true; window._sbSubChecked = true;
+                _launchApp();
+                setTimeout(function(){ if(typeof toast==='function') toast('👋 Welcome back, Pro!', 'ok'); }, 600);
+                return;
+              }
+            }
+            // Free user — show plans page
+            setTimeout(function(){ _showPlansOverlay(); }, 200);
+          }).catch(function() {
+            // Network error — show plans as fallback
+            setTimeout(function(){ _showPlansOverlay(); }, 200);
+          });
+      } else {
+        // No supabase user — show plans
+        setTimeout(function(){ _showPlansOverlay(); }, 200);
+      }
+    }
+
+    // Get Supabase user from current session (may already be set after verifyOtp)
+    if (user && user.id) {
+      _routeAfterLogin(user);
+    } else if (window._supa) {
+      window._supa.auth.getUser().then(function(r) {
+        _routeAfterLogin(r && r.data && r.data.user ? r.data.user : null);
+      }).catch(function() {
+        setTimeout(function(){ _showPlansOverlay(); }, 200);
+      });
+    } else {
+      setTimeout(function(){ _showPlansOverlay(); }, 200);
+    }
   });
 }
 
@@ -2638,6 +2694,85 @@ function openAccountModal(){
   _clRefreshUI();
   m.style.display='flex';
   requestAnimationFrame(function(){inner.style.transform='translateY(0)';});
+  // Load full viewer list with all features for pro users
+  var isPro = (window._sbSubChecked ? !!window._sbSubActive : false) ||
+    !!(JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan==='pro') ||
+    !!localStorage.getItem('sanj_pro');
+  if (isPro && _sb && _adminSBUser) {
+    // Replace cl-viewer-list with inline-style full-featured list
+    var clList = document.getElementById('cl-viewer-list');
+    if (clList) {
+      clList.innerHTML = '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading viewers…</p>';
+      _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+        var list = r.data || [];
+        if (!list.length) {
+          clList.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewer accounts yet. Tap + New to create one.</p>';
+          return;
+        }
+        var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ'};
+        var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq'];
+        clList.innerHTML = list.map(function(v, i) {
+          var perms = v.permissions||[];
+          var chips = perms.map(function(p){ return '<span class="cl-tab-chip">'+(te[p]||'📌')+' '+p+'</span>'; }).join('');
+          var editChips = allTabs.map(function(tab){
+            var isOn = perms.indexOf(tab)!==-1;
+            return '<span onclick="toggleInlineChip(this)" data-tab="'+tab+'" data-on="'+(isOn?'1':'0')+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">'+(te[tab]||'')+' '+tab+'</span>';
+          }).join('');
+          return '<div class="cl-viewer-card">'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">'
+            +'<div style="display:flex;align-items:center;gap:8px;">'
+            +'<div style="width:30px;height:30px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">👁️</div>'
+            +'<div><p style="font-size:12px;font-weight:700;color:#fff;line-height:1;">'+v.email.replace(/-[a-z0-9]{4}$/,'').replace(/-/g,' ')+'</p>'
+            +'<p style="font-size:9px;color:#a78bfa;margin-top:2px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs</p></div>'
+            +'</div>'
+            +'<div style="display:flex;gap:5px;">'
+            +'<button onclick="_copyViewerToken(\''+v.password_hash+'\')" class="cl-btn" style="background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;padding:4px 10px;font-size:10px;">🔗 Link</button>'
+            +'<button onclick="clModalToggleEdit(this,'+i+',\''+v.email+'\')" class="cl-btn" style="background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;padding:4px 10px;font-size:10px;">✏️ Edit</button>'
+            +'<button onclick="deleteViewerAccount(\''+( v.id || v.email )+'\','+i+')" class="cl-btn" style="background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:4px 10px;font-size:10px;">🗑</button>'
+            +'</div></div>'
+            +'<div style="display:flex;flex-wrap:wrap;gap:2px;" id="cl-chips-view-'+i+'">'+(chips||'<span style="font-size:10px;color:rgba(255,255,255,.3)">No tabs</span>')+'</div>'
+            +'<div id="cl-edit-panel-'+i+'" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px;">'
+            +'<p style="font-size:9px;font-weight:700;color:#a78bfa;margin-bottom:5px;">Tabs — tap to toggle:</p>'
+            +'<div style="display:flex;flex-wrap:wrap;" id="cl-edit-chips-'+i+'">'+editChips+'</div>'
+            +'<div style="display:flex;align-items:center;gap:6px;margin:6px 0 8px;">'
+            +'<input type="checkbox" id="cl-print-'+i+'" '+(v.can_print?'checked':'')+' style="accent-color:#818cf8;width:13px;height:13px;">'
+            +'<label for="cl-print-'+i+'" style="font-size:10px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
+            +'</div>'
+            +'<button onclick="clModalSavePerms('+i+',\''+v.email+'\')" style="width:100%;padding:6px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:8px;font-weight:800;font-size:10px;cursor:pointer;">💾 Save Permissions</button>'
+            +'</div>'
+            +'</div>';
+        }).join('');
+      }).catch(function(e) {
+        if(clList) clList.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+(e.message||'error')+'</p>';
+      });
+    }
+  }
+}
+function clModalToggleEdit(btn, idx, email) {
+  var panel = document.getElementById('cl-edit-panel-'+idx);
+  var view  = document.getElementById('cl-chips-view-'+idx);
+  if (!panel) return;
+  var isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if(view) view.style.display = isOpen ? 'flex' : 'none';
+  btn.textContent = isOpen ? '✏️ Edit' : '✕ Cancel';
+}
+function clModalSavePerms(idx, email) {
+  var chipsEl = document.getElementById('cl-edit-chips-'+idx);
+  if (!chipsEl) return;
+  var newPerms = [];
+  chipsEl.querySelectorAll('span[data-tab]').forEach(function(c){
+    if (c.getAttribute('data-on') === '1') newPerms.push(c.getAttribute('data-tab'));
+  });
+  var canPrint = document.getElementById('cl-print-'+idx) ? document.getElementById('cl-print-'+idx).checked : false;
+  if (!_sb || !_adminSBUser) { toast('Not logged in','err'); return; }
+  _sb.from('viewers').update({permissions: newPerms, can_print: canPrint})
+    .eq('admin_id', _adminSBUser.id).eq('email', email)
+    .then(function(r){
+      if (r.error) { toast('Save failed: '+r.error.message,'err'); return; }
+      toast('✅ Permissions saved!','ok');
+      openAccountModal();
+    }).catch(function(e){ toast('Save error: '+(e.message||'unknown'),'err'); });
 }
 function closeAccountModal(){
   var m=document.getElementById('account-modal');
@@ -2896,7 +3031,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <!-- HEADER -->
 
 <header class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
-  <div class="flex items-center gap-2" style="height:44px">
+  <div class="flex items-center gap-2" style="height:44px;position:relative;">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
     <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
       <div style="display:flex;align-items:center;gap:4px">
@@ -2915,30 +3050,26 @@ document.addEventListener('DOMContentLoaded',function(){
       <!-- URL sits directly below logo -->
       <button onclick="showUrlSheet()" style="background:none;border:none;padding:0;cursor:pointer;font-size:7.5px;color:rgba(255,255,255,0.42);line-height:1;letter-spacing:.02em;margin-top:2px;margin-left:2px;-webkit-tap-highlight-color:transparent;outline:none;">app.sanjineer.in</button>
     </div>
-    <!-- CENTER: Company + Engineer name -->
-    <div class="flex-1 flex items-center justify-center min-w-0">
+    <!-- CENTER: Company + Project name — truly centered using absolute -->
+    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
       <!-- Cloud btn hidden — access via Settings panel. Spans kept for JS compat. -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
       <span id="cloud-hdr-btn" style="display:none"></span>
       <span id="cloud-hdr-icon" style="display:none">🔒</span>
       <span id="cloud-hdr-label" style="display:none">Cloud</span>
-      <div class="min-w-0" style="text-align:center;display:flex;flex-direction:column;gap:1px">
-        <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s">Tap Edit Profile</p>
-        <!-- Project selector replaces engineer name — tap to switch project instantly -->
-        <div style="position:relative;width:100%;max-width:160px;margin:0 auto;">
-          <select id="hdr-proj-select" onchange="_hdrProjSwitch(this.value)"
-            style="width:100%;appearance:none;-webkit-appearance:none;background:transparent;border:none;color:rgba(251,191,36,0.9);font-size:10px;font-weight:700;font-family:inherit;outline:none;cursor:pointer;text-align:center;text-align-last:center;padding:0 14px 0 2px;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            <option value="" style="background:#1e1b4b;color:#fff;">📂 No project</option>
-          </select>
-          <span style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:7px;color:rgba(251,191,36,0.6);pointer-events:none;">▾</span>
-        </div>
+      <div class="min-w-0" style="display:flex;flex-direction:column;gap:1px;align-items:center;">
+        <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;white-space:nowrap;">Tap Settings → Profile</p>
+        <!-- Project name display — auto-updates when project selected in Settings -->
+        <p id="hdr-proj-name" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;max-width:160px;text-align:center;">No project</p>
+        <!-- Hidden select kept for JS compat -->
+        <select id="hdr-proj-select" onchange="_hdrProjSwitch(this.value)" style="display:none;"></select>
         <!-- hdr-engineer kept hidden for JS compat (applyProfile writes to it) -->
         <p id="hdr-engineer" class="text-amber-300 truncate" style="display:none;font-size:10px!important;line-height:1;margin:0;">Set your name</p>
         <span id="hdr-proj-chip" style="display:none;"></span>
       </div>
     </div>
-    <!-- RIGHT: Calculator + Total Spends -->
-    <div class="text-right flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
+    <!-- RIGHT: Calculator + Total Spends — absolute right so it never shifts center -->
+    <div class="text-right flex-shrink-0 ml-auto" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
       <div style="display:flex;align-items:center;gap:6px;">
         <!-- Compact calculator trigger — left of spend amount -->
@@ -3073,7 +3204,15 @@ document.addEventListener('DOMContentLoaded',function(){
           <span style="font-size:14px;">📂</span>
           <span style="font-size:11px;font-weight:800;color:#a5b4fc;">Project</span>
         </div>
-        <button id="sett-proj-add-btn" onclick="_settOpenAddProject()" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;">＋ New</button>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <!-- Logo button: shows logo preview if set, tap to edit -->
+          <button id="sett-logo-btn" onclick="_settOpenLogoEdit()" title="Add/Edit Logo" style="width:28px;height:28px;border-radius:7px;border:1.5px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;padding:0;flex-shrink:0;position:relative;">
+            <img id="sett-logo-preview-img" src="" style="width:100%;height:100%;object-fit:cover;display:none;border-radius:6px;">
+            <span id="sett-logo-placeholder" style="font-size:13px;line-height:1;">🖼️</span>
+          </button>
+          <input type="file" id="sett-logo-file-inp" accept="image/*" style="display:none;" onchange="_settLogoFileSelected(event)">
+          <button id="sett-proj-add-btn" onclick="_settOpenAddProject()" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;">＋ New</button>
+        </div>
       </div>
       <!-- Project list (tappable chips) -->
       <div id="sett-proj-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:6px;">
@@ -3105,7 +3244,7 @@ document.addEventListener('DOMContentLoaded',function(){
     <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();openEditProfile()">
       <span style="font-size:15px;flex-shrink:0">👤</span>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <span>Profile &amp; Logo</span>
+        <span>Profile Settings</span>
         <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Company · engineer · logo</span>
       </div>
     </button>
@@ -3377,7 +3516,7 @@ function _settLoadProjDropdown() {
     }
   }
 
-  // ── Header dropdown: populate options ──
+  // ── Header dropdown: populate options (hidden, kept for JS compat) ──
   if (hdrSel) {
     hdrSel.innerHTML = '<option value="" style="background:#1e1b4b;color:#fff;">📂 No project</option>';
     projects.forEach(function(p) {
@@ -3389,10 +3528,14 @@ function _settLoadProjDropdown() {
       if (p.name === active) opt.selected = true;
       hdrSel.appendChild(opt);
     });
-    // If active not in list, reset
     if (active && !projects.find(function(p){ return p.name === active; })) {
       hdrSel.value = '';
     }
+  }
+  // ── Header project name text display ──
+  var hdrProjName = document.getElementById('hdr-proj-name');
+  if (hdrProjName) {
+    hdrProjName.textContent = active ? '📂 ' + active : 'No project';
   }
 
   // ── Add button state ──
@@ -3530,6 +3673,63 @@ function closeSettingsPanel() {
   if (drawer)   { drawer.style.transform = 'translateY(-110%) translateX(-110%)'; drawer.style.opacity = '0'; }
   setTimeout(function() { panel.style.display = 'none'; panel.style.pointerEvents = 'none'; }, 320);
 }
+
+// ── Logo button in settings panel ───────────────────────────────────────────
+function _settOpenLogoEdit() {
+  var inp = document.getElementById('sett-logo-file-inp');
+  if (!inp) return;
+  var p = lprof ? lprof() : null;
+  if (p && p.logo) {
+    // Already has logo — ask to clear or replace
+    if (confirm('Logo is set. Tap OK to replace, or Cancel to remove logo.')) {
+      inp.click();
+    } else {
+      // Remove logo
+      var prof = p || {};
+      prof.logo = null;
+      if (typeof sprof === 'function') sprof(prof);
+      _settUpdateLogoBtn();
+      if (typeof applyProfile === 'function') applyProfile();
+      if (typeof toast === 'function') toast('🖼️ Logo removed', 'ok');
+    }
+  } else {
+    inp.click();
+  }
+}
+function _settLogoFileSelected(evt) {
+  var file = evt.target.files && evt.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var p = (typeof lprof === 'function' ? lprof() : null) || {};
+    p.logo = e.target.result;
+    if (typeof sprof === 'function') sprof(p);
+    _settUpdateLogoBtn();
+    if (typeof applyProfile === 'function') applyProfile();
+    if (typeof toast === 'function') toast('✅ Logo saved!', 'ok');
+  };
+  reader.readAsDataURL(file);
+  // reset so same file can be selected again
+  evt.target.value = '';
+}
+function _settUpdateLogoBtn() {
+  var img = document.getElementById('sett-logo-preview-img');
+  var ph  = document.getElementById('sett-logo-placeholder');
+  var p = typeof lprof === 'function' ? lprof() : null;
+  if (p && p.logo) {
+    if (img) { img.src = p.logo; img.style.display = 'block'; }
+    if (ph)  ph.style.display = 'none';
+  } else {
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    if (ph)  ph.style.display = 'flex';
+  }
+}
+// Sync logo btn whenever settings panel opens — patch openSettingsPanel
+var _origOpenSettingsPanel = openSettingsPanel;
+openSettingsPanel = function() {
+  _origOpenSettingsPanel();
+  try { _settUpdateLogoBtn(); } catch(e) {}
+};
 // ── URL Sheet ────────────────────────────────────────────────────────────────
 function showUrlSheet() {
   var s = document.getElementById('url-sheet');
@@ -5872,7 +6072,8 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="space-y-3">
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company / Owner Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Engineer / Owner Name</label><input id="edit-engineer" type="text" placeholder="e.g. Er. Sanjeev Kumar" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Project Name <span class="font-normal text-gray-400">(Auto-filled from Cloud → Project)</span></label><input id="edit-address" type="text" placeholder="Select project from Cloud Settings" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400" readonly style="background:#f9fafb;color:#6b7280;cursor:default"></div>
+      <!-- Hidden project name input kept for JS compatibility -->
+      <div style="display:none"><input id="edit-address" type="text" readonly style="background:#f9fafb;color:#6b7280;cursor:default"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">GST No. <span class="font-normal text-gray-400">(Optional)</span></label><input id="edit-gst" type="text" placeholder="GST number" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <!-- Hidden logo elements kept for JS compatibility -->
       <div style="display:none">
@@ -6944,8 +7145,17 @@ function applyProfile() {
   var p = lprof();
   var el1 = document.getElementById('hdr-company');
   var el2 = document.getElementById('hdr-engineer');
-  if (el1) el1.textContent = p ? p.company : 'Tap Edit Profile';
+  // Auto-fetch company name from profile, fallback to prompt text
+  if (el1) el1.textContent = (p && p.company && p.company.trim()) ? p.company : 'Tap Settings → Profile';
   if (el2) el2.textContent = p ? p.engineer : 'Set your name';
+  // Update header project name display
+  var hdrProjName = document.getElementById('hdr-proj-name');
+  if (hdrProjName) {
+    var activeProj = '';
+    try { activeProj = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+    if (!activeProj && p) activeProj = p.address || '';
+    hdrProjName.textContent = activeProj ? '📂 ' + activeProj : 'No project';
+  }
   // If user has company logo show it in header; else default app logo — both transparent bg
   var box = document.getElementById('app-logo-box');
   var logoImg = document.getElementById('app-logo-img');
@@ -12401,14 +12611,27 @@ function _onProjectChange(name) {
   // 5. Pull this project's cloud data (getSiteId() now returns new project key)
   toast('Switching to: ' + name + ' ⏳', '');
   if (typeof _refreshBackupLabel === 'function') _refreshBackupLabel();
+
+  // Immediately refresh all visible UI sections
+  try { if (typeof updateDash === 'function') updateDash(); } catch(e) {}
+  try { if (typeof renderWorkers === 'function') renderWorkers(); } catch(e) {}
+  try { if (typeof renderCurrentTab === 'function') renderCurrentTab(); } catch(e) {}
+  // Trigger active tab re-render immediately
+  try {
+    var activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab) {
+      var tabId = activeTab.getAttribute('data-tab') || activeTab.onclick && activeTab.onclick.toString().match(/showTab\('([^']+)'\)/)?.[1];
+      if (tabId && typeof showTab === 'function') showTab(tabId);
+    }
+  } catch(e2) {}
+
   if (typeof _adminCloudPull === 'function' && _adminSBUser) {
     // Force pull — reset timestamp so pull always fires
     _lastCloudTimestamp = 0;
     // Restart realtime channel so it listens to the new project's backup_key
-    setTimeout(function() {
-      try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
-      _adminCloudPull(false); // false = show toast when data arrives
-    }, 600);
+    // Pull immediately (no delay) for instant data load
+    try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
+    _adminCloudPull(false); // false = show toast when data arrives
   } else {
     toast('Project set: ' + name + ' ✓', 'ok');
   }
