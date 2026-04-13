@@ -3610,7 +3610,8 @@ function _settSaveProject() {
   if (projects.find(function(p){ return p.name === name; })) {
     if (typeof toast === 'function') toast('Project already exists', 'err'); return;
   }
-  projects.push({ name: name, logo: null, createdAt: Date.now() });
+  var isFirstProject = (projects.length === 0);
+  projects.push({ name: name, createdAt: Date.now() });
   if (typeof _saveProjects === 'function') _saveProjects(projects);
   var f = document.getElementById('sett-proj-add-form');
   if (f) f.style.display = 'none';
@@ -3621,7 +3622,8 @@ function _settSaveProject() {
   if (typeof toast === 'function') toast('✅ Project created: ' + name, 'ok');
   // For Pro: trigger cloud pull for this new project
   if (isPro && typeof _onProjectChange === 'function') {
-    if (typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
+    // First project: keep existing data. 2nd+ project: start fresh
+    if (!isFirstProject && typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
     _onProjectChange(name);
   } else {
     // Free: just update profile name
@@ -6514,9 +6516,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div id="cloud-add-project-form" style="display:none;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.22);border-radius:10px;padding:.6rem .7rem;margin-top:2px;">
               <p style="font-size:10px;font-weight:800;color:#6ee7b7;margin-bottom:6px;">🏗️ New Project</p>
               <input id="cloud-new-proj-name" type="text" placeholder="e.g. Site Goa Phase 2" style="width:100%;padding:7px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#fff;font-size:11px;outline:none;box-sizing:border-box;margin-bottom:6px;" onkeydown="if(event.key==='Enter')_saveNewProject()">
-              <!-- hidden legacy logo fields kept for JS compat -->
-              <input type="file" id="cloud-proj-logo-file" accept="image/*" style="display:none;" onchange="_previewProjLogo(event)">
-              <div id="cloud-proj-logo-preview" style="display:none;"><img id="cloud-proj-logo-img" style="display:none;"></div>
+              <!-- logo fields removed — logo handled via Company Logo section -->
               <div style="display:flex;gap:6px;">
                 <button onclick="_saveNewProject()" style="flex:1;padding:7px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;">✓ Create</button>
                 <button onclick="_hideAddProject()" style="padding:7px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);border-radius:8px;font-size:11px;cursor:pointer;">Cancel</button>
@@ -12723,8 +12723,6 @@ function _showAddProject() {
         + '<input id="cloud-new-proj-name" type="text" placeholder="e.g. Site Goa Phase 2" '
         + 'style="width:100%;padding:7px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#fff;font-size:11px;outline:none;box-sizing:border-box;margin-bottom:6px;" '
         + 'onkeydown="if(event.key===\'Enter\')_saveNewProject()">'
-        + '<input type="file" id="cloud-proj-logo-file" accept="image/*" style="display:none;" onchange="_previewProjLogo(event)">'
-        + '<div id="cloud-proj-logo-preview" style="display:none;"><img id="cloud-proj-logo-img" style="display:none;"></div>'
         + '<div style="display:flex;gap:6px;">'
         + '<button onclick="_saveNewProject()" style="flex:1;padding:7px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;">✓ Create</button>'
         + '<button onclick="_hideAddProject()" style="padding:7px 14px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);border-radius:8px;font-size:11px;cursor:pointer;">Cancel</button>'
@@ -12783,10 +12781,10 @@ function _saveNewProject() {
     toast('Project already exists', 'err'); return;
   }
 
-  var logoEl = document.getElementById('cloud-proj-logo-img');
-  var logo = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
+  // Determine if this is the very first project (existing data should be preserved)
+  var isFirstProject = (projects.length === 0);
 
-  projects.push({ name: name, logo: logo, createdAt: Date.now() });
+  projects.push({ name: name, createdAt: Date.now() });
   _saveProjects(projects);
   _hideAddProject();
   _loadProjectDropdown();
@@ -12800,7 +12798,11 @@ function _saveNewProject() {
   // Re-init NID for this new project's namespace
   try { _initProjectNID(); } catch(e) { NID = 1; }
   if (isPro && _adminSBUser) {
-    _clearLocalDataForNewProject();
+    // First project: existing data belongs to it — don't wipe
+    // 2nd+ project: start with a clean slate
+    if (!isFirstProject) {
+      _clearLocalDataForNewProject();
+    }
     _onProjectChange(name);
   } else {
     // Free user: just update the profile project name field locally
