@@ -3068,8 +3068,8 @@ document.addEventListener('DOMContentLoaded',function(){
         <span id="hdr-proj-chip" style="display:none;"></span>
       </div>
     </div>
-    <!-- RIGHT: Calculator + Total Spends — absolute right so it never shifts center -->
-    <div class="text-right flex-shrink-0 ml-auto" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
+    <!-- RIGHT: Calculator + Total Spends — absolutely pinned to extreme right, never overlaps center -->
+    <div style="position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;align-items:flex-end;">
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
       <div style="display:flex;align-items:center;gap:6px;">
         <!-- Compact calculator trigger — left of spend amount -->
@@ -6785,7 +6785,7 @@ service cloud.firestore {
     </div>
     <div id="pay-locked-msg" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:9px;padding:6px 10px;margin-bottom:.6rem;display:none;">
       <p style="font-size:10px;color:#fca5a5;font-weight:700;">🔒 Subscription required to use Cloud</p>
-      <p style="font-size:9px;color:#fca5a5;margin-top:1px;opacity:.8;">Pay to activate, or <button onclick="_cancelAndLogout()" style="background:none;border:none;color:#fbbf24;font-size:9px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">cancel & logout</button></p>
+      <p style="font-size:9px;color:#fca5a5;margin-top:1px;opacity:.8;">Pay to activate, or <button onclick="_continueAsFreeUser()" style="background:none;border:none;color:#fbbf24;font-size:9px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">continue as free user</button></p>
     </div>
     <div style="text-align:center;padding:.65rem 0;margin-bottom:.7rem;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);">
       <p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>
@@ -6799,6 +6799,9 @@ service cloud.firestore {
     </div>
     <button onclick="startSubscriptionPayment()" id="sub-pay-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.75rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.4rem;box-shadow:0 4px 16px rgba(79,70,229,.5);min-height:auto;height:auto;">
       💳 Subscribe ₹30/month
+    </button>
+    <button onclick="_continueAsFreeUser()" style="width:100%;padding:.55rem;background:transparent;color:rgba(255,255,255,0.45);border:1px solid rgba(255,255,255,0.12);border-radius:.75rem;font-weight:600;font-size:.8rem;cursor:pointer;margin-bottom:.4rem;">
+      ← Back to Dashboard (free)
     </button>
     <p style="text-align:center;font-size:9px;color:#7c3aed">🔒 Powered by Razorpay · UPI / Card / NetBanking accepted</p>
     <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:.35rem;">
@@ -13409,13 +13412,20 @@ function openViewerModal() {
 function closeViewerModal() { document.getElementById('viewer-modal').classList.remove('show'); }
 function copyViewerLink() {
   var txt = document.getElementById('viewer-link-text').textContent;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt).then(function() { toast('Link copied!', 'ok'); });
+  if (txt === '\u2014' || !txt) { toast('No link to copy yet','warn'); return; }
+  function _fbCopy(t) {
+    try {
+      var el = document.createElement('textarea');
+      el.value = t; el.setAttribute('readonly',''); el.style.position='fixed'; el.style.left='-9999px';
+      document.body.appendChild(el); el.select(); el.setSelectionRange(0,99999);
+      document.execCommand('copy'); document.body.removeChild(el);
+      toast('Link copied!', 'ok');
+    } catch(e) { toast('Copy failed — long-press the link to copy manually','warn'); }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function() { toast('Link copied!', 'ok'); }).catch(function() { _fbCopy(txt); });
   } else {
-    var el = document.createElement('textarea');
-    el.value = txt; document.body.appendChild(el); el.select();
-    document.execCommand('copy'); document.body.removeChild(el);
-    toast('Link copied!', 'ok');
+    _fbCopy(txt);
   }
 }
 function shareViewerLink() {
@@ -14133,38 +14143,25 @@ function doAdminLogout() {
   if (_cloudSyncTimer) { clearInterval(_cloudSyncTimer); _cloudSyncTimer = null; }
   // Stop any viewer polling
   if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; }
-  // Clear ALL app + cloud data from localStorage so a new login starts fresh
-  // 1. Clear all project-prefixed keys (proj__*__cm_*) for ALL projects
-  try {
-    var _lsref = window.localStorage;
-    var _projKeysToDelete = [];
-    for (var _i = 0; _i < _lsref.length; _i++) {
-      var _k = _lsref.key(_i);
-      if (_k && (_k.indexOf('proj__') === 0 || _k.indexOf('cm_') === 0 || _k.indexOf('sanj_projects') === 0 || _k.indexOf('sanj_active_proj') === 0)) {
-        _projKeysToDelete.push(_k);
-      }
-    }
-    _projKeysToDelete.forEach(function(k){ try { _lsref.removeItem(k); } catch(e){} });
-  } catch(e) {}
-  // 2. Clear auth/settings keys
-  var _authKeys = [
-    'cm_admin_role','cm_admin_email','cm_cloud','cm_cloud_activated','cm_cloud_site',
-    'cm_site_id','cm_sub_end','cm_rzp_payment_id','cm_fb_cfg','cm_fb_config',
+  // ── SAFE LOGOUT: only clear auth/cloud/subscription keys ──
+  // Project data (proj__*, sanj_projects, sanj_active_proj, cm_db_*, etc.) is PRESERVED
+  // so the user can log back in and their data is still there.
+  var _authOnlyKeys = [
+    'cm_admin_role', 'cm_admin_email', 'cm_cloud', 'cm_cloud_activated', 'cm_cloud_site',
+    'cm_site_id', 'cm_sub_end', 'cm_rzp_payment_id', 'cm_fb_cfg', 'cm_fb_config',
     ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, CLOUD_KEY
   ];
   var _seen = {};
-  _authKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; try { window.localStorage.removeItem(k); } catch(e){} } });
-  // 3. Also wipe any supabase auth tokens stored by gotrue
+  _authOnlyKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; try { window.localStorage.removeItem(k); } catch(e){} } });
+  // Clear Supabase auth tokens only (sb-* and supabase.* keys)
   try {
     var _lsKeys2 = Object.keys(localStorage);
     _lsKeys2.forEach(function(k){
       if(k.indexOf('sb-')===0 || k.indexOf('supabase.')===0){ localStorage.removeItem(k); }
     });
   } catch(e){}
-  // Reset in-memory data
-  NID = 1;
-  AD = [];
-  toast('Logged out. All local data cleared.', 'ok');
+  // Do NOT clear project data — AD stays loaded from localStorage
+  toast('Logged out. Your local data is safe.', 'ok');
   updateCloudBtn();
   refreshCloudModalState();
   openCloudModal();
@@ -14753,22 +14750,20 @@ function closePayLanding() {
 function _safeClosePayLanding() {
   // Only allow close if NOT in afterAuth gate
   if (_payLandingAfterAuth) {
-    toast('Subscription zaroori hai — pehle pay karo ya logout karo', 'err');
+    toast('Subscribe to unlock Cloud, or tap "Back to Dashboard" to use the app free', 'err');
     return;
   }
   closePayLanding();
 }
-function _cancelAndLogout() {
-  // User chose to cancel — clear pending and logout
-  _pendingAuthUser = null; _pendingAuthEmail = null; _pendingAuthApp = null;
-  _adminSBUser = null; _adminUser = null;
-  safeLS.removeItem(ADMIN_ROLE_KEY); safeLS.removeItem(ADMIN_EMAIL_KEY);
-  safeLS.removeItem(CLOUD_KEY);
-  if (_sb) _sb.auth.signOut().catch(function(){});
+function _continueAsFreeUser() {
+  // Close pay modal and return to dashboard — stays logged in, no data lost
+  _payLandingAfterAuth = false;
   closePayLanding();
-  openCloudModal();
-  switchCloudTab('admin');
-  toast('Logged out — create account again when ready to subscribe', 'ok');
+  toast('Using app as free user. Cloud sync not active.', 'ok');
+}
+function _cancelAndLogout() {
+  // Legacy alias — now redirects to free user flow instead of logging out
+  _continueAsFreeUser();
 }
 
 // Open viewer login as inline modal (no URL param needed)
