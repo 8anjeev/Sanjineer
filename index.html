@@ -695,8 +695,12 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 
           // Activate cloud and load data
           if (!isCloudActivated()) safeLS && safeLS.setItem(typeof CLOUD_KEY !== 'undefined' ? CLOUD_KEY : 'cm_cloud_activated', '1');
-          var siteId = 'user-' + user.id.replace(/-/g,'').slice(0,12);
-          safeLS && safeLS.setItem(typeof CLOUD_SITE_ID !== 'undefined' ? CLOUD_SITE_ID : 'cm_site_id', siteId);
+          // Use project-aware siteId (respects active project selection per user)
+          // getSiteId() shim delegates to window._getSiteId once main script loads
+          var siteId = getSiteId();
+          if (!siteId) siteId = 'user-' + user.id.replace(/-/g,'').slice(0,12);
+          // Only persist siteId if getSiteId() didn't already update it
+          if (!getSiteId()) safeLS && safeLS.setItem(typeof CLOUD_SITE_ID !== 'undefined' ? CLOUD_SITE_ID : 'cm_site_id', siteId);
 
           function _applyCloudData(d2) {
             if (!d2) return;
@@ -6500,10 +6504,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 </select>
                 <span style="padding:0 7px;color:#a78bfa;font-size:10px;flex-shrink:0;pointer-events:none;">▾</span>
               </div>
-              <!-- Logo button chip -->
-              <button onclick="openLogoModal()" title="Company Logo" style="padding:0 11px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);border-radius:10px;color:#fcd34d;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap;">
-                <span>🖼️</span><span style="font-size:10px;font-weight:700;color:#fcd34d;">Logo</span>
-              </button>
               <!-- New Project button chip -->
               <button id="cloud-add-proj-btn" onclick="_showAddProject()" title="Add / set project" style="padding:0 11px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);border-radius:10px;color:#6ee7b7;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;flex-shrink:0;white-space:nowrap;">
                 <span>＋</span><span id="cloud-add-proj-btn-label" style="font-size:10px;font-weight:700;">Project</span>
@@ -6577,6 +6577,25 @@ service cloud.firestore {
               </button>
             </div>
           </div>
+          <!-- ── ⭐ PRO: Company Logo (above viewer management) ── -->
+          <div id="cloud-logo-section" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:.55rem .7rem;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:7px;">
+                <div id="cloud-logo-preview-wrap" style="width:32px;height:32px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+                  <span style="font-size:16px;">🖼️</span>
+                </div>
+                <div>
+                  <div style="display:flex;align-items:center;gap:5px;">
+                    <p style="font-size:10px;font-weight:800;color:#fde68a;margin:0;line-height:1.2;">Company Logo</p>
+                    <span style="font-size:9px;color:#fbbf24;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.35);border-radius:99px;padding:0px 6px;font-weight:700;">Pro</span>
+                  </div>
+                  <p style="font-size:8px;color:rgba(253,230,138,0.6);margin:0;line-height:1.3;">Appears on all PDF exports</p>
+                </div>
+              </div>
+              <button onclick="openLogoModal()" style="padding:5px 13px;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:8px;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 8px rgba(217,119,6,.4);white-space:nowrap;">Edit Logo</button>
+            </div>
+          </div>
+
           <!-- ── VIEWER ACCOUNTS SECTION ── -->
           <div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.22);border-radius:12px;padding:.6rem .7rem;margin-bottom:6px;">
             <!-- Header row -->
@@ -12651,10 +12670,18 @@ function _onProjectChange(name) {
   } catch(e2) {}
 
   if (typeof _adminCloudPull === 'function' && _adminSBUser) {
+    // ── Instantly wipe in-memory data so UI reflects the new (possibly empty) project ──
+    // This makes the switch feel immediate — cloud pull fills it back in if data exists
+    try {
+      AD = [];
+      try { NID = 1; } catch(e2) {}
+      if (typeof renderDashboard === 'function') renderDashboard();
+      if (typeof renderCurrentTab === 'function') renderCurrentTab();
+    } catch(e) {}
+
     // Force pull — reset timestamp so pull always fires
     _lastCloudTimestamp = 0;
     // Restart realtime channel so it listens to the new project's backup_key
-    // Pull immediately (no delay) for instant data load
     try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
     _adminCloudPull(false); // false = show toast when data arrives
   } else {
@@ -12881,6 +12908,8 @@ function refreshCloudModalState() {
     }, 50);
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = 'none';
+    var logoSection = document.getElementById('cloud-logo-section');
+    if (logoSection) logoSection.style.display = 'block';
     var siteEl = document.getElementById('cloud-site-id-display');
     var displaySite = siteId || ((_adminSBUser && _adminSBUser.id) ? 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) : '—');
     if (siteEl) siteEl.textContent = 'Site ID: ' + displaySite;
@@ -12905,6 +12934,9 @@ function refreshCloudModalState() {
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
     // Logged in but FREE user (no active subscription) — show account info + upgrade option
+    // Hide Pro-only logo section
+    var logoSectionFree = document.getElementById('cloud-logo-section');
+    if (logoSectionFree) logoSectionFree.style.display = 'none';
     var adminPanel = document.getElementById('ctab-admin');
     var adminEmail = safeLS.getItem('cm_admin_email') || ((_adminSBUser && _adminSBUser.email) ? _adminSBUser.email : '');
     if (adminPanel) {
@@ -14629,14 +14661,22 @@ function saveViewerPerms(idx, rowId) {
 function _copyViewerToken(token) {
   var base = window.location.href.split('?')[0];
   var link = base + '?vt=' + encodeURIComponent(token);
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(link).then(function(){ toast('🔗 Link copied!', 'ok'); });
-  } else {
-    var el = document.createElement('textarea');
-    el.value = link; document.body.appendChild(el); el.select();
-    document.execCommand('copy'); document.body.removeChild(el);
-    toast('🔗 Link copied!', 'ok');
+  function _fallbackCopy() {
+    try {
+      var el = document.createElement('textarea');
+      el.value = link; el.setAttribute('readonly',''); el.style.cssText='position:fixed;left:-9999px;top:-9999px;opacity:0;';
+      document.body.appendChild(el); el.select(); el.setSelectionRange(0, 99999);
+      var ok = document.execCommand('copy');
+      document.body.removeChild(el);
+      if (ok) toast('🔗 Link copied!', 'ok');
+      else toast('Long-press the link to copy manually', 'warn');
+    } catch(e) { toast('Copy failed — try long-pressing the link', 'warn'); }
   }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link)
+      .then(function() { toast('🔗 Link copied!', 'ok'); })
+      .catch(function() { _fallbackCopy(); });
+  } else { _fallbackCopy(); }
 }
 
 function deleteViewerAccount(rowId, idx) {
