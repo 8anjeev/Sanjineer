@@ -2594,16 +2594,6 @@ function _authVerifySupabaseOTP(email,code,cb){
           </div>
           <button onclick="clLogout()" style="background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.35);border-radius:8px;color:#fca5a5;font-size:10px;font-weight:700;padding:5px 10px;cursor:pointer;flex-shrink:0;">Logout</button>
         </div>
-        <!-- App logo row -->
-        <div id="cl-logo-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <div style="width:32px;height:32px;background:linear-gradient(145deg,#f97316,#fb923c);border-radius:8px;overflow:hidden;flex-shrink:0;box-shadow:0 2px 10px rgba(249,115,22,0.4);">
-            <img src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:32px;height:32px;object-fit:cover;display:block;" onerror="this.parentNode.innerHTML='🏗️';this.parentNode.style.display='flex';this.parentNode.style.alignItems='center';this.parentNode.style.justifyContent='center';this.parentNode.style.fontSize='18px';">
-          </div>
-          <div>
-            <p style="font-size:11px;font-weight:800;color:#fff;margin:0;font-family:'Syne',sans-serif;">Sanjineer</p>
-            <p style="font-size:9px;color:rgba(255,255,255,0.4);margin:0;">Construction Manager</p>
-          </div>
-        </div>
         <div id="cl-valid-row" style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:13px;">✅</span>
           <p id="cl-valid-txt" style="font-size:11px;font-weight:700;color:#34d399;margin:0;">Free Plan</p>
@@ -2859,37 +2849,7 @@ function _clRefreshUI(){
 }
 
 function clRefreshViewers(){
-  // If Supabase is available, pull fresh from DB into localStorage first
-  if (_sb && _adminSBUser) {
-    _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
-      if (r.data && r.data.length) {
-        // Sync DB viewers into localStorage format for offline use
-        var synced = r.data.map(function(v) {
-          return {
-            id: v.id,
-            name: v.email ? v.email.replace(/-[a-z0-9]{4}$/, '').replace(/-/g, ' ') : 'Viewer',
-            tabs: v.permissions || [],
-            allowPrint: !!v.can_print,
-            active: true,
-            ts: v.created_at ? new Date(v.created_at).getTime() : Date.now(),
-            token: v.password_hash
-          };
-        });
-        localStorage.setItem('sanj_viewers', JSON.stringify(synced));
-      }
-      _clViewers = r.data && r.data.length ? JSON.parse(localStorage.getItem('sanj_viewers')||'[]') : [];
-      _renderClViewerList();
-    }).catch(function() {
-      // Fallback to localStorage
-      try{_clViewers=JSON.parse(localStorage.getItem('sanj_viewers')||'[]');}catch(e){_clViewers=[];}
-      _renderClViewerList();
-    });
-    return;
-  }
   try{_clViewers=JSON.parse(localStorage.getItem('sanj_viewers')||'[]');}catch(e){_clViewers=[];}
-  _renderClViewerList();
-}
-function _renderClViewerList(){
   var list=document.getElementById('cl-viewer-list');
   if(!list)return;
   if(!_clViewers.length){
@@ -2897,18 +2857,17 @@ function _renderClViewerList(){
     return;
   }
   list.innerHTML=_clViewers.map(function(v,i){
-    var tabChips=(v.tabs||[]).map(function(t){return '<span class="cl-tab-chip">'+t+'</span>';}).join('');
+    var tabChips=v.tabs.map(function(t){return '<span class="cl-tab-chip">'+t+'</span>';}).join('');
     var printTxt=v.allowPrint?'✅ Print on':'🚫 No print';
     var printCol=v.allowPrint?'#34d399':'#fca5a5';
-    var linkToken = v.token || v.id || '';
     return '<div class="cl-viewer-card">'
       +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
         +'<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#f97316,#fb923c);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">👁️</div>'
         +'<div style="flex:1;min-width:0;">'
           +'<p style="font-size:13px;font-weight:700;color:#fff;margin:0;">'+_esc(v.name)+'</p>'
-          +'<p style="font-size:10px;margin:1px 0 0;font-weight:600;"><span style="color:'+printCol+'">'+printTxt+'</span> · <span style="color:rgba(255,255,255,0.4);">'+(v.tabs||[]).length+' tabs</span></p>'
+          +'<p style="font-size:10px;margin:1px 0 0;font-weight:600;" style="color:'+printCol+'"><span style="color:'+printCol+'">'+printTxt+'</span> · <span style="color:rgba(255,255,255,0.4);">'+v.tabs.length+' tabs</span></p>'
         +'</div>'
-        +(linkToken ? '<button onclick="_copyViewerToken(\''+linkToken+'\',this)" class="cl-btn" style="background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:5px 10px;font-size:10px;transition:all .15s;">🔗 Link</button>' : '')
+        +'<button onclick="clCopyViewerLink('+i+')" class="cl-btn" style="background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.35);color:#34d399;padding:5px 10px;font-size:10px;">🔗 Link</button>'
         +'<button onclick="clEditViewer('+i+')" class="cl-btn" style="background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;padding:5px 10px;font-size:10px;">✏️ Edit</button>'
         +'<div class="cl-tog '+(v.active?'on':'')+'" onclick="clToggleViewer('+i+')"><div class="cl-tog-thumb"></div></div>'
       +'</div>'
@@ -2920,8 +2879,7 @@ function _renderClViewerList(){
 function _esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function clNewViewer(){
-  var _ms={}; try{_ms=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');}catch(e){}
-  var isPro=(localStorage.getItem('sanj_pro')||_ms.plan)==='pro'||!!window._sbSubActive;
+  var isPro=(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
   if(!isPro){if(typeof toast==='function')toast('⭐ Pro required for viewer accounts','');return;}
   // Populate tab grid
   var grid=document.getElementById('cl-vw-tabs-grid');
@@ -6957,9 +6915,11 @@ function _getAllProjectKeys() {
   var proj = '';
   try { proj = (window.localStorage && window.localStorage.getItem('sanj_active_proj')) || ''; } catch(e) {}
   var prefix = '';
-  if (proj) {
-    var slug = proj.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,32) || 'default';
-    prefix = 'proj__' + slug + '__';
+  if (proj && _adminSBUser && _adminSBUser.id) {
+    // Must match the actual storage format: proj__userId__slug__
+    var uid = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+    var slug = proj.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'default';
+    prefix = 'proj__' + uid + '__' + slug + '__';
   }
   var keys = [];
   try {
@@ -7539,9 +7499,7 @@ function _clearLogoFromModal() {
 
 // ── VIEWER MANAGER HELPER (unified open) ───────────────────────────
 function _openViewerManager() {
-  var _ms={}; try{_ms=JSON.parse(localStorage.getItem('sanj_auth_session')||'{}');}catch(e){}
-  var _hasPro=!!window._sbSubActive||_ms.plan==='pro'||!!localStorage.getItem('sanj_pro')||!!window._sbSubChecked===false;
-  if (!_hasPro && window._sbSubChecked) {
+  if (!window._sbSubActive) {
     toast('⭐ Pro feature — subscribe to create viewer accounts', '');
     return;
   }
@@ -9396,10 +9354,8 @@ var tp=document.getElementById('teams-period'); if(tp) tp.textContent=mlabel(VM)
 var ctrs=AD.filter(function(d){ return d.type==='contractor'; }), div=document.getElementById('contractors-list');
 if (!div) return;
 if (!ctrs.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No contractors yet</p>'; return; }
-div.innerHTML=ctrs.filter(function(c){return c&&(c.contractor_name||c.name);}).map(function(c){
-c = Object.assign({}, c);
-c.contractor_name = c.contractor_name || c.name || 'Unknown';
-var tw=AD.filter(function(d){ return d.type==='worker'&&(d.team_name===c.contractor_name||d.team_name===c.name); });
+div.innerHTML=ctrs.filter(function(c){return c&&c.contractor_name;}).map(function(c){
+var tw=AD.filter(function(d){ return d.type==='worker'&&d.team_name===c.contractor_name; });
 var ta=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(vms)&&tw.some(function(w){ return w.name===d.name; }); }));
 var wP=ta.reduce(function(s,a){
   var wkr=tw.find(function(w){return w.name===a.name;})||{};
@@ -9446,13 +9402,13 @@ if(at) at.innerHTML='<option value="">Select Tool</option>'+AD.filter(function(d
 var aw=document.getElementById('as-worker');
 if(aw) aw.innerHTML='<option value="">Select Worker</option>'+AD.filter(function(d){ return d.type==='worker'&&d.active!==false; }).map(function(w){ return '<option value="'+w.__id+'">'+w.name+' ('+w.category+')</option>'; }).join('');
 var wt=document.getElementById('w-team');
-if(wt) wt.innerHTML='<option value="">Select Team</option>'+AD.filter(function(d){ return d.type==='contractor'; }).map(function(t){ var n=t.contractor_name||t.name||''; return '<option value="'+n+'">'+n+'</option>'; }).join('');
+if(wt) wt.innerHTML='<option value="">Select Team</option>'+AD.filter(function(d){ return d.type==='contractor'; }).map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join('');
 // Attendance print worker dropdown — show all (active + inactive) for record access
 var apw=document.getElementById('att-print-worker');
 if(apw){ var workers=AD.filter(function(d){ return d.type==='worker'; }); apw.innerHTML='<option value="">– Select Worker –</option>'+workers.map(function(w){ return '<option value="'+w.__id+'">'+w.name+' — '+w.category+(w.team_name?' ('+w.team_name+')':'')+(w.active===false?' [Inactive]':'')+'</option>'; }).join(''); }
 // Teams print filter dropdown
 var tpf=document.getElementById('teams-print-filter');
-if(tpf){ var teams=AD.filter(function(d){ return d.type==='contractor'; }); tpf.innerHTML='<option value="all">All Teams</option>'+teams.map(function(t){ var n=t.contractor_name||t.name||''; return '<option value="'+n+'">'+n+'</option>'; }).join(''); }
+if(tpf){ var teams=AD.filter(function(d){ return d.type==='contractor'; }); tpf.innerHTML='<option value="all">All Teams</option>'+teams.map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join(''); }
 }
 function getLowStock(){ return lmat().filter(function(i){ return i.minQty>0&&getbal(i)<=i.minQty; }); }
 function renderDashboard(){
@@ -12984,9 +12940,9 @@ function refreshCloudModalState() {
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
     // Logged in but FREE user (no active subscription) — show account info + upgrade option
-    // Logo chip always visible — Pro check is built into button onclick
+    // Logo is Pro-only — hide for free users
     var logoSectionFree = document.getElementById('cloud-logo-section');
-    if (logoSectionFree) logoSectionFree.style.display = 'block';
+    if (logoSectionFree) logoSectionFree.style.display = 'none';
     var adminPanel = document.getElementById('ctab-admin');
     var adminEmail = safeLS.getItem('cm_admin_email') || ((_adminSBUser && _adminSBUser.email) ? _adminSBUser.email : '');
     if (adminPanel) {
@@ -13094,6 +13050,8 @@ function _applyFullBackup(d) {
       safeLS.setItem('sanj_signatures', d.settings.signatures);
     }
   }
+  // Refresh logo chip UI after backup applied (so logo shows immediately)
+  try { if (typeof _refreshLogoChip === 'function') _refreshLogoChip(); } catch(e) {}
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -13332,15 +13290,23 @@ function cloudRestoreNow() {
   var siteId = getSiteId();
   if (!siteId) { toast('No Site ID', 'err'); return; }
   if (!confirm('⚠️ This will replace ALL local data with cloud data. Continue?')) return;
-  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', siteId).single().then(function(r) {
-    if (r.error || !r.data) { toast('No cloud data found for this Site ID', 'err'); return; }
+  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', siteId).maybeSingle().then(function(r) {
+    if (r.error) { toast('Restore error: ' + r.error.message, 'err'); return; }
+    if (!r.data || !r.data.data) { toast('No cloud data found for this project', 'err'); return; }
     var d = r.data.data;
     _applyFullBackup(d);
-    // also keep legacy field compat for very old backups
     if (d.nid) safeLS.setItem('cm_nid', d.nid);
-    AD = ld(); applyProfile(); renderDashboard();
+    try { NID = parseInt(safeLS.getItem('cm_nid') || '1'); } catch(e) {}
+    AD = ld();
+    try { applyProfile && applyProfile(); } catch(e) {}
+    try { renderDashboard && renderDashboard(); } catch(e) {}
+    try { renderCurrentTab && renderCurrentTab(); } catch(e) {}
+    try {
+      var curTab = document.querySelector('.tab-btn.active');
+      if (curTab) { var tn = curTab.getAttribute('data-tab'); if (tn && typeof showTab === 'function') showTab(tn); }
+    } catch(e) {}
     toast('✅ Data restored from cloud!', 'ok');
-  });
+  }).catch(function(e) { toast('Restore failed — check connection', 'err'); });
 }
 
 // -- Auto Sync (bidirectional: push changes + pull remote changes every 25s) --
@@ -13477,7 +13443,6 @@ function _adminCloudPullAll(silent, onDone) {
       var projects = _getProjects();
 
       // Build a map: backup_key → project name
-      // backup_key format: "user-XXXXXXXX-proj-SLUG" or legacy formats
       var keyToName = {};
       projects.forEach(function(p) {
         var expectedKey = 'user-' + uid.replace(/-/g,'').slice(0,12) + '-proj-' + _slugify(p.name);
@@ -13485,13 +13450,14 @@ function _adminCloudPullAll(silent, onDone) {
       });
 
       var applied = 0;
+      var firstProjName = null;
       rows.forEach(function(row) {
         var d = row.data;
         if (!d) return;
         var bk = row.backup_key || '';
         var projName = keyToName[bk];
 
-        // If we can't match by key, try matching by profile name in data
+        // If we can't match by key, try matching by profile address name in data
         if (!projName && d.prof && d.prof.address) {
           projName = d.prof.address;
           // Auto-register this project if not known yet
@@ -13502,14 +13468,23 @@ function _adminCloudPullAll(silent, onDone) {
           }
         }
 
+        // Fallback: extract slug from backup_key and auto-create project
         if (!projName) {
-          // Fallback: extract slug from backup_key
           var m = bk.match(/-proj-(.+)$/);
           if (m) {
             var slug = m[1];
-            // Find project with matching slug
             var matched = projects.find(function(p){ return _slugify(p.name) === slug; });
-            projName = matched ? matched.name : slug;
+            if (matched) {
+              projName = matched.name;
+            } else {
+              // Auto-create a project from the slug for fresh login recovery
+              projName = slug.replace(/-/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+              if (!projects.find(function(p){ return p.name === projName; })) {
+                projects.push({ name: projName, createdAt: Date.now() });
+                _saveProjects(projects);
+                keyToName[bk] = projName;
+              }
+            }
           }
         }
 
@@ -13517,8 +13492,16 @@ function _adminCloudPullAll(silent, onDone) {
           _writeProjectToLocal(projName, d);
           _lastCloudTimestamps[bk] = d.lastSync || 0;
           applied++;
+          if (!firstProjName) firstProjName = projName;
         }
       });
+
+      // If no active project is set but we pulled data, auto-activate the first project
+      var currentActive = _getActiveProject();
+      if (!currentActive && firstProjName) {
+        try { localStorage.setItem(_ACTIVE_PROJ_KEY, firstProjName); } catch(e) {}
+        try { _initProjectNID && _initProjectNID(); } catch(e) {}
+      }
 
       // Update project dropdown and UI
       _loadProjectDropdown();
@@ -13624,7 +13607,7 @@ function _startAdminRealtime() {
 
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
-  // Pull all projects every 30s (less frequent since realtime handles instant updates)
+  // Pull all projects every 30s (realtime handles instant updates)
   var SYNC_MS = 30000;
   _cloudSyncTimer = setInterval(function() {
     if (!isCloudActivated || !isCloudActivated()) return;
@@ -13632,8 +13615,20 @@ function startAutoSync() {
   }, SYNC_MS);
   // Start Realtime for instant push notifications from other devices
   _startAdminRealtime();
-  // Pull all projects immediately on start
-  setTimeout(function() { _adminCloudPullAll(true); }, 1500);
+  // Pull all projects on start — wait for sub check to complete first (up to 6s)
+  // This is critical for fresh logins where _sbSubActive may not yet be set
+  var _pullAttempts = 0;
+  function _deferredPull() {
+    _pullAttempts++;
+    if (window._sbSubChecked || _pullAttempts > 12) {
+      // Sub check done (or timed out) — pull now
+      _adminCloudPullAll(true);
+    } else {
+      // Still waiting for sub check — retry in 500ms
+      setTimeout(_deferredPull, 500);
+    }
+  }
+  setTimeout(_deferredPull, 1500);
 }
 
 // ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
@@ -14711,7 +14706,7 @@ function loadViewerAccountsInline() {
         +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs</p></div>'
         +'</div>'
         +'<div style="display:flex;gap:5px;">'
-        +'<button onclick="_copyViewerToken(\''+v.password_hash+'\',this)" style="padding:0 12px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;" ontouchstart="this.style.transform=\'scale(.93)\'" ontouchend="this.style.transform=\'scale(1)\'">🔗 Link</button>'
+        +'<button onclick="_copyViewerToken(\''+v.password_hash+'\')" style="padding:0 12px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;" ontouchstart="this.style.background=\'rgba(16,185,129,.45)\';this.style.transform=\'scale(.93)\'" ontouchend="this.style.background=\'rgba(16,185,129,.2)\';this.style.transform=\'scale(1)\'">🔗 Link</button>'
         +'<button onclick="toggleInlineEdit(this,'+i+')" style="padding:0 12px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
         +'<button onclick="deleteViewerAccount(\''+( v.id || v.email )+'\','+i+')" style="padding:0 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🗑</button>'
         +'</div></div>'
@@ -14880,28 +14875,10 @@ function saveViewerPerms(idx, rowId) {
     }).catch(function(e){ toast('Save failed: ' + e.message, 'err'); });
 }
 
-function _copyViewerToken(token, btn) {
+function _copyViewerToken(token) {
   var base = window.location.href.split('?')[0].split('#')[0];
   var link = base + '?vt=' + encodeURIComponent(token);
-  function _showCopied() {
-    toast('🔗 Link copied!', 'ok');
-    if (btn) {
-      var orig = btn.innerHTML;
-      var origBg = btn.style.background;
-      var origColor = btn.style.color;
-      var origBorder = btn.style.borderColor;
-      btn.innerHTML = '✅ Copied!';
-      btn.style.background = 'rgba(34,197,94,.3)';
-      btn.style.color = '#86efac';
-      btn.style.borderColor = 'rgba(34,197,94,.5)';
-      setTimeout(function() {
-        btn.innerHTML = orig;
-        btn.style.background = origBg;
-        btn.style.color = origColor;
-        btn.style.borderColor = origBorder;
-      }, 2000);
-    }
-  }
+  function _showCopied() { toast('🔗 Link copied!', 'ok'); }
   function _fallbackCopy() {
     try {
       var el = document.createElement('textarea');
