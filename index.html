@@ -702,44 +702,16 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           // Only persist siteId if getSiteId() didn't already update it
           if (!getSiteId()) safeLS && safeLS.setItem(typeof CLOUD_SITE_ID !== 'undefined' ? CLOUD_SITE_ID : 'cm_site_id', siteId);
 
-          function _applyCloudData(d2) {
-            if (!d2) return;
-            // Use full backup restore if available (project-aware)
-            if (typeof _applyFullBackup === 'function') {
-              _applyFullBackup(d2);
-            } else {
-              if (d2.db)         { sd(d2.db); AD = ld(); }
-              if (d2.meta)       sm(d2.meta);
-              if (d2.mats)       smat(d2.mats);
-              if (d2.dept)       sdept(d2.dept);
-              if (d2.prof)       sprof(d2.prof);
-              if (d2.machinery)  smach(d2.machinery);
-              if (d2.drawings)   sdrw(d2.drawings);
-              if (d2.budget)     sbgt(d2.budget);
-              if (d2.milestones) sms(d2.milestones);
-              if (d2.punchlist)  spl(d2.punchlist);
-            }
-            // Re-init NID after data restore
-            try { _initProjectNID && _initProjectNID(); } catch(e) {}
-            try { applyProfile(); } catch(e) {}
-            try { updateDash(); } catch(e) {}
-            if (typeof toast === 'function') toast('☁️ Cloud data restored!', 'ok');
-          }
+          // (data restore handled by _adminCloudPullAll below)
 
-          _sb.from('cloud_backups').select('data').eq('admin_id', user.id).eq('backup_key', siteId).maybeSingle().then(function(r2) {
-            if (r2 && !r2.error && r2.data && r2.data.data) {
-              _applyCloudData(r2.data.data);
-            } else {
-              // Fallback: most recent backup for this admin
-              _sb.from('cloud_backups').select('data,backup_key').eq('admin_id', user.id).order('created_at', {ascending: false}).limit(1).then(function(r3) {
-                if (r3 && !r3.error && r3.data && r3.data.length > 0) {
-                  var foundKey = r3.data[0].backup_key;
-                  if (foundKey) safeLS && safeLS.setItem(typeof CLOUD_SITE_ID !== 'undefined' ? CLOUD_SITE_ID : 'cm_site_id', foundKey);
-                  _applyCloudData(r3.data[0].data);
-                }
-              }).catch(function(){});
-            }
-          }).catch(function(){});
+          // Pull ALL projects at login — deferred so _adminCloudPullAll is defined
+          setTimeout(function() {
+            try {
+              if (typeof _adminCloudPullAll === 'function') {
+                _adminCloudPullAll(false); // show toast on first login
+              }
+            } catch(e) {}
+          }, 800);
 
           try { loadViewerAccountsInline && loadViewerAccountsInline(); } catch(e) {}
           try { startAutoSync && startAutoSync(); } catch(e) {}
@@ -3225,11 +3197,10 @@ document.addEventListener('DOMContentLoaded',function(){
           <span style="font-size:11px;font-weight:800;color:#a5b4fc;">Project</span>
         </div>
         <div style="display:flex;align-items:center;gap:5px;">
-          <!-- Logo button: shows logo preview if set, tap to edit -->
-          <button id="sett-logo-btn" onclick="_settOpenLogoEdit()" title="Add/Edit Logo" style="width:28px;height:28px;border-radius:7px;border:1.5px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;padding:0;flex-shrink:0;position:relative;">
-            <img id="sett-logo-preview-img" src="" style="width:100%;height:100%;object-fit:cover;display:none;border-radius:6px;">
-            <span id="sett-logo-placeholder" style="font-size:13px;line-height:1;">🖼️</span>
-          </button>
+          <!-- hidden legacy elements kept for JS compat -->
+          <span id="sett-logo-btn" style="display:none;"></span>
+          <img id="sett-logo-preview-img" style="display:none;">
+          <span id="sett-logo-placeholder" style="display:none;"></span>
           <input type="file" id="sett-logo-file-inp" accept="image/*" style="display:none;" onchange="_settLogoFileSelected(event)">
           <button id="sett-proj-add-btn" onclick="_settOpenAddProject()" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;">＋ New</button>
         </div>
@@ -6577,23 +6548,34 @@ service cloud.firestore {
               </button>
             </div>
           </div>
-          <!-- ── ⭐ PRO ONLY: Company Logo chip — above Viewer Management ── -->
-          <div id="cloud-logo-section" style="margin-bottom:6px;">
-            <button onclick="(function(btn){if(!window._sbSubActive){toast('⭐ Pro required for Company Logo','');return;}openLogoModal();btn.style.opacity='.7';setTimeout(function(){btn.style.opacity='1';},200);})(this)" style="width:100%;display:flex;align-items:center;justify-content:space-between;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:.55rem .7rem;cursor:pointer;text-align:left;transition:background .15s,opacity .15s;" ontouchstart="this.style.background='rgba(245,158,11,0.18)'" ontouchend="this.style.background='rgba(245,158,11,0.08)'">
-              <div style="display:flex;align-items:center;gap:7px;">
-                <div id="cloud-logo-preview-wrap" style="width:32px;height:32px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
-                  <span style="font-size:16px;">🖼️</span>
+          <!-- ── ⭐ PRO ONLY: Company Logo card — above Viewer Management ── -->
+          <div id="cloud-logo-section" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:.55rem .7rem;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <!-- Logo preview box — tap to change -->
+              <div id="cloud-logo-preview-wrap" onclick="(function(){if(!window._sbSubActive){toast('⭐ Pro required','');return;}document.getElementById('logo-modal-file-chip').click();})()" style="width:46px;height:46px;flex-shrink:0;background:rgba(245,158,11,0.15);border:1.5px dashed rgba(245,158,11,0.5);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;position:relative;transition:border-color .15s;" ontouchstart="this.style.borderColor='rgba(245,158,11,0.9)'" ontouchend="this.style.borderColor='rgba(245,158,11,0.5)'">
+                <img id="cloud-logo-chip-img" src="" style="width:100%;height:100%;object-fit:cover;display:none;border-radius:9px;">
+                <span id="cloud-logo-chip-placeholder" style="font-size:20px;line-height:1;">🖼️</span>
+              </div>
+              <!-- Hidden file input for chip upload -->
+              <input type="file" id="logo-modal-file-chip" accept="image/*" style="display:none;" onchange="_handleLogoChipUpload(event)">
+              <!-- Info + action buttons -->
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">
+                  <p style="font-size:10px;font-weight:800;color:#fde68a;margin:0;line-height:1.2;">Company Logo</p>
+                  <span style="font-size:9px;color:#fbbf24;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.35);border-radius:99px;padding:0 5px;font-weight:700;">Pro</span>
                 </div>
-                <div>
-                  <div style="display:flex;align-items:center;gap:5px;">
-                    <p style="font-size:10px;font-weight:800;color:#fde68a;margin:0;line-height:1.2;">Company Logo</p>
-                    <span style="font-size:9px;color:#fbbf24;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.35);border-radius:99px;padding:0px 6px;font-weight:700;">Pro</span>
-                  </div>
-                  <p style="font-size:8px;color:rgba(253,230,138,0.6);margin:0;line-height:1.3;">Tap to edit · Appears on all PDF exports</p>
+                <p id="cloud-logo-chip-hint" style="font-size:8px;color:rgba(253,230,138,0.55);margin:0 0 5px;line-height:1.3;">Tap image to upload · Shown on all PDFs</p>
+                <!-- Change / Delete buttons row -->
+                <div style="display:flex;gap:5px;">
+                  <button onclick="(function(){if(!window._sbSubActive){toast('⭐ Pro required','');return;}document.getElementById('logo-modal-file-chip').click();})()" style="flex:1;padding:4px 0;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
+                    <span>🔄</span><span>Change</span>
+                  </button>
+                  <button id="cloud-logo-delete-btn" onclick="(function(){if(!window._sbSubActive){toast('⭐ Pro required','');return;}_clearLogoChip();})()" style="padding:4px 10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:none;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
+                    🗑️
+                  </button>
                 </div>
               </div>
-              <span style="font-size:16px;color:#fbbf24;flex-shrink:0;">›</span>
-            </button>
+            </div>
           </div>
 
           <!-- ── VIEWER ACCOUNTS SECTION ── -->
@@ -7412,9 +7394,11 @@ function closeLogoModal() {
   var modal = document.getElementById('logo-modal');
   if (modal) modal.style.display = 'none';
 }
+// ── Update both modal preview AND the chip in the cloud panel ──
 function _refreshLogoModalPreview() {
   var p = lprof() || {};
   var logoSrc = p.logo || null;
+  // Modal
   var preview = document.getElementById('logo-modal-preview');
   var empty   = document.getElementById('logo-modal-empty');
   var img     = document.getElementById('logo-modal-img');
@@ -7426,6 +7410,59 @@ function _refreshLogoModalPreview() {
     if (preview) preview.style.display = 'none';
     if (empty)   empty.style.display   = 'block';
   }
+  // Also update the chip in cloud panel
+  _refreshLogoChip();
+}
+// ── Refresh logo chip preview in cloud panel ──
+function _refreshLogoChip() {
+  var p = lprof() || {};
+  var logoSrc = p.logo || null;
+  var chipImg = document.getElementById('cloud-logo-chip-img');
+  var chipPh  = document.getElementById('cloud-logo-chip-placeholder');
+  var delBtn  = document.getElementById('cloud-logo-delete-btn');
+  var hint    = document.getElementById('cloud-logo-chip-hint');
+  if (logoSrc) {
+    if (chipImg) { chipImg.src = logoSrc; chipImg.style.display = 'block'; }
+    if (chipPh)  chipPh.style.display  = 'none';
+    if (delBtn)  delBtn.style.display  = 'block';
+    if (hint)    hint.textContent = 'Logo set ✓ · Tap image to replace';
+  } else {
+    if (chipImg) { chipImg.src = ''; chipImg.style.display = 'none'; }
+    if (chipPh)  chipPh.style.display  = 'flex';
+    if (delBtn)  delBtn.style.display  = 'none';
+    if (hint)    hint.textContent = 'Tap image to upload · Shown on all PDFs';
+  }
+}
+// ── Handle upload from chip file input ──
+function _handleLogoChipUpload(evt) {
+  var file = evt.target.files && evt.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var dataUrl = e.target.result;
+    var p = lprof() || {};
+    p.logo = dataUrl;
+    sprof(p);
+    try { applyProfile && applyProfile(); } catch(ex) {}
+    try { cloudBackupNow && cloudBackupNow(true); } catch(ex) {}
+    _refreshLogoChip();
+    _refreshLogoModalPreview();
+    toast('✅ Logo saved!', 'ok');
+  };
+  reader.readAsDataURL(file);
+  evt.target.value = '';
+}
+// ── Delete logo from chip ──
+function _clearLogoChip() {
+  if (!confirm('Remove company logo?')) return;
+  var p = lprof() || {};
+  p.logo = null;
+  sprof(p);
+  try { applyProfile && applyProfile(); } catch(ex) {}
+  try { cloudBackupNow && cloudBackupNow(true); } catch(ex) {}
+  _refreshLogoChip();
+  _refreshLogoModalPreview();
+  toast('Logo removed', 'ok');
 }
 function _handleLogoModalUpload(evt) {
   var file = evt.target.files && evt.target.files[0];
@@ -12611,82 +12648,46 @@ function _onProjectChange(name) {
   if (!name) return;
   var isPro = !!window._sbSubActive;
 
-  // Free users can only have 1 project — switching to it is fine,
-  // but they can't cloud-sync the switch (no _adminSBUser / _adminCloudPull).
-  // Still let them "select" their project to set it as active locally.
-  if (!isPro) {
-    localStorage.setItem(_ACTIVE_PROJ_KEY, name);
-    // Re-init NID for free user's project namespace
-    try { _initProjectNID(); } catch(e) { NID = 1; }
-    var prof2 = lprof() || {};
-    prof2.address = name;
-    sprof(prof2);
-    try { applyProfile && applyProfile(); } catch(e) {}
-    try { updateCloudBtn && updateCloudBtn(); } catch(e) {}
-    _refreshBackupLabel && _refreshBackupLabel();
-    toast('📂 Project: ' + name, 'ok');
-    return;
-  }
-
-  // 1. Backup CURRENT project data to cloud before switching (silent)
-  if (typeof cloudBackupNow === 'function' && _adminSBUser) {
-    cloudBackupNow(true);
-  }
-
-  // 2. Set new active project
+  // Set active project key
   localStorage.setItem(_ACTIVE_PROJ_KEY, name);
-  // Re-init NID to this project's namespace
-  try { _initProjectNID(); } catch(e) { NID = 1; }
-  try { updateCloudBtn && updateCloudBtn(); } catch(e) {}
 
-  // 3. Auto-update profile project name field (readonly display)
+  // Re-init NID for this project namespace
+  try { _initProjectNID(); } catch(e) { NID = 1; }
+
+  // Update profile address field
   var projInput = document.getElementById('edit-address');
   if (projInput) projInput.value = name;
 
-  // 4. Update saved profile — set project name + logo from project
+  // Update saved profile project name
   var prof = lprof() || {};
-  var projects = _getProjects();
-  var proj = projects.find(function(p){ return p.name === name; });
-  if (proj && proj.logo) { prof.logo = proj.logo; }
-  prof.address = name;  // project name shown in PDF headers
+  prof.address = name;
   sprof(prof);
-  applyProfile && applyProfile();
 
-  // 5. Pull this project's cloud data (getSiteId() now returns new project key)
-  toast('Switching to: ' + name + ' ⏳', '');
-  if (typeof _refreshBackupLabel === 'function') _refreshBackupLabel();
+  try { updateCloudBtn && updateCloudBtn(); } catch(e) {}
+  _refreshBackupLabel && _refreshBackupLabel();
 
-  // Immediately refresh all visible UI sections
-  try { if (typeof updateDash === 'function') updateDash(); } catch(e) {}
-  try { if (typeof renderWorkers === 'function') renderWorkers(); } catch(e) {}
-  try { if (typeof renderCurrentTab === 'function') renderCurrentTab(); } catch(e) {}
-  // Trigger active tab re-render immediately
+  // ── INSTANT LOCAL LOAD — no cloud call needed ──
+  // Data is already in local storage under the correct proj__ namespace
+  // Just reload UI from local storage for the new active project
+  try { NID = parseInt(safeLS.getItem('cm_nid') || '1'); } catch(e) {}
+  try { AD = ld(); } catch(e) {}
+  try { applyProfile && applyProfile(); } catch(e) {}
+  try {
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof renderCurrentTab === 'function') renderCurrentTab();
+  } catch(e) {}
   try {
     var activeTab = document.querySelector('.tab-btn.active');
     if (activeTab) {
-      var tabId = activeTab.getAttribute('data-tab') || activeTab.onclick && activeTab.onclick.toString().match(/showTab\('([^']+)'\)/)?.[1];
+      var tabId = activeTab.getAttribute('data-tab');
       if (tabId && typeof showTab === 'function') showTab(tabId);
     }
-  } catch(e2) {}
+  } catch(e) {}
 
-  if (typeof _adminCloudPull === 'function' && _adminSBUser) {
-    // ── Instantly wipe in-memory data so UI reflects the new (possibly empty) project ──
-    // This makes the switch feel immediate — cloud pull fills it back in if data exists
-    try {
-      AD = [];
-      try { NID = 1; } catch(e2) {}
-      if (typeof renderDashboard === 'function') renderDashboard();
-      if (typeof renderCurrentTab === 'function') renderCurrentTab();
-    } catch(e) {}
+  // Update realtime channel to listen to new project's backup_key
+  try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
 
-    // Force pull with full-replace (no merge) — reset timestamp so pull always fires
-    _lastCloudTimestamp = 0;
-    // Restart realtime channel so it listens to the new project's backup_key
-    try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
-    _adminCloudPull(false, true); // false=show toast, true=force full replace (no merge)
-  } else {
-    toast('Project set: ' + name + ' ✓', 'ok');
-  }
+  toast('📂 ' + name, 'ok');
 }
 
 function _showAddProject() {
@@ -12793,16 +12794,16 @@ function _saveNewProject() {
   var sel = document.getElementById('cloud-project-select');
   if (sel) sel.value = name;
 
-  // Set as active project (for Pro: full switch with cloud pull; for free: just set name locally)
+  // Set as active project
   localStorage.setItem(_ACTIVE_PROJ_KEY, name);
-  // Re-init NID for this new project's namespace
   try { _initProjectNID(); } catch(e) { NID = 1; }
   if (isPro && _adminSBUser) {
-    // First project: existing data belongs to it — don't wipe
-    // 2nd+ project: start with a clean slate
+    // For first project: existing local data IS this project — keep it
+    // For 2nd+ project: clear local so it starts fresh (cloud pull won't have it yet)
     if (!isFirstProject) {
       _clearLocalDataForNewProject();
     }
+    // Reload UI from local (first project keeps data; new project starts empty until cloud push)
     _onProjectChange(name);
   } else {
     // Free user: just update the profile project name field locally
@@ -12902,6 +12903,7 @@ function refreshCloudModalState() {
     loadViewerAccountsInline();
     _loadProjectDropdown();
     if (typeof _refreshBackupLabel === 'function') _refreshBackupLabel();
+    if (typeof _refreshLogoChip === 'function') _refreshLogoChip();
     // Auto-select active project
     setTimeout(function() {
       var sel = document.getElementById('cloud-project-select');
@@ -13001,9 +13003,8 @@ function autoInitCloud() {
   if (!_sb) { setTimeout(autoInitCloud, 200); return; }
   updateCloudBtn();
   if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') {
-    // Pull from cloud FIRST on every app open — apply if cloud is newer than local
-    // This ensures a device always starts with the latest data from any other device
-    _adminCloudPull(true);
+    // Pull ALL projects' data at once on startup
+    _adminCloudPullAll(true);
     startAutoSync();
   }
 }
@@ -13184,7 +13185,7 @@ function cloudBackupNow(silent) {
         }
       });
     } catch(e2) {}
-    return {
+    var _payload = {
       db:         ld(),
       meta:       lm(),
       mats:       lmat(),
@@ -13209,8 +13210,11 @@ function cloudBackupNow(silent) {
       lastSync: Date.now(),
       syncedBy: _adminSBUser.email,
       version: '3.0',
-      tombstones: _loadTombstones()  // send tombstones so other devices respect deletes
+      tombstones: _loadTombstones()
     };
+    // Stamp profile timestamp so other devices' merge knows how fresh this profile is
+    try { safeLS.setItem('cm_profile_ts', String(_payload.lastSync)); } catch(e) {}
+    return _payload;
   }
 
   function _doPush(payload) {
@@ -13218,7 +13222,7 @@ function cloudBackupNow(silent) {
       admin_id: _adminSBUser.id, backup_key: siteId, data: payload
     }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
       if (r.error) { if (!silent) toast('Backup failed: ' + r.error.message, 'err'); return; }
-      _lastCloudTimestamp = payload.lastSync;
+      _lastCloudTimestamps[siteId] = payload.lastSync;
       var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
       var el = document.getElementById('cloud-sync-time');
       if (el) el.textContent = 'Synced: ' + now;
@@ -13262,8 +13266,8 @@ function cloudBackupNow(silent) {
           try { safeLS.setItem('cm_machinery', JSON.stringify(mergedMach)); } catch(e) {}
         }
 
-        // Update _lastCloudTimestamp so _adminCloudPull doesn't re-apply this
-        _lastCloudTimestamp = cloudData.lastSync || _lastCloudTimestamp;
+        // Update per-project timestamp so realtime doesn't re-apply this push
+        _lastCloudTimestamps[siteId] = cloudData.lastSync || (_lastCloudTimestamps[siteId] || 0);
       }
 
       // Step 4: Build payload from merged local state and push
@@ -13294,48 +13298,215 @@ function cloudRestoreNow() {
 }
 
 // -- Auto Sync (bidirectional: push changes + pull remote changes every 25s) --
+// ══════════════════════════════════════════════════════════════════════
+// ALL-PROJECTS CLOUD ARCHITECTURE
+// ─────────────────────────────────────────────────────────────────────
+// Strategy:
+//   • On login / startup: fetch ALL projects' cloud rows at once
+//     and write each into its own proj__slug__cm_* localStorage namespace
+//   • Project switch: ZERO cloud calls — just change active slug,
+//     reload UI from local storage → instant, no data bleed possible
+//   • On save: push only the ACTIVE project's data to its backup_key row
+//   • Realtime: listen for any row update → re-fetch that project's data
+//     into its local namespace; if it's the active project, refresh UI
+// ══════════════════════════════════════════════════════════════════════
+
 var _adminRealtimeChannel = null;
-var _lastCloudTimestamp = 0;  // track remote lastSync to detect remote changes
+var _lastCloudTimestamps = {};  // { backup_key: lastSync } per project
 
-function _applyCloudData(d, silent, _forceReplace) {
-  if (!d) return;
-  var remoteTs = d.lastSync || 0;
-  if (!_forceReplace && remoteTs && remoteTs < _lastCloudTimestamp) return; // already applied
-  _lastCloudTimestamp = remoteTs;
+// ── Helper: SMART-MERGE a cloud payload into a specific project's local namespace ──
+// Rule: newer __ts wins per-record; tombstones beat everything; offline local edits preserved
+function _writeProjectToLocal(projName, d) {
+  if (!d || !projName) return;
+  var slug = _slugify(projName);
+  var uid  = _adminSBUser ? 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) : 'default';
+  var prefix = 'proj__' + uid + '__' + slug + '__';
 
-  var dMerged;
-  if (_forceReplace) {
-    // ── PROJECT SWITCH: full replace — no merge, cloud wins completely ──
-    // Wipe local project data first so no stale records bleed in
-    try {
-      var toDelete = _getAllProjectKeys();
-      toDelete.forEach(function(k) { try { window.localStorage.removeItem(k); } catch(e2) {} });
-      NID = 1; AD = [];
-    } catch(e) {}
-    dMerged = JSON.parse(JSON.stringify(d));
-  } else {
-    // ── Normal auto-sync: smart merge ──
-    var localTombs  = _loadTombstones();
-    var remoteTombs = d.tombstones || {};
-    var mergedTombs = _mergeTombstones(localTombs, remoteTombs);
-    _saveTombstones(mergedTombs);
-
-    // Merge main records
-    var mergedDb = _mergeRecordArrays(ld(), d.db || [], mergedTombs);
-    try { safeLS.setItem('cm_db', JSON.stringify(mergedDb)); AD = mergedDb; } catch(e) {}
-
-    // Merge machinery
-    var mergedMach = _mergeMachinery(lmach(), d.machinery || {}, mergedTombs);
-    try { safeLS.setItem('cm_machinery', JSON.stringify(mergedMach)); } catch(e) {}
-
-    dMerged = JSON.parse(JSON.stringify(d));
-    dMerged.db = mergedDb;
-    dMerged.machinery = mergedMach;
+  // Helper to read a raw value from this project's namespace
+  function _localRaw(cmKey) {
+    try { return window.localStorage.getItem(prefix + cmKey); } catch(e) { return null; }
   }
-  _applyFullBackup(dMerged);
-  applyProfile();
+  function _localParsed(cmKey) {
+    var v = _localRaw(cmKey); if (!v) return null;
+    try { return JSON.parse(v); } catch(e) { return v; }
+  }
+  // Helper to write into this project's namespace
+  function _writeKey(cmKey, value) {
+    if (value === null || value === undefined) return;
+    var val = typeof value === 'string' ? value : JSON.stringify(value);
+    try { window.localStorage.setItem(prefix + cmKey, val); } catch(e) {}
+  }
+
+  // ── Merge tombstones: union (highest ts wins per id) ──
+  var remoteTombs = d.tombstones || {};
+  var localTombs  = {};
+  try { localTombs = JSON.parse(_localRaw('cm_tombstones') || '{}'); } catch(e) {}
+  var mergedTombs = _mergeTombstones(localTombs, remoteTombs);
+  _writeKey('cm_tombstones', JSON.stringify(mergedTombs));
+
+  // ── Merge main records array (attendance, expenses, etc.) — __ts per record ──
+  var localDb  = _localParsed('cm_db')  || [];
+  var remoteDb = d.db || [];
+  var mergedDb = _mergeRecordArrays(localDb, remoteDb, mergedTombs);
+  _writeKey('cm_db', JSON.stringify(mergedDb));
+
+  // ── Merge machinery (keyed by date, sessions by id) ──
+  var localMach  = _localParsed('cm_machinery')  || {};
+  var remoteMach = d.machinery || {};
+  var mergedMach = _mergeMachinery(localMach, remoteMach, mergedTombs);
+  _writeKey('cm_machinery', JSON.stringify(mergedMach));
+
+  // ── Profile: merge — cloud wins UNLESS local is newer ──
+  // Profile doesn't have __ts; use lastSync vs local cm_profile_ts
+  var localProfTs  = parseInt(_localRaw('cm_profile_ts') || '0');
+  var remoteProfTs = d.lastSync || 0;
+  if (d.prof && remoteProfTs >= localProfTs) {
+    _writeKey('cm_profile', JSON.stringify(d.prof));
+    _writeKey('cm_profile_ts', String(remoteProfTs));
+  }
+
+  // ── Blob keys from cm_all: merge by key-level lastSync ──
+  // For structured data (BOQ, visits, etc.) — cloud wins only if newer
+  if (d.cm_all && typeof d.cm_all === 'object') {
+    Object.keys(d.cm_all).forEach(function(k) {
+      if (k === 'cm_db' || k === 'cm_machinery' || k === 'cm_profile' || k === 'cm_tombstones') return; // already handled
+      var cloudVal = d.cm_all[k];
+      if (cloudVal === null || cloudVal === undefined) return;
+      // For array-type keys, do per-record merge; for others, last-sync wins
+      var localVal = _localRaw(k);
+      if (!localVal) {
+        // Nothing local — write cloud value
+        _writeKey(k, cloudVal);
+      } else {
+        // Try to parse both and merge arrays; else cloud wins if newer
+        try {
+          var lv = JSON.parse(localVal);
+          var rv = typeof cloudVal === 'string' ? JSON.parse(cloudVal) : cloudVal;
+          if (Array.isArray(lv) && Array.isArray(rv)) {
+            // Per-record merge using __ts
+            _writeKey(k, JSON.stringify(_mergeRecordArrays(lv, rv, mergedTombs)));
+          } else {
+            // Non-array: cloud wins if remote is newer
+            if (remoteProfTs >= localProfTs) _writeKey(k, cloudVal);
+          }
+        } catch(e) {
+          // Can't parse — cloud wins if newer
+          if (remoteProfTs >= localProfTs) _writeKey(k, cloudVal);
+        }
+      }
+    });
+  }
+
+  // ── Scalar/blob keys: only write if not already set locally or cloud is newer ──
+  if (d.meta)       { if (!_localRaw('cm_meta')      || remoteProfTs >= localProfTs) _writeKey('cm_meta',      JSON.stringify(d.meta)); }
+  if (d.mats)       { if (!_localRaw('cm_matstore')  || remoteProfTs >= localProfTs) _writeKey('cm_matstore',  JSON.stringify(d.mats)); }
+  if (d.dept)       { if (!_localRaw('cm_dept')      || remoteProfTs >= localProfTs) _writeKey('cm_dept',      JSON.stringify(d.dept)); }
+  if (d.drawings)   { if (!_localRaw('cm_drawings')  || remoteProfTs >= localProfTs) _writeKey('cm_drawings',  JSON.stringify(d.drawings)); }
+  if (d.budget)     { if (!_localRaw('cm_budget')    || remoteProfTs >= localProfTs) _writeKey('cm_budget',    JSON.stringify(d.budget)); }
+  if (d.milestones) { if (!_localRaw('cm_milestones')|| remoteProfTs >= localProfTs) _writeKey('cm_milestones',JSON.stringify(d.milestones)); }
+  if (d.punchlist)  { if (!_localRaw('cm_punchlist') || remoteProfTs >= localProfTs) _writeKey('cm_punchlist', JSON.stringify(d.punchlist)); }
+
+  // ── NID: take max (never go backwards) ──
+  var localNid  = parseInt(_localRaw('cm_nid') || '1');
+  var remoteNid = parseInt(d.nid || '1');
+  _writeKey('cm_nid', String(Math.max(localNid, remoteNid)));
+}
+
+// ── Fetch ALL projects' data from cloud and store locally ──
+function _adminCloudPullAll(silent, onDone) {
+  if (!_sb || !_adminSBUser) return;
+  var uid = _adminSBUser.id;
+  // Fetch every backup_key row for this admin
+  _sb.from('cloud_backups')
+    .select('backup_key, data, updated_at')
+    .eq('admin_id', uid)
+    .then(function(r) {
+      if (r.error || !r.data || !r.data.length) {
+        if (!silent) toast('No cloud data found', '');
+        if (onDone) onDone(false);
+        return;
+      }
+
+      var rows = r.data;
+      var projects = _getProjects();
+
+      // Build a map: backup_key → project name
+      // backup_key format: "user-XXXXXXXX-proj-SLUG" or legacy formats
+      var keyToName = {};
+      projects.forEach(function(p) {
+        var expectedKey = 'user-' + uid.replace(/-/g,'').slice(0,12) + '-proj-' + _slugify(p.name);
+        keyToName[expectedKey] = p.name;
+      });
+
+      var applied = 0;
+      rows.forEach(function(row) {
+        var d = row.data;
+        if (!d) return;
+        var bk = row.backup_key || '';
+        var projName = keyToName[bk];
+
+        // If we can't match by key, try matching by profile name in data
+        if (!projName && d.prof && d.prof.address) {
+          projName = d.prof.address;
+          // Auto-register this project if not known yet
+          if (projName && !projects.find(function(p){ return p.name === projName; })) {
+            projects.push({ name: projName, createdAt: Date.now() });
+            _saveProjects(projects);
+            keyToName[bk] = projName;
+          }
+        }
+
+        if (!projName) {
+          // Fallback: extract slug from backup_key
+          var m = bk.match(/-proj-(.+)$/);
+          if (m) {
+            var slug = m[1];
+            // Find project with matching slug
+            var matched = projects.find(function(p){ return _slugify(p.name) === slug; });
+            projName = matched ? matched.name : slug;
+          }
+        }
+
+        if (projName) {
+          _writeProjectToLocal(projName, d);
+          _lastCloudTimestamps[bk] = d.lastSync || 0;
+          applied++;
+        }
+      });
+
+      // Update project dropdown and UI
+      _loadProjectDropdown();
+      try { _settLoadProjDropdown && _settLoadProjDropdown(); } catch(e) {}
+
+      // Load active project into UI
+      _loadActiveProjectToUI(silent);
+
+      var el = document.getElementById('cloud-sync-time');
+      var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
+      if (el) el.textContent = 'Synced: ' + now;
+
+      var dot = document.getElementById('cloud-sync-dot');
+      if (dot) { dot.style.background = '#a78bfa'; setTimeout(function(){ dot.style.background = '#22c55e'; }, 1500); }
+
+      if (!silent && applied > 0) toast('☁️ All projects synced!', 'ok');
+      if (onDone) onDone(true);
+    }).catch(function(e) {
+      if (onDone) onDone(false);
+    });
+}
+
+// ── Backward compat shim — single project pull (used in a few places) ──
+function _adminCloudPull(silent, _forceReplace) {
+  // Always pull all projects now — forceReplace is handled by _adminCloudPullAll
+  _adminCloudPullAll(!!silent);
+}
+
+// ── Load active project's local data into UI ──
+function _loadActiveProjectToUI(silent) {
+  try { NID = parseInt(safeLS.getItem('cm_nid') || '1'); } catch(e) {}
+  try { AD = ld(); } catch(e) {}
+  try { applyProfile(); } catch(e) {}
   try { renderDashboard(); } catch(e) {}
-  // FIX: re-render the currently visible tab so changes appear instantly without tab-switch
   try {
     var curTab = document.querySelector('.tab-btn.active');
     if (curTab) {
@@ -13343,37 +13514,9 @@ function _applyCloudData(d, silent, _forceReplace) {
       if (tabName && typeof switchTab === 'function') switchTab(tabName);
     }
   } catch(e) {}
-  var el = document.getElementById('cloud-sync-time');
-  var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
-  if (el) el.textContent = 'Pulled: ' + now;
-  if (!silent) {
-    toast('🔄 Cloud data updated from another device!', 'ok');
-  } else {
-    // Flash sync dot amber → green to show silent pull happened
-    var dot = document.getElementById('cloud-sync-dot');
-    if (dot) { dot.style.background = '#a78bfa'; setTimeout(function(){ dot.style.background = '#22c55e'; }, 1500); }
-  }
 }
 
-function _adminCloudPull(silent, _forceReplace) {
-  if (!_sb || !_adminSBUser) return;
-  var siteId = getSiteId();
-  if (!siteId) return;
-  _sb.from('cloud_backups')
-    .select('data,updated_at')
-    .eq('admin_id', _adminSBUser.id)
-    .eq('backup_key', siteId)
-    .single()
-    .then(function(r) {
-      if (r.error || !r.data || !r.data.data) return;
-      var remoteTs = r.data.data.lastSync || 0;
-      // forceReplace: always apply (project switch). Normal: only if newer.
-      if (_forceReplace || remoteTs > _lastCloudTimestamp) {
-        _applyCloudData(r.data.data, !!silent, !!_forceReplace);
-      }
-    }).catch(function(e) {});
-}
-
+// ── Realtime: listen for any project update from another device ──
 function _startAdminRealtime() {
   if (!_sb || !_adminSBUser) return;
   if (_adminRealtimeChannel) {
@@ -13381,9 +13524,8 @@ function _startAdminRealtime() {
     _adminRealtimeChannel = null;
   }
   try {
-    var _currentSiteId = getSiteId();
     _adminRealtimeChannel = _sb
-      .channel('admin-sync-' + _adminSBUser.id + '-' + (_currentSiteId || 'default'))
+      .channel('admin-sync-all-' + _adminSBUser.id)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
@@ -13391,16 +13533,38 @@ function _startAdminRealtime() {
         filter: 'admin_id=eq.' + _adminSBUser.id
       }, function(payload) {
         try {
-          // ── DATA ISOLATION: only apply data for the CURRENT project/backup_key ──
-          if (payload && payload.new && payload.new.data) {
-            var incomingKey = payload.new.backup_key || '';
-            var myKey = getSiteId();
-            // If backup_key doesn't match current project → ignore (different project update)
-            if (incomingKey && myKey && incomingKey !== myKey) return;
-            _applyCloudData(payload.new.data, true);
-            var el = document.getElementById('cloud-sync-dot');
-            if (el) { el.style.background = '#a78bfa'; setTimeout(function(){ el.style.background='#22c55e'; }, 1500); }
+          if (!payload || !payload.new || !payload.new.data) return;
+          var d   = payload.new.data;
+          var bk  = payload.new.backup_key || '';
+          var remoteTs = d.lastSync || 0;
+
+          // Find which project this update belongs to
+          var projects = _getProjects();
+          var uid = _adminSBUser.id;
+          var projName = null;
+          projects.forEach(function(p) {
+            var expectedKey = 'user-' + uid.replace(/-/g,'').slice(0,12) + '-proj-' + _slugify(p.name);
+            if (expectedKey === bk) projName = p.name;
+          });
+          if (!projName && d.prof && d.prof.address) projName = d.prof.address;
+
+          if (!projName) return; // unknown project — ignore
+
+          // Only apply if newer than what we have for this project
+          if (remoteTs <= (_lastCloudTimestamps[bk] || 0)) return;
+          _lastCloudTimestamps[bk] = remoteTs;
+
+          // Write to that project's local namespace
+          _writeProjectToLocal(projName, d);
+
+          // If this is the ACTIVE project, refresh UI
+          var activeName = _getActiveProject();
+          if (projName === activeName) {
+            _loadActiveProjectToUI(true);
           }
+
+          var dot = document.getElementById('cloud-sync-dot');
+          if (dot) { dot.style.background = '#a78bfa'; setTimeout(function(){ dot.style.background = '#22c55e'; }, 1500); }
         } catch(e) {}
       })
       .subscribe(function(status) {
@@ -13414,16 +13578,16 @@ function _startAdminRealtime() {
 
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
-  // PULL only every 10s — pushing is now done on every data save (debounced)
-  var SYNC_MS = 10000;
+  // Pull all projects every 30s (less frequent since realtime handles instant updates)
+  var SYNC_MS = 30000;
   _cloudSyncTimer = setInterval(function() {
-    if (!_getAdminDb() || !isCloudActivated()) return;
-    _adminCloudPull(true); // pull-only: check if another device pushed newer data
+    if (!isCloudActivated || !isCloudActivated()) return;
+    _adminCloudPullAll(true);
   }, SYNC_MS);
   // Start Realtime for instant push notifications from other devices
   _startAdminRealtime();
-  // Pull immediately on start to get latest cloud data before user edits
-  setTimeout(function() { _adminCloudPull(true); }, 1500);
+  // Pull all projects immediately on start
+  setTimeout(function() { _adminCloudPullAll(true); }, 1500);
 }
 
 // ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
