@@ -6548,30 +6548,27 @@ service cloud.firestore {
               </button>
             </div>
           </div>
-          <!-- ── ⭐ PRO ONLY: Company Logo card — above Viewer Management ── -->
+          <!-- ── Company PDF Logo card — available to all users ── -->
           <div id="cloud-logo-section" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:.55rem .7rem;margin-bottom:6px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <!-- Logo preview box — tap to change -->
-              <div id="cloud-logo-preview-wrap" onclick="(function(){if(!window._sbSubActive){toast('⭐ Pro required','');return;}document.getElementById('logo-modal-file-chip').click();})()" style="width:46px;height:46px;flex-shrink:0;background:rgba(245,158,11,0.15);border:1.5px dashed rgba(245,158,11,0.5);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;position:relative;transition:border-color .15s;" ontouchstart="this.style.borderColor='rgba(245,158,11,0.9)'" ontouchend="this.style.borderColor='rgba(245,158,11,0.5)'">
-                <img id="cloud-logo-chip-img" src="" style="width:100%;height:100%;object-fit:cover;display:none;border-radius:9px;">
-                <span id="cloud-logo-chip-placeholder" style="font-size:20px;line-height:1;">🖼️</span>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <!-- Logo preview chip — shows user logo when set, else faded app logo -->
+              <div id="cloud-logo-preview-wrap" onclick="document.getElementById('logo-modal-file-chip').click()" style="width:50px;height:50px;flex-shrink:0;background:rgba(245,158,11,0.12);border:1.5px dashed rgba(245,158,11,0.5);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;position:relative;transition:border-color .15s;" ontouchstart="this.style.borderColor='rgba(245,158,11,0.9)'" ontouchend="this.style.borderColor='rgba(245,158,11,0.5)'">
+                <img id="cloud-logo-chip-img" src="" style="width:100%;height:100%;object-fit:contain;display:none;border-radius:9px;">
+                <img id="cloud-logo-chip-applogo" src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:100%;height:100%;object-fit:contain;display:block;border-radius:9px;opacity:0.45;" onerror="this.style.display='none'">
+                <span id="cloud-logo-chip-placeholder" style="font-size:22px;line-height:1;display:none;">🖼️</span>
               </div>
-              <!-- Hidden file input for chip upload -->
+              <!-- Hidden file input -->
               <input type="file" id="logo-modal-file-chip" accept="image/*" style="display:none;" onchange="_handleLogoChipUpload(event)">
               <!-- Info + action buttons -->
               <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">
-                  <p style="font-size:10px;font-weight:800;color:#fde68a;margin:0;line-height:1.2;">Company Logo</p>
-                  <span style="font-size:9px;color:#fbbf24;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.35);border-radius:99px;padding:0 5px;font-weight:700;">Pro</span>
-                </div>
-                <p id="cloud-logo-chip-hint" style="font-size:8px;color:rgba(253,230,138,0.55);margin:0 0 5px;line-height:1.3;">Tap image to upload · Shown on all PDFs</p>
-                <!-- Change / Delete buttons row -->
+                <p style="font-size:10px;font-weight:800;color:#fde68a;margin:0 0 2px;line-height:1.2;">PDF Report Logo</p>
+                <p id="cloud-logo-chip-hint" style="font-size:8px;color:rgba(253,230,138,0.55);margin:0 0 6px;line-height:1.3;">Tap to set your logo · Appears on all PDF reports</p>
                 <div style="display:flex;gap:5px;">
-                  <button onclick="(function(){if(!window._sbSubActive){toast('⭐ Pro required','');return;}document.getElementById('logo-modal-file-chip').click();})()" style="flex:1;padding:4px 0;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
-                    <span>🔄</span><span>Change</span>
+                  <button onclick="document.getElementById('logo-modal-file-chip').click()" id="cloud-logo-add-btn" style="flex:1;padding:4px 0;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
+                    <span id="cloud-logo-add-label">➕ Add Logo</span>
                   </button>
-                  <button id="cloud-logo-delete-btn" onclick="(function(){if(!window._sbSubActive){toast('⭐ Pro required','');return;}_clearLogoChip();})()" style="padding:4px 10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:none;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
-                    🗑️
+                  <button id="cloud-logo-delete-btn" onclick="_clearLogoChip()" style="padding:4px 10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:none;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
+                    🗑️ Remove
                   </button>
                 </div>
               </div>
@@ -6893,12 +6890,21 @@ function _pk(key) {
   // Non-cm_ keys and global auth/setting keys are never prefixed
   if (!key || key.indexOf('cm_') !== 0) return key;
   if (_GLOBAL_KEYS[key]) return key;
-  // Get active project slug (same logic as _getActiveProject / _ACTIVE_PROJ_KEY)
+  // Get active project slug
   var proj = '';
   try { proj = (window.localStorage && window.localStorage.getItem('sanj_active_proj')) || ''; } catch(e) {}
   if (!proj) return key; // no project set → use original key (backward compat)
-  // Slugify same way as _slugify
-  var slug = proj.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,32) || 'default';
+  var slug = proj.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'default';
+  // Include user UID so reads always match _writeProjectToLocal's write format.
+  // sanj_admin_uid is stored at login (before _adminSBUser is set) so it survives page reloads.
+  var uid = '';
+  try { uid = (window.localStorage && window.localStorage.getItem('sanj_admin_uid')) || ''; } catch(e) {}
+  if (!uid && typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id) {
+    uid = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+  }
+  // With uid: proj__user-XXXXXX__slug__cm_key  (matches _writeProjectToLocal)
+  // Without uid (free/local users): proj__slug__cm_key
+  if (uid) return 'proj__' + uid + '__' + slug + '__' + key;
   return 'proj__' + slug + '__' + key;
 }
 // Wrap safeLS to auto-prefix cm_ keys
@@ -6915,11 +6921,15 @@ function _getAllProjectKeys() {
   var proj = '';
   try { proj = (window.localStorage && window.localStorage.getItem('sanj_active_proj')) || ''; } catch(e) {}
   var prefix = '';
-  if (proj && _adminSBUser && _adminSBUser.id) {
-    // Must match the actual storage format: proj__userId__slug__
-    var uid = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+  if (proj) {
     var slug = proj.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'default';
-    prefix = 'proj__' + uid + '__' + slug + '__';
+    // Must match _pk() prefix format so push/pull reads and writes the same keys
+    var uid = '';
+    try { uid = (window.localStorage && window.localStorage.getItem('sanj_admin_uid')) || ''; } catch(e) {}
+    if (!uid && typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id) {
+      uid = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+    }
+    prefix = uid ? ('proj__' + uid + '__' + slug + '__') : ('proj__' + slug + '__');
   }
   var keys = [];
   try {
@@ -7419,20 +7429,29 @@ function _refreshLogoModalPreview() {
 function _refreshLogoChip() {
   var p = lprof() || {};
   var logoSrc = p.logo || null;
-  var chipImg = document.getElementById('cloud-logo-chip-img');
-  var chipPh  = document.getElementById('cloud-logo-chip-placeholder');
-  var delBtn  = document.getElementById('cloud-logo-delete-btn');
-  var hint    = document.getElementById('cloud-logo-chip-hint');
+  var chipImg   = document.getElementById('cloud-logo-chip-img');
+  var chipAppLg = document.getElementById('cloud-logo-chip-applogo');
+  var chipPh    = document.getElementById('cloud-logo-chip-placeholder');
+  var delBtn    = document.getElementById('cloud-logo-delete-btn');
+  var addBtn    = document.getElementById('cloud-logo-add-btn');
+  var addLabel  = document.getElementById('cloud-logo-add-label');
+  var hint      = document.getElementById('cloud-logo-chip-hint');
   if (logoSrc) {
-    if (chipImg) { chipImg.src = logoSrc; chipImg.style.display = 'block'; }
-    if (chipPh)  chipPh.style.display  = 'none';
-    if (delBtn)  delBtn.style.display  = 'block';
-    if (hint)    hint.textContent = 'Logo set ✓ · Tap image to replace';
+    // User logo is set — show it, hide fallbacks
+    if (chipImg)   { chipImg.src = logoSrc; chipImg.style.display = 'block'; }
+    if (chipAppLg) chipAppLg.style.display = 'none';
+    if (chipPh)    chipPh.style.display    = 'none';
+    if (delBtn)    delBtn.style.display    = 'block';
+    if (addLabel)  addLabel.textContent    = '🔄 Change';
+    if (hint)      hint.textContent        = 'Your logo ✓ · Tap to replace · Shown on all PDFs';
   } else {
-    if (chipImg) { chipImg.src = ''; chipImg.style.display = 'none'; }
-    if (chipPh)  chipPh.style.display  = 'flex';
-    if (delBtn)  delBtn.style.display  = 'none';
-    if (hint)    hint.textContent = 'Tap image to upload · Shown on all PDFs';
+    // No user logo — show faded app logo as preview hint
+    if (chipImg)   { chipImg.src = ''; chipImg.style.display = 'none'; }
+    if (chipAppLg) chipAppLg.style.display = 'block';
+    if (chipPh)    chipPh.style.display    = 'none';
+    if (delBtn)    delBtn.style.display    = 'none';
+    if (addLabel)  addLabel.textContent    = '➕ Add Logo';
+    if (hint)      hint.textContent        = 'Tap to set your logo · Appears on all PDF reports';
   }
 }
 // ── Handle upload from chip file input ──
@@ -7449,14 +7468,14 @@ function _handleLogoChipUpload(evt) {
     try { cloudBackupNow && cloudBackupNow(true); } catch(ex) {}
     _refreshLogoChip();
     _refreshLogoModalPreview();
-    toast('✅ Logo saved!', 'ok');
+    toast('✅ PDF logo saved!', 'ok');
   };
   reader.readAsDataURL(file);
   evt.target.value = '';
 }
 // ── Delete logo from chip ──
 function _clearLogoChip() {
-  if (!confirm('Remove company logo?')) return;
+  if (!confirm('Remove your PDF logo? The app logo will be used instead.')) return;
   var p = lprof() || {};
   p.logo = null;
   sprof(p);
@@ -12915,7 +12934,7 @@ function refreshCloudModalState() {
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = 'none';
     var logoSection = document.getElementById('cloud-logo-section');
-    if (logoSection) logoSection.style.display = 'block'; // always show — button has Pro check built-in
+    if (logoSection) logoSection.style.display = 'block'; // always visible for all users
     var siteEl = document.getElementById('cloud-site-id-display');
     var displaySite = siteId || ((_adminSBUser && _adminSBUser.id) ? 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) : '—');
     if (siteEl) siteEl.textContent = 'Site ID: ' + displaySite;
@@ -12940,9 +12959,9 @@ function refreshCloudModalState() {
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
     // Logged in but FREE user (no active subscription) — show account info + upgrade option
-    // Logo is Pro-only — hide for free users
+    // Logo section is available to all users — show it
     var logoSectionFree = document.getElementById('cloud-logo-section');
-    if (logoSectionFree) logoSectionFree.style.display = 'none';
+    if (logoSectionFree) logoSectionFree.style.display = 'block';
     var adminPanel = document.getElementById('ctab-admin');
     var adminEmail = safeLS.getItem('cm_admin_email') || ((_adminSBUser && _adminSBUser.email) ? _adminSBUser.email : '');
     if (adminPanel) {
@@ -13050,7 +13069,7 @@ function _applyFullBackup(d) {
       safeLS.setItem('sanj_signatures', d.settings.signatures);
     }
   }
-  // Refresh logo chip UI after backup applied (so logo shows immediately)
+  // Refresh logo chip UI after data applied so logo appears immediately
   try { if (typeof _refreshLogoChip === 'function') _refreshLogoChip(); } catch(e) {}
 }
 
@@ -13295,7 +13314,7 @@ function cloudRestoreNow() {
     if (!r.data || !r.data.data) { toast('No cloud data found for this project', 'err'); return; }
     var d = r.data.data;
     _applyFullBackup(d);
-    if (d.nid) safeLS.setItem('cm_nid', d.nid);
+    if (d.nid) safeLS.setItem('cm_nid', String(d.nid));
     try { NID = parseInt(safeLS.getItem('cm_nid') || '1'); } catch(e) {}
     AD = ld();
     try { applyProfile && applyProfile(); } catch(e) {}
@@ -13303,7 +13322,7 @@ function cloudRestoreNow() {
     try { renderCurrentTab && renderCurrentTab(); } catch(e) {}
     try {
       var curTab = document.querySelector('.tab-btn.active');
-      if (curTab) { var tn = curTab.getAttribute('data-tab'); if (tn && typeof showTab === 'function') showTab(tn); }
+      if (curTab) { var tn = curTab.getAttribute('data-tab'); if (tn && typeof switchTab === 'function') switchTab(tn); }
     } catch(e) {}
     toast('✅ Data restored from cloud!', 'ok');
   }).catch(function(e) { toast('Restore failed — check connection', 'err'); });
@@ -13428,7 +13447,7 @@ function _writeProjectToLocal(projName, d) {
 function _adminCloudPullAll(silent, onDone) {
   if (!_sb || !_adminSBUser) return;
   var uid = _adminSBUser.id;
-  // Fetch every backup_key row for this admin
+  // Fetch every backup_key row for this admin (skip free-user backup rows)
   _sb.from('cloud_backups')
     .select('backup_key, data, updated_at')
     .eq('admin_id', uid)
@@ -13451,16 +13470,19 @@ function _adminCloudPullAll(silent, onDone) {
 
       var applied = 0;
       var firstProjName = null;
+
       rows.forEach(function(row) {
         var d = row.data;
         if (!d) return;
         var bk = row.backup_key || '';
+        // Skip free-user backup rows
+        if (bk.indexOf('free-') === 0) return;
+
         var projName = keyToName[bk];
 
-        // If we can't match by key, try matching by profile address name in data
+        // Match by profile address if key map fails
         if (!projName && d.prof && d.prof.address) {
           projName = d.prof.address;
-          // Auto-register this project if not known yet
           if (projName && !projects.find(function(p){ return p.name === projName; })) {
             projects.push({ name: projName, createdAt: Date.now() });
             _saveProjects(projects);
@@ -13468,7 +13490,7 @@ function _adminCloudPullAll(silent, onDone) {
           }
         }
 
-        // Fallback: extract slug from backup_key and auto-create project
+        // Fallback: extract project name from slug in backup_key
         if (!projName) {
           var m = bk.match(/-proj-(.+)$/);
           if (m) {
@@ -13477,7 +13499,7 @@ function _adminCloudPullAll(silent, onDone) {
             if (matched) {
               projName = matched.name;
             } else {
-              // Auto-create a project from the slug for fresh login recovery
+              // Auto-create project from slug — critical for fresh install recovery
               projName = slug.replace(/-/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
               if (!projects.find(function(p){ return p.name === projName; })) {
                 projects.push({ name: projName, createdAt: Date.now() });
@@ -13496,7 +13518,7 @@ function _adminCloudPullAll(silent, onDone) {
         }
       });
 
-      // If no active project is set but we pulled data, auto-activate the first project
+      // On fresh install: no active project set — auto-activate first pulled project
       var currentActive = _getActiveProject();
       if (!currentActive && firstProjName) {
         try { localStorage.setItem(_ACTIVE_PROJ_KEY, firstProjName); } catch(e) {}
@@ -13607,7 +13629,6 @@ function _startAdminRealtime() {
 
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
-  // Pull all projects every 30s (realtime handles instant updates)
   var SYNC_MS = 30000;
   _cloudSyncTimer = setInterval(function() {
     if (!isCloudActivated || !isCloudActivated()) return;
@@ -13615,16 +13636,14 @@ function startAutoSync() {
   }, SYNC_MS);
   // Start Realtime for instant push notifications from other devices
   _startAdminRealtime();
-  // Pull all projects on start — wait for sub check to complete first (up to 6s)
-  // This is critical for fresh logins where _sbSubActive may not yet be set
+  // Pull all projects on start — wait for subscription check to complete first.
+  // Critical: _sbSubChecked must be true before pulling so Pro namespace is active.
   var _pullAttempts = 0;
   function _deferredPull() {
     _pullAttempts++;
     if (window._sbSubChecked || _pullAttempts > 12) {
-      // Sub check done (or timed out) — pull now
       _adminCloudPullAll(true);
     } else {
-      // Still waiting for sub check — retry in 500ms
       setTimeout(_deferredPull, 500);
     }
   }
@@ -13641,6 +13660,111 @@ function _scheduleCloudPush() {
     _cloudPushTimer = null;
     cloudBackupNow(true); // silent push after user finishes editing
   }, 3000); // 3s debounce — waits until user stops making changes
+
+  // Free users: also schedule a lightweight free-tier backup so data
+  // survives PWA removal + reinstall (IDB/localStorage get wiped by OS)
+  if (_adminSBUser && !window._sbSubActive) {
+    _scheduleFreeUserBackup();
+  }
+}
+
+// ── Free-user silent cloud backup ───────────────────────────────────────────
+// Saves all local app data to cloud_backups under key "free-{uid}" so that
+// after PWA is deleted + reinstalled, data is restored on next login.
+// No Pro subscription required. No confirm dialog. Fully silent.
+var _freeBackupTimer = null;
+function _scheduleFreeUserBackup() {
+  if (!_sb || !_adminSBUser) return;
+  if (window._sbSubActive) return; // Pro handles its own backup
+  if (_freeBackupTimer) clearTimeout(_freeBackupTimer);
+  _freeBackupTimer = setTimeout(function() {
+    _freeBackupTimer = null;
+    _doFreeUserBackup();
+  }, 5000); // slightly longer debounce than Pro to avoid conflicts
+}
+
+function _doFreeUserBackup() {
+  if (!_sb || !_adminSBUser) return;
+  if (window._sbSubActive) return; // Pro handles its own backup
+  var uid = _adminSBUser.id;
+  var freeKey = 'free-' + uid.replace(/-/g,'').slice(0,16);
+  // Collect all current local data
+  var allCmKeys = {};
+  try {
+    var _lsr = window.localStorage;
+    for (var i = 0; i < _lsr.length; i++) {
+      var k = _lsr.key(i);
+      if (!k) continue;
+      if ((k.indexOf('cm_') === 0 || k.indexOf('proj__') === 0 || k.indexOf('sanj_') === 0) &&
+          k.indexOf('sanj_admin_uid') !== 0 && k.indexOf('sanj_last_uid') !== 0) {
+        var v = _lsr.getItem(k);
+        if (v !== null) allCmKeys[k] = v;
+      }
+    }
+  } catch(e) {}
+  var payload = {
+    backup_type: 'free',
+    user_id: uid,
+    data: allCmKeys,
+    projects: [],
+    lastSync: Date.now(),
+    version: '3.0-free'
+  };
+  try { payload.projects = JSON.parse(localStorage.getItem('sanj_projects_v1') || '[]'); } catch(e) {}
+  _sb.from('cloud_backups').upsert({
+    admin_id: uid,
+    backup_key: freeKey,
+    data: payload
+  }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
+    if (!r.error) {
+      try { localStorage.setItem('sanj_free_backup_ts', String(Date.now())); } catch(e) {}
+    }
+  }).catch(function() {});
+}
+
+// ── Restore free-user backup after re-login ──────────────────────────────────
+// Called during free user login. Silently restores data if local storage is empty.
+function _restoreFreeUserBackupIfEmpty() {
+  if (!_sb || !_adminSBUser) return;
+  if (window._sbSubActive) return; // Pro has its own restore path
+  // Only restore if local data appears empty (fresh install after PWA delete)
+  var hasLocalData = false;
+  try {
+    var _lsr = window.localStorage;
+    for (var i = 0; i < _lsr.length; i++) {
+      var k = _lsr.key(i);
+      if (k && (k.indexOf('cm_') === 0 || k.indexOf('proj__') === 0)) {
+        hasLocalData = true; break;
+      }
+    }
+  } catch(e) {}
+  if (hasLocalData) return; // Local data exists — no restore needed
+  var uid = _adminSBUser.id;
+  var freeKey = 'free-' + uid.replace(/-/g,'').slice(0,16);
+  _sb.from('cloud_backups').select('data').eq('admin_id', uid).eq('backup_key', freeKey).maybeSingle().then(function(r) {
+    if (r.error || !r.data || !r.data.data) return; // nothing saved yet
+    var backup = r.data.data;
+    if (!backup.data) return;
+    // Restore all keys
+    try {
+      Object.keys(backup.data).forEach(function(k) {
+        var v = backup.data[k];
+        if (v !== null && v !== undefined) {
+          try { window.localStorage.setItem(k, v); } catch(e) {}
+        }
+      });
+    } catch(e) {}
+    // Restore projects list
+    if (backup.projects && backup.projects.length) {
+      try { localStorage.setItem('sanj_projects_v1', JSON.stringify(backup.projects)); } catch(e) {}
+    }
+    // Reload UI with restored data
+    try { AD = ld(); } catch(e) {}
+    try { applyProfile && applyProfile(); } catch(e) {}
+    try { renderDashboard && renderDashboard(); } catch(e) {}
+    try { _settLoadProjDropdown && _settLoadProjDropdown(); } catch(e) {}
+    toast('✅ Your data has been restored!', 'ok');
+  }).catch(function() {});
 }
 
 // -- Supabase credential viewer --
@@ -13827,6 +13951,11 @@ function _viewerLogout() {
   if (_viewerRealtimeChannel) {
     try { _sb && _sb.removeChannel(_viewerRealtimeChannel); } catch(e) {}
     _viewerRealtimeChannel = null;
+  }
+  // Stop viewer permissions realtime channel
+  if (window._viewerPermsChannel) {
+    try { _sb && _sb.removeChannel(window._viewerPermsChannel); } catch(e) {}
+    window._viewerPermsChannel = null;
   }
   // Stop safety-net poll
   try { if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; } } catch(e) {}
@@ -14245,6 +14374,8 @@ function doSmartLogin() {
           } else {
             toast('✅ Logged in as free user.', 'ok');
           }
+          // Silently restore free-user backup if local data is empty (e.g. after PWA reinstall)
+          setTimeout(function() { _restoreFreeUserBackupIfEmpty(); }, 1000);
           openPayLanding(true); // show upgrade offer (has "Continue free" button)
         }
         btn.textContent = '🔑 Login'; btn.disabled = false;
@@ -14320,6 +14451,10 @@ function showAuthErr(tab, msg) {
 // Same user → data kept. New user → local data cleared (their cloud backup loads instead).
 function _handleAccountSwitch(newUid) {
   if (!newUid) return;
+  // Persist UID immediately so _pk() can build the correct key prefix
+  // on next boot (before _adminSBUser is available in memory)
+  var shortUid = 'user-' + newUid.replace(/-/g,'').slice(0,12);
+  try { localStorage.setItem('sanj_admin_uid', shortUid); } catch(e) {}
   var lastUid = '';
   try { lastUid = localStorage.getItem('sanj_last_uid') || ''; } catch(e) {}
   if (lastUid && lastUid !== newUid) {
@@ -15043,15 +15178,26 @@ function _showViewerBar(email) {
     +'</div>');
   var main = document.getElementById('main-app');
   if (main) main.style.marginTop = '32px';
+  // Hide settings button — viewers must not access settings
+  var settBtn = document.getElementById('settings-hdr-btn');
+  if (settBtn) settBtn.style.display = 'none';
+  // Replace settings button area with a viewer eye indicator
+  var logoWrap = settBtn && settBtn.parentElement;
+  if (logoWrap && !document.getElementById('viewer-eye-indicator')) {
+    var eyeEl = document.createElement('span');
+    eyeEl.id = 'viewer-eye-indicator';
+    eyeEl.title = 'Viewer mode (read-only)';
+    eyeEl.style.cssText = 'font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.55);border-radius:7px;flex-shrink:0;margin-top:-2px;cursor:default;';
+    eyeEl.textContent = '👁️';
+    logoWrap.appendChild(eyeEl);
+  }
 }
 
 function _applyViewerPermissions(perms, canPrint, siteId) {
-  // Hide all tab buttons not in perms using data-tab attribute
+  // Show only permitted tabs; hide everything else
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     var tabId = btn.getAttribute('data-tab');
-    if (perms.indexOf(tabId) === -1) {
-      btn.style.display = 'none';
-    }
+    btn.style.display = perms.indexOf(tabId) === -1 ? 'none' : '';
   });
   // Disable all write actions
   _disableViewerWrites();
@@ -15067,6 +15213,57 @@ function _applyViewerPermissions(perms, canPrint, siteId) {
   // Navigate to first permitted tab
   if (perms.length > 0) {
     setTimeout(function() { switchTab(perms[0]); }, 800);
+  }
+
+  // ── Realtime listener for permission changes by admin ──────────
+  // If admin changes tab permissions, viewer sees new tabs immediately
+  if (!window._viewerPermsChannel && _sb && siteId) {
+    var token = safeLS.getItem('sj_viewer_token') || '';
+    if (token) {
+      try {
+        window._viewerPermsChannel = _sb
+          .channel('viewer-perms-' + token.slice(0,16))
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'viewers',
+            filter: 'password_hash=eq.' + token
+          }, function(payload) {
+            try {
+              var newData = payload.new;
+              if (!newData) return;
+              var newPerms   = newData.permissions || [];
+              var newPrint   = !!newData.can_print;
+              // Persist updated permissions
+              safeLS.setItem('sj_viewer_perms',  JSON.stringify(newPerms));
+              safeLS.setItem('sj_viewer_print',  newPrint ? '1' : '0');
+              // Re-apply tab visibility immediately
+              document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
+                btn.style.display = newPerms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
+              });
+              // If current tab is no longer permitted, switch to first allowed tab
+              var curTab = document.querySelector('.tab-btn.active');
+              var curTabId = curTab ? curTab.getAttribute('data-tab') : '';
+              if (curTabId && newPerms.indexOf(curTabId) === -1 && newPerms.length > 0) {
+                switchTab(newPerms[0]);
+              }
+              _disableViewerWrites();
+              if (newPrint) {
+                document.querySelectorAll('button').forEach(function(b) {
+                  var t = b.textContent.trim();
+                  if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
+                    b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
+                  }
+                });
+              }
+              toast('🔄 Permissions updated by admin', 'ok');
+            } catch(e) {}
+          })
+          .subscribe();
+      } catch(e) {
+        console.warn('Viewer permission realtime failed:', e);
+      }
+    }
   }
 }
 
