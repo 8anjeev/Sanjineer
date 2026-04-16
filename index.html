@@ -3506,10 +3506,29 @@ function _settLoadProjDropdown() {
         editBtn.addEventListener('click', function(e) {
           e.stopPropagation();
           var newName = prompt('Rename project:', p.name);
-          if (!newName || !newName.trim() || newName.trim() === p.name) return;
+          if (!newName || !newName.trim()) return;
           newName = newName.trim();
+          // No change (exact same)
+          if (newName === p.name) return;
           var projs = (typeof _getProjects === 'function') ? _getProjects() : [];
-          if (projs.find(function(x){ return x.name === newName; })) { if (typeof toast === 'function') toast('Name already exists', 'err'); return; }
+          var newNameLower = newName.toLowerCase();
+          // Exact match — can't rename to an existing project name
+          var exactMatch = projs.find(function(x){ return x.name === newName; });
+          if (exactMatch) { if (typeof toast === 'function') toast('A project with that name already exists', 'err'); return; }
+          // Case-insensitive match (e.g. "site A" vs "Site A") — ask user which to keep
+          var caseMatch = projs.find(function(x){ return x.name !== p.name && x.name.toLowerCase() === newNameLower; });
+          if (caseMatch) {
+            var keep = confirm('A project named "' + caseMatch.name + '" already exists (same name, different capitalisation).\n\nTap OK to keep "' + newName + '" (remove "' + caseMatch.name + '"), or Cancel to keep "' + caseMatch.name + '" (cancel rename).');
+            if (!keep) return; // user chose to keep existing, abort rename
+            // Remove the conflicting project
+            projs = projs.filter(function(x){ return x.name !== caseMatch.name; });
+            // If the conflicting one was active, switch active to the renamed one
+            var curActive = '';
+            try { curActive = localStorage.getItem('sanj_active_proj') || ''; } catch(e2) {}
+            if (curActive === caseMatch.name) {
+              try { localStorage.setItem('sanj_active_proj', newName); } catch(e2) {}
+            }
+          }
           var idx = projs.findIndex(function(x){ return x.name === p.name; });
           if (idx === -1) return;
           projs[idx].name = newName;
@@ -3603,8 +3622,19 @@ function _settSaveProject() {
     if (typeof toast === 'function') toast('⭐ Upgrade to Pro for multiple projects', '');
     return;
   }
+  // Exact match check
   if (projects.find(function(p){ return p.name === name; })) {
     if (typeof toast === 'function') toast('Project already exists', 'err'); return;
+  }
+  // Case-insensitive match — ask user which name to keep
+  var nameLower = name.toLowerCase();
+  var caseMatch = projects.find(function(p){ return p.name.toLowerCase() === nameLower; });
+  if (caseMatch) {
+    var keep = confirm('A project named "' + caseMatch.name + '" already exists (same name, different capitalisation).\n\nTap OK to keep "' + name + '" (replace "' + caseMatch.name + '"), or Cancel to keep "' + caseMatch.name + '" (cancel adding).');
+    if (!keep) return;
+    // Remove the conflicting project; keep new name
+    projects = projects.filter(function(p){ return p.name !== caseMatch.name; });
+    if (typeof _saveProjects === 'function') _saveProjects(projects);
   }
   var isFirstProject = (projects.length === 0);
   projects.push({ name: name, createdAt: Date.now() });
@@ -3694,6 +3724,12 @@ function closeSettingsPanel() {
 
 // ── Logo button in settings panel ───────────────────────────────────────────
 function _settOpenLogoEdit() {
+  // Pro-only feature
+  if (!window._sbSubActive) {
+    if (typeof toast === 'function') toast('⭐ Pro required to upload company logo', '');
+    if (typeof openPayLanding === 'function') { closeSettingsPanel(); openPayLanding(true); }
+    return;
+  }
   var inp = document.getElementById('sett-logo-file-inp');
   if (!inp) return;
   var p = lprof ? lprof() : null;
@@ -3715,6 +3751,10 @@ function _settOpenLogoEdit() {
   }
 }
 function _settLogoFileSelected(evt) {
+  if (!window._sbSubActive) {
+    if (typeof toast === 'function') toast('⭐ Pro required to upload company logo', '');
+    return;
+  }
   var file = evt.target.files && evt.target.files[0];
   if (!file) return;
   var reader = new FileReader();
@@ -3724,6 +3764,8 @@ function _settLogoFileSelected(evt) {
     if (typeof sprof === 'function') sprof(p);
     _settUpdateLogoBtn();
     if (typeof applyProfile === 'function') applyProfile();
+    // Cloud backup — pass data URL and company name for storage
+    _uploadLogoToSupabase(e.target.result, file.type);
     if (typeof toast === 'function') toast('✅ Logo saved!', 'ok');
   };
   reader.readAsDataURL(file);
@@ -7510,8 +7552,48 @@ function _refreshLogoChip() {
     if (hint)      hint.textContent        = 'Tap to set your logo · Appears on all PDF reports';
   }
 }
+// ── Upload logo to Supabase Storage with company name ──────────────────────
+async function _uploadLogoToSupabase(dataUrl, mimeType) {
+  try {
+    if (!window._sb || !window._adminSBUser) return; // not logged in
+    // Determine company name: from profile or active project
+    var companyName = 'company';
+    try {
+      var p = (typeof lprof === 'function') ? lprof() : null;
+      if (p && p.company) companyName = p.company;
+      else if (p && p.name) companyName = p.name;
+      else {
+        var active = localStorage.getItem('sanj_active_proj') || '';
+        if (active) companyName = active;
+      }
+    } catch(ex) {}
+    // Sanitise company name for storage path (alphanumeric + dash/underscore)
+    var safeName = companyName.replace(/[^a-zA-Z0-9_\-\.]/g, '_').substring(0, 60);
+    // Convert data URL to Blob
+    var mType = mimeType || 'image/png';
+    var ext = mType === 'image/jpeg' ? 'jpg' : mType === 'image/webp' ? 'webp' : 'png';
+    var byteStr = atob(dataUrl.split(',')[1]);
+    var arr = new Uint8Array(byteStr.length);
+    for (var i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+    var blob = new Blob([arr], { type: mType });
+    var userId = window._adminSBUser.id || 'unknown';
+    var filePath = userId + '/' + safeName + '_logo.' + ext;
+    var result = await window._sb.storage.from('logos').upload(filePath, blob, { upsert: true, contentType: mType });
+    if (result.error) {
+      console.warn('Logo cloud upload error:', result.error.message);
+    } else {
+      console.log('Logo uploaded to cloud:', filePath);
+    }
+  } catch(ex) {
+    console.warn('_uploadLogoToSupabase failed:', ex);
+  }
+}
 // ── Handle upload from chip file input ──
 function _handleLogoChipUpload(evt) {
+  if (!window._sbSubActive) {
+    if (typeof toast === 'function') toast('⭐ Pro required to upload company logo', '');
+    return;
+  }
   var file = evt.target.files && evt.target.files[0];
   if (!file) return;
   var reader = new FileReader();
@@ -7522,6 +7604,7 @@ function _handleLogoChipUpload(evt) {
     sprof(p);
     try { applyProfile && applyProfile(); } catch(ex) {}
     try { cloudBackupNow && cloudBackupNow(true); } catch(ex) {}
+    _uploadLogoToSupabase(dataUrl, file.type);
     _refreshLogoChip();
     _refreshLogoModalPreview();
     toast('✅ PDF logo saved!', 'ok');
@@ -7553,8 +7636,10 @@ function _handleLogoModalUpload(evt) {
     sprof(p);
     // Also sync to header logo
     try { applyProfile && applyProfile(); } catch(ex) {}
-    // Backup to cloud immediately
+    // Backup to cloud immediately (profile-level)
     try { cloudBackupNow && cloudBackupNow(true); } catch(ex) {}
+    // Upload logo to Supabase Storage bucket with company name
+    _uploadLogoToSupabase(dataUrl, file.type);
     _refreshLogoModalPreview();
     toast('✅ Logo saved!', 'ok');
   };
