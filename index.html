@@ -13257,9 +13257,12 @@ function cloudBackupNow(silent) {
         var _v = _rawSafeLS.getItem(_kk);
         if (_v !== null) {
           // Strip project prefix so restore works generically
-          var _stripped = _kk.replace(/^proj__[^_]+__[^_]+__/, 'cm_');
-          // If no prefix was stripped, keep original key
-          if (_stripped === _kk && _kk.indexOf('proj__') === 0) return;
+          // Strip project prefix — handles both with-uid (proj__user-XX__slug__cm_key)
+          // and without-uid (proj__slug__cm_key) formats.
+          // ⚠ Replace with '' not 'cm_' — the remainder already starts with cm_
+          var _stripped = _kk.replace(/^proj__(?:[^_]+__){1,2}/, '');
+          // If regex didn't strip anything (shouldn't happen for proj__ keys), skip
+          if (!_stripped || _stripped === _kk) return;
           _allCmKeys[_stripped] = _v;
         }
       });
@@ -13509,7 +13512,13 @@ function _adminCloudPullAll(silent, onDone) {
     .eq('admin_id', uid)
     .then(function(r) {
       if (r.error || !r.data || !r.data.length) {
-        if (!silent) toast('No cloud data found', '');
+        // No cloud data at all — if user has no projects either, prompt to create one
+        var existingProjects = _getProjects();
+        if (!existingProjects.length && typeof _showFirstProjectPopup === 'function') {
+          _showFirstProjectPopup();
+        } else if (!silent) {
+          toast('No cloud data found', '');
+        }
         if (onDone) onDone(false);
         return;
       }
@@ -13525,7 +13534,7 @@ function _adminCloudPullAll(silent, onDone) {
       });
 
       var applied = 0;
-      var firstProjName = null;
+      var pulledProjectNames = [];
 
       rows.forEach(function(row) {
         var d = row.data;
@@ -13540,7 +13549,7 @@ function _adminCloudPullAll(silent, onDone) {
         if (!projName && d.prof && d.prof.address) {
           projName = d.prof.address;
           if (projName && !projects.find(function(p){ return p.name === projName; })) {
-            projects.push({ name: projName, createdAt: Date.now() });
+            projects.push({ name: projName, createdAt: d.lastSync || Date.now() });
             _saveProjects(projects);
             keyToName[bk] = projName;
           }
@@ -13558,7 +13567,7 @@ function _adminCloudPullAll(silent, onDone) {
               // Auto-create project from slug — critical for fresh install recovery
               projName = slug.replace(/-/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
               if (!projects.find(function(p){ return p.name === projName; })) {
-                projects.push({ name: projName, createdAt: Date.now() });
+                projects.push({ name: projName, createdAt: d.lastSync || Date.now() });
                 _saveProjects(projects);
                 keyToName[bk] = projName;
               }
@@ -13570,15 +13579,29 @@ function _adminCloudPullAll(silent, onDone) {
           _writeProjectToLocal(projName, d);
           _lastCloudTimestamps[bk] = d.lastSync || 0;
           applied++;
-          if (!firstProjName) firstProjName = projName;
+          pulledProjectNames.push(projName);
         }
       });
 
-      // On fresh install: no active project set — auto-activate first pulled project
+      // ── Always activate the correct project after pull ──
+      // Sort pulled projects by creation date — oldest = first/default
       var currentActive = _getActiveProject();
-      if (!currentActive && firstProjName) {
-        try { localStorage.setItem(_ACTIVE_PROJ_KEY, firstProjName); } catch(e) {}
-        try { _initProjectNID && _initProjectNID(); } catch(e) {}
+      var activeIsValid = currentActive && projects.find(function(p){ return p.name === currentActive; });
+      
+      if (!activeIsValid || applied > 0) {
+        // Pick the oldest project from the pulled list as default
+        var sortedProjects = projects.slice().sort(function(a, b){
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
+        var defaultProj = sortedProjects.length ? sortedProjects[0].name : null;
+
+        // Only switch active if current active is missing/invalid OR this is fresh pull on new device
+        if (!activeIsValid && defaultProj) {
+          try { localStorage.setItem(_ACTIVE_PROJ_KEY, defaultProj); } catch(e) {}
+          try { _initProjectNID && _initProjectNID(); } catch(e) {}
+          var hdrProjName = document.getElementById('hdr-proj-name');
+          if (hdrProjName) hdrProjName.textContent = '\uD83D\uDCC2 ' + defaultProj;
+        }
       }
 
       // Update project dropdown and UI
