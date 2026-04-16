@@ -3477,13 +3477,20 @@ function _deleteProjectIfEmpty(projName) {
   try { uid = localStorage.getItem('sanj_admin_uid') || ''; } catch(e) {}
   var prefix = uid ? ('proj__' + uid + '__' + slug + '__') : ('proj__' + slug + '__');
 
-  // Check if ANY localStorage key with this prefix exists
+  // Active project cannot be deleted
+  var active = '';
+  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  if (active === projName) {
+    if (typeof toast === 'function') toast('⚠️ Cannot delete the active project — switch to another first', 'err');
+    return;
+  }
+
+  // Check if project has data — warn user but allow force delete
   var hasData = false;
   try {
     for (var i = 0; i < localStorage.length; i++) {
       var k = localStorage.key(i);
       if (k && k.indexOf(prefix) === 0) {
-        // Check if key has actual non-empty data
         var val = localStorage.getItem(k);
         if (val && val !== '{}' && val !== '[]' && val !== 'null' && val !== '') {
           hasData = true;
@@ -3493,27 +3500,12 @@ function _deleteProjectIfEmpty(projName) {
     }
   } catch(e) {}
 
-  if (hasData) {
-    if (typeof toast === 'function') toast('⚠️ Project has data — clear all data first before deleting', 'err');
-    return;
-  }
+  var confirmMsg = hasData
+    ? 'Delete project "' + projName + '" and ALL its data? This cannot be undone.'
+    : 'Delete project "' + projName + '"? This cannot be undone.';
+  if (!confirm(confirmMsg)) return;
 
-  // Active project cannot be deleted
-  var active = '';
-  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
-  if (active === projName) {
-    if (typeof toast === 'function') toast('⚠️ Cannot delete the active project — switch to another first', 'err');
-    return;
-  }
-
-  if (!confirm('Delete project "' + projName + '"? This cannot be undone.')) return;
-
-  // Remove from project list
-  var projs = (typeof _getProjects === 'function') ? _getProjects() : [];
-  projs = projs.filter(function(x) { return x.name !== projName; });
-  if (typeof _saveProjects === 'function') _saveProjects(projs);
-
-  // Remove any residual empty keys for this project
+  // Remove ALL localStorage keys for this project
   try {
     var toRemove = [];
     for (var j = 0; j < localStorage.length; j++) {
@@ -3522,6 +3514,11 @@ function _deleteProjectIfEmpty(projName) {
     }
     toRemove.forEach(function(k) { localStorage.removeItem(k); });
   } catch(e) {}
+
+  // Remove from project list
+  var projs = (typeof _getProjects === 'function') ? _getProjects() : [];
+  projs = projs.filter(function(x) { return x.name !== projName; });
+  if (typeof _saveProjects === 'function') _saveProjects(projs);
 
   _settLoadProjDropdown();
   if (typeof toast === 'function') toast('🗑 Project "' + projName + '" deleted', 'ok');
@@ -6737,7 +6734,7 @@ service cloud.firestore {
                   <span>⚙️</span><span>Manage</span>
                 </button>
                 <!-- Add new viewer button -->
-                <button onclick="_openViewerManager()" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7c3aed,#6366f1);border:none;color:#fff;border-radius:7px;font-size:16px;font-weight:800;cursor:pointer;flex-shrink:0;">+</button>
+                <button onclick="_openViewerManagerCreate()" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7c3aed,#6366f1);border:none;color:#fff;border-radius:7px;font-size:16px;font-weight:800;cursor:pointer;flex-shrink:0;">+</button>
               </div>
             </div>
             <!-- Inline viewer list -->
@@ -7735,6 +7732,27 @@ function _openViewerManager() {
     return;
   }
   openViewerMgmt();
+}
+
+function _openViewerManagerCreate() {
+  if (!window._sbSubActive) {
+    toast('⭐ Pro feature — subscribe to create viewer accounts', '');
+    return;
+  }
+  if (!_adminSBUser) {
+    toast('Please log in first', 'err');
+    return;
+  }
+  // Open the modal
+  loadViewerAccounts();
+  document.getElementById('viewer-mgmt-modal').classList.add('show');
+  // Instantly scroll to top and focus the viewer name input
+  setTimeout(function() {
+    var scrollBody = document.querySelector('#viewer-mgmt-modal > div > div[style*="overflow-y"]');
+    if (scrollBody) scrollBody.scrollTop = 0;
+    var inp = document.getElementById('vw-name');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 80);
 }
 
 
