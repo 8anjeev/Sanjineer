@@ -3470,6 +3470,63 @@ function _settRipple(e, btn) {
 }
 
 // ── Settings panel project helpers ──────────────────────────
+function _deleteProjectIfEmpty(projName) {
+  // Build the prefix this project uses for localStorage keys
+  var slug = projName.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'default';
+  var uid = '';
+  try { uid = localStorage.getItem('sanj_admin_uid') || ''; } catch(e) {}
+  var prefix = uid ? ('proj__' + uid + '__' + slug + '__') : ('proj__' + slug + '__');
+
+  // Check if ANY localStorage key with this prefix exists
+  var hasData = false;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) {
+        // Check if key has actual non-empty data
+        var val = localStorage.getItem(k);
+        if (val && val !== '{}' && val !== '[]' && val !== 'null' && val !== '') {
+          hasData = true;
+          break;
+        }
+      }
+    }
+  } catch(e) {}
+
+  if (hasData) {
+    if (typeof toast === 'function') toast('⚠️ Project has data — clear all data first before deleting', 'err');
+    return;
+  }
+
+  // Active project cannot be deleted
+  var active = '';
+  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  if (active === projName) {
+    if (typeof toast === 'function') toast('⚠️ Cannot delete the active project — switch to another first', 'err');
+    return;
+  }
+
+  if (!confirm('Delete project "' + projName + '"? This cannot be undone.')) return;
+
+  // Remove from project list
+  var projs = (typeof _getProjects === 'function') ? _getProjects() : [];
+  projs = projs.filter(function(x) { return x.name !== projName; });
+  if (typeof _saveProjects === 'function') _saveProjects(projs);
+
+  // Remove any residual empty keys for this project
+  try {
+    var toRemove = [];
+    for (var j = 0; j < localStorage.length; j++) {
+      var lk = localStorage.key(j);
+      if (lk && lk.indexOf(prefix) === 0) toRemove.push(lk);
+    }
+    toRemove.forEach(function(k) { localStorage.removeItem(k); });
+  } catch(e) {}
+
+  _settLoadProjDropdown();
+  if (typeof toast === 'function') toast('🗑 Project "' + projName + '" deleted', 'ok');
+}
+
 function _settLoadProjDropdown() {
   var listEl = document.getElementById('sett-proj-list');
   var addBtn  = document.getElementById('sett-proj-add-btn');
@@ -3543,9 +3600,19 @@ function _settLoadProjDropdown() {
           _settLoadProjDropdown();
           if (typeof toast === 'function') toast('✅ Renamed to: ' + newName, 'ok');
         });
+        // Delete button — only allowed if project has no data
+        var delBtn = document.createElement('button');
+        delBtn.title = 'Delete project';
+        delBtn.style.cssText = 'background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;flex-shrink:0;line-height:1.4;-webkit-tap-highlight-color:transparent;';
+        delBtn.textContent = '🗑';
+        delBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          _deleteProjectIfEmpty(p.name);
+        });
         chip.innerHTML = '<span style="font-size:12px;flex-shrink:0;">' + (isActive ? '✅' : '📂') + '</span>'
           + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + p.name + '</span>';
         chip.appendChild(editBtn);
+        chip.appendChild(delBtn);
         listEl.appendChild(chip);
       });
     }
@@ -11357,6 +11424,7 @@ function boqImportExcelFixed(file){
         var di=document.getElementById('boq-drop-icon'),dl=document.getElementById('boq-drop-label'),si=document.getElementById('boq-import-status');
         if(parsed.sections.length){
           boqSave(parsed); boqRender();
+          setTimeout(function(){ if(typeof cloudBackupNow==='function') cloudBackupNow(true); }, 800);
           if(di) di.textContent='✅'; if(dl) dl.textContent='Import Excel or PDF';
           if(si) si.textContent='✅ '+parsed.sections.reduce(function(s,x){return s+x.items.length;},0)+' items in '+parsed.sections.length+' sections';
           toast('Imported '+parsed.sections.length+' sections!','ok');
@@ -11406,7 +11474,7 @@ function _boqParsePDFWithLib(file){
       for(var p=1;p<=pdf.numPages;p++){(function(pg){chain=chain.then(function(){return pdf.getPage(pg).then(function(pg){return pg.getTextContent().then(function(tc){allText+=tc.items.map(function(i){return i.str;}).join(' ')+'\n';});});});})(p);}
       chain.then(function(){
         var parsed=boqParseTextToStructure(allText);
-        if(parsed.sections.length){ boqSave(parsed); boqRender(); toast('PDF: '+parsed.sections.length+' sections','ok'); }
+        if(parsed.sections.length){ boqSave(parsed); boqRender(); setTimeout(function(){ if(typeof cloudBackupNow==='function') cloudBackupNow(true); }, 800); toast('PDF: '+parsed.sections.length+' sections','ok'); }
         else toast('Could not parse PDF. Try Excel.','err');
       });
     }).catch(function(e){ toast('PDF error','err'); console.error(e); });
@@ -15116,7 +15184,7 @@ function renderViewerList(list) {
       + '</div>'
       + '<div style="display:flex;gap:6px;align-items:center;">'
       + '<button onclick="toggleViewerEdit(this,'+i+')" style="padding:0 12px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u270F Edit</button>'
-      + '<button onclick="deleteViewerAccount(\''+ v.uid +'\','+ i +')" style="padding:0 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u{1F5D1} Delete</button>'
+      + '<button onclick="deleteViewerAccount(\''+ v.id +'\','+ i +')" style="padding:0 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u{1F5D1} Delete</button>'
       + '</div></div>'
       + '<div style="display:flex;flex-wrap:wrap;" id="vchips-view-'+i+'">' + (chips || '<span style="font-size:10px;color:rgba(255,255,255,.3)">No tabs assigned</span>') + '</div>'
       // Edit panel (hidden by default)
@@ -15127,7 +15195,7 @@ function renderViewerList(list) {
       + '<input type="checkbox" id="vedit-print-'+i+'" '+(v.can_print?'checked':'')+' style="accent-color:#818cf8;width:14px;height:14px;">'
       + '<label for="vedit-print-'+i+'" style="font-size:11px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
       + '</div>'
-      + '<button onclick="saveViewerPerms('+i+',\''+v.uid+'\')" style="width:100%;padding:7px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:10px;font-weight:800;font-size:11px;cursor:pointer;">💾 Save Permissions</button>'
+      + '<button onclick="saveViewerPerms('+i+',\''+v.id+'\')" style="width:100%;padding:7px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:10px;font-weight:800;font-size:11px;cursor:pointer;">💾 Save Permissions</button>'
       + '</div>'
       + '</div>';
   }).join('');
