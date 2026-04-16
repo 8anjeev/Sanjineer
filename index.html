@@ -2879,7 +2879,7 @@ function clRefreshViewers(){
 function _esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function clNewViewer(){
-  var isPro=(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
+  var isPro=!!window._sbSubActive||(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
   if(!isPro){if(typeof toast==='function')toast('⭐ Pro required for viewer accounts','');return;}
   // Populate tab grid
   var grid=document.getElementById('cl-vw-tabs-grid');
@@ -3521,6 +3521,17 @@ function _deleteProjectIfEmpty(projName) {
   if (typeof _saveProjects === 'function') _saveProjects(projs);
 
   _settLoadProjDropdown();
+
+  // Also delete cloud backup row so cloud sync doesn't re-create the project
+  try {
+    if (window._sb && window._adminSBUser) {
+      var delUid = window._adminSBUser.id || '';
+      var delSlug = projName.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+      var delKey = 'user-' + delUid.replace(/-/g,'').slice(0,12) + '-proj-' + delSlug;
+      window._sb.from('cloud_backups').delete().eq('admin_id', delUid).eq('backup_key', delKey).then(function(){});
+    }
+  } catch(e) {}
+
   if (typeof toast === 'function') toast('🗑 Project "' + projName + '" deleted', 'ok');
 }
 
