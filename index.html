@@ -3608,19 +3608,10 @@ function _settLoadProjDropdown() {
           _settLoadProjDropdown();
           if (typeof toast === 'function') toast('✅ Renamed to: ' + newName, 'ok');
         });
-        // Delete button — only allowed if project has no data
-        var delBtn = document.createElement('button');
-        delBtn.title = 'Delete project';
-        delBtn.style.cssText = 'background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;flex-shrink:0;line-height:1.4;-webkit-tap-highlight-color:transparent;';
-        delBtn.textContent = '🗑';
-        delBtn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          _deleteProjectIfEmpty(p.name);
-        });
+        // Delete button removed per design decision
         chip.innerHTML = '<span style="font-size:12px;flex-shrink:0;">' + (isActive ? '✅' : '📂') + '</span>'
           + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + p.name + '</span>';
         chip.appendChild(editBtn);
-        chip.appendChild(delBtn);
         listEl.appendChild(chip);
       });
     }
@@ -6719,7 +6710,7 @@ service cloud.firestore {
                 <p id="cloud-logo-chip-hint" style="font-size:8px;color:rgba(253,230,138,0.55);margin:0 0 6px;line-height:1.3;">Tap to set your logo · Appears on all PDF reports</p>
                 <div style="display:flex;gap:5px;">
                   <button onclick="document.getElementById('logo-modal-file-chip').click()" id="cloud-logo-add-btn" style="flex:1;padding:4px 0;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
-                    <span id="cloud-logo-add-label">➕ Add Logo</span>
+                    <span id="cloud-logo-add-label">➕ Add Logo</span><span style="font-size:8px;background:rgba(255,255,255,0.25);border-radius:4px;padding:1px 4px;margin-left:2px;">⭐ Pro</span>
                   </button>
                   <button id="cloud-logo-delete-btn" onclick="_clearLogoChip()" style="padding:4px 10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;display:none;transition:opacity .15s;" ontouchstart="this.style.opacity='.7'" ontouchend="this.style.opacity='1'">
                     🗑️ Remove
@@ -7196,6 +7187,79 @@ function idbGetAll(keys, cb) {
     });
   });
 }
+// ── Legacy single-project data migration ──────────────────────────────────
+// Old app stored data as bare cm_* keys (cm_data, cm_meta, etc.)
+// New app uses proj__slug__cm_* prefix. Auto-migrate on startup.
+function _migrateLegacySingleProject() {
+  var MIGRATED_KEY = 'sanj_legacy_migrated_v1';
+  try { if (localStorage.getItem(MIGRATED_KEY)) return; } catch(e) { return; }
+
+  // Check for bare legacy keys (no proj__ prefix)
+  var legacyKeys = ['cm_data','cm_meta','cm_matstore','cm_dept','cm_profile','cm_phkeys',
+    'cm_machinery','cm_tombstones','cm_db','cm_rent_store','cm_tools_store',
+    'cm_boq','cm_schedule','cm_budget','cm_contractors','cm_drawings'];
+  var hasLegacy = false;
+  try {
+    for (var i = 0; i < legacyKeys.length; i++) {
+      var v = localStorage.getItem(legacyKeys[i]);
+      if (v && v !== '{}' && v !== '[]' && v !== 'null' && v !== '') {
+        hasLegacy = true; break;
+      }
+    }
+  } catch(e) {}
+
+  if (!hasLegacy) {
+    try { localStorage.setItem(MIGRATED_KEY, '1'); } catch(e) {}
+    return;
+  }
+
+  // Determine target project name from legacy profile or fallback
+  var projName = '';
+  try {
+    var legacyProf = JSON.parse(localStorage.getItem('cm_profile') || 'null');
+    if (legacyProf && legacyProf.address) projName = legacyProf.address;
+  } catch(e) {}
+  if (!projName) projName = 'My Project';
+
+  // Ensure project exists in project list
+  try {
+    var projs = (typeof _getProjects === 'function') ? _getProjects() : [];
+    if (!projs.find(function(p){ return p.name === projName; })) {
+      projs.push({ name: projName, createdAt: Date.now() });
+      if (typeof _saveProjects === 'function') _saveProjects(projs);
+    }
+    // Set as active if no project active yet
+    var active = localStorage.getItem('sanj_active_proj') || '';
+    if (!active) { localStorage.setItem('sanj_active_proj', projName); }
+  } catch(e) {}
+
+  // Build target prefix using _pk logic (without uid since this is pre-login legacy)
+  var slug = projName.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40) || 'default';
+  var prefix = 'proj__' + slug + '__';
+
+  // Copy each legacy bare key into the new prefixed namespace (don't delete originals yet)
+  try {
+    var allKeys = [];
+    for (var j = 0; j < localStorage.length; j++) {
+      var k = localStorage.key(j);
+      if (k && k.indexOf('cm_') === 0 && k.indexOf('proj__') !== 0) allKeys.push(k);
+    }
+    allKeys.forEach(function(k) {
+      var val = localStorage.getItem(k);
+      if (val === null) return;
+      var newKey = prefix + k;
+      // Only write if target doesn't already have data
+      var existing = localStorage.getItem(newKey);
+      if (!existing || existing === '{}' || existing === '[]' || existing === 'null' || existing === '') {
+        localStorage.setItem(newKey, val);
+      }
+    });
+  } catch(e) {}
+
+  try { localStorage.setItem(MIGRATED_KEY, '1'); } catch(e) {}
+  console.log('[Sanjineer] Legacy data migrated to project:', projName);
+}
+
 function migrateOldPhotos() {
   var old = null;
   try { old = JSON.parse(safeLS.getItem('cm_photos') || 'null'); } catch(e) {}
@@ -7666,6 +7730,12 @@ async function _uploadLogoToSupabase(dataUrl, mimeType) {
 // ── Handle upload from chip file input ──
 function _handleLogoChipUpload(evt) {
   if (!window._sbSubActive) {
+    if (typeof toast === 'function') toast('⭐ Pro feature — subscribe to upload your logo', '');
+    var inp = document.getElementById('logo-modal-file-chip');
+    if (inp) inp.value = '';
+    return;
+  }
+  if (!window._sbSubActive) {
     if (typeof toast === 'function') toast('⭐ Pro required to upload company logo', '');
     return;
   }
@@ -7922,6 +7992,7 @@ function boot() {
   });
 
   setupRentalTabs();
+  _migrateLegacySingleProject();
   migrateOldPhotos();
   _setupPWA();
   // Init machinery month selector
