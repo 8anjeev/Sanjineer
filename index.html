@@ -2639,6 +2639,8 @@ function _authVerifySupabaseOTP(email,code,cb){
         <div id="cl-new-viewer-form" style="display:none;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:14px;padding:14px;margin-top:8px;">
           <p style="font-size:12px;font-weight:700;color:#a5b4fc;margin:0 0 10px;">New Viewer Account</p>
           <input id="cl-vw-name" placeholder="Viewer name (e.g. bal kishun)" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#fff;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:8px;" oninput="this.style.borderColor='rgba(255,255,255,0.35)'">
+          <p style="font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.5);margin:0 0 5px;">📂 Projects allowed:</p>
+          <div id="cl-vw-proj-grid" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
           <p style="font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.5);margin:0 0 6px;">Select tabs to share:</p>
           <div id="cl-vw-tabs-grid" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;"></div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -2858,6 +2860,7 @@ function clRefreshViewers(){
   }
   list.innerHTML=_clViewers.map(function(v,i){
     var tabChips=v.tabs.map(function(t){return '<span class="cl-tab-chip">'+t+'</span>';}).join('');
+    var projChips=(v.projects&&v.projects.length)?v.projects.map(function(p){return '<span style="display:inline-flex;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:99px;padding:2px 7px;font-size:9px;color:#6ee7b7;">📂 '+p+'</span>';}).join(''):'<span style="font-size:9px;color:rgba(255,255,255,0.3);">All projects</span>';
     var printTxt=v.allowPrint?'✅ Print on':'🚫 No print';
     var printCol=v.allowPrint?'#34d399':'#fca5a5';
     return '<div class="cl-viewer-card">'
@@ -2871,6 +2874,7 @@ function clRefreshViewers(){
         +'<button onclick="clEditViewer('+i+')" class="cl-btn" style="background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;padding:5px 10px;font-size:10px;">✏️ Edit</button>'
         +'<div class="cl-tog '+(v.active?'on':'')+'" onclick="clToggleViewer('+i+')"><div class="cl-tog-thumb"></div></div>'
       +'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:3px;">'+projChips+'</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:2px;">'+tabChips+'</div>'
     +'</div>';
   }).join('');
@@ -2881,15 +2885,44 @@ function _esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function clNewViewer(){
   var isPro=!!window._sbSubActive||(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
   if(!isPro){if(typeof toast==='function')toast('⭐ Pro required for viewer accounts','');return;}
+  _clOpenViewerForm(null);
+}
+
+function _clOpenViewerForm(editIdx){
+  // Populate project grid
+  var projGrid=document.getElementById('cl-vw-proj-grid');
+  var existingProjs=editIdx!==null && _clViewers[editIdx] ? (_clViewers[editIdx].projects||[]) : [];
+  if(projGrid){
+    var projs=(typeof _getProjects==='function')?_getProjects():[];
+    if(projs.length===0){
+      projGrid.innerHTML='<span style="font-size:9px;color:rgba(255,255,255,0.3);">No projects yet — create one first</span>';
+    } else {
+      projGrid.innerHTML=projs.map(function(p){
+        var isSel=existingProjs.indexOf(p.name)!==-1;
+        return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+(isSel?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.07)')+';border:1px solid '+(isSel?'rgba(16,185,129,0.5)':'rgba(255,255,255,0.12)')+';border-radius:99px;padding:4px 9px;font-size:10px;color:'+(isSel?'#6ee7b7':'rgba(255,255,255,0.55)')+';cursor:pointer;transition:all .15s;"'+(isSel?' class="sel"':'')+' data-proj="'+p.name+'">📂 '+p.name+'</span>';
+      }).join('');
+      projGrid.querySelectorAll('span[data-proj]').forEach(function(s){
+        s.addEventListener('click',function(){
+          this.classList.toggle('sel');
+          var sel=this.classList.contains('sel');
+          this.style.background=sel?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.07)';
+          this.style.borderColor=sel?'rgba(16,185,129,0.5)':'rgba(255,255,255,0.12)';
+          this.style.color=sel?'#6ee7b7':'rgba(255,255,255,0.55)';
+        });
+      });
+    }
+  }
   // Populate tab grid
+  var existingTabs=editIdx!==null && _clViewers[editIdx] ? (_clViewers[editIdx].tabs||[]) : [];
   var grid=document.getElementById('cl-vw-tabs-grid');
   if(grid){
     grid.innerHTML=CL_ALL_TABS.map(function(t){
-      return '<span onclick="this.classList.toggle(\'sel\')" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:99px;padding:4px 9px;font-size:10px;color:rgba(255,255,255,0.55);cursor:pointer;transition:all .15s;" data-tab="'+t.id+'">'+t.label+'</span>';
+      var isSel=existingTabs.indexOf(t.label)!==-1;
+      return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+(isSel?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)')+';border:1px solid '+(isSel?'rgba(99,102,241,0.6)':'rgba(255,255,255,0.12)')+';border-radius:99px;padding:4px 9px;font-size:10px;color:'+(isSel?'#a5b4fc':'rgba(255,255,255,0.55)')+';cursor:pointer;transition:all .15s;"'+(isSel?' class="sel"':'')+' data-tab="'+t.id+'">'+t.label+'</span>';
     }).join('');
-    // style selected
-    grid.querySelectorAll('span').forEach(function(s){
+    grid.querySelectorAll('span[data-tab]').forEach(function(s){
       s.addEventListener('click',function(){
+        this.classList.toggle('sel');
         var sel=this.classList.contains('sel');
         this.style.background=sel?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)';
         this.style.borderColor=sel?'rgba(99,102,241,0.6)':'rgba(255,255,255,0.12)';
@@ -2897,8 +2930,22 @@ function clNewViewer(){
       });
     });
   }
-  document.getElementById('cl-vw-name').value='';
-  document.getElementById('cl-new-viewer-form').style.display='block';
+  // Set name
+  var nameInp=document.getElementById('cl-vw-name');
+  if(nameInp) nameInp.value=editIdx!==null && _clViewers[editIdx] ? _clViewers[editIdx].name : '';
+  // Set print toggle
+  var printTog=document.getElementById('cl-vw-print-tog');
+  if(printTog){
+    var allowPrint=editIdx!==null && _clViewers[editIdx] ? !!_clViewers[editIdx].allowPrint : true;
+    if(allowPrint) printTog.classList.add('on'); else printTog.classList.remove('on');
+  }
+  // Form title
+  var formTitle=document.querySelector('#cl-new-viewer-form > p');
+  if(formTitle) formTitle.textContent=editIdx!==null ? 'Edit Viewer Account' : 'New Viewer Account';
+  // Store edit index on form element
+  var form=document.getElementById('cl-new-viewer-form');
+  form._editIdx=(editIdx!==null)?editIdx:null;
+  form.style.display='block';
 }
 
 function clSaveViewer(){
@@ -2907,13 +2954,31 @@ function clSaveViewer(){
   var selectedTabs=[];
   document.getElementById('cl-vw-tabs-grid').querySelectorAll('span.sel').forEach(function(s){selectedTabs.push(s.textContent.trim());});
   if(!selectedTabs.length){if(typeof toast==='function')toast('⚠️ Select at least one tab','');return;}
+  var selectedProjs=[];
+  var projGrid=document.getElementById('cl-vw-proj-grid');
+  if(projGrid) projGrid.querySelectorAll('span.sel').forEach(function(s){selectedProjs.push(s.getAttribute('data-proj'));});
   var allowPrint=document.getElementById('cl-vw-print-tog').classList.contains('on');
-  var viewer={name:name,tabs:selectedTabs,allowPrint:allowPrint,active:true,ts:Date.now(),id:'v'+Date.now()};
-  _clViewers.push(viewer);
-  localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
-  document.getElementById('cl-new-viewer-form').style.display='none';
-  clRefreshViewers();
-  if(typeof toast==='function')toast('✅ Viewer "'+name+'" created!','ok');
+  var form=document.getElementById('cl-new-viewer-form');
+  var editIdx=form._editIdx;
+  if(editIdx!==null && editIdx!==undefined && _clViewers[editIdx]){
+    // Update existing
+    _clViewers[editIdx].name=name;
+    _clViewers[editIdx].tabs=selectedTabs;
+    _clViewers[editIdx].projects=selectedProjs;
+    _clViewers[editIdx].allowPrint=allowPrint;
+    localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
+    form.style.display='none';
+    clRefreshViewers();
+    if(typeof toast==='function')toast('✅ Viewer "'+name+'" updated!','ok');
+  } else {
+    // New viewer
+    var viewer={name:name,tabs:selectedTabs,projects:selectedProjs,allowPrint:allowPrint,active:true,ts:Date.now(),id:'v'+Date.now()};
+    _clViewers.push(viewer);
+    localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
+    form.style.display='none';
+    clRefreshViewers();
+    if(typeof toast==='function')toast('✅ Viewer "'+name+'" created!','ok');
+  }
 }
 
 function clToggleViewer(i){
@@ -2924,17 +2989,19 @@ function clToggleViewer(i){
 }
 
 function clEditViewer(i){
-  var v=_clViewers[i];if(!v)return;
-  var n=prompt('Viewer name:',v.name);
-  if(n===null)return;
-  if(n.trim())_clViewers[i].name=n.trim();
-  localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
-  clRefreshViewers();
+  var isPro=!!window._sbSubActive||(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
+  if(!isPro){if(typeof toast==='function')toast('⭐ Pro required','');return;}
+  _clOpenViewerForm(i);
+  // Scroll form into view
+  var form=document.getElementById('cl-new-viewer-form');
+  if(form) setTimeout(function(){form.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
 }
 
 function clCopyViewerLink(i){
   var v=_clViewers[i];if(!v)return;
-  var url=window.location.href.split('?')[0]+'?viewer=1&vid='+v.id+'&tabs='+v.tabs.map(function(t){return encodeURIComponent(t);}).join(',');
+  var projParam='';
+  if(v.projects&&v.projects.length){projParam='&projs='+v.projects.map(function(p){return encodeURIComponent(p);}).join(',');}
+  var url=window.location.href.split('?')[0]+'?viewer=1&vid='+v.id+'&tabs='+v.tabs.map(function(t){return encodeURIComponent(t);}).join(',')+projParam;
   _clCopy(url,'🔗 Link copied for '+v.name+'!');
 }
 
@@ -3052,7 +3119,26 @@ document.addEventListener('DOMContentLoaded',function(){
       <div class="min-w-0" style="display:flex;flex-direction:column;gap:1px;align-items:center;">
         <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;white-space:nowrap;">Tap Settings → Profile</p>
         <!-- Project name display — auto-updates when project selected in Settings -->
-        <p id="hdr-proj-name" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;max-width:160px;text-align:center;">No project</p>
+        <!-- Project name — tappable to open project switcher dropdown -->
+        <div style="position:relative;">
+          <p id="hdr-proj-name" class="text-amber-300 truncate" onclick="_toggleProjDropdown()" style="font-size:10px!important;line-height:1;margin:0;max-width:160px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;padding:2px 6px;border-radius:6px;border:1px solid rgba(251,191,36,0.25);transition:background .15s;" ontouchstart="this.style.background='rgba(251,191,36,0.15)'" ontouchend="this.style.background='transparent'">No project ▾</p>
+          <!-- Project Switcher Dropdown -->
+          <div id="hdr-proj-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);min-width:220px;max-width:280px;background:linear-gradient(135deg,#1e1b4b,#2e1065);border:1px solid rgba(99,102,241,0.45);border-radius:14px;padding:10px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.6);backdrop-filter:blur(12px);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <p style="font-size:11px;font-weight:800;color:#a5b4fc;margin:0;">📂 Projects</p>
+              <button onclick="_settOpenAddProject();_closeProjDropdown();" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
+            </div>
+            <div id="hdr-proj-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
+            <!-- Add project form inline -->
+            <div id="hdr-proj-add-form" style="display:none;margin-top:8px;">
+              <input id="hdr-proj-name-inp" type="text" placeholder="e.g. Site Goa Phase 2" onkeydown="if(event.key==='Enter')_hdrSaveProject()" style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:7px;color:#fff;font-size:11px;outline:none;box-sizing:border-box;margin-bottom:6px;">
+              <div style="display:flex;gap:6px;">
+                <button onclick="_hdrSaveProject()" style="flex:1;padding:6px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:7px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;">Create</button>
+                <button onclick="document.getElementById('hdr-proj-add-form').style.display='none'" style="padding:6px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);border-radius:7px;font-size:10px;cursor:pointer;">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- Hidden select kept for JS compat -->
         <select id="hdr-proj-select" onchange="_hdrProjSwitch(this.value)" style="display:none;"></select>
         <!-- hdr-engineer kept hidden for JS compat (applyProfile writes to it) -->
@@ -3603,7 +3689,7 @@ function _settLoadProjDropdown() {
           if (active === p.name) {
             try { localStorage.setItem('sanj_active_proj', newName); } catch(e2) {}
             var hdrProjName = document.getElementById('hdr-proj-name');
-            if (hdrProjName) hdrProjName.textContent = '📂 ' + newName;
+            if (hdrProjName) hdrProjName.textContent = 'D83DDCC2 ' + newName + ' 25BE';
           }
           _settLoadProjDropdown();
           if (typeof toast === 'function') toast('✅ Renamed to: ' + newName, 'ok');
@@ -3636,7 +3722,7 @@ function _settLoadProjDropdown() {
   // ── Header project name text display ──
   var hdrProjName = document.getElementById('hdr-proj-name');
   if (hdrProjName) {
-    hdrProjName.textContent = active ? '📂 ' + active : 'No project';
+    hdrProjName.textContent = active ? '\uD83D\uDCC2 ' + active + ' \u25BE' : 'No project \u25BE';
   }
 
   // ── Add button state ──
@@ -3658,9 +3744,121 @@ function _settLoadProjDropdown() {
 // Called when user picks a project from the header dropdown
 function _hdrProjSwitch(name) {
   if (!name) return;
-  // Call the existing project switch logic
   if (typeof _onProjectChange === 'function') _onProjectChange(name);
-  // Refresh the settings list too (in case it's open)
+  try { _settLoadProjDropdown(); } catch(e) {}
+}
+
+// ── Header project dropdown ──────────────────────────────────────────
+function _toggleProjDropdown() {
+  var dd = document.getElementById('hdr-proj-dropdown');
+  if (!dd) return;
+  if (dd.style.display === 'none') { _openProjDropdown(); } else { _closeProjDropdown(); }
+}
+function _openProjDropdown() {
+  var dd = document.getElementById('hdr-proj-dropdown');
+  if (!dd) return;
+  _renderHdrProjList();
+  dd.style.display = 'block';
+  setTimeout(function() {
+    document.addEventListener('click', _outsideProjDropdown, {once: true});
+  }, 10);
+}
+function _closeProjDropdown() {
+  var dd = document.getElementById('hdr-proj-dropdown');
+  if (dd) dd.style.display = 'none';
+  var f = document.getElementById('hdr-proj-add-form');
+  if (f) f.style.display = 'none';
+  document.removeEventListener('click', _outsideProjDropdown);
+}
+function _outsideProjDropdown(e) {
+  var dd = document.getElementById('hdr-proj-dropdown');
+  var btn = document.getElementById('hdr-proj-name');
+  if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) {
+    _closeProjDropdown();
+  }
+}
+function _renderHdrProjList() {
+  var listEl = document.getElementById('hdr-proj-list');
+  var addBtn  = document.getElementById('hdr-proj-add-btn');
+  if (!listEl) return;
+  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  var active = '';
+  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var isPro = !!window._sbSubActive;
+  if (projects.length === 0) {
+    listEl.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:2px 0;">No projects yet — tap \uFF0B New</p>';
+  } else {
+    listEl.innerHTML = '';
+    projects.forEach(function(p) {
+      var isActive = p.name === active;
+      var chip = document.createElement('button');
+      chip.style.cssText = [
+        'width:100%;display:flex;align-items:center;gap:7px;',
+        'background:' + (isActive ? 'linear-gradient(135deg,rgba(99,102,241,0.35),rgba(168,85,247,0.25))' : 'rgba(255,255,255,0.05)') + ';',
+        'border:1px solid ' + (isActive ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.1)') + ';',
+        'border-radius:8px;padding:6px 9px;cursor:pointer;',
+        'color:' + (isActive ? '#a5b4fc' : 'rgba(255,255,255,0.65)') + ';',
+        'font-size:11px;font-weight:' + (isActive ? '800' : '600') + ';',
+        'text-align:left;-webkit-tap-highlight-color:transparent;outline:none;',
+        'transition:background .15s,border-color .15s;'
+      ].join('');
+      chip.innerHTML = '<span style="font-size:12px;flex-shrink:0;">' + (isActive ? '\u2705' : '\uD83D\uDCC2') + '</span>'
+        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + p.name + '</span>';
+      chip.addEventListener('click', function() {
+        _closeProjDropdown();
+        if (typeof _onProjectChange === 'function') _onProjectChange(p.name);
+        try { _settLoadProjDropdown(); } catch(e2) {}
+      });
+      listEl.appendChild(chip);
+    });
+  }
+  if (addBtn) {
+    if (!isPro && projects.length >= 1) {
+      addBtn.textContent = '\u2B50 Pro';
+      addBtn.style.background = 'rgba(245,158,11,0.18)';
+      addBtn.style.borderColor = 'rgba(245,158,11,0.35)';
+      addBtn.style.color = '#fcd34d';
+      addBtn.onclick = function() { if(typeof toast==='function')toast('\u2B50 Pro required for multiple projects',''); };
+    } else {
+      addBtn.textContent = '\uFF0B New';
+      addBtn.style.background = 'rgba(16,185,129,0.2)';
+      addBtn.style.borderColor = 'rgba(16,185,129,0.35)';
+      addBtn.style.color = '#6ee7b7';
+      addBtn.onclick = function() {
+        var f = document.getElementById('hdr-proj-add-form');
+        var inp = document.getElementById('hdr-proj-name-inp');
+        if (f) { f.style.display = 'block'; if (inp) inp.focus(); }
+      };
+    }
+  }
+}
+function _hdrSaveProject() {
+  var inp = document.getElementById('hdr-proj-name-inp');
+  if (!inp) return;
+  var name = inp.value.trim();
+  if (!name) { if (typeof toast === 'function') toast('Enter project name', 'err'); return; }
+  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  var isPro = !!window._sbSubActive;
+  if (!isPro && projects.length >= 1) {
+    if (typeof toast === 'function') toast('\u2B50 Upgrade to Pro for multiple projects', '');
+    return;
+  }
+  if (projects.find(function(p){ return p.name === name; })) {
+    if (typeof toast === 'function') toast('Project already exists', 'err'); return;
+  }
+  var isFirstProject = projects.length === 0;
+  projects.push({name: name, created: Date.now()});
+  if (typeof _saveProjects === 'function') _saveProjects(projects);
+  try { localStorage.setItem('sanj_active_proj', name); } catch(e) {}
+  try { if (typeof _initProjectNID === 'function') _initProjectNID(); } catch(e) {}
+  if (typeof toast === 'function') toast('\u2705 Project created: ' + name, 'ok');
+  inp.value = '';
+  document.getElementById('hdr-proj-add-form').style.display = 'none';
+  _closeProjDropdown();
+  if (isPro && typeof _onProjectChange === 'function') {
+    if (!isFirstProject && typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
+    _onProjectChange(name);
+  }
   try { _settLoadProjDropdown(); } catch(e) {}
 }
 
@@ -7429,7 +7627,7 @@ function applyProfile() {
     var activeProj = '';
     try { activeProj = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
     if (!activeProj && p) activeProj = p.address || '';
-    hdrProjName.textContent = activeProj ? '📂 ' + activeProj : 'No project';
+    hdrProjName.textContent = activeProj ? 'D83DDCC2 ' + activeProj + ' 25BE' : 'No project 25BE';
   }
   // If user has company logo show it in header; else default app logo — both transparent bg
   var box = document.getElementById('app-logo-box');
@@ -8018,6 +8216,7 @@ function boot() {
     // Admin is active — clear any stale viewer keys so they don't interfere
     safeLS.removeItem('sj_viewer_email');
     safeLS.removeItem('sj_viewer_perms');
+    safeLS.removeItem('sj_viewer_projs');
     safeLS.removeItem('sj_viewer_admin');
     safeLS.removeItem('sj_viewer_site');
     safeLS.removeItem('sj_viewer_print');
@@ -15526,6 +15725,37 @@ function _showViewerBar(email) {
 }
 
 function _applyViewerPermissions(perms, canPrint, siteId) {
+  // ── Project restriction for viewer ──────────────────────────────
+  // Read allowed projects from URL param or localStorage
+  var allowedProjs = [];
+  try {
+    var urlProjs = new URLSearchParams(window.location.search).get('projs');
+    if (urlProjs) {
+      allowedProjs = urlProjs.split(',').map(decodeURIComponent).filter(Boolean);
+      safeLS.setItem('sj_viewer_projs', JSON.stringify(allowedProjs));
+    } else {
+      var stored = safeLS.getItem('sj_viewer_projs');
+      if (stored) allowedProjs = JSON.parse(stored);
+    }
+  } catch(e) {}
+  if (allowedProjs.length > 0) {
+    // Switch to first allowed project if current project not in allowed list
+    var curProj = '';
+    try { curProj = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+    if (allowedProjs.indexOf(curProj) === -1 && typeof _onProjectChange === 'function') {
+      _onProjectChange(allowedProjs[0]);
+    }
+    // Hide project switcher from header — viewer can't switch projects
+    var hdrProjEl = document.getElementById('hdr-proj-name');
+    if (hdrProjEl) { hdrProjEl.style.pointerEvents = 'none'; hdrProjEl.style.opacity = '0.6'; }
+    var hdrDropdown = document.getElementById('hdr-proj-dropdown');
+    if (hdrDropdown) hdrDropdown.style.display = 'none';
+    // Also remove the ▾ arrow hint
+    if (hdrProjEl) {
+      var txt = hdrProjEl.textContent.replace(' ▾','').replace(' ▾','');
+      hdrProjEl.textContent = txt + ' 🔒';
+    }
+  }
   // Show only permitted tabs; hide everything else
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     var tabId = btn.getAttribute('data-tab');
