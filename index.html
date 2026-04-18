@@ -3129,7 +3129,7 @@ document.addEventListener('DOMContentLoaded',function(){
           <div id="hdr-proj-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);min-width:220px;max-width:280px;background:linear-gradient(135deg,#1e1b4b,#2e1065);border:1px solid rgba(99,102,241,0.45);border-radius:14px;padding:10px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.6);backdrop-filter:blur(12px);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <p style="font-size:11px;font-weight:800;color:#a5b4fc;margin:0;">📂 Projects</p>
-              <button onclick="_settOpenAddProject();_closeProjDropdown();" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
+              <button onclick="" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
             </div>
             <div id="hdr-proj-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
             <!-- Add project form inline -->
@@ -3278,8 +3278,8 @@ document.addEventListener('DOMContentLoaded',function(){
       <button onclick="closeAllAndSettings()" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;" ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">✕</button>
     </div>
 
-    <!-- ── PROJECT SELECTOR (inline in Settings) ── -->
-    <div id="sett-proj-section" style="background:linear-gradient(135deg,rgba(99,102,241,0.14),rgba(168,85,247,0.1));border:1px solid rgba(99,102,241,0.28);border-radius:10px;padding:8px 10px;margin-bottom:5px;">
+    <!-- Project selector moved to header dropdown only -->
+    <div id="sett-proj-section" style="display:none;" style="background:linear-gradient(135deg,rgba(99,102,241,0.14),rgba(168,85,247,0.1));border:1px solid rgba(99,102,241,0.28);border-radius:10px;padding:8px 10px;margin-bottom:5px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:14px;">📂</span>
@@ -8278,9 +8278,8 @@ function boot() {
         }
       });
     }
-    // Load data using adminId + stored siteId — ensures correct project on refresh
-    var _bootSiteId = safeLS.getItem('sj_viewer_site') || '';
-    setTimeout(function() { _viewerLoadData(viewerAdmin, _bootSiteId); }, 1500);
+    // Load data using adminId — correct admin's data always
+    setTimeout(function() { _viewerLoadData(viewerAdmin, ''); }, 1500);
     return;
   }
   if (!viewerEmail) {
@@ -11542,10 +11541,8 @@ function boqAddLabourRow(){
 function boqFetchAttendanceData(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   try{
-    // Use ld() — reads cm_db with correct project-prefix via _pk()
-    // Direct safeLS.getItem('cm_data') was wrong: key is cm_db, not cm_data
-    var _boqAD=ld();
-    var att=_boqAD.filter(function(a){ return a.type==='attendance'&&a.date===date; });
+    var AD=JSON.parse(safeLS.getItem('cm_data')||'[]');
+    var att=AD.filter(function(a){ return a.type==='attendance'&&a.date===date; });
     if(!att.length){ toast('No attendance data for '+date,'err'); return; }
     var grp={};
     att.forEach(function(a){ if(!grp[a.category]) grp[a.category]={count:0,hours:0}; grp[a.category].count++; grp[a.category].hours+=(parseFloat(a.hours)||0); });
@@ -11586,8 +11583,7 @@ function boqAddMachRow(){
 function boqFetchMachData(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   try{
-    // Use lmach() — reads cm_machinery with correct project-prefix via _pk()
-    var store=lmach();
+    var store=JSON.parse(safeLS.getItem('cm_machinery')||'{}');
     var sessions=store[date]||[];
     if(!sessions.length){ toast('No machinery data for '+date,'err'); return; }
     var mach=sessions.map(function(s){ return {name:s.name||'Machine',type:s.type||'',hours:s.hours||0,status:'Working'}; });
@@ -13216,17 +13212,8 @@ function _onProjectChange(name) {
   if (!name) return;
   var isPro = !!window._sbSubActive;
 
-  // Set active project key FIRST so _pk() immediately picks up new namespace
+  // Set active project key
   localStorage.setItem(_ACTIVE_PROJ_KEY, name);
-
-  // ── FULL STATE RESET: clear all in-memory state from previous project ──
-  // Without this, editing modals open stale records from the previous project
-  try { WID = null; } catch(e) {}  // attendance/expense edit ID
-  try { CID = null; } catch(e) {}  // contractor edit ID
-  try { MID = null; } catch(e) {}  // machinery edit ID
-  try { _plFilter = 'all'; } catch(e) {}  // punchlist filter
-  // Clear AD immediately so any code between now and re-render gets empty array
-  try { AD = []; } catch(e) {}
 
   // Re-init NID for this project namespace
   try { _initProjectNID(); } catch(e) { NID = 1; }
@@ -13239,20 +13226,6 @@ function _onProjectChange(name) {
   var prof = lprof() || {};
   prof.address = name;
   sprof(prof);
-
-  // ── BUTTON FIX: re-enable any buttons/inputs that were disabled by viewer mode
-  // If an admin was viewing a shared link and then switched back to admin,
-  // or if a stale _IS_VIEWER flag left buttons stuck, this ensures full UI is restored.
-  if (!_IS_VIEWER) {
-    try {
-      document.querySelectorAll('button[disabled]').forEach(function(b) {
-        b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
-      });
-      document.querySelectorAll('input[disabled], textarea[disabled]').forEach(function(el) {
-        el.disabled = false; el.style.opacity = ''; el.style.cursor = '';
-      });
-    } catch(e) {}
-  }
 
   try { updateCloudBtn && updateCloudBtn(); } catch(e) {}
   _refreshBackupLabel && _refreshBackupLabel();
@@ -13271,8 +13244,7 @@ function _onProjectChange(name) {
     var activeTab = document.querySelector('.tab-btn.active');
     if (activeTab) {
       var tabId = activeTab.getAttribute('data-tab');
-      // FIX: was calling showTab() which doesn't exist — correct function is switchTab()
-      if (tabId && typeof switchTab === 'function') switchTab(tabId);
+      if (tabId && typeof showTab === 'function') showTab(tabId);
     }
   } catch(e) {}
 
@@ -13518,7 +13490,17 @@ function refreshCloudModalState() {
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = 'none';
     var logoSection = document.getElementById('cloud-logo-section');
-    if (logoSection) logoSection.style.display = 'block'; // always visible for all users
+    if (logoSection) {
+      logoSection.style.display = 'block';
+      var _laBtn = document.getElementById('cloud-logo-add-btn');
+      var _lpWrap = document.getElementById('cloud-logo-preview-wrap');
+      var _lHint = document.getElementById('cloud-logo-chip-hint');
+      if (_laBtn) { _laBtn.style.opacity='1'; _laBtn.style.pointerEvents='auto';
+        _laBtn.onclick=function(){ document.getElementById('logo-modal-file-chip').click(); }; }
+      if (_lpWrap) { _lpWrap.style.cursor='pointer'; _lpWrap.style.opacity='1';
+        _lpWrap.onclick=function(){ document.getElementById('logo-modal-file-chip').click(); }; }
+      if (_lHint && !lprof().logo) _lHint.textContent='Tap to set your logo · Appears on all PDF reports';
+    }
     var siteEl = document.getElementById('cloud-site-id-display');
     var displaySite = siteId || ((_adminSBUser && _adminSBUser.id) ? 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) : '—');
     if (siteEl) siteEl.textContent = 'Site ID: ' + displaySite;
@@ -13543,9 +13525,19 @@ function refreshCloudModalState() {
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
     // Logged in but confirmed FREE user (subscription check is complete) — show upgrade screen
-    // Logo section is available to all users — show it
+    // Free users see logo section but upload is locked
     var logoSectionFree = document.getElementById('cloud-logo-section');
-    if (logoSectionFree) logoSectionFree.style.display = 'block';
+    if (logoSectionFree) {
+      logoSectionFree.style.display = 'block';
+      var _laBtnF = document.getElementById('cloud-logo-add-btn');
+      var _lpWrapF = document.getElementById('cloud-logo-preview-wrap');
+      var _lHintF = document.getElementById('cloud-logo-chip-hint');
+      var _lockMsg = function(){ toast('⭐ Subscribe to Pro to upload your logo', ''); };
+      if (_laBtnF) { _laBtnF.style.opacity='0.45'; _laBtnF.style.pointerEvents='none'; }
+      if (_lpWrapF) { _lpWrapF.style.cursor='default';
+        _lpWrapF.onclick = _lockMsg; }
+      if (_lHintF) _lHintF.textContent='?? Pro feature — subscribe to brand your PDFs with your logo';
+    }
     var adminPanel = document.getElementById('ctab-admin');
     var adminEmail = safeLS.getItem('cm_admin_email') || ((_adminSBUser && _adminSBUser.email) ? _adminSBUser.email : '');
     if (adminPanel) {
@@ -14454,36 +14446,13 @@ function checkViewerMode() {
   var params = new URLSearchParams(window.location.search);
   var token = params.get('vt');
 
-  // Legacy ?view= support — viewSiteId is a backup_key (siteId), NOT an adminId.
-  // Old code passed it as adminId which caused _viewerLoadData to fail — no admin
-  // row would match that value, so viewers got no data.
-  // Fix: look up the admin_id from cloud_backups using backup_key, then load correctly.
+  // Legacy ?view= support
   if (!token) {
     var viewSiteId = params.get('view');
     if (viewSiteId) {
       _IS_VIEWER = true;
       _showViewerBar('Viewer');
-      // Store siteId so _viewerLoadData can filter by backup_key
-      safeLS.setItem('sj_viewer_site', viewSiteId);
-      // Look up which admin owns this siteId (backup_key)
-      function _legacyViewerLoad() {
-        if (!_sb) { setTimeout(_legacyViewerLoad, 400); return; }
-        _sb.from('cloud_backups')
-          .select('admin_id, data')
-          .eq('backup_key', viewSiteId)
-          .maybeSingle()
-          .then(function(r) {
-            if (r.error || !r.data) {
-              toast('⚠️ Viewer link invalid or expired', 'err'); return;
-            }
-            var adminId = r.data.admin_id;
-            safeLS.setItem('sj_viewer_admin', adminId);
-            _viewerLoadData(adminId, viewSiteId);
-          }).catch(function() {
-            toast('⚠️ Could not load viewer data — check connection', 'err');
-          });
-      }
-      _legacyViewerLoad();
+      _viewerLoadData(viewSiteId, '');
     }
     return;
   }
@@ -14550,19 +14519,19 @@ function _applyTokenViewer(vData, token) {
   var label    = vData.email ? vData.email.split('-').slice(0,-1).join(' ') : 'Viewer';
 
   // Store in localStorage so reload works
+  var siteId = vData.siteId || vData.site_id || '';
   safeLS.setItem('sj_viewer_perms',   JSON.stringify(perms));
   safeLS.setItem('sj_viewer_print',   canPrint ? '1' : '0');
-  safeLS.setItem('sj_viewer_admin',   adminId);   // key: always use adminId to find data
+  safeLS.setItem('sj_viewer_admin',   adminId);
+  safeLS.setItem('sj_viewer_site',    siteId);
   safeLS.setItem('sj_viewer_email',   label);
   safeLS.setItem('sj_viewer_token',   token);
 
   _IS_VIEWER = true;
   _showViewerBar(label);
-  _applyViewerPermissions(perms, canPrint, adminId);
-  if (adminId) {
-    var _tokenSiteId = vData.siteId || vData.site_id || safeLS.getItem('sj_viewer_site') || '';
-    _viewerLoadData(adminId, _tokenSiteId);
-  }
+  _applyViewerPermissions(perms, canPrint, siteId);
+  if (siteId) _viewerLoadData(adminId, siteId);
+  else if (adminId) _viewerLoadData(adminId, '');
   else toast('⚠️ Could not find admin data — invalid link?', 'err');
 }
 
@@ -14573,7 +14542,6 @@ function _viewerRefresh() {
     _viewerLoadData(adminId, siteId);
     toast('🔄 Refreshing data…', 'ok');
   } else {
-    // Fallback: re-fetch token from DB
     var token = safeLS.getItem('sj_viewer_token') || '';
     if (token) { _fetchViewerByToken(token, false); }
     else toast('Session expired — open the viewer link again', 'err');
@@ -14617,15 +14585,9 @@ function _viewerLogout() {
 
 var _viewerRealtimeChannel = null;  // singleton channel reference
 
-function _viewerLoadData(adminId, projId) {
-  if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
+function _viewerLoadData(adminId, siteId) {
+  if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, siteId); }, 600); return; }
   if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
-
-  // ── FIX: Resolve the specific backup_key (siteId) for this viewer's assigned project ──
-  // Priority: explicit projId arg → stored sj_viewer_site → fallback to latest row
-  // This prevents viewers from accidentally pulling data from a different project
-  // when the admin has multiple projects and the wrong one was most recently synced.
-  var _viewerSiteId = projId || safeLS.getItem('sj_viewer_site') || '';
 
   function applyViewerData(d, silent) {
     var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist || d.cm_all);
@@ -14662,7 +14624,7 @@ function _viewerLoadData(adminId, projId) {
     if (!silent) toast('✅ Cloud data loaded', 'ok');
   }
 
-  // ── Pull backup — project-scoped if siteId known, else latest ─
+  // ── Pull latest backup once ────────────────────────────────
   if (typeof window._viewerPollTimer !== 'undefined' && window._viewerPollTimer) {
     clearInterval(window._viewerPollTimer);
     window._viewerPollTimer = null;
@@ -14670,17 +14632,15 @@ function _viewerLoadData(adminId, projId) {
   var _viewerPollTimer = null;
 
   function fetchLatest(silent) {
-    // Build query — always filter by admin_id
-    var q = _sb.from('cloud_backups')
-      .select('data,backup_key,updated_at')
-      .eq('admin_id', adminId);
-
-    // FIX: If we know the viewer's assigned project siteId (backup_key), filter to
-    // ONLY that project row. Without this filter, if the admin has multiple projects
-    // and the most recent push was for a different project, the viewer sees wrong data.
-    if (_viewerSiteId) {
-      q = q.eq('backup_key', _viewerSiteId).maybeSingle();
-      q.then(function(r) {
+    // Use the exact backup_key so viewer always sees their assigned project.
+    // Fall back to latest-row query only for legacy viewers without site_id.
+    var q = _sb.from('cloud_backups').select('data,backup_key,updated_at').eq('admin_id', adminId);
+    if (siteId) {
+      q = q.eq('backup_key', siteId).maybeSingle();
+    } else {
+      q = q.order('updated_at', { ascending: false }).limit(1);
+    }
+    q.then(function(r) {
         if (r.error) {
           if (!silent) {
             console.error('Viewer backup fetch error:', r.error);
@@ -14689,10 +14649,13 @@ function _viewerLoadData(adminId, projId) {
           _showViewerSyncDot('red');
           return;
         }
-        // maybeSingle returns r.data as object (or null), not array
-        var rowData = r.data ? r.data.data : null;
+        // maybeSingle returns {data:object}; limit(1) returns {data:[array]}
+        var rowData = null;
+        if (r.data) {
+          rowData = Array.isArray(r.data) ? (r.data[0] ? r.data[0].data : null) : r.data.data;
+        }
         if (!rowData) {
-          if (!silent) toast('No backup found for this project. Ask admin to Backup Now.', 'err');
+          if (!silent) toast('No backup found for this project. Ask admin to click Backup Now.', 'err');
           return;
         }
         applyViewerData(rowData, !!silent);
@@ -14704,38 +14667,6 @@ function _viewerLoadData(adminId, projId) {
         }
         _showViewerSyncDot('red');
       });
-    } else {
-      // No siteId known — fallback: fetch the single most recent row for this admin
-      // (legacy path: admin has exactly 1 project)
-      q.order('updated_at', { ascending: false }).limit(1)
-      .then(function(r) {
-        if (r.error) {
-          if (!silent) {
-            console.error('Viewer backup fetch error:', r.error);
-            toast('⚠️ Load error: ' + (r.error.message || r.error.code || 'Check RLS'), 'err');
-          }
-          _showViewerSyncDot('red');
-          return;
-        }
-        if (!r.data || r.data.length === 0) {
-          if (!silent) toast('No backup found. Admin needs to click Backup Now first.', 'err');
-          return;
-        }
-        // Cache the siteId we discovered so future polls/reloads are project-scoped
-        if (r.data[0].backup_key) {
-          _viewerSiteId = r.data[0].backup_key;
-          safeLS.setItem('sj_viewer_site', _viewerSiteId);
-        }
-        applyViewerData(r.data[0].data, !!silent);
-        _showViewerSyncDot('green');
-      }).catch(function(e) {
-        if (!silent) {
-          console.error('Viewer load catch:', e);
-          toast('Data load error: ' + (e.message || 'unknown'), 'err');
-        }
-        _showViewerSyncDot('red');
-      });
-    }
   }
 
   // Initial load
@@ -14754,39 +14685,27 @@ function _viewerLoadData(adminId, projId) {
   }
 
   try {
-    // FIX: Channel name and filter are now project-scoped using _viewerSiteId.
-    // Previously filtered only by admin_id — meaning ANY of the admin's project
-    // saves would trigger a viewer refresh, potentially loading the wrong project.
-    // Now we filter to backup_key = viewer's assigned siteId.
-    var _rtChannelName = _viewerSiteId
-      ? 'viewer-proj-' + _viewerSiteId
-      : 'viewer-admin-' + adminId;
-    var _rtFilter = _viewerSiteId
-      ? 'admin_id=eq.' + adminId + '&backup_key=eq.' + _viewerSiteId
-      : 'admin_id=eq.' + adminId;
-
     _viewerRealtimeChannel = _sb
-      .channel(_rtChannelName)
+      .channel('viewer-data-' + adminId)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'cloud_backups',
-        filter: _rtFilter
+        filter: 'admin_id=eq.' + adminId
       }, function(payload) {
         try {
-          // Only apply if backup_key matches our assigned project (extra guard)
-          var incomingKey = payload && payload.new && payload.new.backup_key;
-          if (_viewerSiteId && incomingKey && incomingKey !== _viewerSiteId) return;
           if (payload && payload.new && payload.new.data) {
+            // If viewer is scoped to a siteId, ignore updates for other projects
+            if (siteId && payload.new.backup_key && payload.new.backup_key !== siteId) return;
             applyViewerData(payload.new.data, true);
             _showViewerSyncDot('pulse');
             setTimeout(function() { _showViewerSyncDot('green'); }, 2000);
           } else {
-            fetchLatest(true);
+            fetchLatest();
           }
         } catch(payloadErr) {
           console.warn('Viewer realtime payload error:', payloadErr);
-          fetchLatest(true);
+          fetchLatest();
         }
       })
       .subscribe(function(status) {
@@ -15023,38 +14942,15 @@ function doSmartLogin() {
     if (!vRes.error && vRes.data) {
       // ── VIEWER LOGIN ──
       var vData = vRes.data;
-      // FIX: store both admin_id AND site_id properly.
-      // Previously: _viewerLoadData(siteId, '') — passed siteId as adminId → wrong param → no data.
-      // Correct: _viewerLoadData(adminId, siteId) — adminId filters cloud_backups.admin_id,
-      //          siteId (backup_key) filters to the specific project row.
-      var _vAdminId = vData.admin_id || '';
-      var _vSiteId  = vData.site_id  || '';
-      safeLS.setItem('sj_viewer_perms',  JSON.stringify(vData.permissions || []));
-      safeLS.setItem('sj_viewer_print',  vData.can_print ? '1' : '0');
-      safeLS.setItem('sj_viewer_site',   _vSiteId);
-      safeLS.setItem('sj_viewer_admin',  _vAdminId);
-      safeLS.setItem('sj_viewer_email',  email);
+      safeLS.setItem('sj_viewer_perms', JSON.stringify(vData.permissions || []));
+      safeLS.setItem('sj_viewer_print', vData.can_print ? '1' : '0');
+      safeLS.setItem('sj_viewer_site',  vData.site_id  || '');
+      safeLS.setItem('sj_viewer_email', email);
       closeAuthModal();
       _IS_VIEWER = true;
-      _applyViewerPermissions(vData.permissions || [], vData.can_print, _vAdminId);
-      _showViewerBar(email);
-      if (_vAdminId) {
-        _viewerLoadData(_vAdminId, _vSiteId);
-      } else if (_vSiteId) {
-        // Fallback: admin_id not in viewers row — look it up from cloud_backups
-        _sb.from('cloud_backups').select('admin_id').eq('backup_key', _vSiteId).maybeSingle()
-          .then(function(bkRes) {
-            var resolvedAdminId = (bkRes.data && bkRes.data.admin_id) ? bkRes.data.admin_id : '';
-            if (resolvedAdminId) {
-              safeLS.setItem('sj_viewer_admin', resolvedAdminId);
-              _viewerLoadData(resolvedAdminId, _vSiteId);
-            } else {
-              toast('⚠️ Could not resolve admin data — contact admin', 'err');
-            }
-          }).catch(function() { toast('⚠️ Data load error', 'err'); });
-      } else {
-        toast('⚠️ Viewer record missing site/admin info — contact admin', 'err');
-      }
+      _applyViewerPermissions(vData.permissions || [], vData.can_print, vData.site_id);
+      var siteId = vData.site_id || getSiteId();
+      if (siteId) { _viewerLoadData(siteId, ''); _showViewerBar(email); }
       toast('✅ Welcome, ' + email, 'ok');
       btn.textContent = '🔑 Login'; btn.disabled = false;
       return;
@@ -15834,11 +15730,10 @@ function doViewerLoginInline() {
   }).then(function(r) {
     if (r.error || !r.data) { throw new Error('Galat email ya password'); }
     var data = r.data;
-    var adminId   = data.admin_id || '';
-    var _ilSiteId = data.site_id  || '';
+    var adminId = data.admin_id || data.site_id || '';
     safeLS.setItem('sj_viewer_perms',  JSON.stringify(data.permissions || []));
     safeLS.setItem('sj_viewer_print',  data.can_print ? '1' : '0');
-    safeLS.setItem('sj_viewer_site',   _ilSiteId);
+    safeLS.setItem('sj_viewer_site',   data.site_id  || '');
     safeLS.setItem('sj_viewer_admin',  adminId);
     safeLS.setItem('sj_viewer_email',  email);
     closeAuthModal();
@@ -15846,8 +15741,7 @@ function doViewerLoginInline() {
     _applyViewerPermissions(data.permissions || [], data.can_print, adminId);
     if (adminId) {
       if (!document.getElementById('viewer-top-bar')) { _showViewerBar(email); }
-      // FIX: pass siteId so viewer loads only their assigned project, not the latest one
-      _viewerLoadData(adminId, _ilSiteId);
+      _viewerLoadData(adminId, '');
     } else {
       toast('⚠️ Viewer account has no linked admin — contact admin.', 'err');
     }
@@ -15858,6 +15752,7 @@ function doViewerLoginInline() {
     if (errEl) { errEl.textContent='⚠️ '+(e.message||'Login failed'); errEl.style.display='block'; }
   });
 }
+
 
 function doViewerLogin() {
   var email = document.getElementById('vl-email').value.trim();
@@ -15872,11 +15767,10 @@ function doViewerLogin() {
   }).then(function(r) {
     if (r.error || !r.data) { throw new Error('Galat email ya password'); }
     var data = r.data;
-    var adminId   = data.admin_id || '';
-    var _vlSiteId = data.site_id  || '';
+    var adminId = data.admin_id || data.site_id || '';
     safeLS.setItem('sj_viewer_perms',  JSON.stringify(data.permissions || []));
     safeLS.setItem('sj_viewer_print',  data.can_print ? '1' : '0');
-    safeLS.setItem('sj_viewer_site',   _vlSiteId);
+    safeLS.setItem('sj_viewer_site',   data.site_id  || '');
     safeLS.setItem('sj_viewer_admin',  adminId);
     safeLS.setItem('sj_viewer_email',  email);
     var ov = document.getElementById('viewer-login-overlay');
@@ -15885,8 +15779,7 @@ function doViewerLogin() {
     _applyViewerPermissions(data.permissions || [], data.can_print, adminId);
     if (adminId) {
       if (!document.getElementById('viewer-top-bar')) { _showViewerBar(email); }
-      // FIX: pass siteId so viewer loads only their assigned project, not the latest one
-      _viewerLoadData(adminId, _vlSiteId);
+      _viewerLoadData(adminId, '');
     } else {
       toast('⚠️ Viewer account has no linked admin — contact admin.', 'err');
     }
@@ -17432,11 +17325,8 @@ function switchQtSubTab(tab){
 // ── Measurement Sheet ──────────────────────────────────────────
 var MSHEET_KEY = "cm_measurements";
 var _msRowCount = 0;
-// FIX: Use safeLS (not raw localStorage) so cm_measurements is project-scoped.
-// Raw localStorage.getItem('cm_measurements') bypasses _pk() prefix → all projects
-// share the same measurement data and cloud sync misses this key entirely.
-function lmsheet(){ try{return JSON.parse(safeLS.getItem(MSHEET_KEY)||'[]');}catch(e){return[];} }
-function smsheet(arr){ try{safeLS.setItem(MSHEET_KEY,JSON.stringify(arr)); _scheduleCloudPush(); }catch(e){} }
+function lmsheet(){ try{return JSON.parse(localStorage.getItem(MSHEET_KEY)||'[]');}catch(e){return[];} }
+function smsheet(arr){ try{localStorage.setItem(MSHEET_KEY,JSON.stringify(arr));}catch(e){} }
 
 // Unit definitions: {label, base (base unit type: len/area/vol/cnt), factor (to SI base)}
 var MS_UNITS = [
