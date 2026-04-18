@@ -2088,7 +2088,7 @@ function _launchApp(){
         <!-- Step 2: OTP verification -->
         <div id="ob-otp-step2" style="display:none;">
           <p id="ob-otp-sent-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 10px;text-align:center;font-weight:600;"></p>
-          <input id="ob-otp-input" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.style.borderColor='rgba(165,180,252,.6)'">
+          <input id="ob-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);this.style.borderColor='rgba(165,180,252,.6)'">
           <p id="ob-otp-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
           <button id="ob-verify-otp-btn" onclick="obVerifyOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Login</button>
           <button onclick="obResetOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
@@ -2106,7 +2106,7 @@ function _launchApp(){
         </div>
         <div id="ob-signup-step2" style="display:none;">
           <p id="ob-signup-otp-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 10px;text-align:center;font-weight:600;"></p>
-          <input id="ob-signup-otp-input" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.style.borderColor='rgba(165,180,252,.6)'">
+          <input id="ob-signup-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);this.style.borderColor='rgba(165,180,252,.6)'">
           <p id="ob-signup-otp-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
           <button id="ob-verify-signup-btn" onclick="obVerifySignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Create Account</button>
           <button onclick="obResetSignupOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
@@ -2271,7 +2271,7 @@ function obVerifyOtp() {
   var errEl = document.getElementById('ob-otp-err');
   var btn   = document.getElementById('ob-verify-otp-btn');
   errEl.style.display = 'none';
-  if (!otp || otp.length < 4) {
+  if (!otp || otp.length !== 6 || /^[0-9]{6}$/.test(otp) === false) {
     errEl.textContent = '⚠️ Enter the 6-digit OTP from your email'; errEl.style.display = 'block'; return;
   }
   btn.textContent = '⏳ Verifying…'; btn.disabled = true;
@@ -2335,7 +2335,7 @@ function obVerifySignupOtp() {
   var errEl = document.getElementById('ob-signup-otp-err');
   var btn   = document.getElementById('ob-verify-signup-btn');
   errEl.style.display = 'none';
-  if (!otp || otp.length < 4) {
+  if (!otp || otp.length !== 6 || /^[0-9]{6}$/.test(otp) === false) {
     errEl.textContent = '⚠️ Enter the 6-digit OTP'; errEl.style.display = 'block'; return;
   }
   btn.textContent = '⏳ Verifying…'; btn.disabled = true;
@@ -2400,7 +2400,7 @@ function cmVerifyOtp() {
   var errEl = document.getElementById('cm-otp-err');
   var btn   = document.getElementById('cm-verify-btn');
   errEl.style.display = 'none';
-  if (!otp || otp.length < 4) {
+  if (!otp || otp.length !== 6 || /^[0-9]{6}$/.test(otp) === false) {
     errEl.textContent = '⚠️ Enter the 6-digit OTP'; errEl.style.display = 'block'; return;
   }
   btn.textContent = '⏳ Verifying…'; btn.disabled = true;
@@ -2464,7 +2464,7 @@ function cmVerifySignupOtp() {
   var errEl = document.getElementById('cmc-otp-err');
   var btn   = document.getElementById('cmc-verify-btn');
   errEl.style.display = 'none';
-  if (!otp || otp.length < 4) {
+  if (!otp || otp.length !== 6 || /^[0-9]{6}$/.test(otp) === false) {
     errEl.textContent = '⚠️ Enter the 6-digit OTP'; errEl.style.display = 'block'; return;
   }
   btn.textContent = '⏳ Verifying…'; btn.disabled = true;
@@ -5710,7 +5710,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <!-- Step 2: OTP verify -->
             <div id="cm-otp-step2" style="display:none;">
               <p id="cm-otp-sent-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 8px;text-align:center;font-weight:600;"></p>
-              <input id="cm-otp-input" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="6-digit OTP" maxlength="6" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(165,180,252,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.style.borderColor='rgba(165,180,252,.7)'">
+              <input id="cm-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(165,180,252,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);this.style.borderColor='rgba(165,180,252,.7)'">
               <p id="cm-otp-err" style="font-size:11px;color:#fca5a5;text-align:center;margin:0 0 6px;display:none;"></p>
               <button onclick="cmVerifyOtp()" id="cm-verify-btn" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:11px;font-weight:800;font-size:.95rem;cursor:pointer;margin-bottom:6px;box-shadow:0 4px 14px rgba(5,150,105,.4);">✅ Verify &amp; Login</button>
               <button onclick="cmResetOtp()" style="width:100%;padding:7px;background:none;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.35);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
@@ -5804,7 +5804,7 @@ service cloud.firestore {
           <!-- Step 2 -->
           <div id="cmc-step2" style="display:none;">
             <p id="cmc-otp-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 8px;text-align:center;font-weight:600;"></p>
-            <input id="cmc-otp-input" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="6-digit OTP" maxlength="6" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(165,180,252,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.style.borderColor='rgba(165,180,252,.7)'">
+            <input id="cmc-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(165,180,252,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);this.style.borderColor='rgba(165,180,252,.7)'">
             <p id="cmc-otp-err" style="font-size:11px;color:#fca5a5;text-align:center;margin:0 0 6px;display:none;"></p>
             <button onclick="cmVerifySignupOtp()" id="cmc-verify-btn" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:11px;font-weight:800;font-size:.9rem;cursor:pointer;margin-bottom:6px;box-shadow:0 4px 14px rgba(5,150,105,.4);">✅ Verify &amp; Create Account</button>
             <button onclick="cmResetSignupOtp()" style="width:100%;padding:7px;background:none;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.35);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
