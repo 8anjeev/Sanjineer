@@ -2917,7 +2917,7 @@ function _clOpenViewerForm(editIdx){
   var grid=document.getElementById('cl-vw-tabs-grid');
   if(grid){
     grid.innerHTML=CL_ALL_TABS.map(function(t){
-      var isSel=existingTabs.indexOf(t.label)!==-1;
+      var isSel=existingTabs.indexOf(t.id)!==-1;
       return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+(isSel?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)')+';border:1px solid '+(isSel?'rgba(99,102,241,0.6)':'rgba(255,255,255,0.12)')+';border-radius:99px;padding:4px 9px;font-size:10px;color:'+(isSel?'#a5b4fc':'rgba(255,255,255,0.55)')+';cursor:pointer;transition:all .15s;"'+(isSel?' class="sel"':'')+' data-tab="'+t.id+'">'+t.label+'</span>';
     }).join('');
     grid.querySelectorAll('span[data-tab]').forEach(function(s){
@@ -2952,7 +2952,10 @@ function clSaveViewer(){
   var name=document.getElementById('cl-vw-name').value.trim();
   if(!name){if(typeof toast==='function')toast('⚠️ Enter a viewer name','');return;}
   var selectedTabs=[];
-  document.getElementById('cl-vw-tabs-grid').querySelectorAll('span.sel').forEach(function(s){selectedTabs.push(s.textContent.trim());});
+  document.getElementById('cl-vw-tabs-grid').querySelectorAll('span.sel').forEach(function(s){
+    var tabId = s.getAttribute('data-tab');
+    if(tabId) selectedTabs.push(tabId);
+  });
   if(!selectedTabs.length){if(typeof toast==='function')toast('⚠️ Select at least one tab','');return;}
   var selectedProjs=[];
   var projGrid=document.getElementById('cl-vw-proj-grid');
@@ -7083,7 +7086,7 @@ service cloud.firestore {
         <div style="width:36px;height:36px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(217,119,6,.5);">👥</div>
         <div>
           <p style="font-size:14px;font-weight:900;color:#fff;line-height:1;">Viewer Accounts</p>
-          <p style="font-size:10px;color:#fbbf24;line-height:1.3;">Create & manage read-only users</p>
+          <p id="vmgr-active-proj-tag" style="font-size:10px;color:#fbbf24;line-height:1.3;">📂 Loading…</p>
         </div>
       </div>
       <button onclick="closeViewerMgmt()" style="padding:0 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.7);font-size:11px;font-weight:700;cursor:pointer;">← Back</button>
@@ -7096,6 +7099,11 @@ service cloud.firestore {
       <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;padding:.9rem;margin-bottom:1rem;">
         <p style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:.7rem;">🔗 Create Viewer Link</p>
         <p style="font-size:10px;color:#a78bfa;margin-bottom:.7rem;line-height:1.5;">Share the generated link — viewer opens it, sees only selected tabs. No login needed. Stays active until you delete it.</p>
+        <!-- Project selector for this viewer -->
+        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">📂 Project (viewer will see this project's data)</label>
+        <div id="vmgr-proj-selector" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:.7rem;min-height:28px;">
+          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin:0;padding:4px 0;">Loading projects…</p>
+        </div>
         <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Viewer Name / Label</label>
         <input id="vw-name" type="text" class="auth-input" placeholder="e.g. Client View, Rampur Site, Suresh">
 
@@ -8010,6 +8018,13 @@ function _openViewerManager() {
     toast('Please log in first', 'err');
     return;
   }
+  // Update project tag in modal header
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  // Populate project selector
+  _populateVmgrProjSelector();
   openViewerMgmt();
 }
 
@@ -8022,6 +8037,13 @@ function _openViewerManagerCreate() {
     toast('Please log in first', 'err');
     return;
   }
+  // Update project tag in modal header
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  // Populate project selector in create form
+  _populateVmgrProjSelector();
   // Open the modal
   loadViewerAccounts();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
@@ -8032,6 +8054,55 @@ function _openViewerManagerCreate() {
     var inp = document.getElementById('vw-name');
     if (inp) { inp.focus(); inp.select(); }
   }, 80);
+}
+
+// Populate the project selector chips inside viewer-mgmt-modal create form
+function _populateVmgrProjSelector() {
+  var container = document.getElementById('vmgr-proj-selector');
+  if (!container) return;
+  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  var active = '';
+  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  if (!projects.length) {
+    container.innerHTML = '<p style="font-size:10px;color:rgba(255,255,255,0.3);margin:0;padding:4px 0;">No projects yet</p>';
+    return;
+  }
+  container.innerHTML = projects.map(function(p) {
+    var isSel = p.name === active;
+    return '<span onclick="_vmgrSelectProj(this,\'' + p.name.replace(/'/g,"\\'") + '\')" '
+      + 'style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;cursor:pointer;'
+      + 'background:' + (isSel ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.07)') + ';'
+      + 'border:1.5px solid ' + (isSel ? 'rgba(16,185,129,0.6)' : 'rgba(255,255,255,0.15)') + ';'
+      + 'color:' + (isSel ? '#6ee7b7' : 'rgba(255,255,255,0.55)') + ';'
+      + 'transition:all .15s;"'
+      + (isSel ? ' data-selected="1"' : '') + '>📂 ' + p.name + '</span>';
+  }).join('');
+}
+
+// Switch selected project in the vmgr project selector
+function _vmgrSelectProj(el, projName) {
+  var container = document.getElementById('vmgr-proj-selector');
+  if (!container) return;
+  // Deselect all
+  container.querySelectorAll('span').forEach(function(s) {
+    s.removeAttribute('data-selected');
+    s.style.background = 'rgba(255,255,255,0.07)';
+    s.style.borderColor = 'rgba(255,255,255,0.15)';
+    s.style.color = 'rgba(255,255,255,0.55)';
+  });
+  // Select clicked
+  el.setAttribute('data-selected', '1');
+  el.style.background = 'rgba(16,185,129,0.25)';
+  el.style.borderColor = 'rgba(16,185,129,0.6)';
+  el.style.color = '#6ee7b7';
+  // Switch active project so getSiteId() returns the right site_id for this viewer
+  try { localStorage.setItem('sanj_active_proj', projName); } catch(e) {}
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) vmgrProjTag.textContent = '📂 ' + projName;
+  // Also switch the main app project
+  try { if (typeof _onProjectChange === 'function') _onProjectChange(projName); } catch(e) {}
+  // Reload the existing viewers for the newly selected project
+  loadViewerAccounts();
 }
 
 
@@ -13216,6 +13287,13 @@ function _onProjectChange(name) {
   // Update realtime channel to listen to new project's backup_key
   try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
 
+  // Refresh viewer list for new project (project isolation)
+  try { if (typeof loadViewerAccountsInline === 'function') loadViewerAccountsInline(); } catch(e) {}
+
+  // Update active project tag in viewer-mgmt-modal if open
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) vmgrProjTag.textContent = '📂 ' + name;
+
   toast('📂 ' + name, 'ok');
 }
 
@@ -15257,6 +15335,13 @@ var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null, _cloudSyncTimer 
 })();
 
 function openViewerMgmt() {
+  // Update project tag in the modal header
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) {
+    var ap = '';
+    try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+    vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  }
   loadViewerAccounts();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
 }
@@ -15347,7 +15432,10 @@ function loadViewerAccountsInline() {
   if (!listEl) return;
   if (!_sb || !_adminSBUser) { setTimeout(loadViewerAccountsInline, 600); return; }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
-  _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+  var curSiteId = getSiteId();
+  var query = _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id);
+  if (curSiteId) query = query.eq('site_id', curSiteId);
+  query.then(function(r) {
     var list = r.data || [];
     if (!list.length) {
       listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
@@ -15443,7 +15531,10 @@ function loadViewerAccounts() {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Please login as admin first</p>';
     return;
   }
-  _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+  var curSiteId = getSiteId();
+  var query = _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id);
+  if (curSiteId) query = query.eq('site_id', curSiteId);
+  query.then(function(r) {
     if (r.error) { listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Load failed: '+r.error.message+'</p>'; return; }
     if (!r.data || !r.data.length) {
       listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
