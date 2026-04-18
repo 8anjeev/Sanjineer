@@ -3129,7 +3129,7 @@ document.addEventListener('DOMContentLoaded',function(){
           <div id="hdr-proj-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);min-width:220px;max-width:280px;background:linear-gradient(135deg,#1e1b4b,#2e1065);border:1px solid rgba(99,102,241,0.45);border-radius:14px;padding:10px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.6);backdrop-filter:blur(12px);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
               <p style="font-size:11px;font-weight:800;color:#a5b4fc;margin:0;">📂 Projects</p>
-              <button onclick="" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
+              <button onclick="_hdrAddBtnClick()" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
             </div>
             <div id="hdr-proj-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
             <!-- Add project form inline -->
@@ -3752,6 +3752,7 @@ function _hdrProjSwitch(name) {
 }
 
 // ── Header project dropdown ──────────────────────────────────────────
+var _hdrDropOpening = false;
 function _toggleProjDropdown() {
   var dd = document.getElementById('hdr-proj-dropdown');
   if (!dd) return;
@@ -3762,12 +3763,10 @@ function _openProjDropdown() {
   if (!dd) return;
   _renderHdrProjList();
   dd.style.display = 'block';
-  // Use 150ms so the triggering click fully bubbles BEFORE we attach
-  // the outside-click listener — otherwise the same click that opened
-  // the dropdown immediately closes it again.
-  setTimeout(function() {
-    document.addEventListener('click', _outsideProjDropdown, {once: true});
-  }, 150);
+  _hdrDropOpening = true;
+  setTimeout(function() { _hdrDropOpening = false; }, 0);
+  document.removeEventListener('click', _outsideProjDropdown);
+  document.addEventListener('click', _outsideProjDropdown);
 }
 function _closeProjDropdown() {
   var dd = document.getElementById('hdr-proj-dropdown');
@@ -3777,11 +3776,23 @@ function _closeProjDropdown() {
   document.removeEventListener('click', _outsideProjDropdown);
 }
 function _outsideProjDropdown(e) {
+  if (_hdrDropOpening) return;
   var dd = document.getElementById('hdr-proj-dropdown');
   var btn = document.getElementById('hdr-proj-name');
   if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) {
     _closeProjDropdown();
   }
+}
+function _hdrAddBtnClick() {
+  var isPro = !!window._sbSubActive;
+  var projs = (typeof _getProjects === 'function') ? _getProjects() : [];
+  if (!isPro && projs.length >= 1) {
+    if (typeof toast === 'function') toast('⭐ Pro required for multiple projects', '');
+    return;
+  }
+  var f = document.getElementById('hdr-proj-add-form');
+  var inp = document.getElementById('hdr-proj-name-inp');
+  if (f) { f.style.display = 'block'; if (inp) { inp.value = ''; inp.focus(); } }
 }
 function _renderHdrProjList() {
   var listEl = document.getElementById('hdr-proj-list');
@@ -3861,9 +3872,16 @@ function _hdrSaveProject() {
   inp.value = '';
   document.getElementById('hdr-proj-add-form').style.display = 'none';
   _closeProjDropdown();
+  var _hn = document.getElementById('hdr-proj-name');
+  if (_hn) _hn.textContent = '📂 ' + name + ' ▾';
   if (isPro && typeof _onProjectChange === 'function') {
     if (!isFirstProject && typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
     _onProjectChange(name);
+  } else {
+    try { NID = parseInt(safeLS.getItem('cm_nid')||'1'); } catch(_e) {}
+    try { AD = ld(); } catch(_e) {}
+    try { applyProfile && applyProfile(); } catch(_e) {}
+    try { if (typeof renderDashboard==='function') renderDashboard(); } catch(_e) {}
   }
   try { _settLoadProjDropdown(); } catch(e) {}
 }
@@ -7113,22 +7131,22 @@ service cloud.firestore {
 
         <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:6px;margin-top:.6rem;">Select Tabs to Show — tap to toggle:</label>
         <div id="perm-chips-container" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.75rem;">
-          <span class="perm-chip on" data-tab="dashboard">📊 Dashboard</span>
-          <span class="perm-chip on" data-tab="daily">📋 Daily Report</span>
-          <span class="perm-chip on" data-tab="departmental">🏗️ Dept Work</span>
-          <span class="perm-chip on" data-tab="attendance">📅 Attendance</span>
-          <span class="perm-chip on" data-tab="boq">📋 BOQ DPR</span>
-          <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
-          <span class="perm-chip on" data-tab="expenses">💰 Expenses</span>
-          <span class="perm-chip on" data-tab="materials">🧱 Materials</span>
-          <span class="perm-chip on" data-tab="tools">🔧 Tools</span>
-          <span class="perm-chip on" data-tab="drawings">📐 Drawings</span>
-          <span class="perm-chip on" data-tab="rentals">🚜 Rentals</span>
-          <span class="perm-chip on" data-tab="contractors">👥 Teams</span>
-          <span class="perm-chip on" data-tab="budget">📊 Budget</span>
-          <span class="perm-chip on" data-tab="schedule">📅 Schedule</span>
-          <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
-          <span class="perm-chip on" data-tab="bill">🧾 Bill</span>
+          <span class="perm-chip" data-tab="dashboard">📊 Dashboard</span>
+          <span class="perm-chip" data-tab="daily">📋 Daily Report</span>
+          <span class="perm-chip" data-tab="departmental">🏗️ Dept Work</span>
+          <span class="perm-chip" data-tab="attendance">📅 Attendance</span>
+          <span class="perm-chip" data-tab="boq">📋 BOQ DPR</span>
+          <span class="perm-chip" data-tab="machinery">⚙️ Machinery</span>
+          <span class="perm-chip" data-tab="expenses">💰 Expenses</span>
+          <span class="perm-chip" data-tab="materials">🧱 Materials</span>
+          <span class="perm-chip" data-tab="tools">🔧 Tools</span>
+          <span class="perm-chip" data-tab="drawings">📐 Drawings</span>
+          <span class="perm-chip" data-tab="rentals">🚜 Rentals</span>
+          <span class="perm-chip" data-tab="contractors">👥 Teams</span>
+          <span class="perm-chip" data-tab="budget">📊 Budget</span>
+          <span class="perm-chip" data-tab="schedule">📅 Schedule</span>
+          <span class="perm-chip" data-tab="punchlist">📋 Punch List</span>
+          <span class="perm-chip" data-tab="bill">🧾 Bill</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">
           <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:15px;height:15px;">
@@ -13218,14 +13236,18 @@ function _onProjectChange(name) {
   // Re-init NID for this project namespace
   try { _initProjectNID(); } catch(e) { NID = 1; }
 
-  // Update profile address field
+  // Update profile address UI
   var projInput = document.getElementById('edit-address');
   if (projInput) projInput.value = name;
 
-  // Update saved profile project name
-  var prof = lprof() || {};
-  prof.address = name;
-  sprof(prof);
+  // Write profile address directly — do NOT call sprof() which triggers
+  // _scheduleCloudPush and 3s later overwrites cloud data with an empty payload.
+  try {
+    var _ps = _rawSafeLS.getItem(_pk('cm_profile'));
+    var _po = _ps ? JSON.parse(_ps) : {};
+    _po.address = name;
+    _rawSafeLS.setItem(_pk('cm_profile'), JSON.stringify(_po));
+  } catch(_pe) {}
 
   try { updateCloudBtn && updateCloudBtn(); } catch(e) {}
   _refreshBackupLabel && _refreshBackupLabel();
@@ -15338,12 +15360,18 @@ var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null, _cloudSyncTimer 
 })();
 
 function openViewerMgmt() {
-  // Update project labels (read-only display — not a switcher)
   var ap = '';
   try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
-  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
-  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
-  _populateVmgrProjSelector();
+  var _tag = document.getElementById('vmgr-active-proj-tag');
+  if (_tag) _tag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  var _inf = document.getElementById('vmgr-proj-info-name');
+  if (_inf) _inf.textContent = ap || 'Default Project';
+  // Reset create form to blank state every time modal opens
+  var _ni = document.getElementById('vw-name'); if (_ni) _ni.value = '';
+  document.querySelectorAll('#perm-chips-container .perm-chip').forEach(function(c){ c.classList.remove('on'); });
+  var _cb = document.getElementById('vw-can-print'); if (_cb) _cb.checked = false;
+  var _lr = document.getElementById('vw-link-result'); if (_lr) _lr.style.display = 'none';
+  var _er = document.getElementById('vw-create-err'); if (_er) _er.style.display = 'none';
   loadViewerAccounts();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
 }
@@ -15572,7 +15600,7 @@ function renderViewerList(list) {
       + '<div style="display:flex;align-items:center;gap:8px;">'
       + '<div style="width:30px;height:30px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">\u{1F441}\uFE0F</div>'
       + '<div><p style="font-size:12px;font-weight:700;color:white;line-height:1;">' + v.email + '</p>'
-      + '<p style="font-size:9px;color:#a78bfa;margin-top:2px;">' + (v.canPrint ? '\u2705 Print allowed' : '\u{1F6AB} No print') + '</p></div>'
+      + '<p style="font-size:9px;color:#a78bfa;margin-top:2px;">' + (v.can_print ? '\u2705 Print allowed' : '🚫 No print') + '</p></div>'
       + '</div>'
       + '<div style="display:flex;gap:6px;align-items:center;">'
       + '<button onclick="toggleViewerEdit(this,'+i+')" style="padding:0 12px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u270F Edit</button>'
