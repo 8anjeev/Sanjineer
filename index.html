@@ -2639,6 +2639,8 @@ function _authVerifySupabaseOTP(email,code,cb){
         <div id="cl-new-viewer-form" style="display:none;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:14px;padding:14px;margin-top:8px;">
           <p style="font-size:12px;font-weight:700;color:#a5b4fc;margin:0 0 10px;">New Viewer Account</p>
           <input id="cl-vw-name" placeholder="Viewer name (e.g. bal kishun)" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#fff;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:8px;" oninput="this.style.borderColor='rgba(255,255,255,0.35)'">
+          <p style="font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.5);margin:0 0 5px;">📂 Projects allowed:</p>
+          <div id="cl-vw-proj-grid" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
           <p style="font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.5);margin:0 0 6px;">Select tabs to share:</p>
           <div id="cl-vw-tabs-grid" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;"></div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -2858,6 +2860,7 @@ function clRefreshViewers(){
   }
   list.innerHTML=_clViewers.map(function(v,i){
     var tabChips=v.tabs.map(function(t){return '<span class="cl-tab-chip">'+t+'</span>';}).join('');
+    var projChips=(v.projects&&v.projects.length)?v.projects.map(function(p){return '<span style="display:inline-flex;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);border-radius:99px;padding:2px 7px;font-size:9px;color:#6ee7b7;">📂 '+p+'</span>';}).join(''):'<span style="font-size:9px;color:rgba(255,255,255,0.3);">All projects</span>';
     var printTxt=v.allowPrint?'✅ Print on':'🚫 No print';
     var printCol=v.allowPrint?'#34d399':'#fca5a5';
     return '<div class="cl-viewer-card">'
@@ -2871,6 +2874,7 @@ function clRefreshViewers(){
         +'<button onclick="clEditViewer('+i+')" class="cl-btn" style="background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;padding:5px 10px;font-size:10px;">✏️ Edit</button>'
         +'<div class="cl-tog '+(v.active?'on':'')+'" onclick="clToggleViewer('+i+')"><div class="cl-tog-thumb"></div></div>'
       +'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:3px;">'+projChips+'</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:2px;">'+tabChips+'</div>'
     +'</div>';
   }).join('');
@@ -2881,15 +2885,44 @@ function _esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function clNewViewer(){
   var isPro=!!window._sbSubActive||(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
   if(!isPro){if(typeof toast==='function')toast('⭐ Pro required for viewer accounts','');return;}
+  _clOpenViewerForm(null);
+}
+
+function _clOpenViewerForm(editIdx){
+  // Populate project grid
+  var projGrid=document.getElementById('cl-vw-proj-grid');
+  var existingProjs=editIdx!==null && _clViewers[editIdx] ? (_clViewers[editIdx].projects||[]) : [];
+  if(projGrid){
+    var projs=(typeof _getProjects==='function')?_getProjects():[];
+    if(projs.length===0){
+      projGrid.innerHTML='<span style="font-size:9px;color:rgba(255,255,255,0.3);">No projects yet — create one first</span>';
+    } else {
+      projGrid.innerHTML=projs.map(function(p){
+        var isSel=existingProjs.indexOf(p.name)!==-1;
+        return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+(isSel?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.07)')+';border:1px solid '+(isSel?'rgba(16,185,129,0.5)':'rgba(255,255,255,0.12)')+';border-radius:99px;padding:4px 9px;font-size:10px;color:'+(isSel?'#6ee7b7':'rgba(255,255,255,0.55)')+';cursor:pointer;transition:all .15s;"'+(isSel?' class="sel"':'')+' data-proj="'+p.name+'">📂 '+p.name+'</span>';
+      }).join('');
+      projGrid.querySelectorAll('span[data-proj]').forEach(function(s){
+        s.addEventListener('click',function(){
+          this.classList.toggle('sel');
+          var sel=this.classList.contains('sel');
+          this.style.background=sel?'rgba(16,185,129,0.25)':'rgba(255,255,255,0.07)';
+          this.style.borderColor=sel?'rgba(16,185,129,0.5)':'rgba(255,255,255,0.12)';
+          this.style.color=sel?'#6ee7b7':'rgba(255,255,255,0.55)';
+        });
+      });
+    }
+  }
   // Populate tab grid
+  var existingTabs=editIdx!==null && _clViewers[editIdx] ? (_clViewers[editIdx].tabs||[]) : [];
   var grid=document.getElementById('cl-vw-tabs-grid');
   if(grid){
     grid.innerHTML=CL_ALL_TABS.map(function(t){
-      return '<span onclick="this.classList.toggle(\'sel\')" style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:99px;padding:4px 9px;font-size:10px;color:rgba(255,255,255,0.55);cursor:pointer;transition:all .15s;" data-tab="'+t.id+'">'+t.label+'</span>';
+      var isSel=existingTabs.indexOf(t.id)!==-1;
+      return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+(isSel?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)')+';border:1px solid '+(isSel?'rgba(99,102,241,0.6)':'rgba(255,255,255,0.12)')+';border-radius:99px;padding:4px 9px;font-size:10px;color:'+(isSel?'#a5b4fc':'rgba(255,255,255,0.55)')+';cursor:pointer;transition:all .15s;"'+(isSel?' class="sel"':'')+' data-tab="'+t.id+'">'+t.label+'</span>';
     }).join('');
-    // style selected
-    grid.querySelectorAll('span').forEach(function(s){
+    grid.querySelectorAll('span[data-tab]').forEach(function(s){
       s.addEventListener('click',function(){
+        this.classList.toggle('sel');
         var sel=this.classList.contains('sel');
         this.style.background=sel?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.07)';
         this.style.borderColor=sel?'rgba(99,102,241,0.6)':'rgba(255,255,255,0.12)';
@@ -2897,23 +2930,58 @@ function clNewViewer(){
       });
     });
   }
-  document.getElementById('cl-vw-name').value='';
-  document.getElementById('cl-new-viewer-form').style.display='block';
+  // Set name
+  var nameInp=document.getElementById('cl-vw-name');
+  if(nameInp) nameInp.value=editIdx!==null && _clViewers[editIdx] ? _clViewers[editIdx].name : '';
+  // Set print toggle
+  var printTog=document.getElementById('cl-vw-print-tog');
+  if(printTog){
+    var allowPrint=editIdx!==null && _clViewers[editIdx] ? !!_clViewers[editIdx].allowPrint : true;
+    if(allowPrint) printTog.classList.add('on'); else printTog.classList.remove('on');
+  }
+  // Form title
+  var formTitle=document.querySelector('#cl-new-viewer-form > p');
+  if(formTitle) formTitle.textContent=editIdx!==null ? 'Edit Viewer Account' : 'New Viewer Account';
+  // Store edit index on form element
+  var form=document.getElementById('cl-new-viewer-form');
+  form._editIdx=(editIdx!==null)?editIdx:null;
+  form.style.display='block';
 }
 
 function clSaveViewer(){
   var name=document.getElementById('cl-vw-name').value.trim();
   if(!name){if(typeof toast==='function')toast('⚠️ Enter a viewer name','');return;}
   var selectedTabs=[];
-  document.getElementById('cl-vw-tabs-grid').querySelectorAll('span.sel').forEach(function(s){selectedTabs.push(s.textContent.trim());});
+  document.getElementById('cl-vw-tabs-grid').querySelectorAll('span.sel').forEach(function(s){
+    var tabId = s.getAttribute('data-tab');
+    if(tabId) selectedTabs.push(tabId);
+  });
   if(!selectedTabs.length){if(typeof toast==='function')toast('⚠️ Select at least one tab','');return;}
+  var selectedProjs=[];
+  var projGrid=document.getElementById('cl-vw-proj-grid');
+  if(projGrid) projGrid.querySelectorAll('span.sel').forEach(function(s){selectedProjs.push(s.getAttribute('data-proj'));});
   var allowPrint=document.getElementById('cl-vw-print-tog').classList.contains('on');
-  var viewer={name:name,tabs:selectedTabs,allowPrint:allowPrint,active:true,ts:Date.now(),id:'v'+Date.now()};
-  _clViewers.push(viewer);
-  localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
-  document.getElementById('cl-new-viewer-form').style.display='none';
-  clRefreshViewers();
-  if(typeof toast==='function')toast('✅ Viewer "'+name+'" created!','ok');
+  var form=document.getElementById('cl-new-viewer-form');
+  var editIdx=form._editIdx;
+  if(editIdx!==null && editIdx!==undefined && _clViewers[editIdx]){
+    // Update existing
+    _clViewers[editIdx].name=name;
+    _clViewers[editIdx].tabs=selectedTabs;
+    _clViewers[editIdx].projects=selectedProjs;
+    _clViewers[editIdx].allowPrint=allowPrint;
+    localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
+    form.style.display='none';
+    clRefreshViewers();
+    if(typeof toast==='function')toast('✅ Viewer "'+name+'" updated!','ok');
+  } else {
+    // New viewer
+    var viewer={name:name,tabs:selectedTabs,projects:selectedProjs,allowPrint:allowPrint,active:true,ts:Date.now(),id:'v'+Date.now()};
+    _clViewers.push(viewer);
+    localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
+    form.style.display='none';
+    clRefreshViewers();
+    if(typeof toast==='function')toast('✅ Viewer "'+name+'" created!','ok');
+  }
 }
 
 function clToggleViewer(i){
@@ -2924,17 +2992,19 @@ function clToggleViewer(i){
 }
 
 function clEditViewer(i){
-  var v=_clViewers[i];if(!v)return;
-  var n=prompt('Viewer name:',v.name);
-  if(n===null)return;
-  if(n.trim())_clViewers[i].name=n.trim();
-  localStorage.setItem('sanj_viewers',JSON.stringify(_clViewers));
-  clRefreshViewers();
+  var isPro=!!window._sbSubActive||(localStorage.getItem('sanj_pro')||JSON.parse(localStorage.getItem('sanj_auth_session')||'{}').plan)==='pro';
+  if(!isPro){if(typeof toast==='function')toast('⭐ Pro required','');return;}
+  _clOpenViewerForm(i);
+  // Scroll form into view
+  var form=document.getElementById('cl-new-viewer-form');
+  if(form) setTimeout(function(){form.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
 }
 
 function clCopyViewerLink(i){
   var v=_clViewers[i];if(!v)return;
-  var url=window.location.href.split('?')[0]+'?viewer=1&vid='+v.id+'&tabs='+v.tabs.map(function(t){return encodeURIComponent(t);}).join(',');
+  var projParam='';
+  if(v.projects&&v.projects.length){projParam='&projs='+v.projects.map(function(p){return encodeURIComponent(p);}).join(',');}
+  var url=window.location.href.split('?')[0]+'?viewer=1&vid='+v.id+'&tabs='+v.tabs.map(function(t){return encodeURIComponent(t);}).join(',')+projParam;
   _clCopy(url,'🔗 Link copied for '+v.name+'!');
 }
 
@@ -3043,21 +3113,35 @@ document.addEventListener('DOMContentLoaded',function(){
       <button onclick="showUrlSheet()" style="background:none;border:none;padding:0;cursor:pointer;font-size:7.5px;color:rgba(255,255,255,0.42);line-height:1;letter-spacing:.02em;margin-top:2px;margin-left:2px;-webkit-tap-highlight-color:transparent;outline:none;">app.sanjineer.in</button>
     </div>
     <!-- CENTER: Company + Project name — truly centered using absolute -->
-    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;">
+    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
       <!-- Cloud btn hidden — access via Settings panel. Spans kept for JS compat. -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
       <span id="cloud-hdr-btn" style="display:none"></span>
       <span id="cloud-hdr-icon" style="display:none">🔒</span>
       <span id="cloud-hdr-label" style="display:none">Cloud</span>
       <div class="min-w-0" style="display:flex;flex-direction:column;gap:1px;align-items:center;">
-        <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;white-space:nowrap;pointer-events:none;">Tap Settings → Profile</p>
-        <!-- Project name — clickable to open project dropdown -->
-        <button id="hdr-proj-name" onclick="_toggleHdrProjDropdown(event)"
-          style="font-size:10px!important;line-height:1;margin:0;max-width:180px;color:#fcd34d;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:3px 8px 3px 7px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;outline:none;-webkit-tap-highlight-color:transparent;transition:background .15s,border-color .15s;"
-          ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.10)'">
-          <span id="hdr-proj-name-text" style="flex:1;overflow:hidden;text-overflow:ellipsis;">No project</span>
-          <span id="hdr-proj-chevron" style="font-size:7px;opacity:0.7;transition:transform .2s;flex-shrink:0;">▾</span>
-        </button>
+        <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;white-space:nowrap;">Tap Settings → Profile</p>
+        <!-- Project name display — auto-updates when project selected in Settings -->
+        <!-- Project name — tappable to open project switcher dropdown -->
+        <div style="position:relative;">
+          <p id="hdr-proj-name" class="text-amber-300 truncate" onclick="_toggleProjDropdown()" style="font-size:10px!important;line-height:1;margin:0;max-width:160px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;padding:2px 6px;border-radius:6px;border:1px solid rgba(251,191,36,0.25);transition:background .15s;" ontouchstart="this.style.background='rgba(251,191,36,0.15)'" ontouchend="this.style.background='transparent'">No project ▾</p>
+          <!-- Project Switcher Dropdown -->
+          <div id="hdr-proj-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);min-width:220px;max-width:280px;background:linear-gradient(135deg,#1e1b4b,#2e1065);border:1px solid rgba(99,102,241,0.45);border-radius:14px;padding:10px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.6);backdrop-filter:blur(12px);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <p style="font-size:11px;font-weight:800;color:#a5b4fc;margin:0;">📂 Projects</p>
+              <button onclick="_settOpenAddProject();_closeProjDropdown();" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
+            </div>
+            <div id="hdr-proj-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;"></div>
+            <!-- Add project form inline -->
+            <div id="hdr-proj-add-form" style="display:none;margin-top:8px;">
+              <input id="hdr-proj-name-inp" type="text" placeholder="e.g. Site Goa Phase 2" onkeydown="if(event.key==='Enter')_hdrSaveProject()" style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:7px;color:#fff;font-size:11px;outline:none;box-sizing:border-box;margin-bottom:6px;">
+              <div style="display:flex;gap:6px;">
+                <button onclick="_hdrSaveProject()" style="flex:1;padding:6px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:7px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;">Create</button>
+                <button onclick="document.getElementById('hdr-proj-add-form').style.display='none'" style="padding:6px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);border-radius:7px;font-size:10px;cursor:pointer;">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- Hidden select kept for JS compat -->
         <select id="hdr-proj-select" onchange="_hdrProjSwitch(this.value)" style="display:none;"></select>
         <!-- hdr-engineer kept hidden for JS compat (applyProfile writes to it) -->
@@ -3078,38 +3162,6 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
   </div>
 </header>
-
-<!-- ========== HEADER PROJECT DROPDOWN ========== -->
-<div id="hdr-proj-dropdown" style="display:none;position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:300;width:calc(100% - 20px);max-width:340px;">
-  <!-- backdrop hit area -->
-  <div id="hdr-proj-backdrop" onclick="_closeHdrProjDropdown()" style="position:fixed;inset:0;z-index:-1;"></div>
-  <!-- Dropdown panel -->
-  <div style="background:linear-gradient(160deg,#1a1740 0%,#2d2a6e 55%,#3d1a6e 100%);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:10px 11px 11px;box-shadow:0 12px 40px rgba(0,0,0,0.55),0 0 0 1px rgba(255,255,255,0.06);">
-    <!-- Header row -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:14px;">📂</span>
-        <span style="font-size:11px;font-weight:800;color:#a5b4fc;">Switch Project</span>
-      </div>
-      <button onclick="_settOpenAddProject_hdr()" id="hdr-proj-add-btn" style="font-size:9px;font-weight:800;padding:3px 9px;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.35);color:#6ee7b7;border-radius:7px;cursor:pointer;-webkit-tap-highlight-color:transparent;">＋ New</button>
-    </div>
-    <!-- Project chips list -->
-    <div id="hdr-proj-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:5px;max-height:200px;overflow-y:auto;">
-      <p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:2px 0;">No projects yet — tap ＋ New</p>
-    </div>
-    <!-- Inline add form -->
-    <div id="hdr-proj-add-form" style="display:none;margin-top:5px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:8px 9px;">
-      <p style="font-size:10px;font-weight:700;color:#6ee7b7;margin:0 0 6px;">🏗️ New Project</p>
-      <input id="hdr-proj-name-inp" type="text" placeholder="e.g. Site Goa Phase 2"
-        onkeydown="if(event.key==='Enter')_hdrSaveProject()"
-        style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:7px;color:#fff;font-size:11px;outline:none;box-sizing:border-box;margin-bottom:6px;caret-color:#a5b4fc;">
-      <div style="display:flex;gap:5px;">
-        <button onclick="_hdrSaveProject()" style="flex:1;padding:6px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:7px;font-size:10px;font-weight:800;cursor:pointer;">✓ Create</button>
-        <button onclick="document.getElementById('hdr-proj-add-form').style.display='none'" style="padding:6px 10px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);border-radius:7px;font-size:10px;cursor:pointer;">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ========== SETTINGS PANEL ========== -->
 <!-- URL bottom sheet -->
@@ -3640,7 +3692,7 @@ function _settLoadProjDropdown() {
           if (active === p.name) {
             try { localStorage.setItem('sanj_active_proj', newName); } catch(e2) {}
             var hdrProjName = document.getElementById('hdr-proj-name');
-            if (hdrProjName) _setHdrProjLabel('📂 ' + newName);
+            if (hdrProjName) hdrProjName.textContent = 'D83DDCC2 ' + newName + ' 25BE';
           }
           _settLoadProjDropdown();
           if (typeof toast === 'function') toast('✅ Renamed to: ' + newName, 'ok');
@@ -3673,7 +3725,7 @@ function _settLoadProjDropdown() {
   // ── Header project name text display ──
   var hdrProjName = document.getElementById('hdr-proj-name');
   if (hdrProjName) {
-    _setHdrProjLabel(active ? '📂 ' + active : 'No project');
+    hdrProjName.textContent = active ? '\uD83D\uDCC2 ' + active + ' \u25BE' : 'No project \u25BE';
   }
 
   // ── Add button state ──
@@ -3695,176 +3747,126 @@ function _settLoadProjDropdown() {
 // Called when user picks a project from the header dropdown
 function _hdrProjSwitch(name) {
   if (!name) return;
-  // Call the existing project switch logic
   if (typeof _onProjectChange === 'function') _onProjectChange(name);
-  // Refresh the settings list too (in case it's open)
   try { _settLoadProjDropdown(); } catch(e) {}
 }
 
-// ── Helper: update the #hdr-proj-name button inner text ──────────────────────
-function _setHdrProjLabel(txt) {
-  var span = document.getElementById('hdr-proj-name-text');
-  if (span) { span.textContent = txt; return; }
-  // Fallback: button itself (legacy path)
-  var btn = document.getElementById('hdr-proj-name');
-  if (btn) btn.textContent = txt;
-}
-
-// ── Header Project Dropdown ──────────────────────────────────────────────────
-var _hdrDropdownOpen = false;
-
-function _toggleHdrProjDropdown(e) {
-  if (e) { e.stopPropagation(); }
-  _hdrDropdownOpen ? _closeHdrProjDropdown() : _openHdrProjDropdown();
-}
-
-function _openHdrProjDropdown() {
-  _hdrDropdownOpen = true;
+// ── Header project dropdown ──────────────────────────────────────────
+function _toggleProjDropdown() {
   var dd = document.getElementById('hdr-proj-dropdown');
-  if (dd) dd.style.display = 'block';
-  var chev = document.getElementById('hdr-proj-chevron');
-  if (chev) chev.style.transform = 'rotate(180deg)';
-  _renderHdrProjList();
+  if (!dd) return;
+  if (dd.style.display === 'none') { _openProjDropdown(); } else { _closeProjDropdown(); }
 }
-
-function _closeHdrProjDropdown() {
-  _hdrDropdownOpen = false;
+function _openProjDropdown() {
+  var dd = document.getElementById('hdr-proj-dropdown');
+  if (!dd) return;
+  _renderHdrProjList();
+  dd.style.display = 'block';
+  // Use 150ms so the triggering click fully bubbles BEFORE we attach
+  // the outside-click listener — otherwise the same click that opened
+  // the dropdown immediately closes it again.
+  setTimeout(function() {
+    document.addEventListener('click', _outsideProjDropdown, {once: true});
+  }, 150);
+}
+function _closeProjDropdown() {
   var dd = document.getElementById('hdr-proj-dropdown');
   if (dd) dd.style.display = 'none';
-  var chev = document.getElementById('hdr-proj-chevron');
-  if (chev) chev.style.transform = '';
-  // Close add form
   var f = document.getElementById('hdr-proj-add-form');
   if (f) f.style.display = 'none';
+  document.removeEventListener('click', _outsideProjDropdown);
 }
-
+function _outsideProjDropdown(e) {
+  var dd = document.getElementById('hdr-proj-dropdown');
+  var btn = document.getElementById('hdr-proj-name');
+  if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) {
+    _closeProjDropdown();
+  }
+}
 function _renderHdrProjList() {
   var listEl = document.getElementById('hdr-proj-list');
+  var addBtn  = document.getElementById('hdr-proj-add-btn');
   if (!listEl) return;
   var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
   var active = '';
   try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
-
-  if (!projects.length) {
-    listEl.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:4px 0;">No projects yet — tap ＋ New above</p>';
-    return;
-  }
-  listEl.innerHTML = projects.map(function(p) {
-    var isActive = (p.name === active);
-    return '<button onclick="_hdrSelectProject(' + JSON.stringify(p.name) + ')" style="'
-      + 'width:100%;display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:9px;cursor:pointer;'
-      + 'text-align:left;border:1px solid;transition:all .15s;-webkit-tap-highlight-color:transparent;'
-      + (isActive
-          ? 'background:rgba(99,102,241,0.28);border-color:rgba(99,102,241,0.5);'
-          : 'background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);')
-      + '">'
-      + '<span style="font-size:12px;flex-shrink:0;">' + (isActive ? '✅' : '📂') + '</span>'
-      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:700;'
-      + (isActive ? 'color:#c7d2fe;' : 'color:rgba(255,255,255,0.75);')
-      + '">' + p.name + '</span>'
-      + (isActive ? '<span style="font-size:8px;color:#a5b4fc;font-weight:600;">Active</span>' : '')
-      + '</button>';
-  }).join('');
-
-  // Update + New button state
-  var addBtn = document.getElementById('hdr-proj-add-btn');
   var isPro = !!window._sbSubActive;
+  if (projects.length === 0) {
+    listEl.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:2px 0;">No projects yet — tap \uFF0B New</p>';
+  } else {
+    listEl.innerHTML = '';
+    projects.forEach(function(p) {
+      var isActive = p.name === active;
+      var chip = document.createElement('button');
+      chip.style.cssText = [
+        'width:100%;display:flex;align-items:center;gap:7px;',
+        'background:' + (isActive ? 'linear-gradient(135deg,rgba(99,102,241,0.35),rgba(168,85,247,0.25))' : 'rgba(255,255,255,0.05)') + ';',
+        'border:1px solid ' + (isActive ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.1)') + ';',
+        'border-radius:8px;padding:6px 9px;cursor:pointer;',
+        'color:' + (isActive ? '#a5b4fc' : 'rgba(255,255,255,0.65)') + ';',
+        'font-size:11px;font-weight:' + (isActive ? '800' : '600') + ';',
+        'text-align:left;-webkit-tap-highlight-color:transparent;outline:none;',
+        'transition:background .15s,border-color .15s;'
+      ].join('');
+      chip.innerHTML = '<span style="font-size:12px;flex-shrink:0;">' + (isActive ? '\u2705' : '\uD83D\uDCC2') + '</span>'
+        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + p.name + '</span>';
+      chip.addEventListener('click', function() {
+        _closeProjDropdown();
+        if (typeof _onProjectChange === 'function') _onProjectChange(p.name);
+        try { _settLoadProjDropdown(); } catch(e2) {}
+      });
+      listEl.appendChild(chip);
+    });
+  }
   if (addBtn) {
     if (!isPro && projects.length >= 1) {
-      addBtn.textContent = '⭐ Pro';
+      addBtn.textContent = '\u2B50 Pro';
       addBtn.style.background = 'rgba(245,158,11,0.18)';
       addBtn.style.borderColor = 'rgba(245,158,11,0.35)';
       addBtn.style.color = '#fcd34d';
+      addBtn.onclick = function() { if(typeof toast==='function')toast('\u2B50 Pro required for multiple projects',''); };
     } else {
-      addBtn.textContent = '＋ New';
-      addBtn.style.background = 'rgba(16,185,129,0.20)';
+      addBtn.textContent = '\uFF0B New';
+      addBtn.style.background = 'rgba(16,185,129,0.2)';
       addBtn.style.borderColor = 'rgba(16,185,129,0.35)';
       addBtn.style.color = '#6ee7b7';
+      addBtn.onclick = function() {
+        var f = document.getElementById('hdr-proj-add-form');
+        var inp = document.getElementById('hdr-proj-name-inp');
+        if (f) { f.style.display = 'block'; if (inp) inp.focus(); }
+      };
     }
   }
 }
-
-function _hdrSelectProject(name) {
-  if (!name) return;
-  try { localStorage.setItem('sanj_active_proj', name); } catch(e) {}
-  if (typeof _onProjectChange === 'function') _onProjectChange(name);
-  try { _settLoadProjDropdown(); } catch(e) {}
-  _setHdrProjLabel('📂 ' + name);
-  _closeHdrProjDropdown();
-  if (typeof toast === 'function') toast('📂 ' + name, 'ok');
-}
-
-function _settOpenAddProject_hdr() {
-  var isPro = !!window._sbSubActive;
-  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
-  if (!isPro && projects.length >= 1) {
-    if (typeof toast === 'function') toast('⭐ Pro needed for multiple projects', '');
-    if (typeof openPayLanding === 'function') { _closeHdrProjDropdown(); openPayLanding(true); }
-    return;
-  }
-  var f = document.getElementById('hdr-proj-add-form');
-  if (!f) return;
-  var isOpen = f.style.display !== 'none';
-  f.style.display = isOpen ? 'none' : 'block';
-  if (!isOpen) {
-    var inp = document.getElementById('hdr-proj-name-inp');
-    if (inp) { inp.value = ''; setTimeout(function(){ inp.focus(); }, 80); }
-  }
-}
-
 function _hdrSaveProject() {
   var inp = document.getElementById('hdr-proj-name-inp');
-  var name = inp ? inp.value.trim() : '';
-  if (!name) {
-    if (inp) { inp.style.borderColor = 'rgba(239,68,68,.7)'; inp.placeholder = 'Enter a name!'; }
-    return;
-  }
-  var isPro = !!window._sbSubActive;
+  if (!inp) return;
+  var name = inp.value.trim();
+  if (!name) { if (typeof toast === 'function') toast('Enter project name', 'err'); return; }
   var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
+  var isPro = !!window._sbSubActive;
   if (!isPro && projects.length >= 1) {
-    if (typeof toast === 'function') toast('⭐ Upgrade to Pro for multiple projects', '');
+    if (typeof toast === 'function') toast('\u2B50 Upgrade to Pro for multiple projects', '');
     return;
   }
   if (projects.find(function(p){ return p.name === name; })) {
     if (typeof toast === 'function') toast('Project already exists', 'err'); return;
   }
-  var isFirstProject = (projects.length === 0);
-  projects.push({ name: name, createdAt: Date.now() });
+  var isFirstProject = projects.length === 0;
+  projects.push({name: name, created: Date.now()});
   if (typeof _saveProjects === 'function') _saveProjects(projects);
-  var f = document.getElementById('hdr-proj-add-form');
-  if (f) f.style.display = 'none';
-  // Set as active
   try { localStorage.setItem('sanj_active_proj', name); } catch(e) {}
   try { if (typeof _initProjectNID === 'function') _initProjectNID(); } catch(e) {}
-  _renderHdrProjList();
-  _setHdrProjLabel('📂 ' + name);
+  if (typeof toast === 'function') toast('\u2705 Project created: ' + name, 'ok');
+  inp.value = '';
+  document.getElementById('hdr-proj-add-form').style.display = 'none';
+  _closeProjDropdown();
+  if (isPro && typeof _onProjectChange === 'function') {
+    if (!isFirstProject && typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
+    _onProjectChange(name);
+  }
   try { _settLoadProjDropdown(); } catch(e) {}
-  if (typeof toast === 'function') toast('✅ Project created: ' + name, 'ok');
-  if (!isFirstProject && typeof _clearLocalDataForNewProject === 'function') _clearLocalDataForNewProject();
-  if (typeof _onProjectChange === 'function') _onProjectChange(name);
-  // For free user: update profile address
-  if (!isPro) {
-    try {
-      if (typeof lprof === 'function' && typeof sprof === 'function') {
-        var prof = lprof() || {};
-        prof.address = name;
-        sprof(prof);
-        if (typeof applyProfile === 'function') applyProfile();
-      }
-    } catch(e) {}
-  }
-  setTimeout(_closeHdrProjDropdown, 400);
 }
-
-// Close dropdown on outside click
-document.addEventListener('click', function(e) {
-  if (!_hdrDropdownOpen) return;
-  var dd = document.getElementById('hdr-proj-dropdown');
-  var btn = document.getElementById('hdr-proj-name');
-  if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) {
-    _closeHdrProjDropdown();
-  }
-});
 
 function _settOpenAddProject() {
   var isPro = !!window._sbSubActive;
@@ -7087,7 +7089,7 @@ service cloud.firestore {
         <div style="width:36px;height:36px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(217,119,6,.5);">👥</div>
         <div>
           <p style="font-size:14px;font-weight:900;color:#fff;line-height:1;">Viewer Accounts</p>
-          <p style="font-size:10px;color:#fbbf24;line-height:1.3;">Create & manage read-only users</p>
+          <p id="vmgr-active-proj-tag" style="font-size:10px;color:#fbbf24;line-height:1.3;">📂 Loading…</p>
         </div>
       </div>
       <button onclick="closeViewerMgmt()" style="padding:0 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.7);font-size:11px;font-weight:700;cursor:pointer;">← Back</button>
@@ -7100,6 +7102,12 @@ service cloud.firestore {
       <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;padding:.9rem;margin-bottom:1rem;">
         <p style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:.7rem;">🔗 Create Viewer Link</p>
         <p style="font-size:10px;color:#a78bfa;margin-bottom:.7rem;line-height:1.5;">Share the generated link — viewer opens it, sees only selected tabs. No login needed. Stays active until you delete it.</p>
+        <!-- Active project display — read-only, viewer always gets current active project's site_id -->
+        <div id="vmgr-proj-info" style="display:flex;align-items:center;gap:6px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:9px;padding:6px 10px;margin-bottom:.7rem;">
+          <span style="font-size:12px;">📂</span>
+          <span id="vmgr-proj-info-name" style="font-size:11px;font-weight:700;color:#6ee7b7;">Loading…</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.4);margin-left:auto;">active project</span>
+        </div>
         <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Viewer Name / Label</label>
         <input id="vw-name" type="text" class="auth-input" placeholder="e.g. Client View, Rampur Site, Suresh">
 
@@ -7121,11 +7129,6 @@ service cloud.firestore {
           <span class="perm-chip on" data-tab="schedule">📅 Schedule</span>
           <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
           <span class="perm-chip on" data-tab="bill">🧾 Bill</span>
-        </div>
-        <!-- ── Allowed Projects for this viewer ── -->
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px;margin-top:.5rem;">📂 Restrict to Projects — tap to allow:</label>
-        <div id="vw-proj-chips-container" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.75rem;">
-          <p id="vw-proj-chips-empty" style="font-size:9px;color:rgba(255,255,255,0.35);margin:0;">Loading projects…</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">
           <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:15px;height:15px;">
@@ -7636,7 +7639,7 @@ function applyProfile() {
     var activeProj = '';
     try { activeProj = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
     if (!activeProj && p) activeProj = p.address || '';
-    _setHdrProjLabel(activeProj ? '📂 ' + activeProj : 'No project');
+    hdrProjName.textContent = activeProj ? 'D83DDCC2 ' + activeProj + ' 25BE' : 'No project 25BE';
   }
   // If user has company logo show it in header; else default app logo — both transparent bg
   var box = document.getElementById('app-logo-box');
@@ -8019,6 +8022,12 @@ function _openViewerManager() {
     toast('Please log in first', 'err');
     return;
   }
+  // Update project label in modal header and create form
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  _populateVmgrProjSelector(); // updates the read-only active project label in create form
   openViewerMgmt();
 }
 
@@ -8031,10 +8040,15 @@ function _openViewerManagerCreate() {
     toast('Please log in first', 'err');
     return;
   }
-  // Open the modal
+  // Update project labels (read-only — always uses active project)
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  _populateVmgrProjSelector(); // updates the read-only active project info label
+  // Open the modal and load viewers for current project
   loadViewerAccounts();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
-  // Instantly scroll to top and focus the viewer name input
   setTimeout(function() {
     var scrollBody = document.querySelector('#viewer-mgmt-modal > div > div[style*="overflow-y"]');
     if (scrollBody) scrollBody.scrollTop = 0;
@@ -8042,6 +8056,18 @@ function _openViewerManagerCreate() {
     if (inp) { inp.focus(); inp.select(); }
   }, 80);
 }
+
+// Show the currently active project name in the viewer-mgmt-modal create form.
+// Viewers are ALWAYS created for the currently active project — no switching here.
+function _populateVmgrProjSelector() {
+  var nameEl = document.getElementById('vmgr-proj-info-name');
+  if (!nameEl) return;
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  nameEl.textContent = ap || 'Default Project';
+}
+// Kept for backward compat — no longer does project switching from viewer modal
+function _vmgrSelectProj(el, projName) { /* disabled — viewer always uses active project */ }
 
 
 
@@ -8225,6 +8251,7 @@ function boot() {
     // Admin is active — clear any stale viewer keys so they don't interfere
     safeLS.removeItem('sj_viewer_email');
     safeLS.removeItem('sj_viewer_perms');
+    safeLS.removeItem('sj_viewer_projs');
     safeLS.removeItem('sj_viewer_admin');
     safeLS.removeItem('sj_viewer_site');
     safeLS.removeItem('sj_viewer_print');
@@ -8251,8 +8278,9 @@ function boot() {
         }
       });
     }
-    // Load data using adminId — correct admin's data always
-    setTimeout(function() { _viewerLoadData(viewerAdmin, ''); }, 1500);
+    // Load data using adminId + stored siteId — ensures correct project on refresh
+    var _bootSiteId = safeLS.getItem('sj_viewer_site') || '';
+    setTimeout(function() { _viewerLoadData(viewerAdmin, _bootSiteId); }, 1500);
     return;
   }
   if (!viewerEmail) {
@@ -11514,8 +11542,10 @@ function boqAddLabourRow(){
 function boqFetchAttendanceData(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   try{
-    var AD=JSON.parse(safeLS.getItem('cm_data')||'[]');
-    var att=AD.filter(function(a){ return a.type==='attendance'&&a.date===date; });
+    // Use ld() — reads cm_db with correct project-prefix via _pk()
+    // Direct safeLS.getItem('cm_data') was wrong: key is cm_db, not cm_data
+    var _boqAD=ld();
+    var att=_boqAD.filter(function(a){ return a.type==='attendance'&&a.date===date; });
     if(!att.length){ toast('No attendance data for '+date,'err'); return; }
     var grp={};
     att.forEach(function(a){ if(!grp[a.category]) grp[a.category]={count:0,hours:0}; grp[a.category].count++; grp[a.category].hours+=(parseFloat(a.hours)||0); });
@@ -11556,7 +11586,8 @@ function boqAddMachRow(){
 function boqFetchMachData(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   try{
-    var store=JSON.parse(safeLS.getItem('cm_machinery')||'{}');
+    // Use lmach() — reads cm_machinery with correct project-prefix via _pk()
+    var store=lmach();
     var sessions=store[date]||[];
     if(!sessions.length){ toast('No machinery data for '+date,'err'); return; }
     var mach=sessions.map(function(s){ return {name:s.name||'Machine',type:s.type||'',hours:s.hours||0,status:'Working'}; });
@@ -13185,8 +13216,17 @@ function _onProjectChange(name) {
   if (!name) return;
   var isPro = !!window._sbSubActive;
 
-  // Set active project key
+  // Set active project key FIRST so _pk() immediately picks up new namespace
   localStorage.setItem(_ACTIVE_PROJ_KEY, name);
+
+  // ── FULL STATE RESET: clear all in-memory state from previous project ──
+  // Without this, editing modals open stale records from the previous project
+  try { WID = null; } catch(e) {}  // attendance/expense edit ID
+  try { CID = null; } catch(e) {}  // contractor edit ID
+  try { MID = null; } catch(e) {}  // machinery edit ID
+  try { _plFilter = 'all'; } catch(e) {}  // punchlist filter
+  // Clear AD immediately so any code between now and re-render gets empty array
+  try { AD = []; } catch(e) {}
 
   // Re-init NID for this project namespace
   try { _initProjectNID(); } catch(e) { NID = 1; }
@@ -13199,6 +13239,20 @@ function _onProjectChange(name) {
   var prof = lprof() || {};
   prof.address = name;
   sprof(prof);
+
+  // ── BUTTON FIX: re-enable any buttons/inputs that were disabled by viewer mode
+  // If an admin was viewing a shared link and then switched back to admin,
+  // or if a stale _IS_VIEWER flag left buttons stuck, this ensures full UI is restored.
+  if (!_IS_VIEWER) {
+    try {
+      document.querySelectorAll('button[disabled]').forEach(function(b) {
+        b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
+      });
+      document.querySelectorAll('input[disabled], textarea[disabled]').forEach(function(el) {
+        el.disabled = false; el.style.opacity = ''; el.style.cursor = '';
+      });
+    } catch(e) {}
+  }
 
   try { updateCloudBtn && updateCloudBtn(); } catch(e) {}
   _refreshBackupLabel && _refreshBackupLabel();
@@ -13217,12 +13271,25 @@ function _onProjectChange(name) {
     var activeTab = document.querySelector('.tab-btn.active');
     if (activeTab) {
       var tabId = activeTab.getAttribute('data-tab');
-      if (tabId && typeof showTab === 'function') showTab(tabId);
+      // FIX: was calling showTab() which doesn't exist — correct function is switchTab()
+      if (tabId && typeof switchTab === 'function') switchTab(tabId);
     }
   } catch(e) {}
 
   // Update realtime channel to listen to new project's backup_key
   try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
+
+  // Refresh viewer list for new project after a brief delay so getSiteId()
+  // returns the newly active project's site_id (not the previous one)
+  setTimeout(function() {
+    try { if (typeof loadViewerAccountsInline === 'function') loadViewerAccountsInline(); } catch(e) {}
+  }, 300);
+
+  // Update active project tag in viewer-mgmt-modal if open
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) vmgrProjTag.textContent = '📂 ' + name;
+  var vmgrInfoName = document.getElementById('vmgr-proj-info-name');
+  if (vmgrInfoName) vmgrInfoName.textContent = name;
 
   toast('📂 ' + name, 'ok');
 }
@@ -13420,14 +13487,15 @@ function refreshCloudModalState() {
 
   if (isFullyActive) {
     var adminPanel = document.getElementById('ctab-admin');
-    // If panel was overwritten by expired-screen, restore original structure
+    // If the admin panel's inner structure was replaced (e.g. by the Free Account screen),
+    // and sub is now confirmed active, just reload the page to restore the full UI safely.
+    // But ONLY reload if _sbSubChecked is true — never reload during pending check.
     if (adminPanel && !document.getElementById('ctab-admin-postlogin')) {
-      adminPanel.innerHTML =
-        '<div id="ctab-admin-prelogin" style="display:none"></div>'
-        + '<div id="ctab-admin-postlogin" style="display:block">'
-        + document.getElementById('ctab-admin-postlogin-tpl') ? '' : ''
-        + '</div>';
-      // Reload the page to restore full UI — safer than rebuilding HTML inline
+      if (!window._sbSubChecked) {
+        // Sub check still in flight — do nothing, wait for it to complete
+        return;
+      }
+      // Panel was destroyed — safe to reload now that we know user is Pro
       toast('✅ Cloud ready! Refreshing…', 'ok');
       setTimeout(function(){ location.reload(); }, 800);
       return;
@@ -13474,7 +13542,7 @@ function refreshCloudModalState() {
       }
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
-    // Logged in but FREE user (no active subscription) — show account info + upgrade option
+    // Logged in but confirmed FREE user (subscription check is complete) — show upgrade screen
     // Logo section is available to all users — show it
     var logoSectionFree = document.getElementById('cloud-logo-section');
     if (logoSectionFree) logoSectionFree.style.display = 'block';
@@ -14059,7 +14127,8 @@ function _adminCloudPullAll(silent, onDone) {
         if (!activeIsValid && defaultProj) {
           try { localStorage.setItem(_ACTIVE_PROJ_KEY, defaultProj); } catch(e) {}
           try { _initProjectNID && _initProjectNID(); } catch(e) {}
-          _setHdrProjLabel('\uD83D\uDCC2 ' + defaultProj);
+          var hdrProjName = document.getElementById('hdr-proj-name');
+          if (hdrProjName) hdrProjName.textContent = '\uD83D\uDCC2 ' + defaultProj;
         }
       }
 
@@ -14385,13 +14454,36 @@ function checkViewerMode() {
   var params = new URLSearchParams(window.location.search);
   var token = params.get('vt');
 
-  // Legacy ?view= support
+  // Legacy ?view= support — viewSiteId is a backup_key (siteId), NOT an adminId.
+  // Old code passed it as adminId which caused _viewerLoadData to fail — no admin
+  // row would match that value, so viewers got no data.
+  // Fix: look up the admin_id from cloud_backups using backup_key, then load correctly.
   if (!token) {
     var viewSiteId = params.get('view');
     if (viewSiteId) {
       _IS_VIEWER = true;
       _showViewerBar('Viewer');
-      _viewerLoadData(viewSiteId, '');
+      // Store siteId so _viewerLoadData can filter by backup_key
+      safeLS.setItem('sj_viewer_site', viewSiteId);
+      // Look up which admin owns this siteId (backup_key)
+      function _legacyViewerLoad() {
+        if (!_sb) { setTimeout(_legacyViewerLoad, 400); return; }
+        _sb.from('cloud_backups')
+          .select('admin_id, data')
+          .eq('backup_key', viewSiteId)
+          .maybeSingle()
+          .then(function(r) {
+            if (r.error || !r.data) {
+              toast('⚠️ Viewer link invalid or expired', 'err'); return;
+            }
+            var adminId = r.data.admin_id;
+            safeLS.setItem('sj_viewer_admin', adminId);
+            _viewerLoadData(adminId, viewSiteId);
+          }).catch(function() {
+            toast('⚠️ Could not load viewer data — check connection', 'err');
+          });
+      }
+      _legacyViewerLoad();
     }
     return;
   }
@@ -14440,8 +14532,7 @@ function _fetchViewerByToken(token, silent) {
         canPrint: vData.can_print,
         siteId: vData.site_id,
         adminId: vData.admin_id,
-        email: vData.email,
-        allowedProjects: vData.allowed_projects || null
+        email: vData.email
       }));
       if (!silent) _applyTokenViewer(vData, token);
     }).catch(function() {
@@ -14457,7 +14548,6 @@ function _applyTokenViewer(vData, token) {
   var canPrint = vData.canPrint || vData.can_print || false;
   var adminId  = vData.adminId || vData.admin_id || '';
   var label    = vData.email ? vData.email.split('-').slice(0,-1).join(' ') : 'Viewer';
-  var allowedProjects = vData.allowedProjects || vData.allowed_projects || null;
 
   // Store in localStorage so reload works
   safeLS.setItem('sj_viewer_perms',   JSON.stringify(perms));
@@ -14465,23 +14555,22 @@ function _applyTokenViewer(vData, token) {
   safeLS.setItem('sj_viewer_admin',   adminId);   // key: always use adminId to find data
   safeLS.setItem('sj_viewer_email',   label);
   safeLS.setItem('sj_viewer_token',   token);
-  if (allowedProjects && allowedProjects.length > 0) {
-    safeLS.setItem('sj_viewer_projects', JSON.stringify(allowedProjects));
-  } else {
-    safeLS.removeItem('sj_viewer_projects');
-  }
 
   _IS_VIEWER = true;
   _showViewerBar(label);
   _applyViewerPermissions(perms, canPrint, adminId);
-  if (adminId) _viewerLoadData(adminId, '');
+  if (adminId) {
+    var _tokenSiteId = vData.siteId || vData.site_id || safeLS.getItem('sj_viewer_site') || '';
+    _viewerLoadData(adminId, _tokenSiteId);
+  }
   else toast('⚠️ Could not find admin data — invalid link?', 'err');
 }
 
 function _viewerRefresh() {
   var adminId = safeLS.getItem('sj_viewer_admin') || '';
+  var siteId  = safeLS.getItem('sj_viewer_site')  || '';
   if (adminId) {
-    _viewerLoadData(adminId, '');
+    _viewerLoadData(adminId, siteId);
     toast('🔄 Refreshing data…', 'ok');
   } else {
     // Fallback: re-fetch token from DB
@@ -14511,13 +14600,10 @@ function _viewerLogout() {
   safeLS.removeItem('sj_viewer_admin');
   safeLS.removeItem('sj_viewer_email');
   safeLS.removeItem('sj_viewer_token');
-  safeLS.removeItem('sj_viewer_projects');
   _IS_VIEWER = false;
   _viewerApp = null;
   var bar = document.getElementById('viewer-top-bar');
   if (bar) bar.remove();
-  var projBar = document.getElementById('viewer-proj-bar');
-  if (projBar) projBar.remove();
   var main = document.getElementById('main-app');
   if (main) main.style.marginTop = '';
   // Re-enable all write buttons
@@ -14534,6 +14620,12 @@ var _viewerRealtimeChannel = null;  // singleton channel reference
 function _viewerLoadData(adminId, projId) {
   if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
   if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
+
+  // ── FIX: Resolve the specific backup_key (siteId) for this viewer's assigned project ──
+  // Priority: explicit projId arg → stored sj_viewer_site → fallback to latest row
+  // This prevents viewers from accidentally pulling data from a different project
+  // when the admin has multiple projects and the wrong one was most recently synced.
+  var _viewerSiteId = projId || safeLS.getItem('sj_viewer_site') || '';
 
   function applyViewerData(d, silent) {
     var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist || d.cm_all);
@@ -14570,7 +14662,7 @@ function _viewerLoadData(adminId, projId) {
     if (!silent) toast('✅ Cloud data loaded', 'ok');
   }
 
-  // ── Pull latest backup once ────────────────────────────────
+  // ── Pull backup — project-scoped if siteId known, else latest ─
   if (typeof window._viewerPollTimer !== 'undefined' && window._viewerPollTimer) {
     clearInterval(window._viewerPollTimer);
     window._viewerPollTimer = null;
@@ -14578,11 +14670,44 @@ function _viewerLoadData(adminId, projId) {
   var _viewerPollTimer = null;
 
   function fetchLatest(silent) {
-    _sb.from('cloud_backups')
+    // Build query — always filter by admin_id
+    var q = _sb.from('cloud_backups')
       .select('data,backup_key,updated_at')
-      .eq('admin_id', adminId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
+      .eq('admin_id', adminId);
+
+    // FIX: If we know the viewer's assigned project siteId (backup_key), filter to
+    // ONLY that project row. Without this filter, if the admin has multiple projects
+    // and the most recent push was for a different project, the viewer sees wrong data.
+    if (_viewerSiteId) {
+      q = q.eq('backup_key', _viewerSiteId).maybeSingle();
+      q.then(function(r) {
+        if (r.error) {
+          if (!silent) {
+            console.error('Viewer backup fetch error:', r.error);
+            toast('⚠️ Load error: ' + (r.error.message || r.error.code || 'Check RLS'), 'err');
+          }
+          _showViewerSyncDot('red');
+          return;
+        }
+        // maybeSingle returns r.data as object (or null), not array
+        var rowData = r.data ? r.data.data : null;
+        if (!rowData) {
+          if (!silent) toast('No backup found for this project. Ask admin to Backup Now.', 'err');
+          return;
+        }
+        applyViewerData(rowData, !!silent);
+        _showViewerSyncDot('green');
+      }).catch(function(e) {
+        if (!silent) {
+          console.error('Viewer load catch:', e);
+          toast('Data load error: ' + (e.message || 'unknown'), 'err');
+        }
+        _showViewerSyncDot('red');
+      });
+    } else {
+      // No siteId known — fallback: fetch the single most recent row for this admin
+      // (legacy path: admin has exactly 1 project)
+      q.order('updated_at', { ascending: false }).limit(1)
       .then(function(r) {
         if (r.error) {
           if (!silent) {
@@ -14596,6 +14721,11 @@ function _viewerLoadData(adminId, projId) {
           if (!silent) toast('No backup found. Admin needs to click Backup Now first.', 'err');
           return;
         }
+        // Cache the siteId we discovered so future polls/reloads are project-scoped
+        if (r.data[0].backup_key) {
+          _viewerSiteId = r.data[0].backup_key;
+          safeLS.setItem('sj_viewer_site', _viewerSiteId);
+        }
         applyViewerData(r.data[0].data, !!silent);
         _showViewerSyncDot('green');
       }).catch(function(e) {
@@ -14605,6 +14735,7 @@ function _viewerLoadData(adminId, projId) {
         }
         _showViewerSyncDot('red');
       });
+    }
   }
 
   // Initial load
@@ -14623,25 +14754,39 @@ function _viewerLoadData(adminId, projId) {
   }
 
   try {
+    // FIX: Channel name and filter are now project-scoped using _viewerSiteId.
+    // Previously filtered only by admin_id — meaning ANY of the admin's project
+    // saves would trigger a viewer refresh, potentially loading the wrong project.
+    // Now we filter to backup_key = viewer's assigned siteId.
+    var _rtChannelName = _viewerSiteId
+      ? 'viewer-proj-' + _viewerSiteId
+      : 'viewer-admin-' + adminId;
+    var _rtFilter = _viewerSiteId
+      ? 'admin_id=eq.' + adminId + '&backup_key=eq.' + _viewerSiteId
+      : 'admin_id=eq.' + adminId;
+
     _viewerRealtimeChannel = _sb
-      .channel('viewer-data-' + adminId)
+      .channel(_rtChannelName)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'cloud_backups',
-        filter: 'admin_id=eq.' + adminId
+        filter: _rtFilter
       }, function(payload) {
         try {
+          // Only apply if backup_key matches our assigned project (extra guard)
+          var incomingKey = payload && payload.new && payload.new.backup_key;
+          if (_viewerSiteId && incomingKey && incomingKey !== _viewerSiteId) return;
           if (payload && payload.new && payload.new.data) {
             applyViewerData(payload.new.data, true);
             _showViewerSyncDot('pulse');
             setTimeout(function() { _showViewerSyncDot('green'); }, 2000);
           } else {
-            fetchLatest();
+            fetchLatest(true);
           }
         } catch(payloadErr) {
           console.warn('Viewer realtime payload error:', payloadErr);
-          fetchLatest();
+          fetchLatest(true);
         }
       })
       .subscribe(function(status) {
@@ -14878,21 +15023,38 @@ function doSmartLogin() {
     if (!vRes.error && vRes.data) {
       // ── VIEWER LOGIN ──
       var vData = vRes.data;
-      safeLS.setItem('sj_viewer_perms', JSON.stringify(vData.permissions || []));
-      safeLS.setItem('sj_viewer_print', vData.can_print ? '1' : '0');
-      safeLS.setItem('sj_viewer_site',  vData.site_id  || '');
-      safeLS.setItem('sj_viewer_email', email);
-      if (vData.allowed_projects && vData.allowed_projects.length > 0) {
-        safeLS.setItem('sj_viewer_projects', JSON.stringify(vData.allowed_projects));
-        safeLS.setItem('sj_viewer_admin', vData.admin_id || vData.site_id || '');
-      } else {
-        safeLS.removeItem('sj_viewer_projects');
-      }
+      // FIX: store both admin_id AND site_id properly.
+      // Previously: _viewerLoadData(siteId, '') — passed siteId as adminId → wrong param → no data.
+      // Correct: _viewerLoadData(adminId, siteId) — adminId filters cloud_backups.admin_id,
+      //          siteId (backup_key) filters to the specific project row.
+      var _vAdminId = vData.admin_id || '';
+      var _vSiteId  = vData.site_id  || '';
+      safeLS.setItem('sj_viewer_perms',  JSON.stringify(vData.permissions || []));
+      safeLS.setItem('sj_viewer_print',  vData.can_print ? '1' : '0');
+      safeLS.setItem('sj_viewer_site',   _vSiteId);
+      safeLS.setItem('sj_viewer_admin',  _vAdminId);
+      safeLS.setItem('sj_viewer_email',  email);
       closeAuthModal();
       _IS_VIEWER = true;
-      _applyViewerPermissions(vData.permissions || [], vData.can_print, vData.site_id);
-      var siteId = vData.site_id || getSiteId();
-      if (siteId) { _viewerLoadData(siteId, ''); _showViewerBar(email); }
+      _applyViewerPermissions(vData.permissions || [], vData.can_print, _vAdminId);
+      _showViewerBar(email);
+      if (_vAdminId) {
+        _viewerLoadData(_vAdminId, _vSiteId);
+      } else if (_vSiteId) {
+        // Fallback: admin_id not in viewers row — look it up from cloud_backups
+        _sb.from('cloud_backups').select('admin_id').eq('backup_key', _vSiteId).maybeSingle()
+          .then(function(bkRes) {
+            var resolvedAdminId = (bkRes.data && bkRes.data.admin_id) ? bkRes.data.admin_id : '';
+            if (resolvedAdminId) {
+              safeLS.setItem('sj_viewer_admin', resolvedAdminId);
+              _viewerLoadData(resolvedAdminId, _vSiteId);
+            } else {
+              toast('⚠️ Could not resolve admin data — contact admin', 'err');
+            }
+          }).catch(function() { toast('⚠️ Data load error', 'err'); });
+      } else {
+        toast('⚠️ Viewer record missing site/admin info — contact admin', 'err');
+      }
       toast('✅ Welcome, ' + email, 'ok');
       btn.textContent = '🔑 Login'; btn.disabled = false;
       return;
@@ -15280,8 +15442,13 @@ var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null, _cloudSyncTimer 
 })();
 
 function openViewerMgmt() {
+  // Update project labels (read-only display — not a switcher)
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  _populateVmgrProjSelector();
   loadViewerAccounts();
-  _renderVwProjChips();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
 }
 function closeViewerMgmt() {
@@ -15306,7 +15473,6 @@ function generateViewerLink() {
   var name     = document.getElementById('vw-name') ? document.getElementById('vw-name').value.trim() : '';
   var canPrint = document.getElementById('vw-can-print').checked;
   var perms    = getSelectedPerms();
-  var allowedProjects = _getSelectedVwProjects();
   var errEl    = document.getElementById('vw-create-err');
   var btn      = document.getElementById('create-viewer-btn');
   errEl.style.display = 'none';
@@ -15325,13 +15491,12 @@ function generateViewerLink() {
     email: _adminSBUser.email || safeLS.getItem(ADMIN_EMAIL_KEY) || ''
   }, { onConflict: 'id' })).then(function() {
     return _sb.from('viewers').insert({
-      admin_id:         _adminSBUser.id,
-      email:            slug,
-      password_hash:    token,
-      permissions:      perms,
-      can_print:        canPrint,
-      site_id:          siteId,
-      allowed_projects: allowedProjects.length > 0 ? allowedProjects : null
+      admin_id:      _adminSBUser.id,
+      email:         slug,
+      password_hash: token,
+      permissions:   perms,
+      can_print:     canPrint,
+      site_id:       siteId
     });
   }).then(function(r) {
     if (r.error) throw r.error;
@@ -15373,7 +15538,10 @@ function loadViewerAccountsInline() {
   if (!listEl) return;
   if (!_sb || !_adminSBUser) { setTimeout(loadViewerAccountsInline, 600); return; }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
-  _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+  var curSiteId = getSiteId();
+  var query = _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id);
+  if (curSiteId) query = query.eq('site_id', curSiteId);
+  query.then(function(r) {
     var list = r.data || [];
     if (!list.length) {
       listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
@@ -15381,30 +15549,21 @@ function loadViewerAccountsInline() {
     }
     var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ'};
     var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq'];
-    var allProjects = (typeof _getProjects === 'function') ? _getProjects().map(function(p){ return p.name; }) : [];
     listEl.innerHTML = list.map(function(v,i) {
       var perms = v.permissions||[];
-      var allowedProjs = v.allowed_projects || [];
       var chips = perms.map(function(p){
         return '<span style="padding:2px 7px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:10px;font-size:9px;font-weight:700;color:#c7d2fe;margin:2px;">'+(te[p]||'📌')+' '+p+'</span>';
       }).join('');
-      var projChips = allProjects.length > 0 ? allProjects.map(function(projName) {
-        var isOn = allowedProjs.indexOf(projName) !== -1;
-        return '<span onclick="toggleInlineChip(this)" data-proj="'+projName+'" data-on="'+(isOn?'1':'0')+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#f59e0b':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(245,158,11,0.25)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#fcd34d':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">📂 '+projName+'</span>';
-      }).join('') : '<span style="font-size:9px;color:rgba(255,255,255,.3)">No projects yet</span>';
       var editChips = allTabs.map(function(tab){
         var isOn = perms.indexOf(tab)!==-1;
         return '<span onclick="toggleInlineChip(this)" data-tab="'+tab+'" data-on="'+(isOn?'1':'0')+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">'+(te[tab]||'')+' '+tab+'</span>';
       }).join('');
-      var projSummary = allowedProjs.length > 0
-        ? '<span style="font-size:8px;color:#fcd34d;font-weight:700;margin-left:4px;">📂 '+allowedProjs.join(', ')+'</span>'
-        : '<span style="font-size:8px;color:rgba(255,255,255,.4);margin-left:4px;">All projects</span>';
       return '<div id="inline-viewer-card-'+i+'" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.6rem;margin-bottom:.5rem;">'
         +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">'
         +'<div style="display:flex;align-items:center;gap:7px;">'
         +'<div style="width:26px;height:26px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">👁️</div>'
         +'<div><p style="font-size:11px;font-weight:700;color:white;line-height:1;">'+v.email.replace(/-[a-z0-9]{4}$/,'').replace(/-/g,' ')+'</p>'
-        +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs'+projSummary+'</p></div>'
+        +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs</p></div>'
         +'</div>'
         +'<div style="display:flex;gap:5px;">'
         +'<button onclick="_copyViewerToken(\''+v.password_hash+'\')" style="padding:0 12px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;" ontouchstart="this.style.background=\'rgba(16,185,129,.45)\';this.style.transform=\'scale(.93)\'" ontouchend="this.style.background=\'rgba(16,185,129,.2)\';this.style.transform=\'scale(1)\'">🔗 Link</button>'
@@ -15415,10 +15574,6 @@ function loadViewerAccountsInline() {
         +'<div id="inline-edit-panel-'+i+'" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px;">'
         +'<p style="font-size:9px;font-weight:700;color:#a78bfa;margin-bottom:5px;">Tabs — tap to toggle:</p>'
         +'<div style="display:flex;flex-wrap:wrap;" id="inline-edit-chips-'+i+'">'+editChips+'</div>'
-        +(allProjects.length > 0
-          ? '<p style="font-size:9px;font-weight:700;color:#fcd34d;margin:6px 0 4px;">📂 Projects — tap to allow (none = all):</p>'
-            +'<div style="display:flex;flex-wrap:wrap;" id="inline-edit-proj-chips-'+i+'">'+projChips+'</div>'
-          : '')
         +'<div style="display:flex;align-items:center;gap:6px;margin:6px 0 8px;">'
         +'<input type="checkbox" id="inline-print-'+i+'" '+(v.can_print?'checked':'')+' style="accent-color:#818cf8;width:13px;height:13px;">'
         +'<label for="inline-print-'+i+'" style="font-size:10px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
@@ -15436,17 +15591,9 @@ function toggleInlineChip(el) {
   var isOn = el.getAttribute('data-on') === '1';
   isOn = !isOn;
   el.setAttribute('data-on', isOn ? '1' : '0');
-  // Project chip (amber) vs tab chip (indigo)
-  var isProj = !!el.getAttribute('data-proj');
-  if (isProj) {
-    el.style.background  = isOn ? 'rgba(245,158,11,0.25)' : 'rgba(255,255,255,0.05)';
-    el.style.borderColor = isOn ? '#f59e0b' : 'rgba(255,255,255,0.15)';
-    el.style.color       = isOn ? '#fcd34d' : 'rgba(255,255,255,0.4)';
-  } else {
-    el.style.background  = isOn ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)';
-    el.style.borderColor = isOn ? '#818cf8' : 'rgba(255,255,255,0.15)';
-    el.style.color       = isOn ? '#c7d2fe' : 'rgba(255,255,255,0.4)';
-  }
+  el.style.background = isOn ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)';
+  el.style.borderColor = isOn ? '#818cf8' : 'rgba(255,255,255,0.15)';
+  el.style.color = isOn ? '#c7d2fe' : 'rgba(255,255,255,0.4)';
 }
 
 function toggleInlineEdit(btn, idx) {
@@ -15466,22 +15613,13 @@ function saveInlineViewerPerms(idx, rowId) {
   chipsEl.querySelectorAll('span[data-tab]').forEach(function(c){
     if(c.getAttribute('data-on') === '1') newPerms.push(c.getAttribute('data-tab'));
   });
-  // Collect allowed project chips
-  var projChipsEl = document.getElementById('inline-edit-proj-chips-'+idx);
-  var newAllowedProjs = null;
-  if (projChipsEl) {
-    var sel = [];
-    projChipsEl.querySelectorAll('span[data-proj]').forEach(function(c){
-      if(c.getAttribute('data-on') === '1') sel.push(c.getAttribute('data-proj'));
-    });
-    newAllowedProjs = sel.length > 0 ? sel : null;
-  }
   var canPrint = document.getElementById('inline-print-'+idx) ? document.getElementById('inline-print-'+idx).checked : false;
   if(!_sb||!_adminSBUser){toast('Not logged in','err');return;}
   if(!_adminSBUser.id){toast('Session expired — please login again','err');return;}
   if(!rowId){toast('Cannot identify viewer row','err');return;}
+  // Always update by email + admin_id (safest — avoids UUID issues)
   _sb.from('viewers')
-    .update({permissions: newPerms, can_print: canPrint, allowed_projects: newAllowedProjs})
+    .update({permissions: newPerms, can_print: canPrint})
     .eq('admin_id', _adminSBUser.id)
     .eq('email', rowId)
     .then(function(r){
@@ -15499,7 +15637,10 @@ function loadViewerAccounts() {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Please login as admin first</p>';
     return;
   }
-  _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+  var curSiteId = getSiteId();
+  var query = _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id);
+  if (curSiteId) query = query.eq('site_id', curSiteId);
+  query.then(function(r) {
     if (r.error) { listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Load failed: '+r.error.message+'</p>'; return; }
     if (!r.data || !r.data.length) {
       listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
@@ -15693,10 +15834,11 @@ function doViewerLoginInline() {
   }).then(function(r) {
     if (r.error || !r.data) { throw new Error('Galat email ya password'); }
     var data = r.data;
-    var adminId = data.admin_id || data.site_id || '';
+    var adminId   = data.admin_id || '';
+    var _ilSiteId = data.site_id  || '';
     safeLS.setItem('sj_viewer_perms',  JSON.stringify(data.permissions || []));
     safeLS.setItem('sj_viewer_print',  data.can_print ? '1' : '0');
-    safeLS.setItem('sj_viewer_site',   data.site_id  || '');
+    safeLS.setItem('sj_viewer_site',   _ilSiteId);
     safeLS.setItem('sj_viewer_admin',  adminId);
     safeLS.setItem('sj_viewer_email',  email);
     closeAuthModal();
@@ -15704,7 +15846,8 @@ function doViewerLoginInline() {
     _applyViewerPermissions(data.permissions || [], data.can_print, adminId);
     if (adminId) {
       if (!document.getElementById('viewer-top-bar')) { _showViewerBar(email); }
-      _viewerLoadData(adminId, '');
+      // FIX: pass siteId so viewer loads only their assigned project, not the latest one
+      _viewerLoadData(adminId, _ilSiteId);
     } else {
       toast('⚠️ Viewer account has no linked admin — contact admin.', 'err');
     }
@@ -15715,7 +15858,6 @@ function doViewerLoginInline() {
     if (errEl) { errEl.textContent='⚠️ '+(e.message||'Login failed'); errEl.style.display='block'; }
   });
 }
-
 
 function doViewerLogin() {
   var email = document.getElementById('vl-email').value.trim();
@@ -15730,10 +15872,11 @@ function doViewerLogin() {
   }).then(function(r) {
     if (r.error || !r.data) { throw new Error('Galat email ya password'); }
     var data = r.data;
-    var adminId = data.admin_id || data.site_id || '';
+    var adminId   = data.admin_id || '';
+    var _vlSiteId = data.site_id  || '';
     safeLS.setItem('sj_viewer_perms',  JSON.stringify(data.permissions || []));
     safeLS.setItem('sj_viewer_print',  data.can_print ? '1' : '0');
-    safeLS.setItem('sj_viewer_site',   data.site_id  || '');
+    safeLS.setItem('sj_viewer_site',   _vlSiteId);
     safeLS.setItem('sj_viewer_admin',  adminId);
     safeLS.setItem('sj_viewer_email',  email);
     var ov = document.getElementById('viewer-login-overlay');
@@ -15742,7 +15885,8 @@ function doViewerLogin() {
     _applyViewerPermissions(data.permissions || [], data.can_print, adminId);
     if (adminId) {
       if (!document.getElementById('viewer-top-bar')) { _showViewerBar(email); }
-      _viewerLoadData(adminId, '');
+      // FIX: pass siteId so viewer loads only their assigned project, not the latest one
+      _viewerLoadData(adminId, _vlSiteId);
     } else {
       toast('⚠️ Viewer account has no linked admin — contact admin.', 'err');
     }
@@ -15759,7 +15903,7 @@ function _showViewerBar(email) {
   if (document.getElementById('viewer-top-bar')) return;
   document.body.insertAdjacentHTML('afterbegin',
     '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-    +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+' <span id="viewer-sync-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#fef9c3;margin-left:6px;vertical-align:middle" title="Connecting…"></span></span>'
+    +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+' <span id=\"viewer-sync-dot\" style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:#fef9c3;margin-left:6px;vertical-align:middle\" title=\"Connecting…\"></span></span>'
     +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;">🔄</button>'
     +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;">Logout</button>'
     +'</div>');
@@ -15778,97 +15922,40 @@ function _showViewerBar(email) {
     eyeEl.textContent = '👁️';
     logoWrap.appendChild(eyeEl);
   }
-  // Show project selector bar if viewer has multiple allowed projects
-  _buildViewerProjectSelector();
-}
-
-// ── Viewer Project Selector ──────────────────────────────────────────────────
-// Builds a project-switcher row inside the header (below the gradient header bar)
-// only when the viewer has 2+ allowed projects.
-function _buildViewerProjectSelector() {
-  var rawProj = safeLS.getItem('sj_viewer_projects');
-  var allowedProjects = [];
-  try { allowedProjects = rawProj ? JSON.parse(rawProj) : []; } catch(e) {}
-  if (!allowedProjects || allowedProjects.length < 2) {
-    // Single project: just set it silently
-    if (allowedProjects && allowedProjects.length === 1) {
-      _viewerSwitchProject(allowedProjects[0]);
-    }
-    return;
-  }
-  // Multi-project: build a pill row below the amber viewer bar
-  if (document.getElementById('viewer-proj-bar')) return;
-  var bar = document.createElement('div');
-  bar.id = 'viewer-proj-bar';
-  bar.style.cssText = 'position:fixed;top:32px;left:0;right:0;z-index:9998;background:linear-gradient(135deg,#78350f,#92400e);padding:5px 12px;display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;';
-  bar.innerHTML = '<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.6);flex-shrink:0;">📂</span>'
-    + allowedProjects.map(function(proj) {
-        return '<button onclick="_viewerSwitchProject(' + JSON.stringify(proj) + ')" id="vw-proj-pill-' + proj.replace(/\s/g,'_') + '"'
-          + ' style="flex-shrink:0;padding:3px 10px;border-radius:99px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:white;font-size:10px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .15s,border-color .15s;white-space:nowrap;">'
-          + proj + '</button>';
-      }).join('');
-  document.body.insertBefore(bar, document.body.children[1]);
-  var main = document.getElementById('main-app');
-  if (main) main.style.marginTop = '62px';
-  // Activate first project
-  _viewerSwitchProject(allowedProjects[0]);
-}
-
-function _viewerSwitchProject(projName) {
-  if (!projName) return;
-  // Update active pill styling
-  var rawProj = safeLS.getItem('sj_viewer_projects');
-  var allowed = [];
-  try { allowed = rawProj ? JSON.parse(rawProj) : []; } catch(e) {}
-  allowed.forEach(function(p) {
-    var pill = document.getElementById('vw-proj-pill-' + p.replace(/\s/g,'_'));
-    if (!pill) return;
-    var isActive = (p === projName);
-    pill.style.background = isActive ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.12)';
-    pill.style.borderColor = isActive ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)';
-  });
-  // Switch the active project in localStorage so all data reads use the right prefix
-  try { localStorage.setItem('sanj_active_proj', projName); } catch(e) {}
-  // Update header label
-  _setHdrProjLabel('📂 ' + projName);
-  // Reload the current tab with new project data
-  var curTab = document.querySelector('.tab-btn.active');
-  if (curTab) {
-    try { switchTab(curTab.getAttribute('data-tab')); } catch(ex) {}
-  } else {
-    try { switchTab('dashboard'); } catch(ex) {}
-  }
-}
-
-// ── Viewer-creation: render project chips in the viewer mgmt modal ─────────
-function _renderVwProjChips() {
-  var container = document.getElementById('vw-proj-chips-container');
-  var emptyEl   = document.getElementById('vw-proj-chips-empty');
-  if (!container) return;
-  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
-  if (!projects.length) {
-    container.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,0.35);margin:0;">No projects found — add projects first</p>';
-    return;
-  }
-  if (emptyEl) emptyEl.style.display = 'none';
-  // Build chips — all OFF by default (admin picks which projects viewer can see)
-  container.innerHTML = projects.map(function(p) {
-    return '<span class="perm-chip" data-proj="' + p.name + '" onclick="_toggleVwProjChip(this)" '
-      + 'title="Allow viewer to see ' + p.name + '">'
-      + '📂 ' + p.name + '</span>';
-  }).join('');
-}
-
-function _toggleVwProjChip(el) {
-  el.classList.toggle('on');
-}
-
-function _getSelectedVwProjects() {
-  var chips = document.querySelectorAll('#vw-proj-chips-container .perm-chip.on');
-  return Array.prototype.map.call(chips, function(c) { return c.getAttribute('data-proj'); });
 }
 
 function _applyViewerPermissions(perms, canPrint, siteId) {
+  // ── Project restriction for viewer ──────────────────────────────
+  // Read allowed projects from URL param or localStorage
+  var allowedProjs = [];
+  try {
+    var urlProjs = new URLSearchParams(window.location.search).get('projs');
+    if (urlProjs) {
+      allowedProjs = urlProjs.split(',').map(decodeURIComponent).filter(Boolean);
+      safeLS.setItem('sj_viewer_projs', JSON.stringify(allowedProjs));
+    } else {
+      var stored = safeLS.getItem('sj_viewer_projs');
+      if (stored) allowedProjs = JSON.parse(stored);
+    }
+  } catch(e) {}
+  if (allowedProjs.length > 0) {
+    // Switch to first allowed project if current project not in allowed list
+    var curProj = '';
+    try { curProj = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+    if (allowedProjs.indexOf(curProj) === -1 && typeof _onProjectChange === 'function') {
+      _onProjectChange(allowedProjs[0]);
+    }
+    // Hide project switcher from header — viewer can't switch projects
+    var hdrProjEl = document.getElementById('hdr-proj-name');
+    if (hdrProjEl) { hdrProjEl.style.pointerEvents = 'none'; hdrProjEl.style.opacity = '0.6'; }
+    var hdrDropdown = document.getElementById('hdr-proj-dropdown');
+    if (hdrDropdown) hdrDropdown.style.display = 'none';
+    // Also remove the ▾ arrow hint
+    if (hdrProjEl) {
+      var txt = hdrProjEl.textContent.replace(' ▾','').replace(' ▾','');
+      hdrProjEl.textContent = txt + ' 🔒';
+    }
+  }
   // Show only permitted tabs; hide everything else
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     var tabId = btn.getAttribute('data-tab');
@@ -17345,8 +17432,11 @@ function switchQtSubTab(tab){
 // ── Measurement Sheet ──────────────────────────────────────────
 var MSHEET_KEY = "cm_measurements";
 var _msRowCount = 0;
-function lmsheet(){ try{return JSON.parse(localStorage.getItem(MSHEET_KEY)||'[]');}catch(e){return[];} }
-function smsheet(arr){ try{localStorage.setItem(MSHEET_KEY,JSON.stringify(arr));}catch(e){} }
+// FIX: Use safeLS (not raw localStorage) so cm_measurements is project-scoped.
+// Raw localStorage.getItem('cm_measurements') bypasses _pk() prefix → all projects
+// share the same measurement data and cloud sync misses this key entirely.
+function lmsheet(){ try{return JSON.parse(safeLS.getItem(MSHEET_KEY)||'[]');}catch(e){return[];} }
+function smsheet(arr){ try{safeLS.setItem(MSHEET_KEY,JSON.stringify(arr)); _scheduleCloudPush(); }catch(e){} }
 
 // Unit definitions: {label, base (base unit type: len/area/vol/cnt), factor (to SI base)}
 var MS_UNITS = [
@@ -19092,7 +19182,8 @@ function _saveFirstProject() {
   try { localStorage.setItem('sanj_active_proj', name); } catch(e) {}
   try { if (typeof _initProjectNID === 'function') _initProjectNID(); } catch(e) {}
   // Update header
-  _setHdrProjLabel('\uD83D\uDCC2 ' + name);
+  var hdrProjName = document.getElementById('hdr-proj-name');
+  if (hdrProjName) hdrProjName.textContent = '\uD83D\uDCC2 ' + name;
   // Refresh settings dropdown if open
   try { if (typeof _settLoadProjDropdown === 'function') _settLoadProjDropdown(); } catch(e) {}
   // Sync profile address
