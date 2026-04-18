@@ -3762,9 +3762,12 @@ function _openProjDropdown() {
   if (!dd) return;
   _renderHdrProjList();
   dd.style.display = 'block';
+  // Use 150ms so the triggering click fully bubbles BEFORE we attach
+  // the outside-click listener — otherwise the same click that opened
+  // the dropdown immediately closes it again.
   setTimeout(function() {
     document.addEventListener('click', _outsideProjDropdown, {once: true});
-  }, 10);
+  }, 150);
 }
 function _closeProjDropdown() {
   var dd = document.getElementById('hdr-proj-dropdown');
@@ -7099,10 +7102,11 @@ service cloud.firestore {
       <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;padding:.9rem;margin-bottom:1rem;">
         <p style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:.7rem;">🔗 Create Viewer Link</p>
         <p style="font-size:10px;color:#a78bfa;margin-bottom:.7rem;line-height:1.5;">Share the generated link — viewer opens it, sees only selected tabs. No login needed. Stays active until you delete it.</p>
-        <!-- Project selector for this viewer -->
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">📂 Project (viewer will see this project's data)</label>
-        <div id="vmgr-proj-selector" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:.7rem;min-height:28px;">
-          <p style="font-size:10px;color:rgba(255,255,255,0.3);margin:0;padding:4px 0;">Loading projects…</p>
+        <!-- Active project display — read-only, viewer always gets current active project's site_id -->
+        <div id="vmgr-proj-info" style="display:flex;align-items:center;gap:6px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:9px;padding:6px 10px;margin-bottom:.7rem;">
+          <span style="font-size:12px;">📂</span>
+          <span id="vmgr-proj-info-name" style="font-size:11px;font-weight:700;color:#6ee7b7;">Loading…</span>
+          <span style="font-size:9px;color:rgba(255,255,255,0.4);margin-left:auto;">active project</span>
         </div>
         <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Viewer Name / Label</label>
         <input id="vw-name" type="text" class="auth-input" placeholder="e.g. Client View, Rampur Site, Suresh">
@@ -8018,13 +8022,12 @@ function _openViewerManager() {
     toast('Please log in first', 'err');
     return;
   }
-  // Update project tag in modal header
-  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  // Update project label in modal header and create form
   var ap = '';
   try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
   if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
-  // Populate project selector
-  _populateVmgrProjSelector();
+  _populateVmgrProjSelector(); // updates the read-only active project label in create form
   openViewerMgmt();
 }
 
@@ -8037,17 +8040,15 @@ function _openViewerManagerCreate() {
     toast('Please log in first', 'err');
     return;
   }
-  // Update project tag in modal header
-  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
+  // Update project labels (read-only — always uses active project)
   var ap = '';
   try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
   if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
-  // Populate project selector in create form
-  _populateVmgrProjSelector();
-  // Open the modal
+  _populateVmgrProjSelector(); // updates the read-only active project info label
+  // Open the modal and load viewers for current project
   loadViewerAccounts();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
-  // Instantly scroll to top and focus the viewer name input
   setTimeout(function() {
     var scrollBody = document.querySelector('#viewer-mgmt-modal > div > div[style*="overflow-y"]');
     if (scrollBody) scrollBody.scrollTop = 0;
@@ -8056,54 +8057,17 @@ function _openViewerManagerCreate() {
   }, 80);
 }
 
-// Populate the project selector chips inside viewer-mgmt-modal create form
+// Show the currently active project name in the viewer-mgmt-modal create form.
+// Viewers are ALWAYS created for the currently active project — no switching here.
 function _populateVmgrProjSelector() {
-  var container = document.getElementById('vmgr-proj-selector');
-  if (!container) return;
-  var projects = (typeof _getProjects === 'function') ? _getProjects() : [];
-  var active = '';
-  try { active = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
-  if (!projects.length) {
-    container.innerHTML = '<p style="font-size:10px;color:rgba(255,255,255,0.3);margin:0;padding:4px 0;">No projects yet</p>';
-    return;
-  }
-  container.innerHTML = projects.map(function(p) {
-    var isSel = p.name === active;
-    return '<span onclick="_vmgrSelectProj(this,\'' + p.name.replace(/'/g,"\\'") + '\')" '
-      + 'style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;cursor:pointer;'
-      + 'background:' + (isSel ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.07)') + ';'
-      + 'border:1.5px solid ' + (isSel ? 'rgba(16,185,129,0.6)' : 'rgba(255,255,255,0.15)') + ';'
-      + 'color:' + (isSel ? '#6ee7b7' : 'rgba(255,255,255,0.55)') + ';'
-      + 'transition:all .15s;"'
-      + (isSel ? ' data-selected="1"' : '') + '>📂 ' + p.name + '</span>';
-  }).join('');
+  var nameEl = document.getElementById('vmgr-proj-info-name');
+  if (!nameEl) return;
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
+  nameEl.textContent = ap || 'Default Project';
 }
-
-// Switch selected project in the vmgr project selector
-function _vmgrSelectProj(el, projName) {
-  var container = document.getElementById('vmgr-proj-selector');
-  if (!container) return;
-  // Deselect all
-  container.querySelectorAll('span').forEach(function(s) {
-    s.removeAttribute('data-selected');
-    s.style.background = 'rgba(255,255,255,0.07)';
-    s.style.borderColor = 'rgba(255,255,255,0.15)';
-    s.style.color = 'rgba(255,255,255,0.55)';
-  });
-  // Select clicked
-  el.setAttribute('data-selected', '1');
-  el.style.background = 'rgba(16,185,129,0.25)';
-  el.style.borderColor = 'rgba(16,185,129,0.6)';
-  el.style.color = '#6ee7b7';
-  // Switch active project so getSiteId() returns the right site_id for this viewer
-  try { localStorage.setItem('sanj_active_proj', projName); } catch(e) {}
-  var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
-  if (vmgrProjTag) vmgrProjTag.textContent = '📂 ' + projName;
-  // Also switch the main app project
-  try { if (typeof _onProjectChange === 'function') _onProjectChange(projName); } catch(e) {}
-  // Reload the existing viewers for the newly selected project
-  loadViewerAccounts();
-}
+// Kept for backward compat — no longer does project switching from viewer modal
+function _vmgrSelectProj(el, projName) { /* disabled — viewer always uses active project */ }
 
 
 
@@ -13287,12 +13251,17 @@ function _onProjectChange(name) {
   // Update realtime channel to listen to new project's backup_key
   try { if (typeof _startAdminRealtime === 'function') _startAdminRealtime(); } catch(e) {}
 
-  // Refresh viewer list for new project (project isolation)
-  try { if (typeof loadViewerAccountsInline === 'function') loadViewerAccountsInline(); } catch(e) {}
+  // Refresh viewer list for new project after a brief delay so getSiteId()
+  // returns the newly active project's site_id (not the previous one)
+  setTimeout(function() {
+    try { if (typeof loadViewerAccountsInline === 'function') loadViewerAccountsInline(); } catch(e) {}
+  }, 300);
 
   // Update active project tag in viewer-mgmt-modal if open
   var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
   if (vmgrProjTag) vmgrProjTag.textContent = '📂 ' + name;
+  var vmgrInfoName = document.getElementById('vmgr-proj-info-name');
+  if (vmgrInfoName) vmgrInfoName.textContent = name;
 
   toast('📂 ' + name, 'ok');
 }
@@ -13490,14 +13459,15 @@ function refreshCloudModalState() {
 
   if (isFullyActive) {
     var adminPanel = document.getElementById('ctab-admin');
-    // If panel was overwritten by expired-screen, restore original structure
+    // If the admin panel's inner structure was replaced (e.g. by the Free Account screen),
+    // and sub is now confirmed active, just reload the page to restore the full UI safely.
+    // But ONLY reload if _sbSubChecked is true — never reload during pending check.
     if (adminPanel && !document.getElementById('ctab-admin-postlogin')) {
-      adminPanel.innerHTML =
-        '<div id="ctab-admin-prelogin" style="display:none"></div>'
-        + '<div id="ctab-admin-postlogin" style="display:block">'
-        + document.getElementById('ctab-admin-postlogin-tpl') ? '' : ''
-        + '</div>';
-      // Reload the page to restore full UI — safer than rebuilding HTML inline
+      if (!window._sbSubChecked) {
+        // Sub check still in flight — do nothing, wait for it to complete
+        return;
+      }
+      // Panel was destroyed — safe to reload now that we know user is Pro
       toast('✅ Cloud ready! Refreshing…', 'ok');
       setTimeout(function(){ location.reload(); }, 800);
       return;
@@ -13544,7 +13514,7 @@ function refreshCloudModalState() {
       }
     }
   } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
-    // Logged in but FREE user (no active subscription) — show account info + upgrade option
+    // Logged in but confirmed FREE user (subscription check is complete) — show upgrade screen
     // Logo section is available to all users — show it
     var logoSectionFree = document.getElementById('cloud-logo-section');
     if (logoSectionFree) logoSectionFree.style.display = 'block';
@@ -15335,13 +15305,12 @@ var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null, _cloudSyncTimer 
 })();
 
 function openViewerMgmt() {
-  // Update project tag in the modal header
+  // Update project labels (read-only display — not a switcher)
+  var ap = '';
+  try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
   var vmgrProjTag = document.getElementById('vmgr-active-proj-tag');
-  if (vmgrProjTag) {
-    var ap = '';
-    try { ap = localStorage.getItem('sanj_active_proj') || ''; } catch(e) {}
-    vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
-  }
+  if (vmgrProjTag) vmgrProjTag.textContent = ap ? ('📂 ' + ap) : '📂 Default Project';
+  _populateVmgrProjSelector();
   loadViewerAccounts();
   document.getElementById('viewer-mgmt-modal').classList.add('show');
 }
