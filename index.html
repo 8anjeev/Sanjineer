@@ -3233,6 +3233,8 @@ function _saveHiddenTabs() {
 }
 
 function _applyHiddenTabs() {
+  // Viewer has its own tab restriction system — don't interfere
+  if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) return;
   _TAB_DEFS.forEach(function(t) {
     var isHidden = _hiddenTabs.indexOf(t.id) !== -1;
     document.querySelectorAll('.tab-btn[data-tab="' + t.id + '"]').forEach(function(btn) {
@@ -6636,14 +6638,16 @@ function boot() {
     safeLS.removeItem('sj_viewer_perms');
     safeLS.removeItem('sj_viewer_admin');
     safeLS.removeItem('sj_viewer_site');
+    safeLS.removeItem('sj_viewer_pid');
     safeLS.removeItem('sj_viewer_print');
     safeLS.removeItem('sj_viewer_token');
   }
   if (!_adminLoggedIn && viewerEmail && viewerPerms && viewerAdmin) {
     _IS_VIEWER = true;
-    // Clear any stale project context — viewer sees isolated plain-key data
-    window.currentProjectId = null;
     window.projects = [];
+    // Restore project ID from saved session (set from &pid at link open time)
+    var _savedPid = safeLS.getItem('sj_viewer_pid') || '';
+    window.currentProjectId = _savedPid || null;
     var perms = [];
     try { perms = JSON.parse(viewerPerms); } catch(ex) {}
     var canPrint = safeLS.getItem('sj_viewer_print') === '1';
@@ -12005,11 +12009,17 @@ function checkViewerMode() {
     return;
   }
 
-  // Viewer mode — clear any admin project context to avoid data mixing
-  window.currentProjectId = null;
-  window.projects = [];
+  // Set viewer flag immediately — before any async DB call
+  _IS_VIEWER = true;
 
-  // IMMEDIATELY hide ALL nav tabs — prevent flash of all tabs before perms load
+  // Read project ID embedded in link (&pid=PROJECTID)
+  var _urlProjId = params.get('pid') || '';
+  window.currentProjectId = _urlProjId || null;
+  window.projects = [];
+  // Save pid so _applyTokenViewer can use it after async fetch
+  try { safeLS.setItem('sj_viewer_pid', _urlProjId); } catch(e) {}
+
+  // IMMEDIATELY hide ALL nav tabs — zero flash of all tabs
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.style.display = 'none'; });
 
   // Token-based viewer — check localStorage first for cached session
@@ -12072,15 +12082,34 @@ function _applyTokenViewer(vData, token) {
   var canPrint = vData.canPrint || vData.can_print || false;
   var adminId  = vData.adminId || vData.admin_id || '';
   var label    = vData.email ? vData.email.split('-').slice(0,-1).join(' ') : 'Viewer';
+  var siteId   = vData.siteId || vData.site_id || '';
 
-  var siteId = vData.siteId || vData.site_id || '';
-  // Store in localStorage so reload works
-  safeLS.setItem('sj_viewer_perms',   JSON.stringify(perms));
-  safeLS.setItem('sj_viewer_print',   canPrint ? '1' : '0');
-  safeLS.setItem('sj_viewer_admin',   adminId);   // key: always use adminId to find data
-  safeLS.setItem('sj_viewer_site',    siteId);    // backup_key for project-specific fetch
-  safeLS.setItem('sj_viewer_email',   label);
-  safeLS.setItem('sj_viewer_token',   token);
+  // Get project ID — from URL param (&pid=) embedded at link creation
+  var _pid = '';
+  try {
+    _pid = new URLSearchParams(window.location.search).get('pid')
+        || safeLS.getItem('sj_viewer_pid') || '';
+  } catch(e) {}
+
+  // Set currentProjectId so getSiteId() returns project-specific backup_key
+  window.currentProjectId = _pid || null;
+
+  // Derive siteId if not stored in DB row (handles older viewer records)
+  if (!siteId && adminId) {
+    var _base = 'user-' + adminId.replace(/-/g,'').slice(0,12);
+    siteId = _pid
+      ? _base + '_p' + _pid.replace(/[^a-zA-Z0-9]/g,'').slice(0,8)
+      : _base;
+  }
+
+  // Persist session so page reload works
+  safeLS.setItem('sj_viewer_perms',  JSON.stringify(perms));
+  safeLS.setItem('sj_viewer_print',  canPrint ? '1' : '0');
+  safeLS.setItem('sj_viewer_admin',  adminId);
+  safeLS.setItem('sj_viewer_site',   siteId);
+  safeLS.setItem('sj_viewer_pid',    _pid);
+  safeLS.setItem('sj_viewer_email',  label);
+  safeLS.setItem('sj_viewer_token',  token);
 
   _IS_VIEWER = true;
   _showViewerBar(label);
@@ -12114,9 +12143,11 @@ function _viewerLogout() {
   safeLS.removeItem('sj_viewer_perms');
   safeLS.removeItem('sj_viewer_print');
   safeLS.removeItem('sj_viewer_site');
+  safeLS.removeItem('sj_viewer_pid');
   safeLS.removeItem('sj_viewer_admin');
   safeLS.removeItem('sj_viewer_email');
   safeLS.removeItem('sj_viewer_token');
+  window.currentProjectId = null;
   _IS_VIEWER = false;
   _viewerApp = null;
   var bar = document.getElementById('viewer-top-bar');
@@ -12956,6 +12987,8 @@ function generateViewerLink() {
     var link = base + '?vt=' + encodeURIComponent(token);
     var resEl = document.getElementById('vw-link-result');
     var txtEl = document.getElementById('vw-link-text');
+    // Embed active project ID so viewer always loads this exact project
+    if (window.currentProjectId) link += '&pid=' + encodeURIComponent(window.currentProjectId);
     if (txtEl) txtEl.textContent = link;
     if (resEl) resEl.style.display = 'block';
     if (navigator.clipboard) navigator.clipboard.writeText(link).catch(function(){});
