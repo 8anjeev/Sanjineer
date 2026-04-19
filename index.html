@@ -774,40 +774,48 @@ self.addEventListener('fetch', function(e) {
     var listItems = window.projects.map(function(p) {
       var active = (p.id === window.currentProjectId);
       var pid = _escHtml(p.id);
-      return '<div style="display:flex;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.06);">'
-        // Switch tap area
-        + '<div data-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;flex:1;padding:10px 12px;cursor:pointer;background:' + (active?'rgba(99,102,241,0.2)':'transparent') + ';-webkit-tap-highlight-color:transparent;">'
-        + '<span style="font-size:13px;flex-shrink:0">' + (active ? '✅' : '📁') + '</span>'
-        + '<span style="font-size:12px;font-weight:' + (active?'700':'500') + ';color:' + (active?'#a5b4fc':'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(p.name) + '</span>'
+      // Full-width row: icon + name stretch edge-to-edge; pencil icon inline on same padding, no bg/text
+      return '<div style="display:flex;align-items:center;border-bottom:1px solid rgba(255,255,255,0.07);margin:0 8px;">'
+        // Full-width switch area
+        + '<div data-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:7px 8px;cursor:pointer;border-radius:10px;background:' + (active ? 'linear-gradient(135deg,rgba(99,102,241,0.26),rgba(139,92,246,0.16))' : 'transparent') + ';-webkit-tap-highlight-color:transparent;transition:background .15s;">'
+        + '<div style="width:22px;height:22px;border-radius:6px;background:' + (active ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.08)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:' + (active ? '0 2px 6px rgba(99,102,241,0.38)' : 'none') + ';">'
+        + '<span style="font-size:10px">' + (active ? '\u2705' : '\uD83D\uDCC1') + '</span>'
         + '</div>'
-        // Edit button
-        + '<button data-proj-rename="' + pid + '" title="Rename" style="padding:10px 8px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#818cf8\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">✏️</button>'
+        + '<span style="font-size:12px;font-weight:' + (active ? '700' : '500') + ';color:' + (active ? '#c4b5fd' : 'rgba(255,255,255,0.80)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;letter-spacing:.01em">' + _escHtml(p.name) + '</span>'
+        + '</div>'
+        // Pencil icon only — transparent, no bg, no border, same vertical padding as row
+        + '<button data-proj-rename="' + pid + '" title="Rename" style="flex-shrink:0;padding:7px 8px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.30);font-size:13px;-webkit-tap-highlight-color:transparent;line-height:1;" ontouchstart="this.style.color=\'rgba(165,180,252,0.9)\'" ontouchend="this.style.color=\'rgba(255,255,255,0.30)\'">\u270F\uFE0F</button>'
         + '</div>';
     }).join('');
 
     // "New Project" row — locked for free users
     var _isPro = window.isProUser;
-    var newProjRow = _isPro
-      // PRO: normal button
-      ? '<div id="proj-new-btn" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:rgba(99,102,241,0.1);-webkit-tap-highlight-color:transparent;">'
-        + '<span style="font-size:13px">➕</span>'
-        + '<span style="font-size:12px;font-weight:700;color:#a5b4fc;">New Project</span>'
-        + '</div>'
-      // FREE: locked row with PRO badge
-      : '<div id="proj-new-btn" data-proj-new-locked="1" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:rgba(255,255,255,0.04);-webkit-tap-highlight-color:transparent;opacity:0.85;">'
-        + '<span style="font-size:13px">🔒</span>'
-        + '<span style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.45);">New Project</span>'
-        + '<span style="margin-left:auto;display:inline-flex;align-items:center;padding:1px 6px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:.04em;flex-shrink:0">PRO</span>'
-        + '</div>';
+    var newProjRow = '<div style="padding:8px 10px 10px;">'
+      + (_isPro
+        ? '<div id="proj-new-btn" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-radius:11px;background:linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.12));border:1px solid rgba(99,102,241,0.28);-webkit-tap-highlight-color:transparent;">'
+          + '<div style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,0.35);">'
+          + '<span style="font-size:12px">\u2795</span></div>'
+          + '<span style="font-size:12.5px;font-weight:700;color:#a5b4fc;letter-spacing:.01em">New Project</span>'
+          + '</div>'
+        : '<div id="proj-new-btn" data-proj-new-locked="1" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);-webkit-tap-highlight-color:transparent;">'
+          + '<div style="width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+          + '<span style="font-size:12px">\uD83D\uDD12</span></div>'
+          + '<span style="font-size:12.5px;font-weight:700;color:rgba(255,255,255,0.38);letter-spacing:.01em">New Project</span>'
+          + '<span style="margin-left:auto;display:inline-flex;align-items:center;padding:2px 7px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;border-radius:99px;font-size:8.5px;font-weight:800;letter-spacing:.05em;flex-shrink:0;box-shadow:0 2px 6px rgba(249,115,22,0.4)">PRO</span>'
+          + '</div>')
+      + '</div>';
 
     var html =
       '<div id="proj-dd-inner" style="position:relative;display:inline-flex;">'
-      + '<button id="proj-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:pointer;min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
-      + '<span style="font-size:11px;flex-shrink:0">🗂️</span>'
-      + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
-      + '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;transition:transform .18s">▾</span>'
+      + '<button id="proj-dd-btn" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.24);border-radius:11px;padding:5px 10px 5px 8px;cursor:pointer;min-width:90px;max-width:155px;-webkit-tap-highlight-color:transparent;outline:none;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(0,0,0,0.18);">'
+      + '<span style="font-size:12px;flex-shrink:0">\uD83D\uDDC2\uFE0F</span>'
+      + '<span style="font-size:11.5px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;letter-spacing:.01em">' + _escHtml(name) + '</span>'
+      + '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.6);margin-left:2px;transition:transform .2s">\u25BE</span>'
       + '</button>'
-      + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:200px;max-width:260px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
+      + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);z-index:99998;background:rgba(18,15,50,0.97);border:1px solid rgba(255,255,255,0.13);border-radius:18px;min-width:220px;max-width:270px;box-shadow:0 16px 48px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.05) inset;overflow:hidden;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);">'
+      + '<div style="padding:10px 10px 4px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:4px;">'
+      + '<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:.08em;text-transform:uppercase;padding-left:10px;">Projects</span>'
+      + '</div>'
       + listItems
       + newProjRow
       + '</div>'
@@ -2683,7 +2691,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
     </button>
 
     <!-- Profile Settings -->
-    <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();openEditProfile()">
+    <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();setTimeout(openEditProfile,360)">
       <span style="font-size:15px;flex-shrink:0">👤</span>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span>Profile &amp; Logo</span>
@@ -6046,6 +6054,31 @@ function ldept(){try{return JSON.parse(safeLS.getItem(_pk(DEPT))||'{}');}catch(e
 function sdept(x){safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush();}
 function lprof(){try{return JSON.parse(safeLS.getItem(_pk(PROF))||'null');}catch(e){return null;}}
 function sprof(x){safeLS.setItem(_pk(PROF),JSON.stringify(x));_scheduleCloudPush();}
+
+// ── Global profile: company name, GST, logo — shared across ALL projects ──
+// Stored without project prefix so every project sees the same values
+var GLOBAL_PROF_KEY = 'sanj_global_prof';
+function lglobal() {
+  try { return JSON.parse(localStorage.getItem(GLOBAL_PROF_KEY) || 'null'); } catch(e) { return null; }
+}
+function sglobal(x) {
+  try { localStorage.setItem(GLOBAL_PROF_KEY, JSON.stringify(x)); } catch(e) {}
+  _scheduleCloudPush();
+}
+// Merged profile = global fields + per-project fields combined
+// Per-project fields (address, engineer, headerColor) override global defaults
+function lmergedProf() {
+  var g = lglobal() || {};
+  var p = lprof() || {};
+  return {
+    company:     g.company     || p.company     || '',
+    gst:         g.gst         || p.gst         || '',
+    logo:        g.logo        || p.logo        || null,
+    engineer:    p.engineer    || '',
+    address:     p.address     || '',
+    headerColor: p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
+  };
+}
 function lphkeys(){try{return JSON.parse(safeLS.getItem(PHKEYS)||'{}');}catch(e){return {};}}
 function sphkeys(x){safeLS.setItem(PHKEYS,JSON.stringify(x));}
 
@@ -6249,7 +6282,7 @@ function confirmPoReceive() {
 // PROFILE
 // ============================================================
 function applyProfile() {
-  var p = lprof();
+  var p = lmergedProf();
   var el1 = document.getElementById('hdr-company');
   var el2 = document.getElementById('hdr-engineer');
   if (el1) {
@@ -6276,7 +6309,7 @@ function applyProfile() {
 }
 function openEditProfile() {
   _refreshProStatus();
-  var p = lprof() || {};
+  var p = lmergedProf();
   document.getElementById('edit-company').value = p.company || '';
   document.getElementById('edit-engineer').value = p.engineer || '';
   document.getElementById('edit-address').value = p.address || '';
@@ -6374,17 +6407,27 @@ function saveProfile() {
   var co = document.getElementById('edit-company').value.trim();
   var en = document.getElementById('edit-engineer').value.trim();
   if (!co || !en) { toast('Please fill company and engineer name', 'err'); return; }
-  var existing = lprof() || {};
-  var logoEl = document.getElementById('edit-logo-img');
+
+  var existingGlobal  = lglobal() || {};
+  var existingPerProj = lmergedProf();
+  var logoEl  = document.getElementById('edit-logo-img');
   var logoSrc = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
-  var hColor = (document.getElementById('edit-header-color').value.trim()) || existing.headerColor || '';
+  var hColor  = (document.getElementById('edit-header-color').value.trim()) || existingPerProj.headerColor || '';
+
+  // ── GLOBAL fields: same for ALL projects ──
+  sglobal({
+    company: co,
+    gst:     document.getElementById('edit-gst').value.trim(),
+    logo:    logoSrc || existingGlobal.logo || existingPerProj.logo || null
+  });
+
+  // ── PER-PROJECT fields: engineer, address, header colour ──
   sprof({
-    company: co, engineer: en,
-    address: document.getElementById('edit-address').value.trim(),
-    gst: document.getElementById('edit-gst').value.trim(),
-    logo: logoSrc || existing.logo || null,
+    engineer:    en,
+    address:     document.getElementById('edit-address').value.trim(),
     headerColor: hColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   });
+
   applyProfile();
   applyHeaderColor();
   closeProfileModal();
@@ -6392,7 +6435,7 @@ function saveProfile() {
 }
 
 function applyHeaderColor() {
-  var p = lprof() || {};
+  var p = lmergedProf();
   var hColor = p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)';
   var hdr = document.querySelector('header');
   if (!hdr) return;
@@ -6436,8 +6479,12 @@ function loadProfileLogo(evt) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
-    var p = lprof() || {};
-    p.logo = dataUrl;
+    // Logo is GLOBAL — same across all projects
+    var g = lglobal() || {};
+    g.logo = dataUrl;
+    sglobal(g);
+    var p = lmergedProf();
+    p.logo = dataUrl; // keep in per-project too for backwards compat
     sprof(p);
     var img = document.getElementById('edit-logo-img');
     var prev = document.getElementById('edit-logo-preview');
@@ -6450,7 +6497,10 @@ function loadProfileLogo(evt) {
   reader.readAsDataURL(file);
 }
 function clearProfileLogo() {
-  var p = lprof() || {};
+  var g = lglobal() || {};
+  g.logo = null;
+  sglobal(g);
+  var p = lmergedProf();
   p.logo = null;
   sprof(p);
   var img = document.getElementById('edit-logo-img');
@@ -6547,6 +6597,9 @@ function switchTab(name) {
 
   // Re-apply viewer restrictions after every tab render
   if (_IS_VIEWER) {
+    // Enforce which tab buttons & panels are visible (must run FIRST so
+    // no forbidden tab accidentally appears after a style reset above)
+    _enforceViewerTabs();
     _disableViewerWrites();
     var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (canPrint) {
@@ -6565,7 +6618,7 @@ function switchTab(name) {
           b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
         }
         // Block any add/import/save/delete write buttons
-        if (t.includes('Section') || t.includes('Add') || t.includes('Import') || t.includes('Save') || t.includes('Fill') || t.includes('Fetch') || t === '✕') {
+        if (t.includes('Section') || t.includes('Add') || t.includes('Import') || t.includes('Save') || t.includes('Fill') || t.includes('Fetch') || t === '\u2715') {
           b.disabled = true; b.style.opacity = '0.3'; b.style.cursor = 'not-allowed';
         }
       });
@@ -6585,6 +6638,41 @@ function switchTab(name) {
 // ============================================================
 // BOOT
 // ============================================================
+// ── One-time migration: move company/gst/logo from per-project cm_profile
+// to sanj_global_prof so they are shared across all projects
+function _migrateProfileToGlobal() {
+  try {
+    if (localStorage.getItem('sanj_global_migrated')) return; // already done
+    var g = lglobal();
+    if (g && g.company) { // already migrated
+      localStorage.setItem('sanj_global_migrated', '1');
+      return;
+    }
+    // Look through all localStorage keys for any cm_profile data
+    var bestProf = null;
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k) continue;
+      if (k === _pk(PROF) || k.indexOf('cm_profile') !== -1 || k.indexOf('_cm_profile') !== -1) {
+        try {
+          var p = JSON.parse(localStorage.getItem(k) || 'null');
+          if (p && p.company && (!bestProf || p.company.length > (bestProf.company||'').length)) {
+            bestProf = p;
+          }
+        } catch(e) {}
+      }
+    }
+    if (bestProf) {
+      sglobal({
+        company: bestProf.company || '',
+        gst:     bestProf.gst     || '',
+        logo:    bestProf.logo    || null
+      });
+    }
+    localStorage.setItem('sanj_global_migrated', '1');
+  } catch(e) {}
+}
+
 function boot() {
   document.body.classList.add('js-ready');
   AD = ld();
@@ -6618,6 +6706,9 @@ function boot() {
   if(machSel){machSel.innerHTML='';var now2=new Date();for(var j=0;j<12;j++){var d2=new Date(now2.getFullYear(),now2.getMonth()-j,1);var o2=document.createElement('option');o2.value=mkey(d2);o2.textContent=mlabel(d2);if(!j)o2.selected=true;machSel.appendChild(o2);}}
   // Init machinery date
   var machDate=document.getElementById('mach-date');if(machDate)machDate.value=ist();
+  // ── Migrate existing profile data to global/per-project split ──
+  // One-time migration: if old cm_profile has company/gst/logo, move to global
+  _migrateProfileToGlobal();
   checkViewerMode();
   // ── SUPABASE CONFIG (pre-configured, no manual setup needed) ──
   // Site ID is now auto-set from admin user ID on login — no hardcoded default needed
@@ -6664,7 +6755,10 @@ function boot() {
       var tabId = panel.id.replace(/^tab-/, '');
       if (tabId && perms.indexOf(tabId) === -1) panel.style.display = 'none';
     });
+    // Authoritative enforce before and after first tab switch
+    _enforceViewerTabs();
     if (perms.length > 0) { switchTab(perms[0]); }
+    _enforceViewerTabs();
     _disableViewerWrites();
     if (canPrint) {
       document.querySelectorAll('button').forEach(function(b) {
@@ -7524,7 +7618,7 @@ function viewExpenses(){
 function printExpenses(){
 try{
   AD=ld();
-  var prof=lprof()||{};
+  var prof = lmergedProf();
   var sel=document.getElementById('exp-month-filter');
   var selMonth=sel?sel.value:'';
   var allRecords=AD.filter(function(d){ return d.type==='material'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
@@ -8233,7 +8327,7 @@ function printRentalByClient(){
     +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button>'
     +'<span style="flex:1;font-weight:700">Rental Report — '+client+'</span>'
     +'<button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
-    +'<div class="content">'+_pdfHeader('app.sanjineer.in',(lprof()||{}).company||'','',
+    +'<div class="content">'+_pdfHeader('app.sanjineer.in',(lmergedProf()).company||'','',
         '<p style="font-size:14px;font-weight:900;color:white;line-height:1">&#128230; Rental Report</p>'
        +'<p style="font-size:13px;font-weight:800;color:#fde68a;margin-top:4px">'+client+'</p>'
        +'<p style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:3px">As of: '+fd(today)+'</p>')
@@ -8507,7 +8601,7 @@ function _pdfBaseStyle(){
     '*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}}';
 }
 function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
-  var prof=lprof()||{};
+  var prof = lmergedProf();
   var hColor = prof.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)';
   var defaultRight='<p style="font-size:13px;font-weight:800;color:white;line-height:1.3">'+reportTitle+'</p>'+'<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:4px">'+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'})+'</p>';
   var companyLogoSrc = prof.logo || '';
@@ -8534,7 +8628,7 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
 function _pdfFooter(){ return pftr(); }
 
 function pcs(){
-var _p=lprof()||{};
+var _p=lmergedProf();
 var _hc=(_p.headerColor&&_p.headerColor.indexOf('gradient')===-1)?_p.headerColor:'#4f46e5';
 var _barBg=(_p.headerColor&&_p.headerColor.indexOf('gradient')!==-1)?_p.headerColor:(_p.headerColor||'#4f46e5');
 return ':root{--hc:'+_hc+'}'
@@ -8801,7 +8895,7 @@ var dA=dept.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
 var low=getLowStock();
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</title><style>'+pcs()+'</style></head><body>'
 +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Daily Report — '+dl+'</span><button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
-+'<div class="content">'+_pdfHeader('app.sanjineer.in',(lprof()||{}).company||'','',
++'<div class="content">'+_pdfHeader('app.sanjineer.in',(lmergedProf()).company||'','',
   '<p style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.75);line-height:1;text-transform:uppercase;letter-spacing:.04em">Daily Report</p>'
   +'<p style="font-size:13px;font-weight:900;color:white;line-height:1.3;margin-top:4px">'+new Date(d+'T00:00:00').toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'long',year:'numeric'})+'</p>'
   +'<p style="font-size:11px;font-weight:900;color:white;margin-top:3px">'+new Date(d+'T00:00:00').toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',weekday:'long'})+'</p>',
@@ -8908,7 +9002,7 @@ totalHrs+=hrs; totalOtHrs+=otHrs; totalAdv+=adv; totalPay+=pay;
 
 var dailyWage=(parseFloat(worker.hourly_wage)||0)*8;
 var bal=totalPay-totalAdv;
-var profData=lprof()||{};
+var profData = lmergedProf();
 var company=profData.company||'Sanjineer';
 
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+worker.name+'</title><style>'+pcs()+'\n'
@@ -9066,7 +9160,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payment Report
 'table{border-collapse:collapse;width:100%}tbody tr:nth-child(even){background:#f9fafb}'
 +'</style></head><body>'
 +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Payment Report — '+mL+(selTeam!=='all'?' · '+selTeam:'')+'</span><button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
-+'<div class="content">'+_pdfHeader('app.sanjineer.in',(lprof()||{}).company||'','',
++'<div class="content">'+_pdfHeader('app.sanjineer.in',(lmergedProf()).company||'','',
   '<p style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.8);line-height:1;text-transform:uppercase;letter-spacing:.04em">Monthly Report'+(selTeam!=='all'?' &middot; '+selTeam:'')+'</p>'
   +'<p style="font-size:16px;font-weight:900;color:white;line-height:1.2;margin-top:4px">'+mL+'</p>'
   +'<p style="font-size:10px;color:rgba(255,255,255,0.65);margin-top:4px">'+new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',year:'numeric'})+'</p>'
@@ -9093,7 +9187,7 @@ var tH=entries.reduce(function(s,e){ return s+parseFloat(e.hours||0); },0);
 var tA=entries.reduce(function(s,e){ return s+parseFloat(e.amount||0); },0);
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Dept Work</title><style>'+pcs()+'</style></head><body>'
 +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Dept Work — '+dl+'</span><button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
-+'<div class="content">'+_pdfHeader('app.sanjineer.in',(lprof()||{}).company||'','',
++'<div class="content">'+_pdfHeader('app.sanjineer.in',(lmergedProf()).company||'','',
   '<p style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.75);line-height:1;text-transform:uppercase;letter-spacing:.04em">Departmental Work</p>'
   +'<p style="font-size:13px;font-weight:900;color:white;line-height:1.3;margin-top:4px">'+new Date(DTD+'T00:00:00').toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'long',year:'numeric'})+'</p>'
   +'<p style="font-size:11px;font-weight:900;color:white;margin-top:3px">'+new Date(DTD+'T00:00:00').toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',weekday:'long'})+'</p>'
@@ -9133,7 +9227,7 @@ return '<tr>'+cells+'</tr>';
 }).join('');
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Monthly Dept</title><style>'+pcs()+'table{border-collapse:collapse}</style></head><body>'
 +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Monthly Dept — '+mL+'</span><button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
-+'<div class="content">'+_pdfHeader('app.sanjineer.in',(lprof()||{}).company||'','',
++'<div class="content">'+_pdfHeader('app.sanjineer.in',(lmergedProf()).company||'','',
   '<p style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.75);line-height:1;text-transform:uppercase;letter-spacing:.04em">Departmental Work</p>'
   +'<p style="font-size:14px;font-weight:900;color:white;line-height:1.3;margin-top:3px">Monthly</p>'
   +'<p style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.9);margin-top:3px">'+mL+'</p>'
@@ -9428,7 +9522,7 @@ function printMachinery(){
 try{
   var dateEl=document.getElementById('mach-date');var d=dateEl?dateEl.value:ist();
   var store=lmach(),sessions=store[d]||[];
-  var p=lprof()||{};
+  var p=lmergedProf();
   if(!sessions.length){toast('No sessions on this date','err');return;}
   // Group by machine name
   var machMap={};
@@ -9487,7 +9581,7 @@ try{
   var selMach=machFilter?machFilter.value:'';
   var selOp=opFilter?opFilter.value:'';
   var store=lmach();var days=Object.keys(store).filter(function(d){return d.startsWith(m);}).sort();
-  var p=lprof()||{};
+  var p=lmergedProf();
   var mLabel=mlabel(new Date(m+'-01'));
   // Collect all matching sessions grouped by machine
   var machMap={};
@@ -10932,7 +11026,7 @@ function initBillTab(){
   }
   var ms=document.getElementById('bill-month');
   if(ms){ms.innerHTML='';var now=new Date();for(var i=0;i<12;i++){var d=new Date(now.getFullYear(),now.getMonth()-i,1);var o=document.createElement('option');o.value=mkey(d);o.textContent=mlabel(d);if(!i)o.selected=true;ms.appendChild(o);}}
-  var p=lprof();if(p){var bc=document.getElementById('bill-company');if(bc)bc.value=p.company||'';}
+  var p=lmergedProf();if(p){var bc=document.getElementById('bill-company');if(bc)bc.value=p.company||'';}
   var invDate=document.getElementById('inv-date');if(invDate)invDate.value=ist();
   var invNo=document.getElementById('inv-no');
   if(invNo){var invList=linvs();invNo.value='INV-'+String(invList.length+1).padStart(3,'0');}
@@ -11032,7 +11126,7 @@ function generateSalarySlip(){
     else{additions+=amt;extraRows+='<tr><td style="color:#6b7280">(+) '+label+'</td><td style="color:#059669">+ '+fc(amt)+'</td></tr>';}
   });
   var net=Math.max(0,gross+additions-advances-deductions);
-  var p=lprof()||{};
+  var p=lmergedProf();
   var slipColor = p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)';
   var slipAccent = (slipColor.indexOf('gradient')===-1) ? slipColor : '#4f46e5';
   var company=document.getElementById('bill-company').value||p.company||'Sanjineer';
@@ -11164,7 +11258,7 @@ function reprintInvoice(id){
 }
 
 function _buildInvoiceHTML(inv){
-  var p = lprof() || {};
+  var p = lmergedProf();
   var hColor = p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed)';
   var hSolid = (hColor.indexOf('gradient') !== -1) ? '#4f46e5' : hColor;
   var co  = p.company  || '';
@@ -11293,7 +11387,7 @@ function _printInvoiceHTML(inv){
 function generateInvoice(){
   var client=document.getElementById('inv-client').value.trim();
   if(!client){toast('Client name required','err');return;}
-  var p=lprof()||{};
+  var p=lmergedProf();
   var no=document.getElementById('inv-no').value||('INV-'+Date.now().toString().slice(-4));
   var date=document.getElementById('inv-date').value||ist();
   var addr=document.getElementById('inv-addr').value;
@@ -11540,7 +11634,11 @@ function _applyFullBackup(d) {
   if (d.meta)       sm(d.meta);
   if (d.mats)       smat(d.mats);
   if (d.dept)       sdept(d.dept);
-  if (d.prof)       sprof(d.prof);       // company name + logo (base64 image)
+  if (d.prof)       sprof(d.prof);
+  if (d.global_prof) {
+    // Restore global profile (company, gst, logo) — no project prefix
+    try { localStorage.setItem(GLOBAL_PROF_KEY, JSON.stringify(d.global_prof)); } catch(e) {}
+  }
   if (d.machinery)  smach(d.machinery);
   if (d.drawings)   sdrw(d.drawings);
   if (d.budget)     sbgt(d.budget);
@@ -11689,6 +11787,7 @@ function cloudBackupNow(silent) {
       mats:       lmat(),
       dept:       ldept(),
       prof:       lprof(),
+      global_prof: lglobal(),  // company, gst, logo — same for all projects
       machinery:  lmach(),
       drawings:   ldrw(),
       budget:     lbgt(),
@@ -11992,6 +12091,32 @@ function shareViewerLink() {
 
 // -- Viewer Mode: load read-only data from cloud if ?view= param present --
 var _IS_VIEWER = false;
+
+// ── Viewer tab enforcement — single source of truth ─────────────────────────
+// Reads allowed perms from localStorage and enforces visibility of every
+// tab button AND tab content panel. Called after every tab switch, data
+// reload, and page-restore so there is never a flash of forbidden tabs.
+function _enforceViewerTabs() {
+  if (typeof _IS_VIEWER === 'undefined' || !_IS_VIEWER) return;
+  var perms = [];
+  try { perms = JSON.parse(safeLS.getItem('sj_viewer_perms') || '[]'); } catch(e) {}
+  if (!perms.length) return;
+
+  // 1. Tab nav buttons
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
+    var t = btn.getAttribute('data-tab');
+    btn.style.display = perms.indexOf(t) === -1 ? 'none' : '';
+  });
+
+  // 2. Tab content panels
+  document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
+    var t = panel.id.replace(/^tab-/, '');
+    if (t && perms.indexOf(t) === -1) {
+      panel.style.display = 'none';
+    }
+  });
+}
+
 function checkViewerMode() {
   var params = new URLSearchParams(window.location.search);
   var token = params.get('vt');
@@ -12215,6 +12340,8 @@ function _viewerLoadData(adminId, projId) {
         panel.style.display = 'none';
       }
     });
+    // Authoritative re-enforce (catches any style resets from prior renders)
+    _enforceViewerTabs();
     // Update 🔒 project badge with real site name from backup data
     try {
       var _meta = d.meta || {};
@@ -12767,7 +12894,10 @@ function doUnsubscribe() {
     if (!r.error && r.data && r.data.data) {
       var d = r.data.data;
       if (d.db) sd(d.db); if (d.meta) sm(d.meta); if (d.mats) smat(d.mats);
-      if (d.dept) sdept(d.dept); if (d.prof) sprof(d.prof); if (d.machinery) smach(d.machinery);
+      if (d.dept) sdept(d.dept);
+      if (d.prof) sprof(d.prof);
+      if (d.global_prof) { try { localStorage.setItem(GLOBAL_PROF_KEY, JSON.stringify(d.global_prof)); } catch(e) {} }
+      if (d.machinery) smach(d.machinery);
       if (d.drawings) sdrw(d.drawings); if (d.budget) sbgt(d.budget);
       if (d.milestones) sms(d.milestones); if (d.punchlist) spl(d.punchlist);
     }
@@ -12968,6 +13098,14 @@ function generateViewerLink() {
   var token  = _genToken();
   var slug   = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,20) + '-' + token.slice(0,4);
 
+  // Resolve active project name for the viewer list badge
+  var _activePid  = window.currentProjectId || null;
+  var _activePname = '';
+  try {
+    var _ap = (_activePid && window.projects) ? window.projects.find(function(p){ return p.id === _activePid; }) : null;
+    _activePname = _ap ? (_ap.name || '') : '';
+  } catch(e) {}
+
   Promise.resolve(_sb.from('admins').upsert({
     id: _adminSBUser.id,
     email: _adminSBUser.email || safeLS.getItem(ADMIN_EMAIL_KEY) || ''
@@ -12978,7 +13116,9 @@ function generateViewerLink() {
       password_hash: token,
       permissions:   perms,
       can_print:     canPrint,
-      site_id:       siteId
+      site_id:       siteId,
+      project_id:    _activePid,
+      project_name:  _activePname || null
     });
   }).then(function(r) {
     if (r.error) throw r.error;
@@ -13044,7 +13184,7 @@ function loadViewerAccountsInline() {
         +'<div style="display:flex;align-items:center;gap:7px;">'
         +'<div style="width:26px;height:26px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">👁️</div>'
         +'<div><p style="font-size:11px;font-weight:700;color:white;line-height:1;">'+v.email.replace(/-[a-z0-9]{4}$/,'').replace(/-/g,' ')+'</p>'
-        +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs</p></div>'
+        +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs'+(v.project_name?' · <span style=\'padding:1px 5px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:7px;font-size:8px;font-weight:700;color:#c7d2fe;\'>'+v.project_name+'</span>':'')+'</p></div>'
         +'</div>'
         +'<div style="display:flex;gap:5px;">'
         +'<button onclick="_copyViewerToken(\''+v.password_hash+'\')" style="padding:0 12px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🔗 Link</button>'
@@ -13153,8 +13293,10 @@ function renderViewerList(list) {
       + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
       + '<div style="display:flex;align-items:center;gap:8px;">'
       + '<div style="width:30px;height:30px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">\u{1F441}\uFE0F</div>'
-      + '<div><p style="font-size:12px;font-weight:700;color:white;line-height:1;">' + v.email + '</p>'
-      + '<p style="font-size:9px;color:#a78bfa;margin-top:2px;">' + (v.canPrint ? '\u2705 Print allowed' : '\u{1F6AB} No print') + '</p></div>'
+      + '<div><p style="font-size:12px;font-weight:700;color:white;line-height:1;">' + v.email.replace(/-[a-z0-9]{4}$/,'').replace(/-/g,' ') + '</p>'
+      + '<p style="font-size:9px;color:#a78bfa;margin-top:2px;">' + (v.can_print ? '\u2705 Print allowed' : '\u{1F6AB} No print')
+      + (v.project_name ? ' &middot; <span style=\'padding:1px 6px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:8px;font-size:8px;font-weight:700;color:#c7d2fe;vertical-align:middle;\'>' + v.project_name + '</span>' : '')
+      + '</p></div>'
       + '</div>'
       + '<div style="display:flex;gap:6px;align-items:center;">'
       + '<button onclick="toggleViewerEdit(this,'+i+')" style="padding:0 12px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u270F Edit</button>'
@@ -13410,6 +13552,8 @@ function _applyViewerPermissions(perms, canPrint, siteId) {
       panel.style.display = 'none';
     }
   });
+  // Authoritative enforce so first render is always clean
+  _enforceViewerTabs();
   // Disable all write actions
   _disableViewerWrites();
   // Re-enable print/export buttons if viewer has print permission
@@ -13686,7 +13830,7 @@ function exportAttendanceExcel(workerName, monthKey) {
 function reorderWhatsApp() {
   var low = getLowStock();
   if (!low.length) { toast('No low stock items', 'ok'); return; }
-  var p = lprof()||{};
+  var p = lmergedProf();
   var msg = '🏗️ *' + (p.company||'Site') + '* — Material Reorder Request\n\n';
   msg += '⚠️ *Low Stock Items:*\n';
   low.forEach(function(i){ msg += '• ' + i.name + ': *' + getbal(i) + ' ' + i.unit + '* remaining (min: ' + i.minQty + ')\n'; });
@@ -13952,7 +14096,7 @@ function savePO() {
 }
 
 function generatePOPDF(saveRec, record) {
-  var p   = lprof()||{};
+  var p = lmergedProf();
   var rec = record;
   if (!rec) {
     // Build from form
@@ -14085,7 +14229,7 @@ function whatsappPO(id) {
   }).join('\n');
   if ((rec.lines||[]).length > 5) itemsSummary += '\n• ...and ' + ((rec.lines||[]).length - 5) + ' more items';
 
-  var p = lprof() || {};
+  var p = lmergedProf();
   var msg = '📦 *Purchase Order — ' + (rec.poNo||'PO') + '*\n'
     + '📅 Date: ' + fd(rec.date) + '\n'
     + (rec.delivery ? '🚚 Expected Delivery: ' + fd(rec.delivery) + '\n' : '')
@@ -14232,7 +14376,7 @@ function renderGSTReport() {
   var month = sel.value; // YYYY-MM
   var el = document.getElementById('gst-report-body');
   if (!el) return;
-  var p = lprof() || {};
+  var p = lmergedProf();
 
   // Collect POs for the month
   var pos = lpo().filter(function(r){ return (r.date||'').startsWith(month); });
@@ -14342,7 +14486,7 @@ function generateGSTPDF() {
   var sel = document.getElementById('gst-month-sel');
   if (!sel) return;
   var month = sel.value;
-  var p = lprof() || {};
+  var p = lmergedProf();
   var pos = lpo().filter(function(r){ return (r.date||'').startsWith(month); });
   var bills = lbills ? lbills().filter(function(b){ return (b.date||'').startsWith(month) && b.type==='invoice'; }) : [];
   var monthLabel = new Date(month+'-01').toLocaleString('default',{month:'long',year:'numeric'});
@@ -14787,7 +14931,7 @@ function renderVisitsList() {
 function printVisitLog() {
   var visits = lvisits();
   if (!visits.length) { toast('No visits to print', 'err'); return; }
-  var p = lprof()||{};
+  var p = lmergedProf();
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Site Visit Log</title><style>'+pcs()+'</style></head><body>'
     +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Site Visit / Inspection Log</span><button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
     +'<div class="content">'
@@ -15035,7 +15179,7 @@ function printMeasurementSheet(){
   _printMsHtml({sheetNo:sheetNo,date:date,title:title,location:location,rows:rows});
 }
 function _printMsHtml(r){
-  var p=lprof()||{};
+  var p=lmergedProf();
   var hc=p.headerColor||'linear-gradient(135deg,#4f46e5,#7c3aed)';
   var hSolid=hc.indexOf('gradient')!==-1?'#4f46e5':hc;
   var rowsHtml=r.rows.map(function(row,i){
@@ -15150,7 +15294,7 @@ function generateQuotePDF(saveRecord) {
   var subtotal = lines.reduce(function(s,l){return s+l.amt;},0);
   var gstAmt   = subtotal * gstPct / 100;
   var total    = subtotal + gstAmt;
-  var p = lprof()||{};
+  var p = lmergedProf();
   // Save record
   if (saveRecord !== false) {
     var records = lqt();
@@ -15256,7 +15400,7 @@ function shareDailySummaryWhatsApp() {
     var w=AD.find(function(x){return x.type==='worker'&&x.name===a.name;}); var rate=w?(parseFloat(w.hourly_wage)||0):0;
     return s+(parseFloat(a.hours)||0)*rate+(parseFloat(a.ot_hours)||0)*(parseFloat(a.ot_rate)||0);
   },0);
-  var p = lprof()||{};
+  var p = lmergedProf();
   var meta = lm()[DD]||{};
   var msg = '📋 *Daily Report — '+fdl(DD)+'*\n';
   msg += '🏗️ *'+(p.company||'Site')+'*\n';
