@@ -3498,14 +3498,27 @@ function renderDashBoqBars() {
         if (!item.desc || item.desc === defLabel) return;
 
         var prev     = parseFloat(item.prevQty)  || 0;
-        var todayQty = parseFloat(item.todayQty) || 0;
+        // Use per-date dailyQty dict first, fall back to todayQty field
+        var dq       = item.dailyQty || {};
+        var todayQty = parseFloat(dq[today] || item.todayQty) || 0;
         var total    = prev + todayQty;
 
-        // ── filter ───────────────────────────────────────────────────────
+        // ── filter: week & month sum all dailyQty entries in range ───────
         var include;
-        if (filter === 'all')   { include = true; }
-        else if (filter === 'today') { include = todayQty > 0; }
-        else { include = total > 0; } // week / month — any progress
+        if (filter === 'all') {
+          include = true;
+        } else if (filter === 'today') {
+          include = todayQty > 0;
+        } else {
+          // week or month — sum dailyQty entries within range
+          var rangeStart = filter === 'week' ? wStart : mStart;
+          var rangeTotal = 0;
+          Object.keys(dq).forEach(function(d) {
+            if (d >= rangeStart && d <= today) rangeTotal += parseFloat(dq[d]) || 0;
+          });
+          if (filter === 'week' || filter === 'month') rangeTotal += (item.prevQty ? parseFloat(item.prevQty) : 0);
+          include = rangeTotal > 0 || total > 0;
+        }
 
         if (!include) return;
 
@@ -9915,18 +9928,18 @@ var BOQ_KEY    = 'cm_boq_schedule';
 var BOQ_PI_KEY = 'cm_boq_project_info';
 var BOQ_TD_KEY = 'cm_boq_today_details'; // today's work details
 
-function boqLoad(){ try{ return JSON.parse(safeLS.getItem(BOQ_KEY)||'{"sections":[]}'); }catch(e){ return {sections:[]}; } }
-function boqSave(d){ safeLS.setItem(BOQ_KEY,JSON.stringify(d)); }
+function boqLoad(){ try{ return JSON.parse(safeLS.getItem(_pk(BOQ_KEY))||'{"sections":[]}'); }catch(e){ return {sections:[]}; } }
+function boqSave(d){ safeLS.setItem(_pk(BOQ_KEY),JSON.stringify(d)); }
 function loadBoqTab(){ boqRender(); }
 
 /* ── Project Info ── */
-function boqLoadPI(){ try{ return JSON.parse(safeLS.getItem(BOQ_PI_KEY)||'{}'); }catch(e){ return {}; } }
+function boqLoadPI(){ try{ return JSON.parse(safeLS.getItem(_pk(BOQ_PI_KEY))||'{}'); }catch(e){ return {}; } }
 function boqSaveProjectInfo(){
   var pi={work:(document.getElementById('boq-pi-work')||{}).value||'',client:(document.getElementById('boq-pi-client')||{}).value||'',
     contractor:(document.getElementById('boq-pi-contractor')||{}).value||'',consultant:(document.getElementById('boq-pi-consultant')||{}).value||'',
     wo:(document.getElementById('boq-pi-wo')||{}).value||'',weather:(document.getElementById('boq-pi-weather')||{}).value||'Clear',
     commDate:(document.getElementById('boq-pi-start')||{}).value||'',stipDate:(document.getElementById('boq-pi-end')||{}).value||''};
-  safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info saved!','ok');
+  safeLS.setItem(_pk(BOQ_PI_KEY),JSON.stringify(pi)); toast('Project info saved!','ok');
 }
 function boqPopulatePI(pi){
   var m={'boq-pi-work':pi.work,'boq-pi-client':pi.client,'boq-pi-contractor':pi.contractor,
@@ -9945,7 +9958,7 @@ function boqFetchProjectInfo(){
       if(obj.workOrderNo||obj.wo_no) pi.wo=obj.workOrderNo||obj.wo_no;
       if(obj.startDate||obj.commencement_date) pi.commDate=obj.startDate||obj.commencement_date;
       if(obj.endDate||obj.completion_date) pi.stipDate=obj.endDate||obj.completion_date;
-      boqPopulatePI(pi); safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info loaded!','ok'); return;
+      boqPopulatePI(pi); safeLS.setItem(_pk(BOQ_PI_KEY),JSON.stringify(pi)); toast('Project info loaded!','ok'); return;
     }}catch(e){}
   }
   var saved=boqLoadPI(); if(saved.work){ boqPopulatePI(saved); toast('Loaded saved info','ok'); }
@@ -9953,8 +9966,8 @@ function boqFetchProjectInfo(){
 }
 
 /* ── Today's Work Details ── */
-function boqLoadTD(date){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; } }
-function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); all[date]=data; safeLS.setItem(BOQ_TD_KEY,JSON.stringify(all)); }catch(e){} }
+function boqLoadTD(date){ try{ var all=JSON.parse(safeLS.getItem(_pk(BOQ_TD_KEY))||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; } }
+function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(_pk(BOQ_TD_KEY))||'{}'); all[date]=data; safeLS.setItem(_pk(BOQ_TD_KEY),JSON.stringify(all)); }catch(e){} }
 function boqOpenTodayModal(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   var lbl=document.getElementById('boq-modal-date-label');
