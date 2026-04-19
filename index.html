@@ -6489,6 +6489,14 @@ var TABS = ['dashboard','daily','attendance','boq','machinery','expenses','mater
 var _plFilter='all';
 
 function switchTab(name) {
+  // Viewer guard: block access to tabs not in viewer's allowed perms
+  if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) {
+    var _vp = [];
+    try { _vp = JSON.parse(safeLS.getItem('sj_viewer_perms') || '[]'); } catch(e) {}
+    if (_vp.length > 0 && _vp.indexOf(name) === -1) {
+      return; // silently block — non-allowed tab
+    }
+  }
   TABS.forEach(function(t) {
     var el = document.getElementById('tab-' + t);
     if (el) el.style.display = 'none';
@@ -6629,14 +6637,24 @@ function boot() {
   }
   if (!_adminLoggedIn && viewerEmail && viewerPerms && viewerAdmin) {
     _IS_VIEWER = true;
+    // Clear any stale project context — viewer sees isolated plain-key data
+    window.currentProjectId = null;
+    window.projects = [];
     var perms = [];
     try { perms = JSON.parse(viewerPerms); } catch(ex) {}
     var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (!document.getElementById('viewer-top-bar')) {
       _showViewerBar(viewerEmail);
     }
+    // Show ONLY allowed tabs, hide everything else
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
-      btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
+      var tabName = btn.getAttribute('data-tab');
+      btn.style.display = perms.indexOf(tabName) === -1 ? 'none' : '';
+    });
+    // Also hide non-allowed tab panels
+    document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(function(panel) {
+      var tabId = panel.id.replace('tab-', '');
+      if (perms.indexOf(tabId) === -1) panel.style.display = 'none';
     });
     if (perms.length > 0) { switchTab(perms[0]); }
     _disableViewerWrites();
@@ -6648,7 +6666,7 @@ function boot() {
         }
       });
     }
-    // Load data using adminId — correct admin's data always
+    // Load data using adminId + correct backup_key (project-isolated)
     setTimeout(function() { _viewerLoadData(viewerAdmin, ''); }, 1500);
     return;
   }
@@ -11976,6 +11994,10 @@ function checkViewerMode() {
     return;
   }
 
+  // Viewer mode — clear any admin project context to avoid data mixing
+  window.currentProjectId = null;
+  window.projects = [];
+
   // Token-based viewer — check localStorage first for cached session
   var cached = null;
   try { cached = JSON.parse(safeLS.getItem('sj_vt_' + token) || 'null'); } catch(e) {}
@@ -12018,7 +12040,8 @@ function _fetchViewerByToken(token, silent) {
       safeLS.setItem('sj_vt_' + token, JSON.stringify({
         perms: vData.permissions || [],
         canPrint: vData.can_print,
-        siteId: vData.site_id,
+        siteId: vData.site_id,    // backup_key for project-specific fetch
+        backup_key: vData.backup_key || vData.site_id || '',
         adminId: vData.admin_id,
         email: vData.email
       }));
@@ -12037,10 +12060,12 @@ function _applyTokenViewer(vData, token) {
   var adminId  = vData.adminId || vData.admin_id || '';
   var label    = vData.email ? vData.email.split('-').slice(0,-1).join(' ') : 'Viewer';
 
+  var siteId = vData.siteId || vData.site_id || '';
   // Store in localStorage so reload works
   safeLS.setItem('sj_viewer_perms',   JSON.stringify(perms));
   safeLS.setItem('sj_viewer_print',   canPrint ? '1' : '0');
   safeLS.setItem('sj_viewer_admin',   adminId);   // key: always use adminId to find data
+  safeLS.setItem('sj_viewer_site',    siteId);    // backup_key for project-specific fetch
   safeLS.setItem('sj_viewer_email',   label);
   safeLS.setItem('sj_viewer_token',   token);
 
@@ -12105,28 +12130,61 @@ function _viewerLoadData(adminId, projId) {
   if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
   if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
 
+  // Get the stored backup_key for this viewer (set when viewer was created by admin)
+  // sj_viewer_site stores the site_id (e.g. user-abc123) set at viewer creation time
+  var _viewerBackupKey = safeLS.getItem('sj_viewer_site') || '';
+  // If not stored, derive from adminId (same formula as getSiteId())
+  if (!_viewerBackupKey && adminId) {
+    _viewerBackupKey = 'user-' + adminId.replace(/-/g,'').slice(0,12);
+  }
+
   function applyViewerData(d, silent) {
     var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist || d.cm_all);
     if (!hasData) {
       if (!silent) toast('No backup data found. Ask admin to run Backup Now.', 'err');
       return;
     }
+
+    // ── Viewer data isolation: apply WITHOUT touching project prefix ──
+    // Temporarily null out currentProjectId so _pk() returns plain keys
+    // Viewer data lives in viewer-specific plain localStorage keys (no project mix-up)
+    var _savedProjId = window.currentProjectId;
+    window.currentProjectId = null;
     _applyFullBackup(d);
+    window.currentProjectId = _savedProjId;
+
     applyProfile();
     var rawPerms = safeLS.getItem('sj_viewer_perms');
     var perms = []; var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (rawPerms) { try { perms = JSON.parse(rawPerms); } catch(ex) {} }
+
+    // ── Show ONLY allowed tabs ──────────────────────────────────────
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
-      btn.style.display = perms.indexOf(btn.getAttribute('data-tab')) === -1 ? 'none' : '';
+      var tabName = btn.getAttribute('data-tab');
+      btn.style.display = perms.indexOf(tabName) === -1 ? 'none' : '';
     });
+    // Also hide any tab panels that are not in perms (belt & suspenders)
+    document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(function(panel) {
+      var tabId = panel.id.replace('tab-', '');
+      if (perms.indexOf(tabId) === -1) {
+        panel.style.display = 'none';
+      }
+    });
+
     if (!silent) {
       var firstTab = perms.length > 0 ? perms[0] : 'dashboard';
       switchTab(firstTab);
     } else {
-      // Silent refresh: re-render current tab without switching
-      var curTab = document.querySelector('.tab-btn.active');
-      if (curTab) { try { switchTab(curTab.getAttribute('data-tab')); } catch(ex) {} }
+      // Silent refresh: only re-render if current tab is in allowed perms
+      var curTabEl = document.querySelector('.tab-btn.active');
+      var curTabName = curTabEl ? curTabEl.getAttribute('data-tab') : '';
+      if (curTabName && perms.indexOf(curTabName) !== -1) {
+        try { switchTab(curTabName); } catch(ex) {}
+      } else if (perms.length > 0) {
+        try { switchTab(perms[0]); } catch(ex) {}
+      }
     }
+
     _disableViewerWrites();
     if (canPrint) {
       document.querySelectorAll('button').forEach(function(b) {
@@ -12148,10 +12206,15 @@ function _viewerLoadData(adminId, projId) {
   var _viewerPollTimer = null;
 
   function fetchLatest(silent) {
-    _sb.from('cloud_backups')
+    // Always fetch the specific backup_key this viewer was created for
+    var query = _sb.from('cloud_backups')
       .select('data,backup_key,updated_at')
-      .eq('admin_id', adminId)
-      .order('updated_at', { ascending: false })
+      .eq('admin_id', adminId);
+    // Filter by the stored backup_key (project-specific)
+    if (_viewerBackupKey) {
+      query = query.eq('backup_key', _viewerBackupKey);
+    }
+    query.order('updated_at', { ascending: false })
       .limit(1)
       .then(function(r) {
         if (r.error) {
@@ -12841,7 +12904,10 @@ function generateViewerLink() {
   if (!_sb || !_adminSBUser) { errEl.textContent = '⚠️ Admin login required'; errEl.style.display='block'; return; }
 
   btn.textContent = '⏳ Generating…'; btn.disabled = true;
-  var siteId = getSiteId();
+  var siteId   = getSiteId();
+  var projId   = window.currentProjectId || null;
+  // Store the ACTIVE project's backup_key so viewer always sees THIS project's data
+  // backup_key = siteId (viewer fetches by admin_id + backup_key, not latest)
   var token  = _genToken();
   var slug   = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,20) + '-' + token.slice(0,4);
 
@@ -12855,7 +12921,8 @@ function generateViewerLink() {
       password_hash: token,
       permissions:   perms,
       can_print:     canPrint,
-      site_id:       siteId
+      site_id:       siteId,
+      backup_key:    siteId
     });
   }).then(function(r) {
     if (r.error) throw r.error;
@@ -13234,6 +13301,14 @@ function doViewerLogin() {
 
 // ── Viewer top bar helper ────────────────────────────────────
 function _showViewerBar(email) {
+  // Hide project switcher — viewer sees single project only
+  var projSel = document.getElementById('hdr-proj-select');
+  if (projSel) projSel.style.display = 'none';
+  var projWrap = document.getElementById('hdr-proj-wrap');
+  if (projWrap) projWrap.style.display = 'none';
+  // Hide Settings tab (viewers shouldn't access settings)
+  var settingsBtn = document.querySelector('.tab-btn[data-tab="settings"]');
+  if (settingsBtn) settingsBtn.style.display = 'none';
   if (document.getElementById('viewer-top-bar')) return;
   document.body.insertAdjacentHTML('afterbegin',
     '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
@@ -13253,12 +13328,15 @@ function _showViewerBar(email) {
 }
 
 function _applyViewerPermissions(perms, canPrint, siteId) {
-  // Hide all tab buttons not in perms using data-tab attribute
+  // Hide all tab buttons NOT in perms
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     var tabId = btn.getAttribute('data-tab');
-    if (perms.indexOf(tabId) === -1) {
-      btn.style.display = 'none';
-    }
+    btn.style.display = perms.indexOf(tabId) === -1 ? 'none' : '';
+  });
+  // Also hide tab panels for non-allowed tabs
+  document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(function(panel) {
+    var tabId = panel.id.replace('tab-', '');
+    if (perms.indexOf(tabId) === -1) panel.style.display = 'none';
   });
   // Disable all write actions
   _disableViewerWrites();
