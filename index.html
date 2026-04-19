@@ -13116,9 +13116,7 @@ function generateViewerLink() {
       password_hash: token,
       permissions:   perms,
       can_print:     canPrint,
-      site_id:       siteId,
-      project_id:    _activePid,
-      project_name:  _activePname || null
+      site_id:       siteId
     });
   }).then(function(r) {
     if (r.error) throw r.error;
