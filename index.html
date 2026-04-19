@@ -690,6 +690,10 @@ self.addEventListener('fetch', function(e) {
     window.currentProjectId = projectId;
     try { localStorage.setItem('sanj_current_project', projectId); } catch(e) {}
     _renderProjectDropdown();
+    // Pull this project's cloud backup first (getSiteId now returns project-specific key)
+    if (typeof _adminCloudPull === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
+      _adminCloudPull(true);
+    }
     // Reload the currently active tab with the new project's data
     setTimeout(function() {
       try {
@@ -699,7 +703,7 @@ self.addEventListener('fetch', function(e) {
         var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
         if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
       } catch(e) {}
-    }, 30);
+    }, 200);
   }
 
   // ── Init on startup ───────────────────────────────────────────
@@ -6646,15 +6650,15 @@ function boot() {
     if (!document.getElementById('viewer-top-bar')) {
       _showViewerBar(viewerEmail);
     }
-    // Show ONLY allowed tabs, hide everything else
+    // Hide ALL tabs first, then show only allowed ones
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
       var tabName = btn.getAttribute('data-tab');
       btn.style.display = perms.indexOf(tabName) === -1 ? 'none' : '';
     });
-    // Also hide non-allowed tab panels
-    document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(function(panel) {
-      var tabId = panel.id.replace('tab-', '');
-      if (perms.indexOf(tabId) === -1) panel.style.display = 'none';
+    // Also hide all content panels not in perms
+    document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
+      var tabId = panel.id.replace(/^tab-/, '');
+      if (tabId && perms.indexOf(tabId) === -1) panel.style.display = 'none';
     });
     if (perms.length > 0) { switchTab(perms[0]); }
     _disableViewerWrites();
@@ -11332,7 +11336,12 @@ function isCloudActivated() { return safeLS.getItem(CLOUD_KEY) === '1'; }
 function getFbConfig() { try { return JSON.parse(safeLS.getItem(CLOUD_FB_CFG) || 'null'); } catch(e) { return null; } }
 function getSiteId() {
   if (_adminSBUser && _adminSBUser.id) {
-    var key = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+    var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+    // Project-aware: each project gets its own backup_key row in cloud_backups
+    var key = base;
+    if (window.currentProjectId) {
+      key = base + '_p' + String(window.currentProjectId).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
+    }
     safeLS.setItem(CLOUD_SITE_ID, key);
     return key;
   }
@@ -11988,6 +11997,8 @@ function checkViewerMode() {
     var viewSiteId = params.get('view');
     if (viewSiteId) {
       _IS_VIEWER = true;
+      // IMMEDIATELY hide all tabs — show only after perms loaded
+      document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.style.display = 'none'; });
       _showViewerBar('Viewer');
       _viewerLoadData(viewSiteId, '');
     }
@@ -11997,6 +12008,9 @@ function checkViewerMode() {
   // Viewer mode — clear any admin project context to avoid data mixing
   window.currentProjectId = null;
   window.projects = [];
+
+  // IMMEDIATELY hide ALL nav tabs — prevent flash of all tabs before perms load
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.style.display = 'none'; });
 
   // Token-based viewer — check localStorage first for cached session
   var cached = null;
@@ -12040,8 +12054,7 @@ function _fetchViewerByToken(token, silent) {
       safeLS.setItem('sj_vt_' + token, JSON.stringify({
         perms: vData.permissions || [],
         canPrint: vData.can_print,
-        siteId: vData.site_id,    // backup_key for project-specific fetch
-        backup_key: vData.backup_key || vData.site_id || '',
+        siteId: vData.site_id || '',
         adminId: vData.admin_id,
         email: vData.email
       }));
@@ -12130,11 +12143,12 @@ function _viewerLoadData(adminId, projId) {
   if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
   if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
 
-  // Get the stored backup_key for this viewer (set when viewer was created by admin)
-  // sj_viewer_site stores the site_id (e.g. user-abc123) set at viewer creation time
+  // sj_viewer_site = the getSiteId() value at the moment viewer was created
+  // This matches exactly the backup_key in cloud_backups for that project
+  // Format: user-<uid12>  (no project) OR user-<uid12>_p<projId8> (with project)
   var _viewerBackupKey = safeLS.getItem('sj_viewer_site') || '';
-  // If not stored, derive from adminId (same formula as getSiteId())
   if (!_viewerBackupKey && adminId) {
+    // Fallback: base key without project (covers legacy single-project admins)
     _viewerBackupKey = 'user-' + adminId.replace(/-/g,'').slice(0,12);
   }
 
@@ -12158,18 +12172,31 @@ function _viewerLoadData(adminId, projId) {
     var perms = []; var canPrint = safeLS.getItem('sj_viewer_print') === '1';
     if (rawPerms) { try { perms = JSON.parse(rawPerms); } catch(ex) {} }
 
-    // ── Show ONLY allowed tabs ──────────────────────────────────────
+    // ── Show ONLY allowed tabs (hide everything else strictly) ────
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
       var tabName = btn.getAttribute('data-tab');
       btn.style.display = perms.indexOf(tabName) === -1 ? 'none' : '';
     });
-    // Also hide any tab panels that are not in perms (belt & suspenders)
-    document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(function(panel) {
-      var tabId = panel.id.replace('tab-', '');
-      if (perms.indexOf(tabId) === -1) {
+    // Hide ALL tab content panels that are NOT in perms
+    document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
+      var tabId = panel.id.replace(/^tab-/, '');
+      if (tabId && perms.indexOf(tabId) === -1) {
         panel.style.display = 'none';
       }
     });
+    // Update 🔒 project badge with real site name from backup data
+    try {
+      var _meta = d.meta || {};
+      var _siteName = (_meta.site && _meta.site.trim()) ? _meta.site.trim() : '';
+      if (!_siteName && d.prof) {
+        var _p = (typeof d.prof === 'string') ? JSON.parse(d.prof) : d.prof;
+        _siteName = (_p && _p.site) ? _p.site : '';
+      }
+      if (_siteName) {
+        var _lbl = document.getElementById('viewer-proj-label');
+        if (_lbl) _lbl.textContent = _siteName;
+      }
+    } catch(e) {}
 
     if (!silent) {
       var firstTab = perms.length > 0 ? perms[0] : 'dashboard';
@@ -12904,10 +12931,9 @@ function generateViewerLink() {
   if (!_sb || !_adminSBUser) { errEl.textContent = '⚠️ Admin login required'; errEl.style.display='block'; return; }
 
   btn.textContent = '⏳ Generating…'; btn.disabled = true;
-  var siteId   = getSiteId();
-  var projId   = window.currentProjectId || null;
-  // Store the ACTIVE project's backup_key so viewer always sees THIS project's data
-  // backup_key = siteId (viewer fetches by admin_id + backup_key, not latest)
+  // getSiteId() is project-aware: user-<uid12>_p<projId8> when project active
+  // viewer's site_id matches exactly the cloud_backups backup_key for active project
+  var siteId = getSiteId();
   var token  = _genToken();
   var slug   = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,20) + '-' + token.slice(0,4);
 
@@ -12921,8 +12947,7 @@ function generateViewerLink() {
       password_hash: token,
       permissions:   perms,
       can_print:     canPrint,
-      site_id:       siteId,
-      backup_key:    siteId
+      site_id:       siteId
     });
   }).then(function(r) {
     if (r.error) throw r.error;
@@ -13301,12 +13326,24 @@ function doViewerLogin() {
 
 // ── Viewer top bar helper ────────────────────────────────────
 function _showViewerBar(email) {
-  // Hide project switcher — viewer sees single project only
-  var projSel = document.getElementById('hdr-proj-select');
-  if (projSel) projSel.style.display = 'none';
-  var projWrap = document.getElementById('hdr-proj-wrap');
-  if (projWrap) projWrap.style.display = 'none';
-  // Hide Settings tab (viewers shouldn't access settings)
+  // Replace project dropdown with locked badge showing active project name
+  var projWrap = document.getElementById('project-dropdown-wrap');
+  if (projWrap) {
+    // Get admin's active project name from viewer site info (or fallback label)
+    var _vSite = safeLS.getItem('sj_viewer_site') || '';
+    var _projLabel = 'Project';
+    // Try to get project name from localStorage profile or viewer site id
+    try {
+      var _profRaw = localStorage.getItem('cm_prof') || localStorage.getItem('cm_meta') || '{}';
+      var _prof = JSON.parse(_profRaw);
+      if (_prof && _prof.site) _projLabel = _prof.site;
+    } catch(e) {}
+    projWrap.innerHTML = '<div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:4px 9px;max-width:148px;overflow:hidden;">'
+      + '<span style="font-size:11px;flex-shrink:0">🔒</span>'
+      + '<span id="viewer-proj-label" style="font-size:11px;font-weight:700;color:#fbbf24;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _projLabel + '</span>'
+      + '</div>';
+  }
+  // Hide Settings tab nav button
   var settingsBtn = document.querySelector('.tab-btn[data-tab="settings"]');
   if (settingsBtn) settingsBtn.style.display = 'none';
   if (document.getElementById('viewer-top-bar')) return;
@@ -13328,15 +13365,17 @@ function _showViewerBar(email) {
 }
 
 function _applyViewerPermissions(perms, canPrint, siteId) {
-  // Hide all tab buttons NOT in perms
+  // Hide ALL tab buttons first, then show only allowed ones
   document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     var tabId = btn.getAttribute('data-tab');
     btn.style.display = perms.indexOf(tabId) === -1 ? 'none' : '';
   });
-  // Also hide tab panels for non-allowed tabs
-  document.querySelectorAll('.tab-panel[id^="tab-"]').forEach(function(panel) {
-    var tabId = panel.id.replace('tab-', '');
-    if (perms.indexOf(tabId) === -1) panel.style.display = 'none';
+  // Also hide tab content panels for non-allowed tabs (belt+suspenders)
+  document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
+    var tabId = panel.id.replace(/^tab-/, '');
+    if (tabId && perms.indexOf(tabId) === -1) {
+      panel.style.display = 'none';
+    }
   });
   // Disable all write actions
   _disableViewerWrites();
@@ -13351,7 +13390,7 @@ function _applyViewerPermissions(perms, canPrint, siteId) {
   }
   // Navigate to first permitted tab
   if (perms.length > 0) {
-    setTimeout(function() { switchTab(perms[0]); }, 800);
+    setTimeout(function() { switchTab(perms[0]); }, 500);
   }
 }
 
