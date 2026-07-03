@@ -650,11 +650,8 @@ self.addEventListener('fetch', function(e) {
 
   // ── CRUD ──────────────────────────────────────────────────────
   function createProject(name) {
-    // Safety net: free users can only have 1 project
-    if (!window.isProUser && window.projects.length >= 1) {
-      _showUpgradePopup('Multiple Projects — add unlimited projects');
-      return null;
-    }
+    // Multi-project creation is temporarily unrestricted for all users
+    // (free tier will be reintroduced later)
     var id = _genProjectId();
     var proj = { id: id, name: name || ('Project ' + (window.projects.length + 1)), created_at: Date.now() };
     window.projects.push(proj);
@@ -774,48 +771,33 @@ self.addEventListener('fetch', function(e) {
     var listItems = window.projects.map(function(p) {
       var active = (p.id === window.currentProjectId);
       var pid = _escHtml(p.id);
-      // Full-width row: icon + name stretch edge-to-edge; pencil icon inline on same padding, no bg/text
-      return '<div style="display:flex;align-items:center;border-bottom:1px solid rgba(255,255,255,0.07);margin:0 8px;">'
-        // Full-width switch area
-        + '<div data-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding:7px 8px;cursor:pointer;border-radius:10px;background:' + (active ? 'linear-gradient(135deg,rgba(99,102,241,0.26),rgba(139,92,246,0.16))' : 'transparent') + ';-webkit-tap-highlight-color:transparent;transition:background .15s;">'
-        + '<div style="width:22px;height:22px;border-radius:6px;background:' + (active ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.08)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:' + (active ? '0 2px 6px rgba(99,102,241,0.38)' : 'none') + ';">'
-        + '<span style="font-size:10px">' + (active ? '\u2705' : '\uD83D\uDCC1') + '</span>'
+      return '<div style="display:flex;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+        // Switch tap area
+        + '<div data-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;flex:1;padding:10px 12px;cursor:pointer;background:' + (active?'rgba(99,102,241,0.2)':'transparent') + ';-webkit-tap-highlight-color:transparent;">'
+        + '<span style="font-size:13px;flex-shrink:0">' + (active ? '✅' : '📁') + '</span>'
+        + '<span style="font-size:12px;font-weight:' + (active?'700':'500') + ';color:' + (active?'#a5b4fc':'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(p.name) + '</span>'
         + '</div>'
-        + '<span style="font-size:12px;font-weight:' + (active ? '700' : '500') + ';color:' + (active ? '#c4b5fd' : 'rgba(255,255,255,0.80)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;letter-spacing:.01em">' + _escHtml(p.name) + '</span>'
-        + '</div>'
-        // Pencil icon only — transparent, no bg, no border, same vertical padding as row
-        + '<button data-proj-rename="' + pid + '" title="Rename" style="flex-shrink:0;padding:7px 8px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.30);font-size:13px;-webkit-tap-highlight-color:transparent;line-height:1;" ontouchstart="this.style.color=\'rgba(165,180,252,0.9)\'" ontouchend="this.style.color=\'rgba(255,255,255,0.30)\'">\u270F\uFE0F</button>'
+        // Edit button
+        + '<button data-proj-rename="' + pid + '" title="Rename" style="padding:10px 6px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#818cf8\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">✏️</button>'
+        // Share button
+        + '<button data-proj-share="' + pid + '" title="Share Access" style="padding:10px 8px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#34d399\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">🔗</button>'
         + '</div>';
     }).join('');
 
-    // "New Project" row — locked for free users
-    var _isPro = window.isProUser;
-    var newProjRow = '<div style="padding:8px 10px 10px;">'
-      + (_isPro
-        ? '<div id="proj-new-btn" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-radius:11px;background:linear-gradient(135deg,rgba(99,102,241,0.18),rgba(139,92,246,0.12));border:1px solid rgba(99,102,241,0.28);-webkit-tap-highlight-color:transparent;">'
-          + '<div style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,0.35);">'
-          + '<span style="font-size:12px">\u2795</span></div>'
-          + '<span style="font-size:12.5px;font-weight:700;color:#a5b4fc;letter-spacing:.01em">New Project</span>'
-          + '</div>'
-        : '<div id="proj-new-btn" data-proj-new-locked="1" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);-webkit-tap-highlight-color:transparent;">'
-          + '<div style="width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-          + '<span style="font-size:12px">\uD83D\uDD12</span></div>'
-          + '<span style="font-size:12.5px;font-weight:700;color:rgba(255,255,255,0.38);letter-spacing:.01em">New Project</span>'
-          + '<span style="margin-left:auto;display:inline-flex;align-items:center;padding:2px 7px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;border-radius:99px;font-size:8.5px;font-weight:800;letter-spacing:.05em;flex-shrink:0;box-shadow:0 2px 6px rgba(249,115,22,0.4)">PRO</span>'
-          + '</div>')
-      + '</div>';
+    // "New Project" row — unrestricted for now (free tier removed later)
+    var newProjRow = '<div id="proj-new-btn" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:rgba(99,102,241,0.1);-webkit-tap-highlight-color:transparent;">'
+        + '<span style="font-size:13px">➕</span>'
+        + '<span style="font-size:12px;font-weight:700;color:#a5b4fc;">New Project</span>'
+        + '</div>';
 
     var html =
       '<div id="proj-dd-inner" style="position:relative;display:inline-flex;">'
-      + '<button id="proj-dd-btn" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.24);border-radius:11px;padding:5px 10px 5px 8px;cursor:pointer;min-width:90px;max-width:155px;-webkit-tap-highlight-color:transparent;outline:none;backdrop-filter:blur(4px);box-shadow:0 2px 8px rgba(0,0,0,0.18);">'
-      + '<span style="font-size:12px;flex-shrink:0">\uD83D\uDDC2\uFE0F</span>'
-      + '<span style="font-size:11.5px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;letter-spacing:.01em">' + _escHtml(name) + '</span>'
-      + '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.6);margin-left:2px;transition:transform .2s">\u25BE</span>'
+      + '<button id="proj-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:pointer;min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
+      + '<span style="font-size:11px;flex-shrink:0">🗂️</span>'
+      + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
+      + '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;transition:transform .18s">▾</span>'
       + '</button>'
-      + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);z-index:99998;background:rgba(18,15,50,0.97);border:1px solid rgba(255,255,255,0.13);border-radius:18px;min-width:220px;max-width:270px;box-shadow:0 16px 48px rgba(0,0,0,0.7),0 0 0 1px rgba(255,255,255,0.05) inset;overflow:hidden;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);">'
-      + '<div style="padding:10px 10px 4px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:4px;">'
-      + '<span style="font-size:9px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:.08em;text-transform:uppercase;padding-left:10px;">Projects</span>'
-      + '</div>'
+      + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:200px;max-width:260px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
       + listItems
       + newProjRow
       + '</div>'
@@ -842,6 +824,7 @@ self.addEventListener('fetch', function(e) {
       e.stopPropagation();
       var sw = e.target.closest('[data-proj-switch]');
       var rn = e.target.closest('[data-proj-rename]');
+      var sh = e.target.closest('[data-proj-share]');
       var nb = e.target.closest('#proj-new-btn');
 
       if (sw) {
@@ -862,15 +845,18 @@ self.addEventListener('fetch', function(e) {
         });
         return;
       }
+      if (sh) {
+        var shid = sh.getAttribute('data-proj-share');
+        _projMenuOpen = false;
+        menu.style.display = 'none';
+        if (arrow) arrow.style.transform = '';
+        openProjectShareModal(shid);
+        return;
+      }
       if (nb) {
         _projMenuOpen = false;
         menu.style.display = 'none';
         if (arrow) arrow.style.transform = '';
-        // PRO gate: free users see upgrade popup
-        if (!window.isProUser) {
-          _showUpgradePopup('Multiple Projects — add unlimited projects');
-          return;
-        }
         _showProjectModal('➕ New Project', '', function(n) {
           var proj = createProject(n);
           if (proj) switchProject(proj.id);
@@ -895,6 +881,226 @@ self.addEventListener('fetch', function(e) {
   function _requireProject() {
     if (!window.currentProjectId) { toast('No active project', 'err'); return false; }
     return true;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // PROJECT SHARE CODES — generate a login code scoped to one
+  // project. Anyone who logs in with this code gets read/write
+  // access to ONLY that project's data (like a project manager),
+  // never any other project on this account.
+  // The actual "log in with a code" screen is a separate feature;
+  // this stores the code (locally + in Supabase) so that flow can
+  // look it up later.
+  // ══════════════════════════════════════════════════════════════
+  function _genShareCode() {
+    // 8 chars, uppercase letters + digits, no ambiguous 0/O/1/I
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var out = '';
+    for (var i = 0; i < 8; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
+    return out.slice(0,4) + '-' + out.slice(4);
+  }
+  function _projBackupKey(pid) {
+    if (!(typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id)) return '';
+    var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+    return base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
+  }
+  // Best-effort cloud upsert so a future "login with code" screen can look
+  // this code up from any device. Fails silently (code still works locally /
+  // is still shown to the user) if the table isn't set up yet or offline.
+  function _pushShareCodeToCloud(proj) {
+    try {
+      if (typeof _sb === 'undefined' || !_sb || !proj.shareCode) return;
+      var backupKey = _projBackupKey(proj.id);
+      _sb.from('project_share_codes').upsert({
+        code: proj.shareCode,
+        project_id: proj.id,
+        project_name: proj.name || '',
+        backup_key: backupKey,
+        owner_uid: (typeof _adminSBUser !== 'undefined' && _adminSBUser) ? _adminSBUser.id : null,
+        role: 'manager',
+        permissions: 'read_write',
+        active: true,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'project_id' }).then(function(res){
+        if (res && res.error) console.warn('Share code cloud sync failed (table may not exist yet):', res.error.message);
+      });
+    } catch(e) { console.warn('Share code cloud sync error:', e); }
+  }
+  function _revokeShareCodeInCloud(proj) {
+    try {
+      if (typeof _sb === 'undefined' || !_sb || !proj) return;
+      _sb.from('project_share_codes').update({ active: false }).eq('project_id', proj.id).then(function(){});
+    } catch(e) {}
+  }
+
+  function openProjectShareModal(pid) {
+    var proj = window.projects.find(function(p){ return p.id === pid; });
+    if (!proj) return;
+    if (!proj.shareCode) {
+      proj.shareCode = _genShareCode();
+      _saveProjects();
+      _pushShareCodeToCloud(proj);
+    }
+    _renderShareModal(proj);
+  }
+  function regenerateShareCode(pid) {
+    var proj = window.projects.find(function(p){ return p.id === pid; });
+    if (!proj) return;
+    _revokeShareCodeInCloud(proj);
+    proj.shareCode = _genShareCode();
+    _saveProjects();
+    _pushShareCodeToCloud(proj);
+    _renderShareModal(proj);
+    toast('New code generated — old code no longer works', 'ok');
+  }
+  function revokeShareCode(pid) {
+    var proj = window.projects.find(function(p){ return p.id === pid; });
+    if (!proj) return;
+    _revokeShareCodeInCloud(proj);
+    delete proj.shareCode;
+    _saveProjects();
+    closeProjectShareModal();
+    toast('Access code revoked', 'ok');
+  }
+  function copyShareCode() {
+    var el = document.getElementById('share-code-text');
+    if (!el) return;
+    var code = el.textContent.trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function(){ toast('Code copied ✓', 'ok'); });
+    } else {
+      var ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta);
+      ta.select(); try { document.execCommand('copy'); } catch(e){}
+      document.body.removeChild(ta); toast('Code copied ✓', 'ok');
+    }
+  }
+  function shareShareCode() {
+    var el = document.getElementById('share-code-text');
+    var nameEl = document.getElementById('share-modal-proj-name');
+    if (!el) return;
+    var code = el.textContent.trim();
+    var pname = nameEl ? nameEl.textContent : 'this project';
+    var msg = 'Login code for "' + pname + '" on Sanjineer: ' + code + '\nOpen app.sanjineer.in and use "Login with code" to get access.';
+    if (navigator.share) {
+      navigator.share({ title: 'Sanjineer project access code', text: msg }).catch(function(){});
+    } else {
+      copyShareCode();
+    }
+  }
+  function closeProjectShareModal() {
+    var m = document.getElementById('project-share-modal');
+    if (m) m.remove();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // JOIN A PROJECT BY CODE — the flip side of the share feature.
+  // Looks up the code, adds a local project entry pointing at the
+  // owner's cloud_backups row (via backup_key/owner_uid), then
+  // pulls their data so the joiner sees it immediately. All further
+  // push/pull for this project automatically targets that same row
+  // (see getSiteId / cloudBackupNow / _adminCloudPull patches).
+  // ══════════════════════════════════════════════════════════════
+  function joinProjectByCode(code, cb) {
+    if (typeof _sb === 'undefined' || !_sb) { toast('Cloud not available', 'err'); return; }
+    code = String(code || '').trim().toUpperCase();
+    if (!code) { toast('Enter a code', 'err'); return; }
+    if (!(typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id)) {
+      // Not logged in yet — remember the code and prompt login first
+      try { localStorage.setItem('sanj_pending_join_code', code); } catch(e) {}
+      toast('Sign in first, then the project will join automatically', 'err');
+      if (typeof obSwitchAuthTab === 'function') {
+        var cs = document.getElementById('ob-cloud-section');
+        if (cs) { document.getElementById('ob-local-section').style.display = 'none'; cs.style.display = 'block'; obSwitchAuthTab('login'); }
+      }
+      return;
+    }
+    toast('Looking up code…', 'ok');
+    _sb.from('project_share_codes').select('*').eq('code', code).eq('active', true).maybeSingle().then(function(res) {
+      if (res.error || !res.data) { toast('Invalid or expired code', 'err'); return; }
+      var rec = res.data;
+      var already = window.projects.find(function(p){ return p.joinedBackupKey === rec.backup_key; });
+      if (already) {
+        switchProject(already.id);
+        toast('Already joined — switched to "' + already.name + '"', 'ok');
+        if (cb) cb(already);
+        return;
+      }
+      var proj = createProject(rec.project_name || 'Joined Project');
+      proj.joinedBackupKey = rec.backup_key;
+      proj.joinedOwnerUid = rec.owner_uid;
+      proj.joinedRole = rec.role || 'manager';
+      proj.joinedCode = code;
+      _saveProjects();
+      switchProject(proj.id);
+      toast('Joined "' + proj.name + '" ✓ — pulling data…', 'ok');
+      setTimeout(function() {
+        if (typeof _adminCloudPull === 'function') _adminCloudPull(false);
+      }, 300);
+      if (cb) cb(proj);
+    }).catch(function(){ toast('Could not reach server', 'err'); });
+  }
+
+  function openJoinCodeModal() {
+    var existing = document.getElementById('join-code-modal');
+    if (existing) existing.remove();
+    var modal = document.createElement('div');
+    modal.id = 'join-code-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+    modal.innerHTML =
+      '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 20px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+      + '<p style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.5);margin:0 0 4px">🔗 JOIN A PROJECT</p>'
+      + '<p style="font-size:11.5px;color:rgba(255,255,255,0.55);line-height:1.5;margin:0 0 14px">Enter the code your contractor / site owner shared with you. You\'ll get read &amp; write access to only that project.</p>'
+      + '<input id="join-code-input" type="text" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" style="width:100%;box-sizing:border-box;padding:12px;background:#0f0e1a;border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;font-size:20px;font-weight:800;letter-spacing:2px;text-align:center;text-transform:uppercase;outline:none;margin-bottom:14px;font-family:monospace" oninput="this.value=this.value.toUpperCase()">'
+      + '<div style="display:flex;gap:10px">'
+      + '<button onclick="closeJoinCodeModal()" style="flex:1;padding:11px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer">Cancel</button>'
+      + '<button onclick="submitJoinCode()" style="flex:1;padding:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer">Join</button>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('pointerdown', function(e){ if (e.target===modal) closeJoinCodeModal(); });
+    setTimeout(function(){ var i=document.getElementById('join-code-input'); if(i) i.focus(); }, 80);
+  }
+  function closeJoinCodeModal() {
+    var m = document.getElementById('join-code-modal');
+    if (m) m.remove();
+  }
+  function submitJoinCode() {
+    var el = document.getElementById('join-code-input');
+    var code = el ? el.value : '';
+    joinProjectByCode(code, function(){ closeJoinCodeModal(); });
+  }
+  function _renderShareModal(proj) {
+    closeProjectShareModal();
+    var hasCloud = (typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id);
+    var modal = document.createElement('div');
+    modal.id = 'project-share-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+    modal.innerHTML =
+      '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 20px;width:100%;max-width:340px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+      + '<div style="display:flex;align-items:center;justify-content:between;margin-bottom:4px">'
+      + '<p style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.5);margin:0;flex:1">🔗 SHARE PROJECT ACCESS</p>'
+      + '</div>'
+      + '<p id="share-modal-proj-name" style="font-size:16px;font-weight:900;color:#fff;margin:0 0 14px">' + _escHtml(proj.name) + '</p>'
+      + (hasCloud
+        ? ('<div style="background:#0f0e1a;border:1.5px dashed rgba(129,140,248,0.5);border-radius:12px;padding:16px;text-align:center;margin-bottom:12px">'
+          + '<p id="share-code-text" style="font-size:26px;font-weight:900;letter-spacing:2px;color:#a5b4fc;margin:0;font-family:monospace">' + proj.shareCode + '</p>'
+          + '</div>'
+          + '<p style="font-size:11.5px;color:rgba(255,255,255,0.55);line-height:1.5;margin:0 0 16px">Share this code with your engineer. Anyone who logs in with it gets <b style="color:#a5b4fc">read &amp; write access to only this project</b> — like a project manager. They will never see your other sites.</p>'
+          + '<div style="display:flex;gap:8px;margin-bottom:8px">'
+          + '<button onclick="copyShareCode()" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer">📋 Copy</button>'
+          + '<button onclick="shareShareCode()" style="flex:1;padding:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">📤 Share</button>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px">'
+          + '<button onclick="regenerateShareCode(\'' + _escHtml(proj.id) + '\')" style="flex:1;padding:9px;background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:11.5px;font-weight:700;cursor:pointer">🔄 New Code</button>'
+          + '<button onclick="revokeShareCode(\'' + _escHtml(proj.id) + '\')" style="flex:1;padding:9px;background:transparent;border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#fca5a5;font-size:11.5px;font-weight:700;cursor:pointer">🚫 Revoke</button>'
+          + '</div>')
+        : ('<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-bottom:14px">'
+          + '<p style="font-size:12px;color:#fde68a;line-height:1.5;margin:0">⚠️ Sign in to your account first (Settings → cloud sync) so this code can be looked up from your engineer\'s device.</p>'
+          + '</div>')
+      )
+      + '<button onclick="closeProjectShareModal()" style="width:100%;padding:10px;margin-top:6px;background:rgba(255,255,255,0.06);border:none;border-radius:10px;color:rgba(255,255,255,0.7);font-size:12.5px;font-weight:700;cursor:pointer">Close</button>'
+      + '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('pointerdown', function(e){ if (e.target===modal) closeProjectShareModal(); });
   }
 
   // ── PRO upgrade popup ─────────────────────────────────────────
@@ -2034,6 +2240,11 @@ function _launchApp(){
       </div>
     </div>
 
+    <!-- ── Join an existing project via code ── -->
+    <button onclick="openJoinCodeModal()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 16px;background:rgba(52,211,153,0.1);border:1.5px dashed rgba(52,211,153,0.4);border-radius:14px;color:#6ee7b7;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:1.2rem;">
+      🔗 Have a project code? <span style="text-decoration:underline">Join a Project</span>
+    </button>
+
     <!-- ── Cloud Toggle Card ── -->
     <div style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:16px 18px;margin-bottom:1.2rem;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -2212,6 +2423,14 @@ function _waitSb(cb) {
 // ── Shared: handle successful OTP verify → check subscription ─
 function _handleOtpSuccess(user, email, onDismiss) {
   _adminSBUser = user;
+  // If the person tapped "Join a Project" before signing in, finish that now
+  try {
+    var pendingCode = localStorage.getItem('sanj_pending_join_code');
+    if (pendingCode && typeof joinProjectByCode === 'function') {
+      localStorage.removeItem('sanj_pending_join_code');
+      setTimeout(function(){ joinProjectByCode(pendingCode); }, 800);
+    }
+  } catch(e) {}
   try { localStorage.setItem('sanj_cloud_choice','cloud'); } catch(e) {}
   safeLS.setItem(ADMIN_ROLE_KEY || 'cm_admin_role', 'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY || 'cm_admin_email', email);
@@ -2544,6 +2763,11 @@ function doAdminSignup() { cmSendSignupOtp(); }
         <span id="cloud-hdr-icon" style="font-size:17px;line-height:1">🔒</span>
         <span id="cloud-hdr-label" style="font-size:9px!important;color:rgba(255,255,255,0.8);line-height:1;margin-top:1px">Cloud</span>
       </button>
+      <!-- OWNER button — only visible when the logged-in admin's email === OWNER_EMAIL -->
+      <button id="owner-hdr-btn" class="cloud-btn flex-shrink-0" onclick="openOwnerDashboard()" title="Owner Dashboard" style="display:none;border-color:rgba(251,191,36,0.5)">
+        <span style="font-size:17px;line-height:1">👑</span>
+        <span style="font-size:9px!important;color:#fbbf24;line-height:1;margin-top:1px">Owner</span>
+      </button>
       <!-- Stacked: company above, project dropdown below -->
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;max-width:200px;">
         <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;letter-spacing:.01em;max-width:190px;text-align:center"></p>
@@ -2556,9 +2780,9 @@ function doAdminSignup() { cmSendSignupOtp(); }
     <div class="text-right flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
       <div style="display:flex;align-items:center;gap:6px;">
-        <!-- Compact calculator trigger — left of spend amount -->
-        <button onclick="openCalcModal()" style="display:flex;align-items:center;justify-content:center;background:transparent;border:none;border-radius:8px;padding:4px 7px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;" ontouchstart="this.style.background='rgba(255,255,255,0.18)'" ontouchend="this.style.background='transparent'">
-          <span style="font-size:15px;line-height:1">🖩</span>
+        <!-- Compact QDPR trigger — left of spend amount -->
+        <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:4px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
+          <span style="font-size:12px;line-height:1">📆</span><span style="font-size:11px;line-height:1;font-weight:800;color:#fff;letter-spacing:.2px">QDPR</span>
         </button>
         <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
       </div>
@@ -2678,7 +2902,10 @@ function doAdminSignup() { cmSendSignupOtp(); }
         <span id="sett-gear" style="font-size:16px;display:inline-block;">⚙️</span>
         <p style="font-size:13px;font-weight:900;color:#fff;margin:0;">Settings</p>
       </div>
-      <button onclick="closeAllAndSettings()" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;" ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">✕</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button onclick="closeAllAndSettings();setTimeout(openCalcModal,220)" title="Calculator" style="display:flex;align-items:center;gap:4px;height:24px;padding:0 9px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:11px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'">🖩 Calc</button>
+        <button onclick="closeAllAndSettings()" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;" ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">✕</button>
+      </div>
     </div>
 
     <!-- Login / Cloud -->
@@ -2687,6 +2914,15 @@ function doAdminSignup() { cmSendSignupOtp(); }
       <div style="display:flex;flex-direction:column;gap:1px">
         <span id="sett-login-title">Login / Cloud</span>
         <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sett-login-sub">Sign in for backup &amp; sync</span>
+      </div>
+    </button>
+
+    <!-- Sales — Building / Floor / Flat inventory -->
+    <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();setTimeout(openSalesModal,360)" id="sett-sales-btn">
+      <span style="font-size:15px;flex-shrink:0">🏢</span>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <span>Sales</span>
+        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Buildings · Floors · Flats</span>
       </div>
     </button>
 
@@ -3246,7 +3482,11 @@ function _applyHiddenTabs() {
   _TAB_DEFS.forEach(function(t) {
     var isHidden = _hiddenTabs.indexOf(t.id) !== -1;
     document.querySelectorAll('.tab-btn[data-tab="' + t.id + '"]').forEach(function(btn) {
-      btn.style.display = isHidden ? 'none' : '';
+      // A stylesheet rule sets `.tab-btn { display: inline-flex !important }`,
+      // which beats a plain inline style — so this must also be !important
+      // to actually hide the tab.
+      if (isHidden) btn.style.setProperty('display', 'none', 'important');
+      else btn.style.removeProperty('display');
     });
   });
   // Update sub-label
@@ -3498,27 +3738,14 @@ function renderDashBoqBars() {
         if (!item.desc || item.desc === defLabel) return;
 
         var prev     = parseFloat(item.prevQty)  || 0;
-        // Use per-date dailyQty dict first, fall back to todayQty field
-        var dq       = item.dailyQty || {};
-        var todayQty = parseFloat(dq[today] || item.todayQty) || 0;
+        var todayQty = parseFloat(item.todayQty) || 0;
         var total    = prev + todayQty;
 
-        // ── filter: week & month sum all dailyQty entries in range ───────
+        // ── filter ───────────────────────────────────────────────────────
         var include;
-        if (filter === 'all') {
-          include = true;
-        } else if (filter === 'today') {
-          include = todayQty > 0;
-        } else {
-          // week or month — sum dailyQty entries within range
-          var rangeStart = filter === 'week' ? wStart : mStart;
-          var rangeTotal = 0;
-          Object.keys(dq).forEach(function(d) {
-            if (d >= rangeStart && d <= today) rangeTotal += parseFloat(dq[d]) || 0;
-          });
-          if (filter === 'week' || filter === 'month') rangeTotal += (item.prevQty ? parseFloat(item.prevQty) : 0);
-          include = rangeTotal > 0 || total > 0;
-        }
+        if (filter === 'all')   { include = true; }
+        else if (filter === 'today') { include = todayQty > 0; }
+        else { include = total > 0; } // week / month — any progress
 
         if (!include) return;
 
@@ -4068,13 +4295,20 @@ document.addEventListener('DOMContentLoaded', function() {
         <option>Plumber</option><option>Plumber Helper</option>
         <option>Engineer</option><option>Guard</option>
       </select>
-      <select id="w-team" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+      <select id="w-team" onchange="onTeamChange()" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
         <option value="">Select Team</option>
       </select>
       <input type="number" id="w-wage" placeholder="Regular Rate ₹/hr" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="number" id="w-ot-rate" placeholder="OT Rate ₹/hr (opt)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <button onclick="addWorker()" class="g-tor-emerald500-teal500 text-white rounded-xl font-semibold active:scale-95" style="font-size:10px;padding:0 12px">✅ Add Worker</button>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:3px">
+          <input type="checkbox" id="w-is-staff" onchange="toggleStaffFields()" style="width:13px;height:13px;accent-color:#7c3aed;cursor:pointer">
+          <label for="w-is-staff" style="font-size:10px;font-weight:800;color:#7c3aed;cursor:pointer;-webkit-tap-highlight-color:transparent">🧑‍💼 Staff</label>
+        </div>
+        <input type="number" id="w-ot-rate" placeholder="OT Rate ₹/hr (opt)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 w-full" style="box-sizing:border-box">
+        <input type="number" id="w-monthly-salary" placeholder="Monthly Salary ₹" step="any" class="px-3 py-2 border border-purple-200 rounded-xl text-sm focus:outline-none focus:border-purple-400 w-full" style="display:none;background:#faf5ff;box-sizing:border-box">
+      </div>
     </div>
+    <button onclick="addWorker()" class="g-tor-emerald500-teal500 w-full text-white rounded-xl font-semibold active:scale-95 mt-2" style="font-size:11px;padding:8px 12px">✅ Add Worker</button>
   </div>
 
   <!-- Master Attendance -->
@@ -4185,10 +4419,33 @@ document.addEventListener('DOMContentLoaded', function() {
       <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <select id="mat-category" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
       <input type="text" id="mat-supplier" placeholder="Supplier Name (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="text" id="mat-supplier-phone" placeholder="Supplier Phone (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
     </div>
     <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
+  </div>
+  <div class="bg-white rounded-2xl p-2.5 mb-3 shadow-xl">
+    <div class="flex gap-2 items-center flex-wrap">
+      <select id="mat-print-daterange" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400" style="flex:0 0 auto">
+        <option value="all">📅 All Time</option>
+        <option value="today">Today</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="month">This Month</option>
+      </select>
+      <select id="mat-print-filter" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400" onchange="viewMaterials()">
+        <option value="">📦 All Materials (Stock)</option>
+      </select>
+    </div>
+    <div class="flex gap-2 items-center flex-wrap mt-2">
+      <select id="mat-print-category" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+        <option value="">All Categories</option>
+      </select>
+      <select id="mat-print-supplier" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+        <option value="">All Suppliers</option>
+      </select>
+      <button onclick="printStockList()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print Received</button>
+    </div>
   </div>
   <div id="materials-list" class="space-y-3">
     <p class="text-white/50 text-center py-4">No materials added yet</p>
@@ -5325,7 +5582,58 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="visits-list"><p class="text-gray-400 text-center py-3 text-xs">No visits logged yet</p></div>
   </div>
 </div>
+
 </main>
+</div>
+
+<!-- ===== QDPR (Site-wise Daily Progress Reports) — bottom-sheet overlay, opened from Settings ===== -->
+<div id="qdpr-panel" style="display:none;position:fixed;inset:0;z-index:9500;">
+  <div id="qdpr-panel-backdrop" onclick="closeQdprPanel()" style="position:absolute;inset:0;background:rgba(10,6,35,0);transition:background .28s ease;"></div>
+  <div id="qdpr-panel-sheet" style="position:absolute;left:0;right:0;bottom:0;max-height:92vh;background:#F3F4F8;border-radius:20px 20px 0 0;box-shadow:0 -10px 50px rgba(0,0,0,.45);transform:translateY(100%);transition:transform .32s cubic-bezier(0.34,1.05,0.64,1);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="width:38px;height:4px;border-radius:99px;background:rgba(0,0,0,.18);margin:8px auto 4px;flex-shrink:0"></div>
+    <div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">
+      <div style="text-align:left">
+        <div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">📆 QDPR</div>
+        <div style="color:rgba(255,255,255,.6);font-size:10px" id="qdpr-date-day">—</div>
+      </div>
+      <input type="date" id="qdpr-date-input" onchange="changeQdprDate(this.value)" style="background:rgba(255,255,255,.16);border:none;border-radius:9px;color:white;font-size:12.5px;font-weight:700;padding:6px 10px;outline:none;text-align:center;cursor:pointer">
+      <button onclick="openQdprProjectModal()" title="Add Project" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center">➕</button>
+      <button onclick="printQdprAll()" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;padding:8px 12px;cursor:pointer;color:white;font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px">🖨️ Print All</button>
+      <button onclick="closeQdprPanel()" style="width:30px;height:30px;flex-shrink:0;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div style="overflow-y:auto;padding:12px 14px 28px;flex:1">
+      <div id="qdpr-site-count" class="text-[10px] font-bold text-indigo-500" style="margin-bottom:6px"></div>
+      <div id="qdpr-sites-list"><p class="text-gray-400 text-center py-3 text-xs">No projects yet</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- QDPR Add/Edit Project modal — opened from the ➕ button in the QDPR header -->
+<div id="qdpr-project-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9600" onclick="if(event.target===this)closeQdprProjectModal()">
+  <div class="bg-white rounded-2xl p-4 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-2">
+      <h3 id="qdpr-project-modal-title" class="font-bold text-gray-800 text-sm">📆 Add Project</h3>
+      <button onclick="closeQdprProjectModal()" class="text-gray-400 text-xl">✕</button>
+    </div>
+    <input type="hidden" id="qs-edit-pid" value="">
+    <!-- Create New / Join with Code toggle (hidden while editing an existing project) -->
+    <div id="qdpr-proj-mode-toggle" class="flex gap-1 bg-gray-100 rounded-xl p-1 mb-3">
+      <button id="qdpr-mode-new-btn" onclick="_qdprSetProjMode('new')" class="flex-1 py-1.5 rounded-lg text-xs font-bold" style="background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff">➕ New Project</button>
+      <button id="qdpr-mode-join-btn" onclick="_qdprSetProjMode('join')" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-gray-500">🔗 Join with Code</button>
+    </div>
+    <!-- New project fields -->
+    <div id="qdpr-proj-new-fields" class="grid grid-cols-1 gap-2 mb-2">
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Project Name</label><input type="text" id="qs-name" placeholder="e.g. Rampur Residency" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Site Address</label><input type="text" id="qs-address" placeholder="Full site address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+    </div>
+    <!-- Join with code fields -->
+    <div id="qdpr-proj-join-fields" class="mb-2" style="display:none">
+      <label class="text-[10px] font-bold text-gray-500 block mb-1">Project Code</label>
+      <input type="text" id="qdpr-join-code-input" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" class="w-full px-3 py-3 border border-gray-200 rounded-xl text-center font-mono text-lg font-extrabold tracking-widest focus:outline-none focus:border-indigo-400" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+      <p class="text-[10px] text-gray-400 mt-1.5">Get this code from the site owner/contractor. You'll get read &amp; write access to only that project.</p>
+    </div>
+    <button id="qdpr-project-modal-save-btn" onclick="saveQdprSite()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">➕ Save Project</button>
+  </div>
 </div>
 
 <!-- ====== MODALS ====== -->
@@ -5407,6 +5715,27 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<!-- Staff status + advance modal — opened by tapping a staff row's checkbox in Master Attendance -->
+<div id="ma-staff-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9700" onclick="if(event.target===this)closeMaStaffModal()">
+  <div class="bg-white rounded-2xl p-4 w-full max-w-xs shadow-2xl">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-bold text-gray-800 text-sm">🧑‍💼 <span id="ma-staff-modal-name">Staff</span></h3>
+      <button onclick="closeMaStaffModal()" class="text-gray-400 text-xl">✕</button>
+    </div>
+    <input type="hidden" id="ma-staff-modal-wid" value="">
+    <label class="text-[10px] font-bold text-gray-500 block mb-1">Status</label>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <button type="button" id="ma-staff-status-P" onclick="pickMaStaffStatus('P')" style="flex:1;padding:9px 0;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;text-align:center;background:#fff;color:#5b21b6;border:1.5px solid #ddd6fe">P</button>
+      <button type="button" id="ma-staff-status-HD" onclick="pickMaStaffStatus('HD')" style="flex:1;padding:9px 0;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;text-align:center;background:#fff;color:#5b21b6;border:1.5px solid #ddd6fe">HD</button>
+      <button type="button" id="ma-staff-status-A" onclick="pickMaStaffStatus('A')" style="flex:1;padding:9px 0;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;text-align:center;background:#fff;color:#5b21b6;border:1.5px solid #ddd6fe">A</button>
+      <button type="button" id="ma-staff-status-L" onclick="pickMaStaffStatus('L')" style="flex:1;padding:9px 0;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;text-align:center;background:#fff;color:#5b21b6;border:1.5px solid #ddd6fe">L</button>
+    </div>
+    <label class="text-[10px] font-bold text-gray-500 block mb-1">Advance ₹ (optional)</label>
+    <input type="number" id="ma-staff-modal-advance" placeholder="0" step="any" class="w-full px-3 py-2 border border-amber-200 rounded-xl text-sm focus:outline-none mb-3" style="background:#fffbeb">
+    <button onclick="saveMaStaffModal()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save</button>
+  </div>
+</div>
+
 <!-- ===== MANAGE WORKERS MODAL ===== -->
 <div id="manage-workers-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this)closeManageWorkersModal()">
   <div class="bg-white rounded-2xl w-full shadow-2xl overflow-y-auto" style="max-width:360px;max-height:90vh;padding:12px 14px">
@@ -5456,7 +5785,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="closeAttModal()" class="text-gray-400 font-bold" style="font-size:14px;background:none;border:none;cursor:pointer;height:auto;min-height:auto;padding:0">✕</button>
     </div>
     <!-- 2x2 GRID: Date | Regular Hrs / Advance | OT Hrs -->
-    <div class="grid grid-cols-2 gap-2 mb-2">
+    <div class="grid grid-cols-2 gap-2 mb-2" id="att-hourly-fields">
       <div>
         <label style="font-size:8px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">📅 Date</label>
         <input type="date" id="att-date" class="w-full border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400" style="padding:5px 7px;font-size:11px">
@@ -5473,6 +5802,24 @@ document.addEventListener('DOMContentLoaded', function() {
         <label style="font-size:8px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">⚡ OT Hours</label>
         <input type="number" id="att-ot-hours" placeholder="0" step="any" oninput="calcAttTotal()" class="w-full border border-purple-200 rounded-lg focus:outline-none focus:border-purple-400" style="padding:5px 7px;font-size:11px;background:#faf5ff">
       </div>
+    </div>
+    <!-- STAFF fields: Date + Status only -->
+    <div class="grid grid-cols-2 gap-2 mb-2" id="att-staff-fields" style="display:none">
+      <div>
+        <label style="font-size:8px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">📅 Date</label>
+        <input type="date" id="att-date-staff" class="w-full border border-gray-200 rounded-lg focus:outline-none focus:border-indigo-400" style="padding:5px 7px;font-size:11px">
+      </div>
+      <div>
+        <label style="font-size:8px;font-weight:800;color:#5b21b6;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Status</label>
+        <select id="att-status-staff" class="w-full border border-purple-200 rounded-lg focus:outline-none" style="padding:5px 7px;font-size:11px;background:#faf5ff">
+          <option value="P">P — Present</option><option value="A">A — Absent</option><option value="HD">HD — Half Day</option><option value="L">L — Leave</option>
+        </select>
+      </div>
+      <div style="grid-column:1/3">
+        <label style="font-size:8px;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">💰 Advance ₹ (optional)</label>
+        <input type="number" id="att-advance-staff" placeholder="0" step="any" class="w-full border border-amber-200 rounded-lg focus:outline-none focus:border-amber-400" style="padding:5px 7px;font-size:11px;background:#fffbeb">
+      </div>
+      <p style="grid-column:1/3;font-size:9px;color:#9ca3af;margin:0">Fixed monthly salary — status is for record only, not used to calculate pay.</p>
     </div>
     <!-- Live total preview -->
     <div id="att-total-preview" style="display:none;background:linear-gradient(135deg,#ede9fe,#ddd6fe);border-radius:8px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
@@ -5500,7 +5847,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="mat-purchase-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeMatModal()">
   <div class="bg-white rounded-2xl p-3 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
-    <div class="flex items-center justify-between mb-2"><h3 id="mat-modal-title" class="font-bold text-gray-800 text-sm">📦 Record Purchase</h3><button onclick="closeMatModal()" class="text-gray-400 text-xl">✕</button></div>
+    <div class="flex items-center justify-between mb-2"><h3 id="mat-modal-title" class="font-bold text-gray-800 text-sm">📦 Material Received</h3><button onclick="closeMatModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="mp-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
@@ -5508,7 +5855,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Unit</label><input type="text" id="mp-unit" placeholder="bags, kg, nos..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Total Cost (₹) *</label><input type="number" id="mp-cost" placeholder="Total amount paid" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       </div>
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Supplier Name</label><input type="text" id="mp-supplier" placeholder="Supplier / vendor name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Supplier Name</label><input type="text" id="mp-supplier" placeholder="Supplier / vendor name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Material Type</label><select id="mp-category" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select></div>
+      </div>
       <div>
         <label class="text-xs font-semibold text-gray-500 block mb-1">📎 Bill / Receipt <span class="font-normal text-gray-400">(Optional)</span></label>
         <div class="flex gap-2 mb-2">
@@ -5539,7 +5889,7 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
         </div>
       </div>
-      <button onclick="saveMatPurchase()" class="g-tor-emerald500-teal500 w-full py-2 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save Purchase</button>
+      <button onclick="saveMatPurchase()" class="g-tor-emerald500-teal500 w-full py-2 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save — Adds to Stock</button>
     </div>
   </div>
 </div>
@@ -7154,14 +7504,41 @@ function delDeptEntry(i) {
 // ============================================================
 // WORKERS & ATTENDANCE
 // ============================================================
+function toggleStaffFields(){
+  var chk = document.getElementById('w-is-staff');
+  var wageEl = document.getElementById('w-wage');
+  var otEl = document.getElementById('w-ot-rate');
+  var salEl = document.getElementById('w-monthly-salary');
+  if (!chk) return;
+  // Staff / team-salaried workers are paid a fixed monthly salary —
+  // hide Regular Rate, and swap the OT Rate box for a Monthly Salary box.
+  if (wageEl) wageEl.style.display = chk.checked ? 'none' : '';
+  if (otEl) otEl.style.display = chk.checked ? 'none' : '';
+  if (salEl) salEl.style.display = chk.checked ? '' : 'none';
+}
+// Selecting a Team auto-switches the worker to fixed-monthly-salary mode:
+// hourly rate fields hide, only Role + Monthly Salary remain visible.
+function onTeamChange(){
+  var teamEl = document.getElementById('w-team');
+  var chk = document.getElementById('w-is-staff');
+  if (!teamEl || !chk) return;
+  if (teamEl.value) { chk.checked = true; } else { chk.checked = false; }
+  toggleStaffFields();
+}
+
 function addWorker() {
   var name=document.getElementById('w-name').value.trim(), cat=document.getElementById('w-category').value;
   var team=document.getElementById('w-team').value, wage=parseFloat(document.getElementById('w-wage').value)||0;
   var otRateEl=document.getElementById('w-ot-rate'); var otRate=otRateEl?parseFloat(otRateEl.value)||0:0;
+  var isStaffEl=document.getElementById('w-is-staff'); var isStaff=isStaffEl?!!isStaffEl.checked:false;
+  var monthlySalaryEl=document.getElementById('w-monthly-salary'); var monthlySalary=monthlySalaryEl?parseFloat(monthlySalaryEl.value)||0:0;
   if (!name||!cat||!team) { toast('Fill all fields','err'); return; }
-  ins({type:'worker',name:name,category:cat,team_name:team,hourly_wage:wage,ot_rate:otRate});
+  if (isStaff && !monthlySalary) { toast('Enter monthly salary for staff','err'); return; }
+  ins({type:'worker',name:name,category:cat,team_name:team,hourly_wage:wage,ot_rate:otRate,is_staff:isStaff,monthly_salary:monthlySalary});
   document.getElementById('w-name').value=''; document.getElementById('w-wage').value='';
   if(otRateEl) otRateEl.value='';
+  if(monthlySalaryEl) monthlySalaryEl.value='';
+  if(isStaffEl){ isStaffEl.checked=false; toggleStaffFields(); }
   toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers();
 }
 function delWorker(id) {
@@ -7202,6 +7579,747 @@ function openManageWorkers() {
 
 function closeManageWorkers() {
   document.getElementById('manage-workers-modal').style.display = 'none';
+}
+
+// ============================================================
+// QDPR — Site-wise Daily Progress Reports
+// Content model, visual style & print layout mirror the
+// reference "Site Reports" app (weather/labour/dept-work/
+// materials received & required/photos, gradient headers,
+// data tables, 4-col photo grid, per-site print sections).
+// ============================================================
+var QC = {
+  ink:'#1E1458', navy:'#2D1B8E', royal:'#4A3AB5',
+  gold:'#D97706', amber:'#F59E0B', mint:'#059669', rose:'#E11D48',
+  slate:'#475569', fog:'#94A3B8',
+  snow:'#F8F7FF', cloud:'#EEF0FF', white:'#FFFFFF', border:'#DDE2F5', bg:'#F0F2FF'
+};
+var QDPR_APALS=[QC.navy,'#0F766E','#7C3AED','#B45309','#0369A1','#BE185D'];
+var QDPR_MAX_PHOTOS = 8;
+// Shared material category list — used by QDPR material rows, the Materials
+// tab "Add Material" form and the Material Received print filter.
+var MATERIAL_CATEGORIES = [
+  'Cement & Concrete','Steel / TMT Bars','Sand & Aggregate','Bricks / Blocks',
+  'Pipes & Fittings','Plumbing','Electrical','Tiles & Flooring','Chemicals & Admixtures',
+  'Glass & Glazing','Paint & Finishing','Hardware & Fasteners','Wood / Timber',
+  'Sanitary Fittings','Waterproofing','Doors & Windows','Roofing','Scaffolding & Shuttering',
+  'Safety Equipment','Other'
+];
+function _matCatOptionsHTML(selected, includeAll){
+  var opts = includeAll ? ['<option value="">All Categories</option>'] : ['<option value="">Select Category</option>'];
+  MATERIAL_CATEGORIES.forEach(function(c){
+    opts.push('<option value="'+esc(c)+'"'+(c===selected?' selected':'')+'>'+esc(c)+'</option>');
+  });
+  return opts.join('');
+}
+var qdprState = { date: null, formSiteId: null, formReportId: null };
+var qdprFormState = null;
+
+function qAColor(name){ return QDPR_APALS[(name||'?').charCodeAt(0) % QDPR_APALS.length]; }
+function qdprAvatar(name, size){
+  size = size || 42;
+  var bg = qAColor(name);
+  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:12px;flex-shrink:0;background:linear-gradient(135deg,'+bg+','+bg+'99);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:'+Math.round(size*.38)+'px;box-shadow:0 3px 10px '+bg+'55">'+((name||'?')[0]||'?').toUpperCase()+'</div>';
+}
+function qdprSecHead(icon, title){
+  return '<div style="display:flex;align-items:center;gap:7px;margin-bottom:7px">'
+    +'<span style="font-size:13px">'+icon+'</span>'
+    +'<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:'+QC.navy+'">'+title+'</span>'
+    +'<div style="flex:1;height:1px;background:'+QC.border+'"></div></div>';
+}
+function qdprDataTable(cols, rows, centerIdx){
+  if (!rows || !rows.length) return '';
+  var ci = centerIdx || [];
+  function al(i){ return ci.indexOf(i)!==-1 ? 'center' : 'left'; }
+  var ths = cols.map(function(c,i){
+    return '<th style="padding:5px 9px;text-align:'+al(i)+';font-weight:700;color:'+QC.navy+';font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;background:'+QC.cloud+';border-radius:'+(i===0?'7px 0 0 7px':i===cols.length-1?'0 7px 7px 0':'0')+'">'+c+'</th>';
+  }).join('');
+  var trs = rows.map(function(row,ri){
+    return '<tr>'+row.map(function(cell,ci2){
+      return '<td style="padding:5px 9px;text-align:'+al(ci2)+';color:'+(ci2===0?QC.ink:QC.slate)+';font-weight:'+(ci2===0?600:400)+';border-bottom:'+(ri<rows.length-1?('1px solid '+QC.border):'none')+'">'+cell+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  return '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+ths+'</tr></thead><tbody>'+trs+'</tbody></table></div>';
+}
+function qdprPhotoGridView(photos){
+  if (!photos || !photos.length) return '';
+  var cells = photos.map(function(p){
+    return '<div style="aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid '+QC.border+';background:'+QC.snow+'"><img src="'+p.src+'" style="width:100%;height:100%;object-fit:cover;display:block"></div>';
+  }).join('');
+  return '<div>'+qdprSecHead('📸','Site Photos')+'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;page-break-inside:avoid">'+cells+'</div></div>';
+}
+
+// ── Row editor (Labour / Dept Work / Materials) ────────────────
+var QDPR_ROW_FIELDS = {
+  labour:      [{key:'category',label:'Category',ph:'Mason / Labour / Carpenter...'},{key:'count',label:'Count',ph:'4',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concreting, soiling of Footing 79',full:true}],
+  deptWork:    [{key:'category',label:'Category',ph:'Mason / Labour'},{key:'workers',label:'Workers',ph:'1',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concrete around RCC pipe',full:true}],
+  matBought:   [{key:'material',label:'Material',ph:'Cement / Hammer beat'},{key:'matCategory',label:'Material Type',type:'select',options:MATERIAL_CATEGORIES},{key:'qty',label:'Qty',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Bags / Kg / Nos'},{key:'supplier',label:'Supplier Name',ph:'Supplier / Vendor'},{key:'amount',label:'Amount (₹)',ph:'0',type:'number'}],
+  matRequired: [{key:'material',label:'Material',ph:'Binding wire / Cement'},{key:'matCategory',label:'Material Type',type:'select',options:MATERIAL_CATEGORIES},{key:'qty',label:'Qty Needed',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Kg / Bags / Nos'}]
+};
+var QDPR_ROW_BLANKS = {
+  labour:      {category:'',count:'',floor:'',workDone:''},
+  deptWork:    {category:'',workers:'',floor:'',workDone:''},
+  matBought:   {material:'',matCategory:'',qty:'',unit:'',supplier:'',amount:''},
+  matRequired: {material:'',matCategory:'',qty:'',unit:''}
+};
+function qdprBuildRowsHTML(section){
+  var rows = qdprFormState[section] || [];
+  var fields = QDPR_ROW_FIELDS[section];
+  return rows.map(function(row, ri){
+    return '<div style="background:'+QC.snow+';border:1px solid '+QC.border+';border-radius:12px;padding:12px;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="font-size:10.5px;font-weight:700;color:'+QC.fog+'">#'+(ri+1)+'</span>'
+      +(rows.length>1?'<button onclick="qdprRmRow(\''+section+'\',\''+row.id+'\')" style="font-size:10px;font-weight:700;color:'+QC.rose+';background:'+QC.rose+'15;border:none;border-radius:6px;padding:3px 8px;cursor:pointer">Remove</button>':'')
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +fields.map(function(f){
+        var control;
+        if (f.type==='select'){
+          control = '<select onchange="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">'
+            +_matCatOptionsHTML(row[f.key]||'', false)
+            +'</select>';
+        } else {
+          control = '<input type="'+(f.type||'text')+'" value="'+esc(row[f.key]||'')+'" placeholder="'+(f.ph||'')+'" oninput="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">';
+        }
+        return '<div style="'+(f.full?'grid-column:1/-1':'')+'">'
+          +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">'+f.label+'</label>'
+          +control
+          +'</div>';
+      }).join('')
+      +'</div></div>';
+  }).join('');
+}
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function qdprRowSection(icon, title, section){
+  return '<div style="margin-bottom:4px">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+    +'<span style="font-size:14px">'+icon+'</span>'
+    +'<span style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.9px;color:'+QC.navy+';flex:1">'+title+'</span>'
+    +'<button onclick="qdprAddRow(\''+section+'\')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:8px;border:none;background:'+QC.cloud+';color:'+QC.navy+';font-size:11px;font-weight:700;cursor:pointer">➕ Add</button>'
+    +'</div>'
+    +'<div id="qdpr_rows_'+section+'">'+qdprBuildRowsHTML(section)+'</div></div>';
+}
+function qdprUpdRow(sec, rid, field, val){
+  var row = (qdprFormState[sec]||[]).find(function(r){ return r.id===rid; });
+  if (row) row[field] = val;
+}
+function qdprAddRow(sec){
+  qdprFormState[sec].push(Object.assign({id: uid()}, QDPR_ROW_BLANKS[sec]));
+  var el = document.getElementById('qdpr_rows_'+sec); if (el) el.innerHTML = qdprBuildRowsHTML(sec);
+}
+function qdprRmRow(sec, rid){
+  qdprFormState[sec] = qdprFormState[sec].filter(function(r){ return r.id!==rid; });
+  var el = document.getElementById('qdpr_rows_'+sec); if (el) el.innerHTML = qdprBuildRowsHTML(sec);
+}
+function uid(){ return 'q'+Date.now()+Math.random().toString(36).slice(2,6); }
+
+// ── Photo editor (form) ─────────────────────────────────────
+function qdprResizeImageFile(file, maxWidth, quality){
+  maxWidth = maxWidth || 1000; quality = quality || 0.75;
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        var w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round(h*(maxWidth/w)); w = maxWidth; }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = function(){ reject(new Error('Image load failed')); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function(){ reject(new Error('File read failed')); };
+    reader.readAsDataURL(file);
+  });
+}
+function qdprBuildPhotoGridEditableHTML(){
+  var photos = qdprFormState.photos || [];
+  return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+    +photos.map(function(p){
+      return '<div style="position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1.5px solid '+QC.border+'">'
+        +'<img src="'+p.src+'" style="width:100%;height:100%;object-fit:cover;display:block">'
+        +'<button onclick="qdprRemovePhoto(\''+p.id+'\')" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.62);color:white;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">✕</button>'
+        +'</div>';
+    }).join('')
+    +'</div>';
+}
+function qdprPhotoSectionHTML(){
+  var n = (qdprFormState.photos||[]).length;
+  var full = n >= QDPR_MAX_PHOTOS;
+  return '<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+    +'<span style="font-size:14px">📸</span>'
+    +'<span style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.9px;color:'+QC.navy+';flex:1">Site Photos</span>'
+    +'<span style="font-size:10.5px;font-weight:700;color:'+(full?QC.rose:QC.fog)+'">'+n+'/'+QDPR_MAX_PHOTOS+'</span>'
+    +'</div>'
+    +'<div id="qdprPhotoGrid">'+qdprBuildPhotoGridEditableHTML()+'</div>'
+    +'<label style="display:'+(full?'none':'flex')+';align-items:center;justify-content:center;gap:6px;margin-top:10px;padding:11px;border-radius:10px;border:1.5px dashed '+QC.border+';background:'+QC.snow+';color:'+QC.navy+';font-size:12.5px;font-weight:700;cursor:pointer">'
+    +'📷 Add Photos (up to '+QDPR_MAX_PHOTOS+')'
+    +'<input type="file" accept="image/*" multiple style="display:none" onchange="onQdprPhotoChange(this)"></label>'
+    +(full?'<div style="text-align:center;font-size:11px;color:'+QC.fog+';margin-top:8px">Maximum of '+QDPR_MAX_PHOTOS+' photos reached — remove one to add another</div>':'')
+    +'</div>';
+}
+async function onQdprPhotoChange(input){
+  var files = Array.from(input.files||[]);
+  if (!files.length) return;
+  if (!qdprFormState.photos) qdprFormState.photos = [];
+  var room = QDPR_MAX_PHOTOS - qdprFormState.photos.length;
+  if (room<=0){ toast('Maximum '+QDPR_MAX_PHOTOS+' photos allowed','err'); input.value=''; return; }
+  var toProcess = files.slice(0, room);
+  if (files.length>room) toast('Only '+room+' more photo(s) added (max '+QDPR_MAX_PHOTOS+')','err');
+  for (var i=0;i<toProcess.length;i++){
+    try{ var dataUrl = await qdprResizeImageFile(toProcess[i]); qdprFormState.photos.push({id:uid(), src:dataUrl}); }
+    catch(e){ console.error('QDPR photo processing failed', e); }
+  }
+  input.value='';
+  var g = document.getElementById('qdprPhotoGrid'); if (g) g.parentElement.outerHTML = qdprPhotoSectionHTML();
+}
+function qdprRemovePhoto(id){
+  qdprFormState.photos = (qdprFormState.photos||[]).filter(function(p){ return p.id!==id; });
+  var wrap = document.getElementById('qdprPhotoGrid');
+  if (wrap) wrap.parentElement.outerHTML = qdprPhotoSectionHTML();
+}
+
+// ── Tab entry / date switching ──────────────────────────────
+// ── QDPR bottom-sheet panel (opened from Settings, not a tab) ─────────────
+function openQdprPanel(){
+  var panel = document.getElementById('qdpr-panel');
+  var backdrop = document.getElementById('qdpr-panel-backdrop');
+  var sheet = document.getElementById('qdpr-panel-sheet');
+  if (!panel) return;
+  panel.style.display = 'block';
+  loadQdprTab();
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      if (backdrop) backdrop.style.background = 'rgba(10,6,35,.55)';
+      if (sheet) sheet.style.transform = 'translateY(0)';
+    });
+  });
+}
+function closeQdprPanel(){
+  var panel = document.getElementById('qdpr-panel');
+  var backdrop = document.getElementById('qdpr-panel-backdrop');
+  var sheet = document.getElementById('qdpr-panel-sheet');
+  if (backdrop) backdrop.style.background = 'rgba(10,6,35,0)';
+  if (sheet) sheet.style.transform = 'translateY(100%)';
+  setTimeout(function(){ if (panel) panel.style.display = 'none'; }, 300);
+}
+
+// ── Project-scoped storage helpers ─────────────────────────────
+// QDPR reads/writes ANY project's own data directly (by project id),
+// independent of whichever project is currently "active" in the app,
+// so every project saved in the app shows up here, and every report
+// is written straight into that project's own date-wise records.
+function _qdprProjKey(pid, base){ return 'sanj_project_' + pid + '_' + base; }
+function qdprLoadProjAD(pid){
+  try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, DB)) || '[]'); } catch(e){ return []; }
+}
+function qdprSaveProjAD(pid, arr){
+  try { safeLS.setItem(_qdprProjKey(pid, DB), JSON.stringify(arr)); } catch(e){}
+  if (pid === window.currentProjectId) {
+    AD = arr;
+    if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  }
+}
+function qdprInsertToProj(pid, obj){
+  var arr = qdprLoadProjAD(pid);
+  var rec = Object.assign({__id: uid(), __ts: Date.now()}, obj);
+  arr.push(rec);
+  qdprSaveProjAD(pid, arr);
+  return rec;
+}
+function qdprUpdateInProj(pid, id, patch){
+  var arr = qdprLoadProjAD(pid);
+  var idx = arr.findIndex(function(d){ return d.__id===id; });
+  if (idx>-1) { arr[idx] = Object.assign({}, arr[idx], patch); qdprSaveProjAD(pid, arr); return arr[idx]; }
+  return null;
+}
+function qdprDeleteFromProj(pid, id){
+  qdprSaveProjAD(pid, qdprLoadProjAD(pid).filter(function(d){ return d.__id!==id; }));
+}
+function qdprLoadProjMats(pid){
+  try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, MATS)) || '[]'); } catch(e){ return []; }
+}
+function qdprSaveProjMats(pid, mats){
+  try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mats)); } catch(e){}
+  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+}
+
+// Push "Materials Received" rows from a saved QDPR report straight into
+// that project's own Materials stock (as a "purchase" transaction), so it
+// shows up automatically in the Materials tab for that project — date-wise,
+// keyed to the report so re-saving/editing never duplicates entries.
+function _qdprSyncMaterials(pid, report){
+  if (!report) return;
+  var mats = qdprLoadProjMats(pid);
+  var reportId = report.__id;
+  (report.matBought||[]).forEach(function(m){
+    if (!m.material || !(parseFloat(m.qty) > 0)) return;
+    var nameKey = m.material.trim();
+    var item = mats.find(function(x){ return (x.name||'').trim().toLowerCase() === nameKey.toLowerCase(); });
+    if (!item) {
+      item = {id:'mat'+Date.now()+Math.random().toString(36).slice(2,6), name:nameKey, unit:m.unit||'', category:m.matCategory||'', minQty:0, transactions:[], created:Date.now()};
+      mats.push(item);
+    } else if (m.matCategory && !item.category) {
+      item.category = m.matCategory;
+    }
+    item.transactions = (item.transactions||[]).filter(function(t){ return !(t.qdpr_report_id===reportId && t.qdpr_material_row===m.id); });
+    item.transactions.push({
+      type:'purchase', qty: parseFloat(m.qty)||0, date: report.date, unit: m.unit||item.unit,
+      cost: parseFloat(m.amount)||0, supplier: m.supplier||'QDPR Entry', category: m.matCategory||item.category||'',
+      qdpr_report_id: reportId, qdpr_material_row: m.id
+    });
+  });
+  // Drop any auto-synced transactions for rows that were removed from the report
+  var liveRowIds = (report.matBought||[]).filter(function(m){ return m.material && parseFloat(m.qty)>0; }).map(function(m){ return m.id; });
+  mats.forEach(function(item){
+    item.transactions = (item.transactions||[]).filter(function(t){
+      return t.qdpr_report_id !== reportId || liveRowIds.indexOf(t.qdpr_material_row) !== -1;
+    });
+  });
+  qdprSaveProjMats(pid, mats);
+
+  // ── Also mirror priced material purchases into this project's own
+  // expense/activity ledger (type:'material') so the Expense Ledger,
+  // per-project totals, and the dashboard "Total Spends" figure update
+  // automatically — exactly as a manual Materials-tab purchase would. ──
+  var pAD = qdprLoadProjAD(pid);
+  pAD = pAD.filter(function(d){ return !(d.type==='material' && d.qdpr_report_id===reportId); });
+  (report.matBought||[]).forEach(function(m){
+    if (!m.material || !(parseFloat(m.qty) > 0)) return;
+    var cost = parseFloat(m.amount)||0;
+    if (cost <= 0) return; // no cost entered — nothing to add to the expense ledger
+    pAD.push({
+      __id: gid(), __ts: Date.now(), type:'material',
+      material_name: m.material.trim(), quantity: parseFloat(m.qty)||0, unit: m.unit||'',
+      cost: cost, date: report.date, supplier: m.supplier||'QDPR Entry',
+      category: m.matCategory||'', is_petty_cash:false,
+      qdpr_report_id: reportId, qdpr_material_row: m.id
+    });
+  });
+  qdprSaveProjAD(pid, pAD);
+}
+function _qdprRemoveMaterialsForReport(pid, reportId){
+  var mats = qdprLoadProjMats(pid);
+  mats.forEach(function(item){ item.transactions = (item.transactions||[]).filter(function(t){ return t.qdpr_report_id !== reportId; }); });
+  qdprSaveProjMats(pid, mats);
+  var pAD = qdprLoadProjAD(pid).filter(function(d){ return !(d.type==='material' && d.qdpr_report_id===reportId); });
+  qdprSaveProjAD(pid, pAD);
+}
+function _qdprRefreshLiveTabsIfActive(pid){
+  if (pid !== window.currentProjectId) return;
+  AD = ld();
+  if (typeof viewMaterials === 'function') { try{ viewMaterials(); }catch(e){} }
+  if (typeof viewExpenses === 'function') { try{ viewExpenses(); }catch(e){} }
+  if (typeof updateDash === 'function') { try{ updateDash(); }catch(e){} }
+}
+
+function loadQdprTab(){
+  if (typeof _loadProjects === 'function') _loadProjects();
+  if (!qdprState.date) qdprState.date = ist();
+  var dEl = document.getElementById('qdpr-date-input'); if (dEl) dEl.value = qdprState.date;
+  var dayEl = document.getElementById('qdpr-date-day'); if (dayEl) dayEl.textContent = _qdprDayName(qdprState.date);
+  renderQdprSites();
+}
+function _qdprDayName(ds){
+  var DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return DAYS[new Date(ds+'T12:00:00').getDay()];
+}
+function _qdprFmtDate(ds){
+  var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var d=new Date(ds+'T12:00:00');
+  return d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear();
+}
+function changeQdprDate(v){
+  qdprState.date = v;
+  var dayEl = document.getElementById('qdpr-date-day'); if (dayEl) dayEl.textContent = _qdprDayName(v);
+  renderQdprSites();
+}
+
+// ── Projects CRUD (every project saved in the app is a QDPR "site") ────
+var _qdprProjMode = 'new';
+function _qdprSetProjMode(mode){
+  _qdprProjMode = mode;
+  var newBtn = document.getElementById('qdpr-mode-new-btn');
+  var joinBtn = document.getElementById('qdpr-mode-join-btn');
+  var newFields = document.getElementById('qdpr-proj-new-fields');
+  var joinFields = document.getElementById('qdpr-proj-join-fields');
+  var saveBtn = document.getElementById('qdpr-project-modal-save-btn');
+  var activeStyle = 'background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff';
+  var inactiveStyle = 'background:transparent;color:#6b7280';
+  if (newBtn) newBtn.style.cssText += ';' + (mode==='new' ? activeStyle : inactiveStyle);
+  if (joinBtn) joinBtn.style.cssText += ';' + (mode==='join' ? activeStyle : inactiveStyle);
+  if (newFields) newFields.style.display = (mode==='new') ? 'grid' : 'none';
+  if (joinFields) joinFields.style.display = (mode==='join') ? 'block' : 'none';
+  if (saveBtn) saveBtn.textContent = (mode==='join') ? '🔗 Join Project' : '➕ Save Project';
+}
+function openQdprProjectModal(pid){
+  var modal = document.getElementById('qdpr-project-modal');
+  if (!modal) return;
+  var titleEl = document.getElementById('qdpr-project-modal-title');
+  var saveBtn = document.getElementById('qdpr-project-modal-save-btn');
+  var pidEl = document.getElementById('qs-edit-pid');
+  var nameEl = document.getElementById('qs-name');
+  var addrEl = document.getElementById('qs-address');
+  var modeToggle = document.getElementById('qdpr-proj-mode-toggle');
+  var joinCodeEl = document.getElementById('qdpr-join-code-input');
+  if (joinCodeEl) joinCodeEl.value = '';
+  if (pid) {
+    var proj = (window.projects||[]).find(function(p){ return p.id===pid; });
+    if (titleEl) titleEl.textContent = '✏️ Edit Project';
+    if (saveBtn) saveBtn.textContent = '💾 Save Changes';
+    if (pidEl) pidEl.value = pid;
+    if (nameEl) nameEl.value = proj ? (proj.name||'') : '';
+    if (addrEl) addrEl.value = proj ? (proj.address||'') : '';
+    if (modeToggle) modeToggle.style.display = 'none'; // can't switch mode while editing
+    _qdprSetProjMode('new');
+  } else {
+    if (titleEl) titleEl.textContent = '📆 Add Project';
+    if (pidEl) pidEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (addrEl) addrEl.value = '';
+    if (modeToggle) modeToggle.style.display = 'flex';
+    _qdprSetProjMode('new');
+  }
+  modal.style.display = 'flex';
+}
+function closeQdprProjectModal(){
+  var modal = document.getElementById('qdpr-project-modal');
+  if (modal) modal.style.display = 'none';
+}
+function saveQdprSite(){
+  var editPid = (document.getElementById('qs-edit-pid').value||'').trim();
+  if (!editPid && _qdprProjMode === 'join') {
+    var code = (document.getElementById('qdpr-join-code-input').value||'').trim();
+    if (!code) { toast('Enter a project code','err'); return; }
+    if (typeof joinProjectByCode === 'function') {
+      joinProjectByCode(code, function(){
+        closeQdprProjectModal();
+        renderQdprSites();
+      });
+    }
+    return;
+  }
+  var name = (document.getElementById('qs-name').value||'').trim();
+  var address = (document.getElementById('qs-address').value||'').trim();
+  if (!name) { toast('Enter project name','err'); return; }
+  if (editPid) {
+    // Edit existing project
+    var proj = (window.projects||[]).find(function(p){ return p.id===editPid; });
+    if (!proj) { toast('Project not found','err'); return; }
+    proj.name = name; proj.address = address;
+    if (typeof _saveProjects === 'function') _saveProjects();
+    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    toast('Project updated ✓','ok');
+  } else {
+    // Add new project
+    if (typeof createProject !== 'function') { toast('Cannot create project here','err'); return; }
+    var newProj = createProject(name);
+    if (newProj && address) { newProj.address = address; if (typeof _saveProjects === 'function') _saveProjects(); }
+    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    toast('Project saved ✓','ok');
+  }
+  closeQdprProjectModal();
+  renderQdprSites();
+}
+function delQdprSite(pid){
+  if (typeof deleteProject !== 'function') return;
+  var proj = (window.projects||[]).find(function(p){ return p.id===pid; });
+  if (!proj) return;
+  askDel('Delete project "'+proj.name+'"? This removes it from the whole app, not just QDPR.', function(){
+    deleteProject(pid);
+    renderQdprSites();
+  });
+}
+function delQdprReport(pid, reportId){
+  askDel('Delete this daily progress report?', function(){
+    qdprDeleteFromProj(pid, reportId);
+    _qdprRemoveMaterialsForReport(pid, reportId);
+    toast('Report deleted','ok');
+    renderQdprSites();
+    _qdprRefreshLiveTabsIfActive(pid);
+  });
+}
+
+// ── Rendering: sites list (dashboard-style cards) ───────────
+function renderQdprSites(){
+  var el = document.getElementById('qdpr-sites-list'); if (!el) return;
+  if (typeof _loadProjects === 'function') _loadProjects();
+  var projects = window.projects || [];
+  var cnt = document.getElementById('qdpr-site-count');
+  if (cnt) cnt.textContent = projects.length ? (projects.length+' project'+(projects.length>1?'s':'')) : '';
+  if (!projects.length) { el.innerHTML = '<div style="text-align:center;padding:40px 16px"><div style="font-size:44px;margin-bottom:12px">🏗️</div><div style="font-size:15px;font-weight:800;color:'+QC.ink+'">No Projects Yet</div><div style="font-size:12.5px;color:'+QC.fog+';margin-top:4px">Add a project above to start logging daily progress reports</div></div>'; return; }
+  el.innerHTML = projects.map(function(p){
+    var site = {__id: p.id, name: p.name, address: p.address||''};
+    var pAD = qdprLoadProjAD(p.id);
+    var report = pAD.find(function(d){ return d.type==='qdpr_entry' && d.date===qdprState.date; });
+    return report ? qdprReportCard(site, report) : qdprEmptyCard(site);
+  }).join('');
+}
+
+function qdprReportCard(site, report){
+  var dW = (report.deptWork||[]).reduce(function(s,d){ return s+(Number(d.workers)||0); },0);
+  var lRows = (report.labour||[]).filter(function(l){ return l.category; }).map(function(l){
+    return [esc(l.category), '<span style="background:'+QC.cloud+';color:'+QC.navy+';font-weight:700;font-size:11px;padding:2px 8px;border-radius:20px">'+esc(l.count)+'</span>', esc(l.floor), esc(l.workDone)];
+  });
+  var dRowsBase = (report.deptWork||[]).filter(function(d){ return d.category; }).map(function(d){ return [esc(d.category), esc(d.workers), esc(d.floor), esc(d.workDone)]; });
+  var dRows = dRowsBase.concat(dW>0?[['<strong>Total</strong>', dW, '', '']]:[]);
+  var mRows = (report.matBought||[]).filter(function(m){ return m.material; }).map(function(m){
+    return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim(), esc(m.supplier||'—'), m.amount?fc(parseFloat(m.amount)||0):'—'];
+  });
+  var reqRows = (report.matRequired||[]).filter(function(m){ return m.material; }).map(function(m){ return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim()]; });
+
+  return '<div style="background:'+QC.white+';border-radius:18px;overflow:hidden;margin-bottom:14px;box-shadow:0 2px 16px '+QC.ink+'0E;border:1px solid '+QC.border+'">'
+    +'<div style="background:linear-gradient(135deg,'+QC.ink+' 0%,'+QC.navy+' 55%,'+QC.royal+' 100%);padding:8px 14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<div style="display:flex;gap:9px;align-items:center;flex:1;min-width:0">'
+    +qdprAvatar(site.name,38)
+    +'<div style="min-width:0;line-height:1.25">'
+    +'<div style="color:white;font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(site.name)+'</div>'
+    +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
+    +'</div></div>'
+    +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
+    +'<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'
+    +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
+    +'<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'
+    +'</div></div></div>'
+    +'<div style="padding:13px 14px">'
+    +((report.weather||report.siteNote)?('<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 12px;margin-bottom:13px;display:flex;gap:8px;align-items:flex-start"><span>'+_qdprWeatherEmoji(report.weather)+'</span><div style="font-size:12.5px"><span style="font-weight:700;color:#92400E">'+esc(report.weather||'')+'</span>'+(report.siteNote?('<span style="color:#78350F"> — '+esc(report.siteNote)+'</span>'):'')+'</div></div>'):'')
+    +(lRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('👷','Labour Summary')+qdprDataTable(['Category','Count','Floor','Work Done'],lRows,[1])+'</div>'):'')
+    +(dRowsBase.length?('<div style="margin-bottom:13px">'+qdprSecHead('🏗️','Departmental Work')+qdprDataTable(['Category','Workers','Floor','Work Done'],dRows,[1])+'</div>'):'')
+    +(mRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('🛒','Materials Received')+qdprDataTable(['Material','Type','Qty','Supplier','Amount'],mRows,[2])+'</div>'):'')
+    +(reqRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('📋','Material Required')+qdprDataTable(['Material','Type','Qty'],reqRows,[2])+'</div>'):'')
+    +qdprPhotoGridView(report.photos)
+    +'</div></div>';
+}
+function _qdprWeatherEmoji(w){
+  if (!w) return '☀️';
+  if (/rain/i.test(w)) return '🌧️';
+  if (/partly/i.test(w)) return '🌦️';
+  if (/cloud/i.test(w)) return '⛅';
+  return '☀️';
+}
+function qdprEmptyCard(site){
+  return '<div style="background:'+QC.white+';border-radius:18px;margin-bottom:14px;border:1.5px solid '+QC.border+';overflow:hidden">'
+    +'<div style="background:linear-gradient(135deg,'+QC.ink+' 0%,'+QC.navy+' 55%,'+QC.royal+' 100%);padding:8px 14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<div style="display:flex;gap:9px;align-items:center">'+qdprAvatar(site.name,38)
+    +'<div style="line-height:1.25">'
+    +'<div style="color:white;font-size:15px;font-weight:800">'+esc(site.name)+'</div>'
+    +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
+    +'</div></div>'
+    +'<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'
+    +'</div></div>'
+    +'<div style="padding:16px 14px">'
+    +'<div style="background:#FEF2F2;border:1.5px dashed #FCA5A5;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px;display:flex;flex-direction:column;align-items:center;gap:5px">'
+    +'<div style="display:flex;align-items:center;gap:6px;color:#B91C1C;font-weight:800;font-size:13px">🔒 SITE CLOSED TODAY</div>'
+    +'<div style="font-size:11.5px;color:#991B1B">No work reported for '+_qdprFmtDate(qdprState.date)+'</div>'
+    +'</div>'
+    +'<button onclick="openQdprForm(\''+site.__id+'\')" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;background:linear-gradient(135deg,'+QC.navy+','+QC.royal+');color:white;box-shadow:0 2px 10px '+QC.navy+'40">➕ Add Daily Report</button>'
+    +'</div></div>';
+}
+
+// ── Add / Edit Report modal ─────────────────────────────────
+function openQdprForm(pid, reportId){
+  var proj = (window.projects||[]).find(function(p){ return p.id===pid; }); if (!proj) return;
+  var site = {__id: pid, name: proj.name, address: proj.address||''};
+  qdprState.formSiteId = pid;
+  qdprState.formReportId = reportId || null;
+  var pAD = qdprLoadProjAD(pid);
+  var existing = reportId ? pAD.find(function(d){ return d.__id===reportId; }) : null;
+  qdprFormState = existing ? JSON.parse(JSON.stringify(existing)) : {
+    date: qdprState.date, weather:'Sunny', siteNote:'',
+    labour:[Object.assign({id:uid()}, QDPR_ROW_BLANKS.labour)],
+    deptWork:[Object.assign({id:uid()}, QDPR_ROW_BLANKS.deptWork)],
+    matBought:[Object.assign({id:uid()}, QDPR_ROW_BLANKS.matBought)],
+    matRequired:[Object.assign({id:uid()}, QDPR_ROW_BLANKS.matRequired)],
+    photos:[]
+  };
+  ['labour','deptWork','matBought','matRequired'].forEach(function(k){
+    if (!qdprFormState[k] || !qdprFormState[k].length) qdprFormState[k] = [Object.assign({id:uid()}, QDPR_ROW_BLANKS[k])];
+    // Backfill any newly-added fields (matCategory/supplier/amount) missing from older saved reports
+    qdprFormState[k] = qdprFormState[k].map(function(r){ return Object.assign({id: r.id||uid()}, QDPR_ROW_BLANKS[k], r); });
+  });
+  if (!qdprFormState.photos) qdprFormState.photos = [];
+
+  var modal = document.getElementById('qdpr-form-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'qdpr-form-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(30,20,88,.55);z-index:9600;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:0';
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  modal.innerHTML = qdprFormHTML(site, !!existing);
+}
+function closeQdprForm(){
+  var modal = document.getElementById('qdpr-form-modal');
+  if (modal) modal.style.display = 'none';
+  qdprFormState = null;
+}
+function qdprFormHTML(site, isEdit){
+  var f = qdprFormState;
+  var iStyle = 'width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.snow+';color:'+QC.ink+';box-sizing:border-box';
+  var weathers = [{e:'☀️',l:'Sunny'},{e:'🌧️',l:'Rainy'},{e:'⛅',l:'Cloudy'},{e:'🌦️',l:'Partly Cloudy'}];
+  return '<div style="background:'+QC.bg+';min-height:100vh;width:100%;max-width:640px;margin:0 auto">'
+    +'<div style="background:linear-gradient(135deg,'+QC.ink+' 0%,'+QC.navy+' 55%,'+QC.royal+' 100%);position:sticky;top:0;z-index:10;box-shadow:0 4px 24px '+QC.ink+'40">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px">'
+    +'<div style="display:flex;align-items:center;gap:9px">'
+    +'<button onclick="closeQdprForm()" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">←</button>'
+    +'<div style="line-height:1.25"><div style="color:white;font-size:15.5px;font-weight:800">'+(isEdit?'Edit Report':'Add Report')+'</div>'
+    +'<div style="color:rgba(255,255,255,.6);font-size:10.5px">'+esc(site.name)+' — '+_qdprFmtDate(f.date)+'</div></div></div>'
+    +'<button onclick="saveQdprReport()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:linear-gradient(135deg,#059669,#10B981);color:white">✓ Save</button>'
+    +'</div></div>'
+    +'<div style="padding:14px;padding-bottom:40px">'
+    +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'
+    +qdprSecHead('🌤️','Site Status')
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">'
+    +weathers.map(function(w){ return '<button onclick="qdprSetWeather(\''+w.l+'\')" style="padding:7px 13px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid '+(f.weather===w.l?QC.navy:QC.border)+';background:'+(f.weather===w.l?QC.cloud:QC.white)+';color:'+(f.weather===w.l?QC.navy:QC.slate)+'">'+w.e+' '+w.l+'</button>'; }).join('')
+    +'</div>'
+    +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Site Note / Tomorrow\'s Requirement</label>'
+    +'<input value="'+esc(f.siteNote)+'" placeholder="e.g. Binding wire for shuttering required tomorrow" oninput="qdprFormState.siteNote=this.value" style="'+iStyle+'">'
+    +'</div>'
+    +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'+qdprRowSection('👷','Labour Summary','labour')+'</div>'
+    +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'+qdprRowSection('🏗️','Departmental Work','deptWork')+'</div>'
+    +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'+qdprRowSection('🛒','Materials Received','matBought')+'</div>'
+    +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'+qdprRowSection('📋','Material Required','matRequired')+'</div>'
+    +qdprPhotoSectionHTML()
+    +'<div style="display:flex;gap:10px">'
+    +'<button onclick="saveQdprReport()" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;border:none;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(135deg,'+QC.navy+','+QC.royal+');color:white;box-shadow:0 2px 10px '+QC.navy+'40">✓ Save Report</button>'
+    +'<button onclick="closeQdprForm()" style="padding:12px 18px;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;background:transparent;color:'+QC.navy+';border:1.5px solid '+QC.border+'">Cancel</button>'
+    +'</div></div></div>';
+}
+function qdprSetWeather(w){
+  qdprFormState.weather = w;
+  var modal = document.getElementById('qdpr-form-modal');
+  var proj = (window.projects||[]).find(function(p){ return p.id===qdprState.formSiteId; });
+  var site = proj ? {__id: proj.id, name: proj.name, address: proj.address||''} : null;
+  if (modal && site) modal.innerHTML = qdprFormHTML(site, !!qdprState.formReportId);
+}
+function saveQdprReport(){
+  var pid = qdprState.formSiteId;
+  var proj = (window.projects||[]).find(function(p){ return p.id===pid; }); if (!proj) return;
+  var rec = {
+    type:'qdpr_entry', date: qdprFormState.date || qdprState.date,
+    weather: qdprFormState.weather, siteNote: qdprFormState.siteNote,
+    labour: qdprFormState.labour, deptWork: qdprFormState.deptWork,
+    matBought: qdprFormState.matBought, matRequired: qdprFormState.matRequired,
+    photos: qdprFormState.photos
+  };
+  var saved = qdprState.formReportId
+    ? qdprUpdateInProj(pid, qdprState.formReportId, rec)
+    : qdprInsertToProj(pid, rec);
+  // "Materials Received" rows entered here flow straight into this
+  // project's own Materials tab automatically — date-wise, no duplicates.
+  _qdprSyncMaterials(pid, saved);
+  closeQdprForm();
+  toast('Daily report saved ✓ — materials synced to project','ok');
+  renderQdprSites();
+  _qdprRefreshLiveTabsIfActive(pid);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// QDPR PRINT — mirrors the reference app's print layout:
+// gradient header (company | date+day | engineer), per-site
+// gradient section blocks (SITE CLOSED TODAY fallback), tables,
+// photo grid, divider between sites, signature line.
+// ═══════════════════════════════════════════════════════════════
+function qdprPrintHeaderHTML(date, prof){
+  return '<div style="background:linear-gradient(135deg,'+QC.ink+' 0%,'+QC.navy+' 55%,'+QC.royal+' 100%);border-radius:9px;padding:9px 14px;margin-bottom:11px;display:flex;justify-content:space-between;align-items:center">'
+    +'<div style="flex:1.3;text-align:left">'
+    +'<div style="font-size:15px;font-weight:900;color:#fff;letter-spacing:.3px;line-height:1.15">'+esc(prof.company||'Company Name')+'</div>'
+    +(prof.address?('<div style="font-size:10px;color:rgba(255,255,255,.75);margin-top:1px">'+esc(prof.address)+'</div>'):'')
+    +'</div>'
+    +'<div style="flex:1;text-align:center">'
+    +'<div style="font-size:11.5px;font-weight:800;color:#fff">'+_qdprFmtDate(date)+'</div>'
+    +'<div style="font-size:10px;color:rgba(255,255,255,.75)">'+_qdprDayName(date)+'</div></div>'
+    +'<div style="flex:1.1;text-align:right">'
+    +'<div style="font-size:8px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:1px">DPR Prepared By</div>'
+    +'<div style="font-size:11.5px;font-weight:800;color:#fff">'+(prof.engineer?('Er. '+esc(prof.engineer)):'—')+'</div></div></div>';
+}
+function qdprPrintSiteSectionHTML(site, report){
+  var html = '<div style="margin-bottom:14px;page-break-inside:avoid">';
+  html += '<div style="background:linear-gradient(135deg,'+QC.ink+' 0%,'+QC.navy+' 55%,'+QC.royal+' 100%);border-radius:7px;padding:5px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px">'
+    +'<div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap">'+esc(site.name)+'</div>'
+    +(site.address?('<div style="font-size:10.5px;color:rgba(255,255,255,.8);text-align:right">'+esc(site.address)+'</div>'):'')
+    +'</div>';
+  if (!report){
+    html += '<div style="background:#FEF2F2;border:1.5px dashed #FCA5A5;border-radius:9px;padding:13px;text-align:center">'
+      +'<div style="font-size:13px;font-weight:800;color:#B91C1C;letter-spacing:.5px">🔒 SITE CLOSED TODAY</div>'
+      +'<div style="font-size:11px;color:#991B1B;margin-top:3px">No work reported for this date</div></div></div>';
+    return html;
+  }
+  if (report.weather || report.siteNote){
+    html += '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;padding:7px 11px;margin-bottom:9px">'
+      +'<span style="font-weight:800;color:#92400E;font-size:11.5px">'+esc(report.weather||'')+'</span>'
+      +(report.siteNote?('<span style="color:#78350F;font-size:11.5px"> — '+esc(report.siteNote)+'</span>'):'')+'</div>';
+  }
+  var lRows = (report.labour||[]).filter(function(l){ return l.category; }).map(function(l){ return [esc(l.category), esc(l.count), esc(l.floor), esc(l.workDone)]; });
+  if (lRows.length) html += '<div style="margin-bottom:9px">'+qdprSecHead('👷','Labour Summary')+qdprDataTable(['Category','Count','Floor','Work Done'],lRows,[1])+'</div>';
+  var dW = (report.deptWork||[]).reduce(function(s,d){ return s+(Number(d.workers)||0); },0);
+  var dRowsBase = (report.deptWork||[]).filter(function(d){ return d.category; }).map(function(d){ return [esc(d.category), esc(d.workers), esc(d.floor), esc(d.workDone)]; });
+  if (dRowsBase.length){
+    var dRows = dRowsBase.concat(dW>0?[['<strong>Total</strong>', dW, '', '']]:[]);
+    html += '<div style="margin-bottom:9px">'+qdprSecHead('🏗️','Departmental Work')+qdprDataTable(['Category','Workers','Floor','Work Done'],dRows,[1])+'</div>';
+  }
+  var mRows = (report.matBought||[]).filter(function(m){ return m.material; }).map(function(m){
+    return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim(), esc(m.supplier||'—'), m.amount?fc(parseFloat(m.amount)||0):'—'];
+  });
+  if (mRows.length) html += '<div style="margin-bottom:9px">'+qdprSecHead('🛒','Materials Received')+qdprDataTable(['Material','Type','Qty','Supplier','Amount'],mRows,[2])+'</div>';
+  var reqRows = (report.matRequired||[]).filter(function(m){ return m.material; }).map(function(m){ return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim()]; });
+  if (reqRows.length) html += '<div style="margin-bottom:9px">'+qdprSecHead('📋','Material Required')+qdprDataTable(['Material','Type','Qty'],reqRows,[2])+'</div>';
+  if (!lRows.length && !dRowsBase.length && !mRows.length && !reqRows.length && !(report.photos&&report.photos.length)){
+    html += '<div style="font-size:11px;color:'+QC.fog+';font-style:italic;padding:2px 0">No detailed work logged for this site today.</div>';
+  }
+  if (report.photos && report.photos.length) html += '<div style="margin-top:3px">'+qdprPhotoGridView(report.photos)+'</div>';
+  html += '</div>';
+  return html;
+}
+function qdprBuildPrintBody(date, items){
+  var prof = lmergedProf();
+  var sections = items.map(function(it){ return qdprPrintSiteSectionHTML(it.site, it.report); }).join('<div style="height:1px;background:'+QC.border+';margin:0 0 14px"></div>');
+  var signature = '<div style="margin-top:16px;page-break-inside:avoid"><div style="font-size:11px;font-weight:700;color:'+QC.slate+';border-top:1px solid '+QC.border+';padding-top:8px;width:180px;text-align:center">Site Engineer'+(prof.engineer?(' — '+esc(prof.engineer)):'')+'</div></div>';
+  return '<div style="font-family:-apple-system,\'Segoe UI\',Arial,sans-serif;color:'+QC.ink+';width:100%">'
+    +qdprPrintHeaderHTML(date, prof)+sections+signature+'</div>';
+}
+function printQdprAll(){
+try{
+  if (typeof _loadProjects === 'function') _loadProjects();
+  var projects = window.projects || [];
+  if (!projects.length){ toast('No projects yet','err'); return; }
+  var items = projects.map(function(p){
+    var site = {__id:p.id, name:p.name, address:p.address||''};
+    var pAD = qdprLoadProjAD(p.id);
+    return {site:site, report: pAD.find(function(d){ return d.type==='qdpr_entry'&&d.date===qdprState.date; })||null};
+  });
+  var body = qdprBuildPrintBody(qdprState.date, items);
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QDPR — '+_qdprFmtDate(qdprState.date)+'</title><style>'+pcs()+'@media screen{.content{margin-top:126px}}</style></head><body>'
+    +'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button>'
+    +'<span style="flex:1;font-weight:700">QDPR — '+_qdprFmtDate(qdprState.date)+'</span>'
+    +'<button class="bp" onclick="window.print()">&#128438; Print</button>'
+    +'<button class="bx" onclick="window.close()">&#x2715;</button></div>'
+    +'<div class="content">'+body+_pdfFooter()+'</div></body></html>';
+  opw(html);
+}catch(err){ toast('Print error: '+err.message,'err'); console.error('printQdprAll',err); }
+}
+function printQdprSite(pid){
+try{
+  var proj = (window.projects||[]).find(function(p){ return p.id===pid; }); if (!proj) return;
+  var site = {__id:proj.id, name:proj.name, address:proj.address||''};
+  var pAD = qdprLoadProjAD(pid);
+  var report = pAD.find(function(d){ return d.type==='qdpr_entry'&&d.date===qdprState.date; })||null;
+  var body = qdprBuildPrintBody(qdprState.date, [{site:site, report:report}]);
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QDPR — '+esc(site.name)+'</title><style>'+pcs()+'@media screen{.content{margin-top:126px}}</style></head><body>'
+    +'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button>'
+    +'<span style="flex:1;font-weight:700">QDPR — '+esc(site.name)+'</span>'
+    +'<button class="bp" onclick="window.print()">&#128438; Print</button>'
+    +'<button class="bx" onclick="window.close()">&#x2715;</button></div>'
+    +'<div class="content">'+body+_pdfFooter()+'</div></body></html>';
+  opw(html);
+}catch(err){ toast('Print error: '+err.message,'err'); console.error('printQdprSite',err); }
 }
 
 function _renderMwWorkerList() {
@@ -7330,12 +8448,24 @@ function openAttModal(wid, date) {
   var ex=dedup(AD.filter(function(d2){ return d2.type==='attendance'&&d2.name===w.name&&d2.date===d; }));
   var att=ex.length?ex[0]:null;
   document.getElementById('att-modal-title').textContent='Attendance — '+w.name;
-  document.getElementById('att-date').value=d;
-  document.getElementById('att-hours').value=att?(att.hours||''):'';
-  document.getElementById('att-advance').value=att?(att.advance||''):'';
-  document.getElementById('att-ot-hours').value=att?(att.ot_hours||''):'';
+  var hourlyWrap=document.getElementById('att-hourly-fields'), staffWrap=document.getElementById('att-staff-fields');
+  if (w.is_staff) {
+    if (hourlyWrap) hourlyWrap.style.display='none';
+    if (staffWrap) staffWrap.style.display='grid';
+    document.getElementById('att-date-staff').value=d;
+    document.getElementById('att-status-staff').value=att?(att.status||'P'):'P';
+    document.getElementById('att-advance-staff').value=att?(att.advance||''):'';
+    var prev=document.getElementById('att-total-preview'); if(prev) prev.style.display='none';
+  } else {
+    if (hourlyWrap) hourlyWrap.style.display='grid';
+    if (staffWrap) staffWrap.style.display='none';
+    document.getElementById('att-date').value=d;
+    document.getElementById('att-hours').value=att?(att.hours||''):'';
+    document.getElementById('att-advance').value=att?(att.advance||''):'';
+    document.getElementById('att-ot-hours').value=att?(att.ot_hours||''):'';
+    calcAttTotal();
+  }
   document.getElementById('att-modal').classList.add('modal-show');
-  calcAttTotal();
 }
 function calcAttTotal(){
   var h=parseFloat((document.getElementById('att-hours')||{}).value)||0;
@@ -7355,17 +8485,29 @@ function closeAttModal(){ document.getElementById('att-modal').classList.remove(
 function closeMasterAttModal(){ document.getElementById('master-att-modal').classList.remove('modal-show'); }
 function closeManageWorkersModal(){ document.getElementById('manage-workers-modal').classList.remove('modal-show'); }
 function saveAttendance() {
+  if (!WID) { toast('Error','err'); return; }
+  var w=AD.find(function(d){ return d.__id===WID; }); if(!w) return;
+  if (w.is_staff) {
+    var date=document.getElementById('att-date-staff').value;
+    var status=document.getElementById('att-status-staff').value||'P';
+    var advance=parseFloat(document.getElementById('att-advance-staff').value)||0;
+    var ex=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&d.date===date; }));
+    var data={status:status, advance:advance, hours:0, ot_hours:0, ot_rate:0, payment:0, hourly_wage:0, is_staff:true};
+    if (ex.length) upd(ex[0].__id, data);
+    else ins(Object.assign({type:'attendance', name:w.name, category:w.category, date:date}, data));
+    AD=ld(); closeAttModal(); toast('Saved','ok');
+    if (date===DD) viewDaily(); viewWorkers();
+    return;
+  }
   var date=document.getElementById('att-date').value;
   var hours=parseFloat(document.getElementById('att-hours').value)||0;
   var advance=parseFloat(document.getElementById('att-advance').value)||0;
   var otHours=parseFloat(document.getElementById('att-ot-hours').value)||0;
-  if (!WID) { toast('Error','err'); return; }
-  var w=AD.find(function(d){ return d.__id===WID; }); if(!w) return;
   var otRate=parseFloat(w.ot_rate)||0; // strictly worker's own OT rate — no fallback to regular rate
   var payment=(hours*(parseFloat(w.hourly_wage)||0))+(otHours*otRate);
   var ex=dedup(AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&d.date===date; }));
-  if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,ot_hours:otHours,ot_rate:otRate,payment:payment,hourly_wage:w.hourly_wage});
-  else ins({type:'attendance',name:w.name,category:w.category,date:date,hours:hours,advance:advance,ot_hours:otHours,ot_rate:otRate,payment:payment,hourly_wage:w.hourly_wage});
+  if (ex.length) upd(ex[0].__id,{hours:hours,advance:advance,ot_hours:otHours,ot_rate:otRate,payment:payment,hourly_wage:w.hourly_wage,status:'P'});
+  else ins({type:'attendance',name:w.name,category:w.category,date:date,hours:hours,advance:advance,ot_hours:otHours,ot_rate:otRate,payment:payment,hourly_wage:w.hourly_wage,status:'P'});
   AD=ld(); closeAttModal(); toast('Saved','ok');
   if (date===DD) viewDaily(); viewWorkers();
 }
@@ -7388,9 +8530,11 @@ function viewWorkers() {
           +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
           +'<div style="width:40px;height:40px;border-radius:50%;background:'+(w.active===false?'linear-gradient(135deg,#9ca3af,#6b7280)':'linear-gradient(135deg,#6366f1,#8b5cf6)')+';display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px;flex-shrink:0;box-shadow:0 4px 12px rgba(99,102,241,0.4)">'+(w.name&&w.name.length?w.name[0].toUpperCase():'?')+'</div>'
           +'<div style="flex:1;min-width:0">'
-          +'<p style="font-weight:800;color:#1f2937;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+w.name+(w.active===false?' <span style="font-size:9px;color:#ef4444;font-weight:700">[Inactive]</span>':'')+'</p>'
-          +'<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.hourly_wage)+'/hr'+(w.team_name?' &middot; '+w.team_name:'')+'</p>'
-          +(w.ot_rate&&parseFloat(w.ot_rate)>0?'<p style="font-size:9px;color:#7c3aed;font-weight:700;line-height:1;margin-top:1px">OT: '+fc(w.ot_rate)+'/hr</p>':'')
+          +'<p style="font-weight:800;color:#1f2937;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+w.name+(w.is_staff?' <span style="font-size:8.5px;color:#7c3aed;font-weight:800;background:#f5f3ff;padding:1px 5px;border-radius:99px">STAFF</span>':'')+(w.active===false?' <span style="font-size:9px;color:#ef4444;font-weight:700">[Inactive]</span>':'')+'</p>'
+          +(w.is_staff
+            ? '<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.monthly_salary)+'/month (fixed)'+(w.team_name?' &middot; '+w.team_name:'')+'</p>'
+            : '<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.hourly_wage)+'/hr'+(w.team_name?' &middot; '+w.team_name:'')+'</p>'
+              +(w.ot_rate&&parseFloat(w.ot_rate)>0?'<p style="font-size:9px;color:#7c3aed;font-weight:700;line-height:1;margin-top:1px">OT: '+fc(w.ot_rate)+'/hr</p>':''))
           +'</div>'
           +'<button onclick="toggleCal(\''+w.__id+'\')" style="font-size:11px;padding:0 12px;background:linear-gradient(135deg,#e0e7ff,#c7d2fe);color:#4338ca;border:none;border-radius:9px;cursor:pointer;font-weight:700;box-shadow:0 1px 3px rgba(99,102,241,0.4),0 1px 2px rgba(0,0,0,0.1);white-space:nowrap;flex-shrink:0">📅 Calendar</button>'
           +'<button onclick="delWorker(\''+w.__id+'\')" style="font-size:11px;padding:0 12px;background:linear-gradient(135deg,#fee2e2,#fecaca);color:#dc2626;border:none;border-radius:9px;cursor:pointer;font-weight:700;box-shadow:0 1px 3px rgba(220,38,38,0.35),0 1px 2px rgba(0,0,0,0.1);flex-shrink:0">🗑 Del</button>'
@@ -7451,6 +8595,26 @@ function _workerChips(w, yr, mo){
   AD.filter(function(d){ return d.type==='attendance'&&d.name===w.name&&(d.date||'').startsWith(msStr); })
     .forEach(function(a){ if(!mp[a.date]||a.__id>mp[a.date].__id) mp[a.date]=a; });
   var uniq=Object.values(mp);
+  if (w.is_staff) {
+    var cP=uniq.filter(function(a){return a.status==='P';}).length;
+    var cA=uniq.filter(function(a){return a.status==='A';}).length;
+    var cHD=uniq.filter(function(a){return a.status==='HD';}).length;
+    var cL=uniq.filter(function(a){return a.status==='L';}).length;
+    var sAdv=uniq.reduce(function(s,a){ return s+(parseFloat(a.advance)||0); },0);
+    var sSalary=parseFloat(w.monthly_salary)||0;
+    return '<div style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:8px;padding:5px 3px;text-align:center;box-shadow:0 2px 4px rgba(59,130,246,0.35),0 1px 2px rgba(0,0,0,0.12)">'
+      +'<p style="font-size:7px;color:#3b82f6;font-weight:700;line-height:1">P / HD</p>'
+      +'<p style="font-weight:900;font-size:10px;color:#1d4ed8;line-height:1.3">'+cP+' / '+cHD+'</p></div>'
+      +'<div style="background:linear-gradient(135deg,#ede9fe,#ddd6fe);border-radius:8px;padding:5px 3px;text-align:center;box-shadow:0 2px 4px rgba(91,33,182,0.28),0 1px 2px rgba(0,0,0,0.12)">'
+      +'<p style="font-size:7px;color:#7c3aed;font-weight:700;line-height:1">A / L</p>'
+      +'<p style="font-weight:900;font-size:10px;color:#5b21b6;line-height:1.3">'+cA+' / '+cL+'</p></div>'
+      +'<div style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:8px;padding:5px 3px;text-align:center;box-shadow:0 2px 4px rgba(245,158,11,0.35),0 1px 2px rgba(0,0,0,0.12)">'
+      +'<p style="font-size:7px;color:#d97706;font-weight:700;line-height:1">Adv</p>'
+      +'<p style="font-weight:900;font-size:9px;color:#b45309;line-height:1.3">'+fc(sAdv)+'</p></div>'
+      +'<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:8px;padding:5px 3px;text-align:center;box-shadow:0 2px 4px rgba(5,150,105,0.35),0 1px 2px rgba(0,0,0,0.12)">'
+      +'<p style="font-size:7px;color:#059669;font-weight:700;line-height:1">Salary</p>'
+      +'<p style="font-weight:900;font-size:9px;color:#047857;line-height:1.3">'+fc(sSalary)+'</p></div>';
+  }
   var tD=uniq.filter(function(a){ return parseFloat(a.hours)>0||parseFloat(a.ot_hours)>0; }).length;
   var tH=uniq.reduce(function(s,a){ return s+(parseFloat(a.hours)||0); },0);
   var tOT=uniq.reduce(function(s,a){ return s+(parseFloat(a.ot_hours)||0); },0);
@@ -7492,6 +8656,18 @@ function renderCal(w, vd){
     var day=i+1;
     var ds=yr+'-'+('0'+(mo+1)).slice(-2)+'-'+('0'+day).slice(-2);
     var a=mp[ds], isT=ds===today, isPast=ds<today;
+    if (w.is_staff) {
+      var stMap={P:{bg:'#10b981',c:'#fff'},A:{bg:'#fee2e2',c:'#dc2626'},HD:{bg:'#fef3c7',c:'#b45309'},L:{bg:'#dbeafe',c:'#1d4ed8'}};
+      var st=a?(a.status||'P'):null;
+      var sBg=st?(stMap[st]?stMap[st].bg:'#10b981'):(isT?'#c7d2fe':'transparent');
+      var sCol=st?(stMap[st]?stMap[st].c:'#fff'):(isT?'#4338ca':'#9ca3af');
+      var advAmtS=a?parseFloat(a.advance)||0:0;
+      return '<div onclick="openAttModal(\''+w.__id+'\',\''+ds+'\')" style="cursor:pointer;border-radius:6px;min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+sBg+';color:'+sCol+';padding:2px">'
+        +'<div style="font-size:7.5px;font-weight:400;line-height:1">'+day+'</div>'
+        +(st?'<div style="font-size:6px;line-height:1.1;font-weight:800;margin-top:1px">'+st+'</div>':'')
+        +(advAmtS>0?'<div style="font-size:5px;line-height:1.1;background:rgba(251,191,36,0.9);color:#92400e;border-radius:3px;padding:0 2px;font-weight:400">₹'+Math.round(advAmtS)+'</div>':'')+
+        '</div>';
+    }
     var bg=a?(parseFloat(a.hours)===0?'#fee2e2':'#10b981'):(isT?'#c7d2fe':isPast?'#fef2f2':'transparent');
     var col=a?(parseFloat(a.hours)===0?'#dc2626':'#ffffff'):(isT?'#4338ca':isPast?'#f87171':'#9ca3af');
     var advAmt=a?parseFloat(a.advance)||0:0;
@@ -7722,10 +8898,13 @@ try{
 function addMaterialItem(){
   var name=document.getElementById('mat-name').value.trim(), unit=document.getElementById('mat-unit').value.trim();
   var initQty=parseFloat(document.getElementById('mat-init-qty').value)||0, minQty=parseFloat(document.getElementById('mat-min-qty').value)||0;
+  var catEl=document.getElementById('mat-category'), category=catEl?catEl.value:'';
+  var supplier=(document.getElementById('mat-supplier')||{}).value||'';
   if (!name) { toast('Enter material name','err'); return; }
   var mats=lmat();
-  mats.push({id:'mat'+Date.now(),name:name,unit:unit,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0}]:[],created:Date.now()});
+  mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
   smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty'].forEach(function(id){ document.getElementById(id).value=''; });
+  if (catEl) catEl.value='';
   toast('Material added','ok'); viewMaterials(); updateDash();
 }
 function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
@@ -7790,10 +8969,12 @@ function _saveBill(ctx, cb){
 // ── Mat Purchase Modal ─────────────────────────────────────────────────────────
 function openMatPurchaseModal(id){
   MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
-  document.getElementById('mat-modal-title').textContent='Purchase — '+item.name;
+  document.getElementById('mat-modal-title').textContent='Material Received — '+item.name;
   document.getElementById('mp-date').value=ist(); document.getElementById('mp-qty').value='';
   document.getElementById('mp-unit').value=item.unit||''; document.getElementById('mp-cost').value='';
   document.getElementById('mp-supplier').value='';
+  var mpCatEl=document.getElementById('mp-category');
+  if (mpCatEl) mpCatEl.innerHTML=_matCatOptionsHTML(item.category||'', false);
   clearBill('mp');
   document.getElementById('mat-purchase-modal').classList.add('modal-show');
 }
@@ -7802,9 +8983,11 @@ function saveMatPurchase(){
   var date=document.getElementById('mp-date').value, qty=parseFloat(document.getElementById('mp-qty').value)||0;
   var unit=document.getElementById('mp-unit').value.trim(), cost=parseFloat(document.getElementById('mp-cost').value)||0;
   var supplier=document.getElementById('mp-supplier').value.trim();
+  var catEl=document.getElementById('mp-category'), category=catEl?catEl.value:'';
   if(!date||!qty){ toast('Enter date and quantity','err'); return; }
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
-  var txn={type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier};
+  if (category && !item.category) item.category = category;
+  var txn={type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,category:category||item.category||''};
   _saveBill('mp', function(key){
     txn.bill_id = key;
     item.transactions.push(txn); smat(mats);
@@ -7877,8 +9060,40 @@ function delMatTxn(matId,idx){
 function viewMaterials(){
   var mats=lmat(), div=document.getElementById('materials-list');
   if (!div) return;
+  // Populate the "add new material" category dropdown (once)
+  var addCatEl = document.getElementById('mat-category');
+  if (addCatEl && !addCatEl.dataset.filled) { addCatEl.innerHTML = _matCatOptionsHTML('', false); addCatEl.dataset.filled = '1'; }
+  // Populate / refresh the material-name filter dropdown (preserve current selection)
+  var filterEl = document.getElementById('mat-print-filter');
+  if (filterEl) {
+    var curSel = filterEl.value;
+    filterEl.innerHTML = '<option value="">📦 All Materials (Stock)</option>' +
+      mats.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); })
+        .map(function(m){ return '<option value="'+m.id+'">'+m.name+'</option>'; }).join('');
+    if (curSel && mats.some(function(m){ return m.id===curSel; })) filterEl.value = curSel;
+  }
+  // Populate / refresh category filter (distinct categories in use)
+  var catFilterEl = document.getElementById('mat-print-category');
+  if (catFilterEl) {
+    var curCat = catFilterEl.value;
+    catFilterEl.innerHTML = _matCatOptionsHTML('', true);
+    if (curCat) catFilterEl.value = curCat;
+  }
+  // Populate / refresh supplier filter (distinct suppliers seen in purchase transactions)
+  var supFilterEl = document.getElementById('mat-print-supplier');
+  if (supFilterEl) {
+    var curSup = supFilterEl.value;
+    var supSet = {};
+    mats.forEach(function(m){ (m.transactions||[]).forEach(function(t){ if (t.type==='purchase' && t.supplier) supSet[t.supplier]=1; }); });
+    var supNames = Object.keys(supSet).sort(function(a,b){ return a.localeCompare(b); });
+    supFilterEl.innerHTML = '<option value="">All Suppliers</option>' + supNames.map(function(s){ return '<option value="'+esc(s)+'">'+esc(s)+'</option>'; }).join('');
+    if (curSup && supNames.indexOf(curSup)!==-1) supFilterEl.value = curSup;
+  }
+  var filterId = filterEl ? filterEl.value : '';
+  var displayMats = filterId ? mats.filter(function(m){ return m.id===filterId; }) : mats;
   if (!mats.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No materials added yet</p>'; return; }
-  div.innerHTML=mats.map(function(item){
+  if (!displayMats.length) { div.innerHTML='<p style="color:rgba(255,255,255,0.5);text-align:center;padding:16px">No matching material</p>'; return; }
+  div.innerHTML=displayMats.map(function(item){
     var bal=getbal(item), low=item.minQty>0&&bal<=item.minQty;
     var txns=(item.transactions||[]).slice().reverse();
     var tPQ=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+t.qty; },0);
@@ -7886,10 +9101,10 @@ function viewMaterials(){
     return '<div style="background:white;border-radius:12px;overflow:hidden;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
       +'<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #f3f4f6">'
       +'<div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,'+(low?'#ef4444,#f43f5e':'#6366f1,#8b5cf6')+');display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:13px">'+(item.name&&item.name.length?item.name[0].toUpperCase():'?')+'</div>'
-      +'<div style="flex:1;min-width:0"><p style="font-weight:700;color:#1f2937;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+(low?' <span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:999px">LOW</span>':'')+'</p>'
+      +'<div style="flex:1;min-width:0"><p style="font-weight:700;color:#1f2937;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+(item.category?' <span style="font-size:9px;background:#eef2ff;color:#4f46e5;padding:1px 5px;border-radius:999px;font-weight:600">'+esc(item.category)+'</span>':'')+(low?' <span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:999px">LOW</span>':'')+'</p>'
       +'<p style="font-size:10px"><span style="font-weight:600;color:'+(low?'#dc2626':'#059669')+'">Stock: '+bal+' '+item.unit+'</span> &nbsp;|&nbsp; Bought: '+tPQ+' &nbsp;|&nbsp; <span style="color:#b45309;font-weight:600">'+fc(tC)+'</span></p></div>'
       +'<div style="display:flex;gap:4px;flex-shrink:0">'
-      +'<button onclick="openMatPurchaseModal(\''+item.id+'\')" style="font-size:10px;padding:0 12px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Buy</button>'
+      +'<button onclick="openMatPurchaseModal(\''+item.id+'\')" style="font-size:10px;padding:0 12px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">📥 Received</button>'
       +'<button onclick="openMatUseModal(\''+item.id+'\')" style="font-size:10px;padding:0 12px;background:#ef4444;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">Use</button>'
       +'<button onclick="delMaterialItem(\''+item.id+'\')" style="font-size:10px;padding:0 12px;background:#f3f4f6;color:#6b7280;border:none;border-radius:7px;cursor:pointer">X</button>'
       +'</div></div>'
@@ -7917,6 +9132,100 @@ function viewMaterials(){
 function toggleMatHistory(id){
   var el=document.getElementById(id); if(!el) return;
   el.style.maxHeight = el.style.maxHeight === '0px' || !el.style.maxHeight ? '1000px' : '0px';
+}
+
+function printStockList(){
+try{
+  var mats=lmat();
+  var filterEl = document.getElementById('mat-print-filter');
+  var filterId = filterEl ? filterEl.value : '';
+  var rangeEl = document.getElementById('mat-print-daterange');
+  var range = rangeEl ? rangeEl.value : 'all';
+  var catEl = document.getElementById('mat-print-category');
+  var filterCat = catEl ? catEl.value : '';
+  var supEl = document.getElementById('mat-print-supplier');
+  var filterSup = supEl ? supEl.value : '';
+
+  var today = ist(); // YYYY-MM-DD
+  var y = new Date(today+'T12:00:00'); y.setDate(y.getDate()-1);
+  var yesterday = y.toISOString().slice(0,10);
+  var thisMonth = today.slice(0,7);
+
+  var matList = filterId ? mats.filter(function(m){ return m.id===filterId; }) : mats.slice();
+  if (filterCat) matList = matList.filter(function(m){ return (m.category||'')===filterCat; });
+  matList.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+
+  // Flatten to purchase (received) transactions only
+  var rows=[];
+  matList.forEach(function(item){
+    (item.transactions||[]).filter(function(t){ return t.type==='purchase'; }).forEach(function(t){
+      if (range==='today' && t.date!==today) return;
+      if (range==='yesterday' && t.date!==yesterday) return;
+      if (range==='month' && (t.date||'').slice(0,7)!==thisMonth) return;
+      if (filterSup && (t.supplier||'')!==filterSup) return;
+      rows.push({date:t.date||'', material:item.name, category:t.category||item.category||'', unit:t.unit||item.unit||'', qty:parseFloat(t.qty)||0, cost:parseFloat(t.cost)||0, supplier:t.supplier||''});
+    });
+  });
+  rows.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+
+  if(!rows.length){ toast('No material received records for this filter','err'); return; }
+
+  var rangeLabel = range==='today'?'Today ('+fd(today)+')':range==='yesterday'?'Yesterday ('+fd(yesterday)+')':range==='month'?mlabel(new Date(thisMonth+'-01')):'All Time';
+  var matLabel = filterId && matList.length===1 ? matList[0].name : 'All Materials';
+
+  var totalQty=0, totalCost=0;
+  var trs=rows.map(function(r){
+    totalQty+=r.qty; totalCost+=r.cost;
+    return '<tr>'
+      +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
+      +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+r.material+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.category||'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+r.qty+' '+r.unit+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var prof = lmergedProf();
+  var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; }) || {};
+  var companyBlock = '<span style="display:block;font-size:16px;font-weight:900;color:white;line-height:1.15">'+esc(prof.company||'Sanjineer')+'</span>'
+    + (curProj.name ? '<span style="display:block;font-size:11.5px;font-weight:700;color:rgba(255,255,255,0.85);margin-top:3px">'+esc(curProj.name)+'</span>' : '')
+    + (curProj.address ? '<span style="display:block;font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+esc(curProj.address)+'</span>' : '');
+  var rightBlock = '<span style="display:block;font-size:13px;font-weight:800;color:white;line-height:1.3">'+esc(matLabel)+'</span>'
+    + '<span style="display:block;font-size:10.5px;color:rgba(255,255,255,0.85);margin-top:3px">'+esc(rangeLabel)+'</span>'
+    + '<span style="display:block;font-size:11px;font-weight:700;color:#ede9fe;margin-top:3px">Total Qty: '+totalQty+'</span>';
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Material Received</title><style>'+pcs()
+    +'table{width:100%;border-collapse:collapse}'
+    +'thead th{background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;padding:6px 8px;font-size:10px;font-weight:700;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    +'td{border-bottom:1px solid #f3f4f6}'
+    +'tbody tr:nth-child(even){background:#f9fafb}'
+    +'@media screen{.content{margin-top:126px}}'
+    +'</style></head><body>'
+    +'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button>'
+    +'<span style="flex:1;font-weight:700">Material Received &#8212; '+rangeLabel+'</span>'
+    +'<button class="bp" onclick="window.print()">&#128438; Print</button>'
+    +'<button class="bx" onclick="window.close()">&#x2715;</button></div>'
+    +'<div class="content">'
+    +_matPrintHeaderHTML(companyBlock, rightBlock)
+    +'<table><thead><tr>'
+    +'<th>Date</th>'
+    +'<th>Material</th>'
+    +'<th>Type</th>'
+    +'<th style="text-align:center">Qty</th>'
+    +'<th>Supplier</th>'
+    +'<th style="text-align:right">Cost</th>'
+    +'</tr></thead>'
+    +'<tbody>'+trs+'</tbody>'
+    +'<tfoot><tr style="background:#f5f3ff">'
+    +'<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="3">TOTAL</td>'
+    +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalQty+'</td>'
+    +'<td></td>'
+    +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalCost)+'</td>'
+    +'</tr></tfoot>'
+    +'</table>'
+    +_pdfFooter()+'</div></body></html>';
+  opw(html);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printStockList',err);}
 }
 
 // ============================================================
@@ -8639,6 +9948,20 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
     +'</div><div style="text-align:right;flex-shrink:0">'+(rightHtml||defaultRight)+'</div></div>';
 }
 function _pdfFooter(){ return pftr(); }
+// Minimal print header: logo (left) | arbitrary center HTML | arbitrary right HTML — nothing auto-appended.
+// Used by Material Received print so the header shows exactly company + project (center) and
+// material + duration + total qty (right), with no extra business-profile address/engineer lines.
+function _matPrintHeaderHTML(centerHtml, rightHtml){
+  var prof = lmergedProf();
+  var hColor = prof.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)';
+  var logoSrc = prof.logo || 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
+    +'<div style="flex-shrink:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center">'
+    +'<img src="'+logoSrc+'" style="width:44px;height:44px;object-fit:contain;display:block;border-radius:8px;background:transparent" onerror="this.style.display=\'none\'"></div>'
+    +'<div style="text-align:center;flex:1;padding:0 12px">'+centerHtml+'</div>'
+    +'<div style="text-align:right;flex-shrink:0">'+rightHtml+'</div>'
+    +'</div>';
+}
 
 function pcs(){
 var _p=lmergedProf();
@@ -8847,6 +10170,9 @@ function opw(html){
   ifr.style.cssText='flex:1;border:0;width:100%;';
   var closeImpl='try{var o=parent.document.getElementById("_pf_overlay");if(o)o.remove();}catch(ex){}';
   var pHtml=_injectClose(_patchClose(html,'_cpf()'),'_cpf',closeImpl);
+  // Overlay already supplies its own Back/Print/Close bar (topbar above) —
+  // hide the report's own internal .bar so it isn't shown twice.
+  pHtml=pHtml.replace(/<\/head>/i,'<style>.bar{display:none!important}.content{margin-top:0!important}@media screen{.content{margin-top:0!important}}</style></head>');
   ifr.setAttribute('srcdoc',pHtml);
   ov.appendChild(ifr);
   document.body.appendChild(ov);
@@ -8857,23 +10183,35 @@ function opw(html){
   document.getElementById('_pf_print').onclick=function(){
     var ua=navigator.userAgent||'';
     var isAndroid=/Android/i.test(ua);
+    // Strategy 0: try opening a real new tab/window first (fresh user-gesture
+    // from this very click) — most reliable native print/share sheet when it
+    // works, and sidesteps in-iframe print restrictions entirely.
+    var openedTab=false;
+    try{
+      var blob0=new Blob([html],{type:'text/html'});
+      var burl0=URL.createObjectURL(blob0);
+      var pw0=window.open(burl0,'_blank');
+      if(pw0){ openedTab=true; setTimeout(function(){URL.revokeObjectURL(burl0);},60000); }
+      else{ URL.revokeObjectURL(burl0); }
+    }catch(e0){}
+    if(openedTab) return;
     // Strategy 1: iframe print (works in desktop Chrome/Firefox/Safari)
     var s1ok=false;
     try{ifr.contentWindow.focus();ifr.contentWindow.print();s1ok=true;}catch(e1){s1ok=false;}
-    // Strategy 2: full-screen iframe + window.print() — Android WebView or if Strategy 1 silently failed
-    if(!s1ok||isAndroid){
-      var origStyle=ifr.style.cssText;
-      var tb=document.getElementById('_pf_topbar');
-      if(tb)tb.style.display='none';
-      ifr.style.cssText='position:fixed;inset:0;top:0;left:0;width:100vw;height:100vh;border:none;z-index:999997;background:#fff;display:block;';
+    // Strategy 2: full-screen iframe + window.print() — always also attempted,
+    // since iOS/WebView often report success from Strategy 1 without actually
+    // showing the print dialog.
+    var origStyle=ifr.style.cssText;
+    var tb=document.getElementById('_pf_topbar');
+    if(tb)tb.style.display='none';
+    ifr.style.cssText='position:fixed;inset:0;top:0;left:0;width:100vw;height:100vh;border:none;z-index:999997;background:#fff;display:block;';
+    setTimeout(function(){
+      try{window.print();}catch(e2){}
       setTimeout(function(){
-        try{window.print();}catch(e2){}
-        setTimeout(function(){
-          ifr.style.cssText=origStyle;
-          if(tb)tb.style.display='';
-        },600);
-      },250);
-    }
+        ifr.style.cssText=origStyle;
+        if(tb)tb.style.display='';
+      },600);
+    },250);
   };
 }
 
@@ -9002,6 +10340,55 @@ if(!worker){ toast('Worker not found','err'); return; }
 var allAtt=dedup(AD.filter(function(d){ return d.type==='attendance'&&(d.date||'').startsWith(selMs)&&d.name===worker.name; }));
 allAtt.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
+var profData = lmergedProf();
+var company=profData.company||'Sanjineer';
+var isStaff = !!worker.is_staff;
+
+if (isStaff) {
+  // ── Staff: no hourly tracking — print a simple day-wise status log (P/HD/A/L) ──
+  var cP=allAtt.filter(function(a){return a.status==='P';}).length;
+  var cA=allAtt.filter(function(a){return a.status==='A';}).length;
+  var cHD=allAtt.filter(function(a){return a.status==='HD';}).length;
+  var cL=allAtt.filter(function(a){return a.status==='L';}).length;
+  var stColor={P:'#059669',A:'#dc2626',HD:'#d97706',L:'#1d4ed8'};
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+worker.name+'</title><style>'+pcs()+'\n'
+  +'body{font-size:12px}*{font-family:\'Outfit\',Arial,sans-serif}'
+  +'table{width:100%;border-collapse:collapse}'
+  +'th{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:4px 6px;font-weight:700;font-size:12px;text-align:left}'
+  +'td{padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:400}'
+  +'tfoot td{background:#f0f4ff;font-weight:700;font-size:12px}'
+  +'</style></head><body>'
+  +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance \u2014 '+worker.name+'</span><button class="bp" onclick="window.print()">\u2756 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
+  +'<div class="content">'
+  +_pdfHeader('app.sanjineer.in',company,'',
+    '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+worker.name+'</p>'
+    +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+worker.category+'</p>'
+    +'<p style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px">'+mL+'</p>'
+    +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Total Present: '+cP+'</p>'
+  )
+  +(allAtt.length
+  ? '<table><thead><tr>'
+  +'<th>Date</th>'
+  +'<th style="text-align:center">Status</th>'
+  +'</tr></thead><tbody>'+allAtt.map(function(a){
+    var st=a.status||'P';
+    return '<tr>'
+      +'<td style="padding:4px 6px;font-weight:700;color:#1f2937;font-size:12px">'+fdl(a.date)+'</td>'
+      +'<td style="text-align:center;padding:4px 6px;font-size:12px;font-weight:800;color:'+(stColor[st]||'#374151')+'">'+st+'</td>'
+      +'</tr>';
+  }).join('')+'</tbody>'
+  +'<tfoot>'
+  +'<tr style="background:#f0f4ff">'
+  +'<td style="padding:4px 6px;font-weight:900;color:#1e1b4b;font-size:12px">TOTAL</td>'
+  +'<td style="text-align:center;padding:4px 6px;font-weight:900;color:#4f46e5;font-size:12px">'+cP+'P / '+cA+'A / '+cHD+'HD / '+cL+'L</td>'
+  +'</tr></tfoot></table>'
+  : '<p style="padding:16px;color:#9ca3af;text-align:center">No attendance records for '+mL+'</p>')
+  +pftr()+'</div></body></html>';
+  opw(html);
+  return;
+}
+
 var totalHrs=0, totalOtHrs=0, totalAdv=0, totalPay=0;
 allAtt.forEach(function(a){
 var hrs=parseFloat(a.hours)||0;
@@ -9015,8 +10402,6 @@ totalHrs+=hrs; totalOtHrs+=otHrs; totalAdv+=adv; totalPay+=pay;
 
 var dailyWage=(parseFloat(worker.hourly_wage)||0)*8;
 var bal=totalPay-totalAdv;
-var profData = lmergedProf();
-var company=profData.company||'Sanjineer';
 
 var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+worker.name+'</title><style>'+pcs()+'\n'
 +'body{font-size:12px}*{font-family:\'Outfit\',Arial,sans-serif}'
@@ -9928,18 +11313,18 @@ var BOQ_KEY    = 'cm_boq_schedule';
 var BOQ_PI_KEY = 'cm_boq_project_info';
 var BOQ_TD_KEY = 'cm_boq_today_details'; // today's work details
 
-function boqLoad(){ try{ return JSON.parse(safeLS.getItem(_pk(BOQ_KEY))||'{"sections":[]}'); }catch(e){ return {sections:[]}; } }
-function boqSave(d){ safeLS.setItem(_pk(BOQ_KEY),JSON.stringify(d)); }
+function boqLoad(){ try{ return JSON.parse(safeLS.getItem(BOQ_KEY)||'{"sections":[]}'); }catch(e){ return {sections:[]}; } }
+function boqSave(d){ safeLS.setItem(BOQ_KEY,JSON.stringify(d)); }
 function loadBoqTab(){ boqRender(); }
 
 /* ── Project Info ── */
-function boqLoadPI(){ try{ return JSON.parse(safeLS.getItem(_pk(BOQ_PI_KEY))||'{}'); }catch(e){ return {}; } }
+function boqLoadPI(){ try{ return JSON.parse(safeLS.getItem(BOQ_PI_KEY)||'{}'); }catch(e){ return {}; } }
 function boqSaveProjectInfo(){
   var pi={work:(document.getElementById('boq-pi-work')||{}).value||'',client:(document.getElementById('boq-pi-client')||{}).value||'',
     contractor:(document.getElementById('boq-pi-contractor')||{}).value||'',consultant:(document.getElementById('boq-pi-consultant')||{}).value||'',
     wo:(document.getElementById('boq-pi-wo')||{}).value||'',weather:(document.getElementById('boq-pi-weather')||{}).value||'Clear',
     commDate:(document.getElementById('boq-pi-start')||{}).value||'',stipDate:(document.getElementById('boq-pi-end')||{}).value||''};
-  safeLS.setItem(_pk(BOQ_PI_KEY),JSON.stringify(pi)); toast('Project info saved!','ok');
+  safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info saved!','ok');
 }
 function boqPopulatePI(pi){
   var m={'boq-pi-work':pi.work,'boq-pi-client':pi.client,'boq-pi-contractor':pi.contractor,
@@ -9958,7 +11343,7 @@ function boqFetchProjectInfo(){
       if(obj.workOrderNo||obj.wo_no) pi.wo=obj.workOrderNo||obj.wo_no;
       if(obj.startDate||obj.commencement_date) pi.commDate=obj.startDate||obj.commencement_date;
       if(obj.endDate||obj.completion_date) pi.stipDate=obj.endDate||obj.completion_date;
-      boqPopulatePI(pi); safeLS.setItem(_pk(BOQ_PI_KEY),JSON.stringify(pi)); toast('Project info loaded!','ok'); return;
+      boqPopulatePI(pi); safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info loaded!','ok'); return;
     }}catch(e){}
   }
   var saved=boqLoadPI(); if(saved.work){ boqPopulatePI(saved); toast('Loaded saved info','ok'); }
@@ -9966,8 +11351,8 @@ function boqFetchProjectInfo(){
 }
 
 /* ── Today's Work Details ── */
-function boqLoadTD(date){ try{ var all=JSON.parse(safeLS.getItem(_pk(BOQ_TD_KEY))||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; } }
-function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(_pk(BOQ_TD_KEY))||'{}'); all[date]=data; safeLS.setItem(_pk(BOQ_TD_KEY),JSON.stringify(all)); }catch(e){} }
+function boqLoadTD(date){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; } }
+function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); all[date]=data; safeLS.setItem(BOQ_TD_KEY,JSON.stringify(all)); }catch(e){} }
 function boqOpenTodayModal(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   var lbl=document.getElementById('boq-modal-date-label');
@@ -11087,6 +12472,22 @@ function loadWorkerBillData(){
   var worker=AD.find(function(d){return d.type==='worker'&&d.name===wName;});
   if(!worker)return;
   var atts=dedup(AD.filter(function(d){return d.type==='attendance'&&d.name===wName&&(d.date||'').startsWith(month);}));
+  if (worker.is_staff) {
+    var cP=atts.filter(function(a){return a.status==='P';}).length;
+    var cA=atts.filter(function(a){return a.status==='A';}).length;
+    var cHD=atts.filter(function(a){return a.status==='HD';}).length;
+    var cL=atts.filter(function(a){return a.status==='L';}).length;
+    var gross=parseFloat(worker.monthly_salary)||0;
+    var advances=atts.reduce(function(s,a){return s+(parseFloat(a.advance)||0);},0);
+    var net=gross-advances;
+    document.getElementById('bp-days').textContent=cP+'P/'+cA+'A/'+cHD+'HD/'+cL+'L';
+    document.getElementById('bp-hours').textContent='Fixed Monthly';
+    document.getElementById('bp-gross').textContent=fc(gross);
+    document.getElementById('bp-advance').textContent=fc(advances);
+    document.getElementById('bp-net').textContent=fc(Math.max(0,net));
+    document.getElementById('bill-worker-preview').classList.remove('hidden');
+    return;
+  }
   var hours=atts.reduce(function(s,a){return s+(parseFloat(a.hours)||0);},0);
   var otHours=atts.reduce(function(s,a){return s+(parseFloat(a.ot_hours)||0);},0);
   var days=new Set(atts.map(function(a){return a.date;})).size;
@@ -11113,17 +12514,29 @@ function generateSalarySlip(){
   var worker=AD.find(function(d){return d.type==='worker'&&d.name===wName;});
   if(!worker){toast('Worker not found','err');return;}
   var atts=dedup(AD.filter(function(d){return d.type==='attendance'&&d.name===wName&&(d.date||'').startsWith(month);}));
-  var hours=atts.reduce(function(s,a){return s+(parseFloat(a.hours)||0);},0);
-  var otHours=atts.reduce(function(s,a){return s+(parseFloat(a.ot_hours)||0);},0);
-  var days=new Set(atts.map(function(a){return a.date;})).size;
-  var regRate=parseFloat(worker.hourly_wage)||0;
-  var otRate=parseFloat(worker.ot_rate)||0; // strictly worker's OT rate
-  var regPay=hours*regRate;
-  var otPay=atts.reduce(function(s,a){
-    var or=parseFloat(a.ot_rate)||parseFloat(worker.ot_rate)||0;
-    return s+(parseFloat(a.ot_hours)||0)*or;
-  },0);
-  var gross=regPay+otPay;
+  var isStaff = !!worker.is_staff;
+  var hours=0, otHours=0, days=0, regRate=0, otRate=0, regPay=0, otPay=0, gross=0;
+  var attSummaryRow='';
+  if (isStaff) {
+    var cP=atts.filter(function(a){return a.status==='P';}).length;
+    var cA=atts.filter(function(a){return a.status==='A';}).length;
+    var cHD=atts.filter(function(a){return a.status==='HD';}).length;
+    var cL=atts.filter(function(a){return a.status==='L';}).length;
+    gross=parseFloat(worker.monthly_salary)||0;
+    attSummaryRow='<tr><td style="color:#6b7280">Attendance (Record Only)</td><td>'+cP+' P · '+cA+' A · '+cHD+' HD · '+cL+' L</td></tr>';
+  } else {
+    hours=atts.reduce(function(s,a){return s+(parseFloat(a.hours)||0);},0);
+    otHours=atts.reduce(function(s,a){return s+(parseFloat(a.ot_hours)||0);},0);
+    days=new Set(atts.map(function(a){return a.date;})).size;
+    regRate=parseFloat(worker.hourly_wage)||0;
+    otRate=parseFloat(worker.ot_rate)||0; // strictly worker's OT rate
+    regPay=hours*regRate;
+    otPay=atts.reduce(function(s,a){
+      var or=parseFloat(a.ot_rate)||parseFloat(worker.ot_rate)||0;
+      return s+(parseFloat(a.ot_hours)||0)*or;
+    },0);
+    gross=regPay+otPay;
+  }
   var advances=atts.reduce(function(s,a){return s+(parseFloat(a.advance)||0);},0);
   // Collect salary extras
   var extraLines=document.querySelectorAll('.salary-extra-line');
@@ -11159,16 +12572,22 @@ function generateSalarySlip(){
     '</div>'+
     '<table>'+
     '<tr><td style="color:#6b7280">Employee Name</td><td>'+wName+'</td></tr>'+
-    '<tr><td style="color:#6b7280">Designation</td><td>'+(worker.category||'Worker')+'</td></tr>'+
+    '<tr><td style="color:#6b7280">Designation</td><td>'+(worker.category||'Worker')+(isStaff?' (Staff)':'')+'</td></tr>'+
     (worker.team_name?'<tr><td style="color:#6b7280">Team</td><td>'+worker.team_name+'</td></tr>':'')+
-    '<tr><td style="color:#6b7280">Hourly Rate</td><td>'+fc(parseFloat(worker.hourly_wage)||0)+'/hr'+(otRate&&otRate!==regRate?' &nbsp;<span style="font-size:10px;color:#7c3aed">OT: '+fc(otRate)+'/hr</span>':'')+'</td></tr>'+
-    '<tr><td style="color:#6b7280">Days Present</td><td>'+days+' days</td></tr>'+
-    '<tr><td style="color:#6b7280">Regular Hours</td><td>'+hours.toFixed(1)+' hrs</td></tr>'+
-    (otHours>0?'<tr><td style="color:#7c3aed">Overtime Hours</td><td style="color:#7c3aed">'+otHours.toFixed(1)+' hrs</td></tr>':'')+
+    (isStaff
+      ? ('<tr><td style="color:#6b7280">Salary Type</td><td>Fixed Monthly</td></tr>'+attSummaryRow)
+      : ('<tr><td style="color:#6b7280">Hourly Rate</td><td>'+fc(parseFloat(worker.hourly_wage)||0)+'/hr'+(otRate&&otRate!==regRate?' &nbsp;<span style="font-size:10px;color:#7c3aed">OT: '+fc(otRate)+'/hr</span>':'')+'</td></tr>'+
+         '<tr><td style="color:#6b7280">Days Present</td><td>'+days+' days</td></tr>'+
+         '<tr><td style="color:#6b7280">Regular Hours</td><td>'+hours.toFixed(1)+' hrs</td></tr>'+
+         (otHours>0?'<tr><td style="color:#7c3aed">Overtime Hours</td><td style="color:#7c3aed">'+otHours.toFixed(1)+' hrs</td></tr>':''))
+    )+
     '</table>'+
     '<table>'+
-    '<tr><td style="color:#6b7280">Regular Pay ('+hours.toFixed(1)+'h × '+fc(regRate)+')</td><td style="color:#059669">'+fc(regPay)+'</td></tr>'+
-    (otHours>0?'<tr><td style="color:#7c3aed">Overtime Pay ('+otHours.toFixed(1)+'h × '+fc(otRate)+')</td><td style="color:#7c3aed">'+fc(otPay)+'</td></tr>':'')+
+    (isStaff
+      ? '<tr><td style="color:#6b7280">Fixed Monthly Salary</td><td style="color:#059669">'+fc(gross)+'</td></tr>'
+      : ('<tr><td style="color:#6b7280">Regular Pay ('+hours.toFixed(1)+'h × '+fc(regRate)+')</td><td style="color:#059669">'+fc(regPay)+'</td></tr>'+
+         (otHours>0?'<tr><td style="color:#7c3aed">Overtime Pay ('+otHours.toFixed(1)+'h × '+fc(otRate)+')</td><td style="color:#7c3aed">'+fc(otPay)+'</td></tr>':''))
+    )+
     '<tr><td style="color:#6b7280">Gross Wages</td><td style="color:#059669;font-weight:800">'+fc(gross)+'</td></tr>'+
     extraRows+
     '<tr><td style="color:#6b7280">Advances Deducted</td><td style="color:#dc2626">- '+fc(advances)+'</td></tr>'+
@@ -11446,6 +12865,13 @@ var _cloudSyncTimer = null;
 function isCloudActivated() { return safeLS.getItem(CLOUD_KEY) === '1'; }
 function getFbConfig() { try { return JSON.parse(safeLS.getItem(CLOUD_FB_CFG) || 'null'); } catch(e) { return null; } }
 function getSiteId() {
+  // Joined projects (added via someone else's share code) sync through the
+  // SAME cloud_backups row as the project owner — using their backup_key.
+  var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; });
+  if (curProj && curProj.joinedBackupKey) {
+    safeLS.setItem(CLOUD_SITE_ID, curProj.joinedBackupKey);
+    return curProj.joinedBackupKey;
+  }
   if (_adminSBUser && _adminSBUser.id) {
     var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
     // Project-aware: each project gets its own backup_key row in cloud_backups
@@ -11825,8 +13251,10 @@ function cloudBackupNow(silent) {
   }
 
   function _doPush(payload) {
+    var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; });
+    var pushAdminId = (curProj && curProj.joinedOwnerUid) ? curProj.joinedOwnerUid : _adminSBUser.id;
     _sb.from('cloud_backups').upsert({
-      admin_id: _adminSBUser.id, backup_key: siteId, data: payload
+      admin_id: pushAdminId, backup_key: siteId, data: payload
     }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
       if (r.error) { if (!silent) toast('Backup failed: ' + r.error.message, 'err'); return; }
       _lastCloudTimestamp = payload.lastSync;
@@ -11959,9 +13387,11 @@ function _adminCloudPull(silent) {
   if (!_sb || !_adminSBUser) return;
   var siteId = getSiteId();
   if (!siteId) return;
+  var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; });
+  var pullAdminId = (curProj && curProj.joinedOwnerUid) ? curProj.joinedOwnerUid : _adminSBUser.id;
   _sb.from('cloud_backups')
     .select('data,updated_at')
-    .eq('admin_id', _adminSBUser.id)
+    .eq('admin_id', pullAdminId)
     .eq('backup_key', siteId)
     .single()
     .then(function(r) {
@@ -13129,7 +14559,9 @@ function generateViewerLink() {
       password_hash: token,
       permissions:   perms,
       can_print:     canPrint,
-      site_id:       siteId
+      site_id:       siteId,
+      project_id:    _activePid,
+      project_name:  _activePname || null
     });
   }).then(function(r) {
     if (r.error) throw r.error;
@@ -14549,6 +15981,7 @@ function generateGSTPDF() {
 function openMasterAtt() {
   var modal = document.getElementById('master-att-modal');
   if (!modal) return;
+  _maStaffData = {};
   // Always reset to fresh state
   var dateEl = document.getElementById('ma-date');
   if (dateEl) { dateEl.value = DD; }
@@ -14572,6 +16005,51 @@ function openMasterAtt() {
 }
 function closeMasterAtt() {
   document.getElementById('master-att-modal').style.display = 'none';
+}
+
+// Per-worker+date status/advance chosen via the staff modal in Master Attendance.
+// Reset fresh each time the Master Attendance panel is opened.
+var _maStaffData = {};
+function _maKey(wid){ var d=(document.getElementById('ma-date')||{}).value||DD; return wid+'|'+d; }
+
+function openMaStaffModal(wid){
+  var w = AD.find(function(x){ return x.__id===wid; }); if (!w) return;
+  var sd = _maStaffData[_maKey(wid)] || {status:'P', advance:0};
+  var modal = document.getElementById('ma-staff-modal'); if (!modal) return;
+  document.getElementById('ma-staff-modal-name').textContent = w.name;
+  document.getElementById('ma-staff-modal-wid').value = wid;
+  document.getElementById('ma-staff-modal-advance').value = sd.advance || '';
+  ['P','HD','A','L'].forEach(function(st){
+    var btn = document.getElementById('ma-staff-status-'+st);
+    if (btn) btn.style.cssText = _maStatusBtnStyle(st===sd.status);
+  });
+  modal.dataset.status = sd.status;
+  modal.style.display = 'flex';
+}
+function _maStatusBtnStyle(active){
+  return 'flex:1;padding:9px 0;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;text-align:center;'
+    + (active ? 'background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;border:none' : 'background:#fff;color:#5b21b6;border:1.5px solid #ddd6fe');
+}
+function pickMaStaffStatus(st){
+  var modal = document.getElementById('ma-staff-modal'); if (!modal) return;
+  modal.dataset.status = st;
+  ['P','HD','A','L'].forEach(function(s){
+    var btn = document.getElementById('ma-staff-status-'+s);
+    if (btn) btn.style.cssText = _maStatusBtnStyle(s===st);
+  });
+}
+function closeMaStaffModal(){
+  var modal = document.getElementById('ma-staff-modal'); if (modal) modal.style.display = 'none';
+}
+function saveMaStaffModal(){
+  var modal = document.getElementById('ma-staff-modal'); if (!modal) return;
+  var wid = document.getElementById('ma-staff-modal-wid').value;
+  var status = modal.dataset.status || 'P';
+  var advance = parseFloat(document.getElementById('ma-staff-modal-advance').value)||0;
+  _maStaffData[_maKey(wid)] = {status:status, advance:advance};
+  var pill = document.getElementById('ma-staff-pill-'+wid);
+  if (pill) pill.textContent = status + (advance>0?' · ₹'+advance:'');
+  closeMaStaffModal();
 }
 
 function renderMasterAttWorkers() {
@@ -14600,6 +16078,20 @@ function renderMasterAttWorkers() {
       +catWorkers.map(function(w){
         var alreadyDone = attended.indexOf(w.name) !== -1;
         var chkId = 'ma-chk-'+w.__id;
+        if (w.is_staff) {
+          // Existing status for this worker/date, if already marked
+          var exAtt = dedup(AD.filter(function(a){ return a.type==='attendance'&&a.name===w.name&&a.date===targetDate; }));
+          var curStatus = (exAtt.length && exAtt[0].status) ? exAtt[0].status : 'P';
+          var curAdv = (exAtt.length && exAtt[0].advance) ? parseFloat(exAtt[0].advance)||0 : 0;
+          if (!_maStaffData[_maKey(w.__id)]) _maStaffData[_maKey(w.__id)] = {status:curStatus, advance:curAdv};
+          var sd = _maStaffData[_maKey(w.__id)];
+          return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;background:'+(alreadyDone?'#fefce8':'#f5f3ff')+';border:1px solid '+(alreadyDone?'#fde047':'#ddd6fe')+'">'
+            +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" data-staff="1" checked'
+            +' style="width:16px;height:16px;accent-color:#7c3aed;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openMaStaffModal(\''+w.__id+'\')">'
+            +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+w.name+' <span style="font-size:9px;color:#7c3aed;font-weight:800">STAFF</span>'+(alreadyDone?' ⚠️':'')+'</span>'
+            +'<span id="ma-staff-pill-'+w.__id+'" onclick="event.stopPropagation();openMaStaffModal(\''+w.__id+'\')" style="font-size:10px;font-weight:800;border:1px solid #c4b5fd;border-radius:7px;padding:3px 8px;background:#fff;color:#5b21b6;cursor:pointer">'+sd.status+(sd.advance>0?' · ₹'+sd.advance:'')+'</span>'
+            +'</label>';
+        }
         return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;cursor:pointer;background:'+(alreadyDone?'#fefce8':'#f8fafc')+';border:1px solid '+(alreadyDone?'#fde047':'#e5e7eb')+'">'
           +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" '+(alreadyDone?'checked':'')
           +' style="width:16px;height:16px;accent-color:#4f46e5;flex-shrink:0;cursor:pointer">'
@@ -14624,23 +16116,31 @@ function saveMasterAttendance() {
   var otHours     = parseFloat(document.getElementById('ma-ot-hours').value) || 0;
   var msg         = document.getElementById('master-att-msg');
 
-  if (!hours && !otHours) {
-    if(msg){msg.textContent='Enter working hours first';msg.style.color='#dc2626';msg.style.display='block';}
-    return;
-  }
-
   // Collect all checked workers
   var selected = [];
   document.querySelectorAll('#master-att-worker-list input[type="checkbox"]:checked').forEach(function(cb){
+    var isStaff = cb.getAttribute('data-staff') === '1';
+    var wid = cb.getAttribute('data-wid');
+    var sd = isStaff ? (_maStaffData[_maKey(wid)] || {status:'P', advance:0}) : null;
     selected.push({
-      wid:     cb.getAttribute('data-wid'),
+      wid:     wid,
       name:    cb.getAttribute('data-name'),
-      already: cb.getAttribute('data-already') === '1'
+      already: cb.getAttribute('data-already') === '1',
+      isStaff: isStaff,
+      status:  sd ? sd.status : '',
+      staffAdvance: sd ? sd.advance : 0
     });
   });
 
   if (!selected.length) {
     if(msg){msg.textContent='Select at least one worker';msg.style.color='#dc2626';msg.style.display='block';}
+    return;
+  }
+
+  // Hours are only required if at least one selected worker is an hourly (non-staff) worker
+  var hasHourlySelected = selected.some(function(s){ return !s.isStaff; });
+  if (hasHourlySelected && !hours && !otHours) {
+    if(msg){msg.textContent='Enter working hours first';msg.style.color='#dc2626';msg.style.display='block';}
     return;
   }
 
@@ -14652,16 +16152,28 @@ function saveMasterAttendance() {
   function _writeAttendance(list, replaceExisting) {
     list.forEach(function(s){
       var worker  = AD.find(function(w){ return w.__id === s.wid; });
+      AD = ld();
+      var ex = dedup(AD.filter(function(a){ return a.type==='attendance'&&a.name===s.name&&a.date===date; }));
+      if (s.isStaff) {
+        // Staff: status (P/A/HD/L) is recorded for reference only.
+        // Fixed monthly salary — no per-day hours/payment calculation.
+        var status = s.status || 'P';
+        var staffData = {status:status, hours:0, ot_hours:0, ot_rate:0, payment:0, hourly_wage:0, advance:s.staffAdvance||0, is_staff:true};
+        if (ex.length && replaceExisting) {
+          upd(ex[0].__id, staffData);
+        } else if (!ex.length) {
+          ins(Object.assign({type:'attendance', date:date, name:s.name, category:(worker?worker.category:'')}, staffData));
+        }
+        return;
+      }
       var otRate  = worker ? (parseFloat(worker.ot_rate)||0) : 0;
       var regRate = worker ? (parseFloat(worker.hourly_wage)||0) : 0;
       var payment = (hours * regRate) + (otHours * otRate);
       var cat     = worker ? (worker.category||'') : '';
-      AD = ld();
-      var ex = dedup(AD.filter(function(a){ return a.type==='attendance'&&a.name===s.name&&a.date===date; }));
       if (ex.length && replaceExisting) {
-        upd(ex[0].__id, {hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate});
+        upd(ex[0].__id, {hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate, status:'P'});
       } else if (!ex.length) {
-        ins({type:'attendance', date:date, name:s.name, category:cat, hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate, work_done:''});
+        ins({type:'attendance', date:date, name:s.name, category:cat, hours:hours, advance:advance, ot_hours:otHours, ot_rate:otRate, payment:payment, hourly_wage:regRate, work_done:'', status:'P'});
       }
     });
   }
@@ -16708,5 +18220,523 @@ document.addEventListener('keydown',function(e){
 
 document.addEventListener('DOMContentLoaded',function(){_cBuildStd();_cBuildSci();_cBuildUnitNumpad();calcUnitCatChange();});
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     OWNER DASHBOARD  +  SALES (Building / Floor / Flat) MODULE
+     Added by Claude — see owner_and_sales_schema.sql for the DB side.
+═══════════════════════════════════════════════════════════════════ -->
+<style>
+  #owner-modal, #sales-modal { display:none; position:fixed; inset:0; z-index:9998; align-items:center; justify-content:center; background:rgba(0,0,0,.7); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:14px; }
+  #owner-modal.show, #sales-modal.show { display:flex; }
+  .ownx-box { width:100%; max-width:460px; max-height:88vh; overflow-y:auto; background:linear-gradient(160deg,#1a1740 0%,#2d2a6e 55%,#3d1a6e 100%); border-radius:20px; padding:16px; box-shadow:0 24px 60px rgba(0,0,0,.6); }
+  .ownx-card { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:12px; }
+  .ownx-pill { font-size:9px; font-weight:800; padding:2px 8px; border-radius:99px; }
+  .ownx-x { width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.07); color:#fff; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .ownx-back { background:none; border:none; color:#a78bfa; font-size:11px; font-weight:800; cursor:pointer; padding:4px 0; display:flex; align-items:center; gap:4px; }
+  #owner-viewbar { display:none; position:fixed; top:0; left:0; right:0; z-index:9997; background:linear-gradient(135deg,#b45309,#d97706); color:#fff; padding:8px 12px; font-size:11px; font-weight:800; align-items:center; justify-content:space-between; gap:8px; }
+  #owner-viewbar.show { display:flex; }
+  #owner-viewbar button { flex-shrink:0; background:rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:10px; font-weight:800; padding:4px 10px; border-radius:8px; cursor:pointer; }
+</style>
+
+<!-- Persistent "viewing as another admin" bar -->
+<div id="owner-viewbar">
+  <span id="owner-viewbar-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👑 Owner viewing…</span>
+  <button onclick="_ownerExitViewAs()">Exit ✕</button>
+</div>
+
+<!-- ══════════ OWNER DASHBOARD MODAL ══════════ -->
+<div id="owner-modal" onclick="if(event.target===this)closeOwnerDashboard()">
+  <div class="ownx-box" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <p style="font-size:14px;font-weight:900;color:#fff;margin:0;">👑 Owner Dashboard</p>
+      <button class="ownx-x" onclick="closeOwnerDashboard()">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button id="owner-tab-summary-btn" onclick="switchOwnerTab('summary')" style="flex:1;padding:7px 0;border-radius:9px;border:1px solid rgba(255,255,255,.12);font-size:11px;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">📊 Summary</button>
+      <button id="owner-tab-feed-btn" onclick="switchOwnerTab('feed')" style="flex:1;padding:7px 0;border-radius:9px;border:1px solid rgba(255,255,255,.12);font-size:11px;font-weight:800;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);">🕒 Activity Feed</button>
+    </div>
+    <div id="owner-summary-wrap"></div>
+    <div id="owner-feed-wrap" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- ══════════ SALES MODAL (Building → Floor → Flat) ══════════ -->
+<div id="sales-modal" onclick="if(event.target===this)closeSalesModal()">
+  <div class="ownx-box" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <p style="font-size:14px;font-weight:900;color:#fff;margin:0;">🏢 Sales</p>
+      <button class="ownx-x" onclick="closeSalesModal()">✕</button>
+    </div>
+
+    <!-- Screen 1: pick a project -->
+    <div id="sales-project-screen">
+      <p style="font-size:10px;color:rgba(255,255,255,.45);margin:0 0 10px;">Select a project to manage its inventory</p>
+      <div id="sales-project-list"></div>
+    </div>
+
+    <!-- Screen 2: buildings for a project -->
+    <div id="sales-buildings-screen" style="display:none;">
+      <button class="ownx-back" onclick="_salesBackToProjects()">‹ All Projects</button>
+      <p style="font-size:12px;font-weight:800;color:#fbbf24;margin:2px 0 10px;" id="sales-proj-label"></p>
+      <div id="sales-buildings-wrap"></div>
+    </div>
+
+    <!-- Screen 3: floors for a building -->
+    <div id="sales-floors-screen" style="display:none;">
+      <button class="ownx-back" onclick="_salesBackToBuildings()">‹ Buildings</button>
+      <p style="font-size:12px;font-weight:800;color:#fbbf24;margin:2px 0 10px;" id="sales-building-label"></p>
+      <div id="sales-floors-wrap"></div>
+    </div>
+
+    <!-- Screen 4: flats for a floor -->
+    <div id="sales-flats-screen" style="display:none;">
+      <button class="ownx-back" onclick="_salesBackToFloors()">‹ Floors</button>
+      <p style="font-size:12px;font-weight:800;color:#fbbf24;margin:2px 0 10px;" id="sales-floor-label"></p>
+      <div id="sales-flats-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  CONFIG — must match is_owner() email in owner_and_sales_schema.sql
+// ══════════════════════════════════════════════════════════════
+var OWNER_EMAIL = 'YOUR-EMAIL@example.com'; // ⚠️ change this (both here and in the SQL file)
+
+function _isOwnerUser() {
+  return !!(_adminSBUser && _adminSBUser.email && _adminSBUser.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
+}
+
+function updateOwnerBtn() {
+  var btn = document.getElementById('owner-hdr-btn');
+  if (btn) btn.style.display = _isOwnerUser() ? 'flex' : 'none';
+}
+
+// Hook into existing auth-ready / signed-out callbacks without breaking them
+(function () {
+  var origReady = window._onSBAuthReady;
+  window._onSBAuthReady = function (user) {
+    if (typeof origReady === 'function') origReady(user);
+    setTimeout(updateOwnerBtn, 60);
+  };
+  var origOut = window._onSBSignedOut;
+  window._onSBSignedOut = function () {
+    if (typeof origOut === 'function') origOut();
+    updateOwnerBtn();
+  };
+})();
+document.addEventListener('DOMContentLoaded', function () { setTimeout(updateOwnerBtn, 500); });
+
+// ══════════════════════════════════════════════════════════════
+//  OWNER DASHBOARD
+// ══════════════════════════════════════════════════════════════
+var _ownerAllRows = [];   // [{admin_id, backup_key, email, company, lastSync, data}]
+var _ownerAdminsMap = {}; // admin_id -> email
+
+function openOwnerDashboard() {
+  if (!_isOwnerUser()) { toast('Owner access only', 'err'); return; }
+  document.getElementById('owner-modal').classList.add('show');
+  switchOwnerTab('summary');
+  _ownerLoadAll();
+}
+function closeOwnerDashboard() { document.getElementById('owner-modal').classList.remove('show'); }
+
+function switchOwnerTab(tab) {
+  var s = document.getElementById('owner-summary-wrap');
+  var f = document.getElementById('owner-feed-wrap');
+  var bS = document.getElementById('owner-tab-summary-btn');
+  var bF = document.getElementById('owner-tab-feed-btn');
+  if (s) s.style.display = (tab === 'summary') ? 'block' : 'none';
+  if (f) f.style.display = (tab === 'feed') ? 'block' : 'none';
+  [[bS, 'summary'], [bF, 'feed']].forEach(function (pair) {
+    if (!pair[0]) return;
+    var active = tab === pair[1];
+    pair[0].style.background = active ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : 'rgba(255,255,255,.07)';
+    pair[0].style.color = active ? '#fff' : 'rgba(255,255,255,.5)';
+  });
+}
+
+function _ownerLoadAll() {
+  var wrapS = document.getElementById('owner-summary-wrap');
+  if (wrapS) wrapS.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">Loading…</p>';
+  if (!_sb) { toast('Cloud not ready yet', 'err'); return; }
+  Promise.all([
+    _sb.from('admins').select('id,email'),
+    _sb.from('cloud_backups').select('admin_id,backup_key,data,created_at')
+  ]).then(function (results) {
+    var adminsRes = results[0], backupsRes = results[1];
+    if (adminsRes.error || backupsRes.error) {
+      toast('Owner load failed: ' + ((adminsRes.error || backupsRes.error).message), 'err');
+      return;
+    }
+    _ownerAdminsMap = {};
+    (adminsRes.data || []).forEach(function (a) { _ownerAdminsMap[a.id] = a.email; });
+    _ownerAllRows = (backupsRes.data || []).map(function (r) {
+      var d = r.data || {};
+      return {
+        admin_id: r.admin_id,
+        backup_key: r.backup_key,
+        email: _ownerAdminsMap[r.admin_id] || d.syncedBy || '—',
+        company: (d.global_prof && d.global_prof.company) || (d.meta && d.meta.company) || r.backup_key,
+        lastSync: d.lastSync || (r.created_at ? new Date(r.created_at).getTime() : 0),
+        data: d
+      };
+    }).sort(function (a, b) { return b.lastSync - a.lastSync; });
+    _ownerRenderSummary();
+    _ownerRenderFeed();
+  }).catch(function (e) { toast('Owner load error: ' + e.message, 'err'); });
+}
+
+function _ownerTimeAgo(ts) {
+  if (!ts) return '—';
+  var diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return Math.floor(diff / 86400000) + 'd ago';
+}
+
+function _ownerRenderSummary() {
+  var wrap = document.getElementById('owner-summary-wrap');
+  if (!wrap) return;
+  if (!_ownerAllRows.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">No sites yet</p>'; return; }
+  wrap.innerHTML = _ownerAllRows.map(function (row, i) {
+    return '<div class="ownx-card" style="margin-bottom:8px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">'
+      + '<span style="font-size:12px;font-weight:800;color:#fff;">' + esc(row.company) + '</span>'
+      + '<span style="font-size:9px;color:rgba(255,255,255,.4);flex-shrink:0;margin-left:8px;">' + _ownerTimeAgo(row.lastSync) + '</span>'
+      + '</div>'
+      + '<p style="font-size:10px;color:#a78bfa;margin:0 0 8px;">' + esc(row.email) + '</p>'
+      + '<button onclick="_ownerSwitchToProject(' + i + ')" style="width:100%;padding:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">👁 Switch to Admin — Open Project</button>'
+      + '</div>';
+  }).join('');
+}
+
+function _ownerRenderFeed() {
+  var wrap = document.getElementById('owner-feed-wrap');
+  if (!wrap) return;
+  if (!_ownerAllRows.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">No activity yet</p>'; return; }
+  wrap.innerHTML = _ownerAllRows.map(function (row, i) {
+    var dt = row.lastSync ? new Date(row.lastSync).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+    return '<div onclick="_ownerSwitchToProject(' + i + ')" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;">'
+      + '<span style="font-size:16px;flex-shrink:0;">🏗️</span>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<p style="font-size:11px;font-weight:700;color:#fff;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(row.company) + '</p>'
+      + '<p style="font-size:9px;color:rgba(255,255,255,.4);margin:0;">' + esc(row.email) + ' · ' + dt + '</p>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function _ownerSwitchToProject(i) {
+  var row = _ownerAllRows[i];
+  if (!row) return;
+  try { sessionStorage.setItem('sanj_owner_viewing', JSON.stringify({ backup_key: row.backup_key, admin_id: row.admin_id, company: row.company, email: row.email })); } catch (e) {}
+  _applyFullBackup(row.data);
+  closeOwnerDashboard();
+  _ownerShowViewBar(row.company, row.email);
+  toast('👁 Viewing: ' + row.company, 'ok');
+  setTimeout(function () {
+    try {
+      AD = ld(); applyProfile();
+      if (typeof switchTab === 'function') switchTab('dashboard');
+    } catch (e) {}
+  }, 150);
+}
+
+function _ownerShowViewBar(company, email) {
+  var bar = document.getElementById('owner-viewbar');
+  var lbl = document.getElementById('owner-viewbar-label');
+  if (lbl) lbl.textContent = '👑 Owner viewing: ' + company + ' (' + email + ') — read-only';
+  if (bar) bar.classList.add('show');
+}
+
+function _ownerExitViewAs() {
+  try { sessionStorage.removeItem('sanj_owner_viewing'); } catch (e) {}
+  toast('Returning to your own dashboard…', 'ok');
+  setTimeout(function () { location.reload(); }, 400);
+}
+
+// Restore the view-bar if the owner reloaded the page mid-viewing
+(function _ownerRestoreBarOnLoad() {
+  try {
+    var raw = sessionStorage.getItem('sanj_owner_viewing');
+    if (raw) {
+      var v = JSON.parse(raw);
+      setTimeout(function () { _ownerShowViewBar(v.company, v.email); }, 400);
+    }
+  } catch (e) {}
+})();
+
+// ══════════════════════════════════════════════════════════════
+//  SALES — Building → Floor → Flat inventory
+// ══════════════════════════════════════════════════════════════
+var _salesCurProjectId = null;
+var _salesCurAdminId = null;
+var _salesActiveBuildingId = null;
+var _salesActiveFloorId = null;
+var _salesBuildings = [];
+var _salesFloors = [];
+var _salesFlats = [];
+var _salesStatusColors = { available: '#22c55e', booked: '#f59e0b', sold: '#ef4444' };
+
+function _bkForProject(projId) {
+  var proj = (window.projects || []).find(function (p) { return p.id === projId; });
+  if (proj && proj.joinedBackupKey) return proj.joinedBackupKey;
+  if (_adminSBUser && _adminSBUser.id) {
+    var base = 'user-' + _adminSBUser.id.replace(/-/g, '').slice(0, 12);
+    return base + '_p' + String(projId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+  }
+  return null;
+}
+
+function openSalesModal() {
+  if (!_adminSBUser) { toast('Please login (Cloud) first to use Sales', 'err'); openCloudModal(); return; }
+  document.getElementById('sales-modal').classList.add('show');
+  _salesShowProjectPicker();
+}
+function closeSalesModal() { document.getElementById('sales-modal').classList.remove('show'); }
+
+function _salesShowProjectPicker() {
+  document.getElementById('sales-project-screen').style.display = 'block';
+  document.getElementById('sales-buildings-screen').style.display = 'none';
+  document.getElementById('sales-floors-screen').style.display = 'none';
+  document.getElementById('sales-flats-screen').style.display = 'none';
+  var wrap = document.getElementById('sales-project-list');
+  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
+
+  if (_isOwnerUser()) {
+    if (_ownerAllRows.length) {
+      _salesRenderProjectPicker(_ownerAllRows.map(function (r) { return { id: r.backup_key, admin_id: r.admin_id, label: r.company + ' · ' + r.email }; }));
+    } else {
+      Promise.all([_sb.from('admins').select('id,email'), _sb.from('cloud_backups').select('admin_id,backup_key,data,created_at')])
+        .then(function (results) {
+          (results[0].data || []).forEach(function (a) { _ownerAdminsMap[a.id] = a.email; });
+          _ownerAllRows = (results[1].data || []).map(function (r) {
+            var d = r.data || {};
+            return { admin_id: r.admin_id, backup_key: r.backup_key, email: _ownerAdminsMap[r.admin_id] || '—', company: (d.global_prof && d.global_prof.company) || r.backup_key, lastSync: d.lastSync || 0, data: d };
+          });
+          _salesRenderProjectPicker(_ownerAllRows.map(function (r) { return { id: r.backup_key, admin_id: r.admin_id, label: r.company + ' · ' + r.email }; }));
+        });
+    }
+  } else {
+    var list = (window.projects || []).map(function (p) {
+      return { id: _bkForProject(p.id), admin_id: _adminSBUser.id, label: p.name };
+    }).filter(function (x) { return x.id; });
+    _salesRenderProjectPicker(list);
+  }
+}
+
+function _salesRenderProjectPicker(list) {
+  var wrap = document.getElementById('sales-project-list');
+  if (!list.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No projects found</p>'; return; }
+  window._salesProjList = list;
+  wrap.innerHTML = list.map(function (p, i) {
+    return '<button onclick="_salesOpenProjectByIndex(' + i + ')" style="width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;">'
+      + '<span style="font-size:15px;flex-shrink:0;">🏢</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(p.label) + '</span><span style="color:rgba(255,255,255,.3);flex-shrink:0;">›</span>'
+      + '</button>';
+  }).join('');
+}
+
+function _salesOpenProjectByIndex(i) {
+  var p = (window._salesProjList || [])[i];
+  if (!p) return;
+  _salesCurProjectId = p.id;
+  _salesCurAdminId = p.admin_id;
+  document.getElementById('sales-project-screen').style.display = 'none';
+  document.getElementById('sales-buildings-screen').style.display = 'block';
+  document.getElementById('sales-proj-label').textContent = p.label;
+  _salesLoadBuildings();
+}
+function _salesBackToProjects() { _salesShowProjectPicker(); }
+
+function _salesLoadBuildings() {
+  var wrap = document.getElementById('sales-buildings-wrap');
+  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
+  _sb.from('buildings').select('*').eq('project_id', _salesCurProjectId).order('created_at').then(function (r) {
+    if (r.error) { toast('Load failed: ' + r.error.message, 'err'); return; }
+    _salesBuildings = r.data || [];
+    _salesRenderBuildings();
+  });
+}
+function _salesRenderBuildings() {
+  var wrap = document.getElementById('sales-buildings-wrap');
+  var html = '<button onclick="_salesAddBuilding()" style="width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">+ Add Building</button>';
+  if (!_salesBuildings.length) {
+    html += '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No buildings yet — add one above</p>';
+  } else {
+    html += _salesBuildings.map(function (b) {
+      var safeName = esc(b.name).replace(/'/g, "\\'");
+      return '<div class="ownx-card" style="margin-bottom:8px;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+        + '<span style="font-size:12px;font-weight:800;color:#fff;">🏢 ' + esc(b.name) + '</span>'
+        + '<div style="display:flex;gap:6px;flex-shrink:0;">'
+        + '<button onclick="_salesRenameBuilding(\'' + b.id + '\',\'' + safeName + '\')" style="background:none;border:none;color:#a78bfa;font-size:12px;cursor:pointer;">✎</button>'
+        + '<button onclick="_salesDeleteBuilding(\'' + b.id + '\')" style="background:none;border:none;color:#f87171;font-size:12px;cursor:pointer;">🗑</button>'
+        + '</div></div>'
+        + '<button onclick="_salesOpenFloors(\'' + b.id + '\',\'' + safeName + '\')" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;">Manage Floors →</button>'
+        + '</div>';
+    }).join('');
+  }
+  wrap.innerHTML = html;
+}
+function _salesAddBuilding() {
+  var name = prompt('Building name (e.g. "Tower A")');
+  if (!name || !name.trim()) return;
+  _sb.from('buildings').insert({ admin_id: _salesCurAdminId, project_id: _salesCurProjectId, name: name.trim() }).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Building added', 'ok'); _salesLoadBuildings();
+  });
+}
+function _salesRenameBuilding(id, oldName) {
+  var name = prompt('Rename building', oldName);
+  if (!name || !name.trim()) return;
+  _sb.from('buildings').update({ name: name.trim() }).eq('id', id).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    _salesLoadBuildings();
+  });
+}
+function _salesDeleteBuilding(id) {
+  if (!confirm('Delete this building and all its floors/flats?')) return;
+  _sb.from('buildings').delete().eq('id', id).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Building deleted', 'ok'); _salesLoadBuildings();
+  });
+}
+
+// ── Floors ──
+function _salesOpenFloors(buildingId, buildingName) {
+  _salesActiveBuildingId = buildingId;
+  document.getElementById('sales-buildings-screen').style.display = 'none';
+  document.getElementById('sales-floors-screen').style.display = 'block';
+  document.getElementById('sales-building-label').textContent = buildingName;
+  _salesLoadFloors();
+}
+function _salesBackToBuildings() {
+  document.getElementById('sales-floors-screen').style.display = 'none';
+  document.getElementById('sales-buildings-screen').style.display = 'block';
+}
+function _salesLoadFloors() {
+  var wrap = document.getElementById('sales-floors-wrap');
+  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
+  _sb.from('floors').select('*').eq('building_id', _salesActiveBuildingId).order('floor_number').then(function (r) {
+    if (r.error) { toast('Load failed: ' + r.error.message, 'err'); return; }
+    _salesFloors = r.data || [];
+    _salesRenderFloors();
+  });
+}
+function _salesRenderFloors() {
+  var wrap = document.getElementById('sales-floors-wrap');
+  var html = '<button onclick="_salesAddFloor()" style="width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">+ Add Floor</button>';
+  if (!_salesFloors.length) html += '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No floors yet</p>';
+  else html += _salesFloors.map(function (f) {
+    var safeName = esc(f.name).replace(/'/g, "\\'");
+    return '<div class="ownx-card" style="margin-bottom:8px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+      + '<span style="font-size:12px;font-weight:800;color:#fff;">🏬 ' + esc(f.name) + '</span>'
+      + '<button onclick="_salesDeleteFloor(\'' + f.id + '\')" style="background:none;border:none;color:#f87171;font-size:12px;cursor:pointer;">🗑</button>'
+      + '</div>'
+      + '<button onclick="_salesOpenFlats(\'' + f.id + '\',\'' + safeName + '\')" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;">Manage Flats →</button>'
+      + '</div>';
+  }).join('');
+  wrap.innerHTML = html;
+}
+function _salesAddFloor() {
+  var name = prompt('Floor name (e.g. "3rd Floor")');
+  if (!name || !name.trim()) return;
+  var num = parseInt(prompt('Floor number (for sorting, e.g. 3)', String(_salesFloors.length)) || _salesFloors.length, 10) || 0;
+  _sb.from('floors').insert({ admin_id: _salesCurAdminId, building_id: _salesActiveBuildingId, name: name.trim(), floor_number: num }).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Floor added', 'ok'); _salesLoadFloors();
+  });
+}
+function _salesDeleteFloor(id) {
+  if (!confirm('Delete this floor and all its flats?')) return;
+  _sb.from('floors').delete().eq('id', id).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Floor deleted', 'ok'); _salesLoadFloors();
+  });
+}
+
+// ── Flats ──
+function _salesOpenFlats(floorId, floorName) {
+  _salesActiveFloorId = floorId;
+  document.getElementById('sales-floors-screen').style.display = 'none';
+  document.getElementById('sales-flats-screen').style.display = 'block';
+  document.getElementById('sales-floor-label').textContent = floorName;
+  _salesLoadFlats();
+}
+function _salesBackToFloors() {
+  document.getElementById('sales-flats-screen').style.display = 'none';
+  document.getElementById('sales-floors-screen').style.display = 'block';
+}
+function _salesLoadFlats() {
+  var wrap = document.getElementById('sales-flats-wrap');
+  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
+  _sb.from('flats').select('*').eq('floor_id', _salesActiveFloorId).order('created_at').then(function (r) {
+    if (r.error) { toast('Load failed: ' + r.error.message, 'err'); return; }
+    _salesFlats = r.data || [];
+    _salesRenderFlats();
+  });
+}
+function _salesRenderFlats() {
+  var wrap = document.getElementById('sales-flats-wrap');
+  var html = '<button onclick="_salesAddFlat()" style="width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">+ Add Flat</button>';
+  if (!_salesFlats.length) html += '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No flats yet</p>';
+  else html += _salesFlats.map(function (f) {
+    var col = _salesStatusColors[f.status] || '#9ca3af';
+    return '<div class="ownx-card" style="margin-bottom:8px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;">'
+      + '<span style="font-size:12px;font-weight:800;color:#fff;">🚪 ' + esc(f.name) + '</span>'
+      + '<span class="ownx-pill" style="background:' + col + '22;color:' + col + ';border:1px solid ' + col + '55;text-transform:capitalize;">' + esc(f.status) + '</span>'
+      + '</div>'
+      + '<p style="font-size:10px;color:rgba(255,255,255,.5);margin:4px 0 8px;">' + (f.area || 0) + ' ' + esc(f.area_unit || 'sqft') + (f.price ? ' · ₹' + Number(f.price).toLocaleString('en-IN') : '') + (f.buyer_name ? ' · ' + esc(f.buyer_name) : '') + '</p>'
+      + '<div style="display:flex;gap:5px;flex-wrap:wrap;">'
+      + ['available', 'booked', 'sold'].map(function (s) {
+        var active = f.status === s; var c = _salesStatusColors[s];
+        return '<button onclick="_salesSetFlatStatus(\'' + f.id + '\',\'' + s + '\')" style="flex:1;min-width:60px;padding:5px 0;border-radius:7px;font-size:9px;font-weight:800;text-transform:capitalize;cursor:pointer;border:1px solid ' + c + ';background:' + (active ? c : 'none') + ';color:' + (active ? '#fff' : c) + ';">' + s + '</button>';
+      }).join('')
+      + '<button onclick="_salesEditFlat(\'' + f.id + '\')" style="padding:5px 10px;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;">✎</button>'
+      + '<button onclick="_salesDeleteFlat(\'' + f.id + '\')" style="padding:5px 10px;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;">🗑</button>'
+      + '</div></div>';
+  }).join('');
+  wrap.innerHTML = html;
+}
+function _salesAddFlat() {
+  var name = prompt('Flat name / number (e.g. "301" or "A-1")');
+  if (!name || !name.trim()) return;
+  var area = parseFloat(prompt('Area (sqft)', '0')) || 0;
+  _sb.from('flats').insert({ admin_id: _salesCurAdminId, floor_id: _salesActiveFloorId, name: name.trim(), area: area, area_unit: 'sqft', status: 'available' }).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Flat added', 'ok'); _salesLoadFlats();
+  });
+}
+function _salesSetFlatStatus(id, status) {
+  _sb.from('flats').update({ status: status }).eq('id', id).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    _salesLoadFlats();
+  });
+}
+function _salesEditFlat(id) {
+  var f = _salesFlats.find(function (x) { return x.id === id; });
+  if (!f) return;
+  var name = prompt('Flat name', f.name); if (name === null) return;
+  var area = parseFloat(prompt('Area (sqft)', f.area)) || 0;
+  var price = parseFloat(prompt('Price (₹, optional)', f.price || '')) || null;
+  var buyer = prompt('Buyer name (optional)', f.buyer_name || '') || null;
+  _sb.from('flats').update({ name: name.trim(), area: area, price: price, buyer_name: buyer }).eq('id', id).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Flat updated', 'ok'); _salesLoadFlats();
+  });
+}
+function _salesDeleteFlat(id) {
+  if (!confirm('Delete this flat?')) return;
+  _sb.from('flats').delete().eq('id', id).then(function (r) {
+    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
+    toast('Flat deleted', 'ok'); _salesLoadFlats();
+  });
+}
+</script>
+
 </body>
 </html>
