@@ -943,16 +943,6 @@ self.addEventListener('fetch', function(e) {
     }
     _renderShareModal(proj);
   }
-  function regenerateShareCode(pid) {
-    var proj = window.projects.find(function(p){ return p.id === pid; });
-    if (!proj) return;
-    _revokeShareCodeInCloud(proj);
-    proj.shareCode = _genShareCode();
-    _saveProjects();
-    _pushShareCodeToCloud(proj);
-    _renderShareModal(proj);
-    toast('New code generated — old code no longer works', 'ok');
-  }
   function revokeShareCode(pid) {
     var proj = window.projects.find(function(p){ return p.id === pid; });
     if (!proj) return;
@@ -1005,12 +995,22 @@ self.addEventListener('fetch', function(e) {
     code = String(code || '').trim().toUpperCase();
     if (!code) { toast('Enter a code', 'err'); return; }
     if (!(typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id)) {
-      // Not logged in yet — remember the code and prompt login first
+      // Not logged in yet — remember the code and prompt login first.
+      // IMPORTANT: close this modal first, otherwise it sits on top (z-index
+      // 99999) of whatever login screen we're about to reveal and blocks it.
+      closeJoinCodeModal();
       try { localStorage.setItem('sanj_pending_join_code', code); } catch(e) {}
-      toast('Sign in first, then the project will join automatically', 'err');
-      if (typeof obSwitchAuthTab === 'function') {
+      toast('Sign in first — the project will join automatically once you\'re logged in', 'ok');
+      var onboard = document.getElementById('auth-onboard');
+      if (onboard && onboard.style.display !== 'none' && typeof obSwitchAuthTab === 'function') {
+        // Still on the onboarding screen — switch it to the cloud login tab
         var cs = document.getElementById('ob-cloud-section');
-        if (cs) { document.getElementById('ob-local-section').style.display = 'none'; cs.style.display = 'block'; obSwitchAuthTab('login'); }
+        var ls = document.getElementById('ob-local-section');
+        if (cs) { if (ls) ls.style.display = 'none'; cs.style.display = 'block'; obSwitchAuthTab('login'); }
+      } else if (typeof openCloudModal === 'function') {
+        // Onboarding already dismissed — use the cloud sync modal instead
+        openCloudModal();
+        if (typeof switchCloudTab === 'function') switchCloudTab('admin');
       }
       return;
     }
@@ -1089,10 +1089,7 @@ self.addEventListener('fetch', function(e) {
           + '<button onclick="copyShareCode()" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer">📋 Copy</button>'
           + '<button onclick="shareShareCode()" style="flex:1;padding:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">📤 Share</button>'
           + '</div>'
-          + '<div style="display:flex;gap:8px">'
-          + '<button onclick="regenerateShareCode(\'' + _escHtml(proj.id) + '\')" style="flex:1;padding:9px;background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:11.5px;font-weight:700;cursor:pointer">🔄 New Code</button>'
-          + '<button onclick="revokeShareCode(\'' + _escHtml(proj.id) + '\')" style="flex:1;padding:9px;background:transparent;border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#fca5a5;font-size:11.5px;font-weight:700;cursor:pointer">🚫 Revoke</button>'
-          + '</div>')
+          + '<button onclick="revokeShareCode(\'' + _escHtml(proj.id) + '\')" style="width:100%;padding:9px;background:transparent;border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#fca5a5;font-size:11.5px;font-weight:700;cursor:pointer">🚫 Revoke Access</button>')
         : ('<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-bottom:14px">'
           + '<p style="font-size:12px;color:#fde68a;line-height:1.5;margin:0">⚠️ Sign in to your account first (Settings → cloud sync) so this code can be looked up from your engineer\'s device.</p>'
           + '</div>')
@@ -1174,6 +1171,16 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       updateCloudBtn && updateCloudBtn();
       refreshCloudModalState && refreshCloudModalState();
     }
+    // If a "Join a Project" code was pending from before this device signed
+    // in (or before the OTP screen was completed), finish it now — exactly
+    // once — so a restored session also completes the join.
+    try {
+      var pendingCode = localStorage.getItem('sanj_pending_join_code');
+      if (pendingCode && typeof joinProjectByCode === 'function') {
+        localStorage.removeItem('sanj_pending_join_code');
+        setTimeout(function(){ joinProjectByCode(pendingCode); }, 800);
+      }
+    } catch(e) {}
   }
   function _onSBSignedOut() {
     _adminSBUser = null;
@@ -18233,16 +18240,11 @@ document.addEventListener('DOMContentLoaded',function(){_cBuildStd();_cBuildSci(
   .ownx-pill { font-size:9px; font-weight:800; padding:2px 8px; border-radius:99px; }
   .ownx-x { width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.07); color:#fff; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
   .ownx-back { background:none; border:none; color:#a78bfa; font-size:11px; font-weight:800; cursor:pointer; padding:4px 0; display:flex; align-items:center; gap:4px; }
-  #owner-viewbar { display:none; position:fixed; top:0; left:0; right:0; z-index:9997; background:linear-gradient(135deg,#b45309,#d97706); color:#fff; padding:8px 12px; font-size:11px; font-weight:800; align-items:center; justify-content:space-between; gap:8px; }
-  #owner-viewbar.show { display:flex; }
-  #owner-viewbar button { flex-shrink:0; background:rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.3); color:#fff; font-size:10px; font-weight:800; padding:4px 10px; border-radius:8px; cursor:pointer; }
+  .ownx-stat { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px; text-align:center; }
+  .ownx-stat b { display:block; font-size:15px; color:#fff; }
+  .ownx-stat span { font-size:9px; color:rgba(255,255,255,.5); font-weight:700; text-transform:uppercase; }
+  .ownx-readonly-badge { display:inline-block; font-size:9px; font-weight:800; padding:3px 8px; border-radius:99px; background:rgba(52,211,153,.15); color:#6ee7b7; border:1px solid rgba(52,211,153,.35); }
 </style>
-
-<!-- Persistent "viewing as another admin" bar -->
-<div id="owner-viewbar">
-  <span id="owner-viewbar-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👑 Owner viewing…</span>
-  <button onclick="_ownerExitViewAs()">Exit ✕</button>
-</div>
 
 <!-- ══════════ OWNER DASHBOARD MODAL ══════════ -->
 <div id="owner-modal" onclick="if(event.target===this)closeOwnerDashboard()">
@@ -18257,6 +18259,19 @@ document.addEventListener('DOMContentLoaded',function(){_cBuildStd();_cBuildSci(
     </div>
     <div id="owner-summary-wrap"></div>
     <div id="owner-feed-wrap" style="display:none;"></div>
+
+    <!-- Read-only detail screen for a single project. Rendered entirely
+         from the already-fetched backup JSON — never touches the app's
+         own local storage or live state, so there is nothing to edit. -->
+    <div id="owner-detail-wrap" style="display:none;">
+      <button class="ownx-back" onclick="_ownerBackToSummary()">‹ All Sites</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px;">
+        <p id="owner-detail-title" style="font-size:13px;font-weight:900;color:#fff;margin:0;"></p>
+        <span class="ownx-readonly-badge">👁 Read-only</span>
+      </div>
+      <p id="owner-detail-sub" style="font-size:10px;color:#a78bfa;margin:0 0 12px;"></p>
+      <div id="owner-detail-body"></div>
+    </div>
   </div>
 </div>
 
@@ -18339,13 +18354,18 @@ function openOwnerDashboard() {
   switchOwnerTab('summary');
   _ownerLoadAll();
 }
-function closeOwnerDashboard() { document.getElementById('owner-modal').classList.remove('show'); }
+function closeOwnerDashboard() {
+  document.getElementById('owner-modal').classList.remove('show');
+  _ownerBackToSummary();
+}
 
 function switchOwnerTab(tab) {
   var s = document.getElementById('owner-summary-wrap');
   var f = document.getElementById('owner-feed-wrap');
+  var d = document.getElementById('owner-detail-wrap');
   var bS = document.getElementById('owner-tab-summary-btn');
   var bF = document.getElementById('owner-tab-feed-btn');
+  if (d) d.style.display = 'none';
   if (s) s.style.display = (tab === 'summary') ? 'block' : 'none';
   if (f) f.style.display = (tab === 'feed') ? 'block' : 'none';
   [[bS, 'summary'], [bF, 'feed']].forEach(function (pair) {
@@ -18407,7 +18427,7 @@ function _ownerRenderSummary() {
       + '<span style="font-size:9px;color:rgba(255,255,255,.4);flex-shrink:0;margin-left:8px;">' + _ownerTimeAgo(row.lastSync) + '</span>'
       + '</div>'
       + '<p style="font-size:10px;color:#a78bfa;margin:0 0 8px;">' + esc(row.email) + '</p>'
-      + '<button onclick="_ownerSwitchToProject(' + i + ')" style="width:100%;padding:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">👁 Switch to Admin — Open Project</button>'
+      + '<button onclick="_ownerViewDetail(' + i + ')" style="width:100%;padding:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">👁 View Details (read-only)</button>'
       + '</div>';
   }).join('');
 }
@@ -18418,7 +18438,7 @@ function _ownerRenderFeed() {
   if (!_ownerAllRows.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">No activity yet</p>'; return; }
   wrap.innerHTML = _ownerAllRows.map(function (row, i) {
     var dt = row.lastSync ? new Date(row.lastSync).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-    return '<div onclick="_ownerSwitchToProject(' + i + ')" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;">'
+    return '<div onclick="_ownerViewDetail(' + i + ')" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;">'
       + '<span style="font-size:16px;flex-shrink:0;">🏗️</span>'
       + '<div style="flex:1;min-width:0;">'
       + '<p style="font-size:11px;font-weight:700;color:#fff;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(row.company) + '</p>'
@@ -18428,45 +18448,57 @@ function _ownerRenderFeed() {
   }).join('');
 }
 
-function _ownerSwitchToProject(i) {
+// ── Read-only project detail ────────────────────────────────────
+// Renders straight from the JSON already fetched into _ownerAllRows.
+// Deliberately does NOT call _applyFullBackup / write to localStorage /
+// touch AD or switchTab — there is no live app state to edit here.
+function _ownerCount(x) { return Array.isArray(x) ? x.length : (x && typeof x === 'object' ? Object.keys(x).length : 0); }
+
+function _ownerViewDetail(i) {
   var row = _ownerAllRows[i];
   if (!row) return;
-  try { sessionStorage.setItem('sanj_owner_viewing', JSON.stringify({ backup_key: row.backup_key, admin_id: row.admin_id, company: row.company, email: row.email })); } catch (e) {}
-  _applyFullBackup(row.data);
-  closeOwnerDashboard();
-  _ownerShowViewBar(row.company, row.email);
-  toast('👁 Viewing: ' + row.company, 'ok');
-  setTimeout(function () {
-    try {
-      AD = ld(); applyProfile();
-      if (typeof switchTab === 'function') switchTab('dashboard');
-    } catch (e) {}
-  }, 150);
-}
-
-function _ownerShowViewBar(company, email) {
-  var bar = document.getElementById('owner-viewbar');
-  var lbl = document.getElementById('owner-viewbar-label');
-  if (lbl) lbl.textContent = '👑 Owner viewing: ' + company + ' (' + email + ') — read-only';
-  if (bar) bar.classList.add('show');
-}
-
-function _ownerExitViewAs() {
-  try { sessionStorage.removeItem('sanj_owner_viewing'); } catch (e) {}
-  toast('Returning to your own dashboard…', 'ok');
-  setTimeout(function () { location.reload(); }, 400);
-}
-
-// Restore the view-bar if the owner reloaded the page mid-viewing
-(function _ownerRestoreBarOnLoad() {
+  var d = row.data || {};
+  var db = {};
+  try { db = d.db ? JSON.parse(d.db) : []; } catch (e) { db = []; }
+  var dprCount = _ownerCount(db);
+  var totalExpense = 0, totalWorkers = 0;
   try {
-    var raw = sessionStorage.getItem('sanj_owner_viewing');
-    if (raw) {
-      var v = JSON.parse(raw);
-      setTimeout(function () { _ownerShowViewBar(v.company, v.email); }, 400);
-    }
+    (Array.isArray(db) ? db : []).forEach(function (entry) {
+      if (entry && Array.isArray(entry.expenses)) {
+        entry.expenses.forEach(function (ex) { totalExpense += Number(ex.amount) || 0; });
+      }
+      if (entry && Array.isArray(entry.workers)) totalWorkers += entry.workers.length;
+    });
   } catch (e) {}
-})();
+
+  document.getElementById('owner-detail-title').textContent = row.company;
+  document.getElementById('owner-detail-sub').textContent = row.email + ' · last synced ' + _ownerTimeAgo(row.lastSync);
+
+  var body = document.getElementById('owner-detail-body');
+  body.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+    + '<div class="ownx-stat"><b>' + dprCount + '</b><span>DPR Entries</span></div>'
+    + '<div class="ownx-stat"><b>' + totalWorkers + '</b><span>Worker Logs</span></div>'
+    + '<div class="ownx-stat"><b>₹' + totalExpense.toLocaleString('en-IN') + '</b><span>Total Expenses</span></div>'
+    + '<div class="ownx-stat"><b>' + ((d.meta && d.meta.length) || 0) + '</b><span>Milestones/Meta</span></div>'
+    + '</div>'
+    + '<div class="ownx-card" style="margin-bottom:8px;">'
+    + '<p style="font-size:9px;font-weight:800;color:rgba(255,255,255,.4);text-transform:uppercase;margin:0 0 6px;">Company / GST</p>'
+    + '<p style="font-size:12px;color:#fff;margin:0;">' + esc((d.global_prof && d.global_prof.company) || row.company) + '</p>'
+    + '<p style="font-size:10px;color:rgba(255,255,255,.5);margin:2px 0 0;">' + esc((d.global_prof && d.global_prof.gst) || '—') + '</p>'
+    + '</div>'
+    + '<p style="text-align:center;font-size:9.5px;color:rgba(255,255,255,.35);margin:10px 0 0;">This is a read-only snapshot. To make changes, log in as that project\'s own admin.</p>';
+
+  document.getElementById('owner-summary-wrap').style.display = 'none';
+  document.getElementById('owner-feed-wrap').style.display = 'none';
+  document.getElementById('owner-detail-wrap').style.display = 'block';
+}
+
+function _ownerBackToSummary() {
+  var d = document.getElementById('owner-detail-wrap');
+  if (d) d.style.display = 'none';
+  switchOwnerTab('summary');
+}
 
 // ══════════════════════════════════════════════════════════════
 //  SALES — Building → Floor → Flat inventory
