@@ -777,10 +777,10 @@ self.addEventListener('fetch', function(e) {
         + '<span style="font-size:13px;flex-shrink:0">' + (active ? '✅' : '📁') + '</span>'
         + '<span style="font-size:12px;font-weight:' + (active?'700':'500') + ';color:' + (active?'#a5b4fc':'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(p.name) + '</span>'
         + '</div>'
+        // Share button — generate a join code for this project
+        + '<button data-proj-share="' + pid + '" title="Share / Join code" style="padding:10px 6px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#34d399\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">🔗</button>'
         // Edit button
-        + '<button data-proj-rename="' + pid + '" title="Rename" style="padding:10px 6px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#818cf8\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">✏️</button>'
-        // Share button
-        + '<button data-proj-share="' + pid + '" title="Share Access" style="padding:10px 8px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#34d399\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">🔗</button>'
+        + '<button data-proj-rename="' + pid + '" title="Rename" style="padding:10px 8px;background:transparent;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:14px;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.color=\'#818cf8\'" ontouchend="this.style.color=\'rgba(255,255,255,0.35)\'">✏️</button>'
         + '</div>';
     }).join('');
 
@@ -827,6 +827,14 @@ self.addEventListener('fetch', function(e) {
       var sh = e.target.closest('[data-proj-share]');
       var nb = e.target.closest('#proj-new-btn');
 
+      if (sh) {
+        var shid = sh.getAttribute('data-proj-share');
+        _projMenuOpen = false;
+        menu.style.display = 'none';
+        if (arrow) arrow.style.transform = '';
+        if (typeof openShareProjectModal === 'function') openShareProjectModal(shid);
+        return;
+      }
       if (sw) {
         var pid = sw.getAttribute('data-proj-switch');
         _projMenuOpen = false;
@@ -843,14 +851,6 @@ self.addEventListener('fetch', function(e) {
         _showProjectModal('✏️ Rename Project', rproj.name, function(newName) {
           renameProject(rid, newName);
         });
-        return;
-      }
-      if (sh) {
-        var shid = sh.getAttribute('data-proj-share');
-        _projMenuOpen = false;
-        menu.style.display = 'none';
-        if (arrow) arrow.style.transform = '';
-        openProjectShareModal(shid);
         return;
       }
       if (nb) {
@@ -881,223 +881,6 @@ self.addEventListener('fetch', function(e) {
   function _requireProject() {
     if (!window.currentProjectId) { toast('No active project', 'err'); return false; }
     return true;
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // PROJECT SHARE CODES — generate a login code scoped to one
-  // project. Anyone who logs in with this code gets read/write
-  // access to ONLY that project's data (like a project manager),
-  // never any other project on this account.
-  // The actual "log in with a code" screen is a separate feature;
-  // this stores the code (locally + in Supabase) so that flow can
-  // look it up later.
-  // ══════════════════════════════════════════════════════════════
-  function _genShareCode() {
-    // 8 chars, uppercase letters + digits, no ambiguous 0/O/1/I
-    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    var out = '';
-    for (var i = 0; i < 8; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
-    return out.slice(0,4) + '-' + out.slice(4);
-  }
-  function _projBackupKey(pid) {
-    if (!(typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id)) return '';
-    var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
-    return base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
-  }
-  // Best-effort cloud upsert so a future "login with code" screen can look
-  // this code up from any device. Fails silently (code still works locally /
-  // is still shown to the user) if the table isn't set up yet or offline.
-  function _pushShareCodeToCloud(proj) {
-    try {
-      if (typeof _sb === 'undefined' || !_sb || !proj.shareCode) return;
-      var backupKey = _projBackupKey(proj.id);
-      _sb.from('project_share_codes').upsert({
-        code: proj.shareCode,
-        project_id: proj.id,
-        project_name: proj.name || '',
-        backup_key: backupKey,
-        owner_uid: (typeof _adminSBUser !== 'undefined' && _adminSBUser) ? _adminSBUser.id : null,
-        role: 'manager',
-        permissions: 'read_write',
-        active: true,
-        created_at: new Date().toISOString()
-      }, { onConflict: 'project_id' }).then(function(res){
-        if (res && res.error) console.warn('Share code cloud sync failed (table may not exist yet):', res.error.message);
-      });
-    } catch(e) { console.warn('Share code cloud sync error:', e); }
-  }
-  function _revokeShareCodeInCloud(proj) {
-    try {
-      if (typeof _sb === 'undefined' || !_sb || !proj) return;
-      _sb.from('project_share_codes').update({ active: false }).eq('project_id', proj.id).then(function(){});
-    } catch(e) {}
-  }
-
-  function openProjectShareModal(pid) {
-    var proj = window.projects.find(function(p){ return p.id === pid; });
-    if (!proj) return;
-    if (!proj.shareCode) {
-      proj.shareCode = _genShareCode();
-      _saveProjects();
-      _pushShareCodeToCloud(proj);
-    }
-    _renderShareModal(proj);
-  }
-  function revokeShareCode(pid) {
-    var proj = window.projects.find(function(p){ return p.id === pid; });
-    if (!proj) return;
-    _revokeShareCodeInCloud(proj);
-    delete proj.shareCode;
-    _saveProjects();
-    closeProjectShareModal();
-    toast('Access code revoked', 'ok');
-  }
-  function copyShareCode() {
-    var el = document.getElementById('share-code-text');
-    if (!el) return;
-    var code = el.textContent.trim();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(code).then(function(){ toast('Code copied ✓', 'ok'); });
-    } else {
-      var ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta);
-      ta.select(); try { document.execCommand('copy'); } catch(e){}
-      document.body.removeChild(ta); toast('Code copied ✓', 'ok');
-    }
-  }
-  function shareShareCode() {
-    var el = document.getElementById('share-code-text');
-    var nameEl = document.getElementById('share-modal-proj-name');
-    if (!el) return;
-    var code = el.textContent.trim();
-    var pname = nameEl ? nameEl.textContent : 'this project';
-    var msg = 'Login code for "' + pname + '" on Sanjineer: ' + code + '\nOpen app.sanjineer.in and use "Login with code" to get access.';
-    if (navigator.share) {
-      navigator.share({ title: 'Sanjineer project access code', text: msg }).catch(function(){});
-    } else {
-      copyShareCode();
-    }
-  }
-  function closeProjectShareModal() {
-    var m = document.getElementById('project-share-modal');
-    if (m) m.remove();
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // JOIN A PROJECT BY CODE — the flip side of the share feature.
-  // Looks up the code, adds a local project entry pointing at the
-  // owner's cloud_backups row (via backup_key/owner_uid), then
-  // pulls their data so the joiner sees it immediately. All further
-  // push/pull for this project automatically targets that same row
-  // (see getSiteId / cloudBackupNow / _adminCloudPull patches).
-  // ══════════════════════════════════════════════════════════════
-  function joinProjectByCode(code, cb) {
-    if (typeof _sb === 'undefined' || !_sb) { toast('Cloud not available', 'err'); return; }
-    code = String(code || '').trim().toUpperCase();
-    if (!code) { toast('Enter a code', 'err'); return; }
-    if (!(typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id)) {
-      // Not logged in yet — remember the code and prompt login first.
-      // IMPORTANT: close this modal first, otherwise it sits on top (z-index
-      // 99999) of whatever login screen we're about to reveal and blocks it.
-      closeJoinCodeModal();
-      try { localStorage.setItem('sanj_pending_join_code', code); } catch(e) {}
-      toast('Sign in first — the project will join automatically once you\'re logged in', 'ok');
-      var onboard = document.getElementById('auth-onboard');
-      if (onboard && onboard.style.display !== 'none' && typeof obSwitchAuthTab === 'function') {
-        // Still on the onboarding screen — switch it to the cloud login tab
-        var cs = document.getElementById('ob-cloud-section');
-        var ls = document.getElementById('ob-local-section');
-        if (cs) { if (ls) ls.style.display = 'none'; cs.style.display = 'block'; obSwitchAuthTab('login'); }
-      } else if (typeof openCloudModal === 'function') {
-        // Onboarding already dismissed — use the cloud sync modal instead
-        openCloudModal();
-        if (typeof switchCloudTab === 'function') switchCloudTab('admin');
-      }
-      return;
-    }
-    toast('Looking up code…', 'ok');
-    _sb.from('project_share_codes').select('*').eq('code', code).eq('active', true).maybeSingle().then(function(res) {
-      if (res.error || !res.data) { toast('Invalid or expired code', 'err'); return; }
-      var rec = res.data;
-      var already = window.projects.find(function(p){ return p.joinedBackupKey === rec.backup_key; });
-      if (already) {
-        switchProject(already.id);
-        toast('Already joined — switched to "' + already.name + '"', 'ok');
-        if (cb) cb(already);
-        return;
-      }
-      var proj = createProject(rec.project_name || 'Joined Project');
-      proj.joinedBackupKey = rec.backup_key;
-      proj.joinedOwnerUid = rec.owner_uid;
-      proj.joinedRole = rec.role || 'manager';
-      proj.joinedCode = code;
-      _saveProjects();
-      switchProject(proj.id);
-      toast('Joined "' + proj.name + '" ✓ — pulling data…', 'ok');
-      setTimeout(function() {
-        if (typeof _adminCloudPull === 'function') _adminCloudPull(false);
-      }, 300);
-      if (cb) cb(proj);
-    }).catch(function(){ toast('Could not reach server', 'err'); });
-  }
-
-  function openJoinCodeModal() {
-    var existing = document.getElementById('join-code-modal');
-    if (existing) existing.remove();
-    var modal = document.createElement('div');
-    modal.id = 'join-code-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
-    modal.innerHTML =
-      '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 20px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
-      + '<p style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.5);margin:0 0 4px">🔗 JOIN A PROJECT</p>'
-      + '<p style="font-size:11.5px;color:rgba(255,255,255,0.55);line-height:1.5;margin:0 0 14px">Enter the code your contractor / site owner shared with you. You\'ll get read &amp; write access to only that project.</p>'
-      + '<input id="join-code-input" type="text" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" style="width:100%;box-sizing:border-box;padding:12px;background:#0f0e1a;border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;font-size:20px;font-weight:800;letter-spacing:2px;text-align:center;text-transform:uppercase;outline:none;margin-bottom:14px;font-family:monospace" oninput="this.value=this.value.toUpperCase()">'
-      + '<div style="display:flex;gap:10px">'
-      + '<button onclick="closeJoinCodeModal()" style="flex:1;padding:11px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer">Cancel</button>'
-      + '<button onclick="submitJoinCode()" style="flex:1;padding:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer">Join</button>'
-      + '</div></div>';
-    document.body.appendChild(modal);
-    modal.addEventListener('pointerdown', function(e){ if (e.target===modal) closeJoinCodeModal(); });
-    setTimeout(function(){ var i=document.getElementById('join-code-input'); if(i) i.focus(); }, 80);
-  }
-  function closeJoinCodeModal() {
-    var m = document.getElementById('join-code-modal');
-    if (m) m.remove();
-  }
-  function submitJoinCode() {
-    var el = document.getElementById('join-code-input');
-    var code = el ? el.value : '';
-    joinProjectByCode(code, function(){ closeJoinCodeModal(); });
-  }
-  function _renderShareModal(proj) {
-    closeProjectShareModal();
-    var hasCloud = (typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id);
-    var modal = document.createElement('div');
-    modal.id = 'project-share-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
-    modal.innerHTML =
-      '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 20px;width:100%;max-width:340px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
-      + '<div style="display:flex;align-items:center;justify-content:between;margin-bottom:4px">'
-      + '<p style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.5);margin:0;flex:1">🔗 SHARE PROJECT ACCESS</p>'
-      + '</div>'
-      + '<p id="share-modal-proj-name" style="font-size:16px;font-weight:900;color:#fff;margin:0 0 14px">' + _escHtml(proj.name) + '</p>'
-      + (hasCloud
-        ? ('<div style="background:#0f0e1a;border:1.5px dashed rgba(129,140,248,0.5);border-radius:12px;padding:16px;text-align:center;margin-bottom:12px">'
-          + '<p id="share-code-text" style="font-size:26px;font-weight:900;letter-spacing:2px;color:#a5b4fc;margin:0;font-family:monospace">' + proj.shareCode + '</p>'
-          + '</div>'
-          + '<p style="font-size:11.5px;color:rgba(255,255,255,0.55);line-height:1.5;margin:0 0 16px">Share this code with your engineer. Anyone who logs in with it gets <b style="color:#a5b4fc">read &amp; write access to only this project</b> — like a project manager. They will never see your other sites.</p>'
-          + '<div style="display:flex;gap:8px;margin-bottom:8px">'
-          + '<button onclick="copyShareCode()" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer">📋 Copy</button>'
-          + '<button onclick="shareShareCode()" style="flex:1;padding:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer">📤 Share</button>'
-          + '</div>'
-          + '<button onclick="revokeShareCode(\'' + _escHtml(proj.id) + '\')" style="width:100%;padding:9px;background:transparent;border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#fca5a5;font-size:11.5px;font-weight:700;cursor:pointer">🚫 Revoke Access</button>')
-        : ('<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:14px;margin-bottom:14px">'
-          + '<p style="font-size:12px;color:#fde68a;line-height:1.5;margin:0">⚠️ Sign in to your account first (Settings → cloud sync) so this code can be looked up from your engineer\'s device.</p>'
-          + '</div>')
-      )
-      + '<button onclick="closeProjectShareModal()" style="width:100%;padding:10px;margin-top:6px;background:rgba(255,255,255,0.06);border:none;border-radius:10px;color:rgba(255,255,255,0.7);font-size:12.5px;font-weight:700;cursor:pointer">Close</button>'
-      + '</div>';
-    document.body.appendChild(modal);
-    modal.addEventListener('pointerdown', function(e){ if (e.target===modal) closeProjectShareModal(); });
   }
 
   // ── PRO upgrade popup ─────────────────────────────────────────
@@ -1171,16 +954,6 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       updateCloudBtn && updateCloudBtn();
       refreshCloudModalState && refreshCloudModalState();
     }
-    // If a "Join a Project" code was pending from before this device signed
-    // in (or before the OTP screen was completed), finish it now — exactly
-    // once — so a restored session also completes the join.
-    try {
-      var pendingCode = localStorage.getItem('sanj_pending_join_code');
-      if (pendingCode && typeof joinProjectByCode === 'function') {
-        localStorage.removeItem('sanj_pending_join_code');
-        setTimeout(function(){ joinProjectByCode(pendingCode); }, 800);
-      }
-    } catch(e) {}
   }
   function _onSBSignedOut() {
     _adminSBUser = null;
@@ -2247,11 +2020,6 @@ function _launchApp(){
       </div>
     </div>
 
-    <!-- ── Join an existing project via code ── -->
-    <button onclick="openJoinCodeModal()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 16px;background:rgba(52,211,153,0.1);border:1.5px dashed rgba(52,211,153,0.4);border-radius:14px;color:#6ee7b7;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:1.2rem;">
-      🔗 Have a project code? <span style="text-decoration:underline">Join a Project</span>
-    </button>
-
     <!-- ── Cloud Toggle Card ── -->
     <div style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:16px 18px;margin-bottom:1.2rem;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -2430,14 +2198,6 @@ function _waitSb(cb) {
 // ── Shared: handle successful OTP verify → check subscription ─
 function _handleOtpSuccess(user, email, onDismiss) {
   _adminSBUser = user;
-  // If the person tapped "Join a Project" before signing in, finish that now
-  try {
-    var pendingCode = localStorage.getItem('sanj_pending_join_code');
-    if (pendingCode && typeof joinProjectByCode === 'function') {
-      localStorage.removeItem('sanj_pending_join_code');
-      setTimeout(function(){ joinProjectByCode(pendingCode); }, 800);
-    }
-  } catch(e) {}
   try { localStorage.setItem('sanj_cloud_choice','cloud'); } catch(e) {}
   safeLS.setItem(ADMIN_ROLE_KEY || 'cm_admin_role', 'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY || 'cm_admin_email', email);
@@ -2766,33 +2526,28 @@ function doAdminSignup() { cmSendSignupOtp(); }
     <div class="flex-1 flex items-center justify-center min-w-0">
       <!-- Hidden kept for JS compat -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
-      <button id="cloud-hdr-btn" class="cloud-btn flex-shrink-0" onclick="openCloudModal()" title="Cloud" style="display:none">
-        <span id="cloud-hdr-icon" style="font-size:17px;line-height:1">🔒</span>
-        <span id="cloud-hdr-label" style="font-size:9px!important;color:rgba(255,255,255,0.8);line-height:1;margin-top:1px">Cloud</span>
+      <button id="cloud-hdr-btn" class="cloud-btn flex-shrink-0" onclick="openCloudModal()" title="Admin" style="display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
+        <span id="cloud-hdr-label" style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Admin</span>
       </button>
-      <!-- OWNER button — only visible when the logged-in admin's email === OWNER_EMAIL -->
-      <button id="owner-hdr-btn" class="cloud-btn flex-shrink-0" onclick="openOwnerDashboard()" title="Owner Dashboard" style="display:none;border-color:rgba(251,191,36,0.5)">
-        <span style="font-size:17px;line-height:1">👑</span>
-        <span style="font-size:9px!important;color:#fbbf24;line-height:1;margin-top:1px">Owner</span>
+      <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;">
+        <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
       </button>
       <!-- Stacked: company above, project dropdown below -->
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;max-width:200px;">
         <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;letter-spacing:.01em;max-width:190px;text-align:center"></p>
         <div id="project-dropdown-wrap" style="flex-shrink:0;display:flex;align-items:center;justify-content:center"></div>
       </div>
+      <!-- QDPR — mirrors Admin/Owner on the other side of center for symmetry -->
+      <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;flex-shrink:0;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
+        <span style="font-size:10px;line-height:1;font-weight:800;color:#fff;">QDPR</span>
+      </button>
       <!-- Engineer name hidden — preserved for JS compat -->
       <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;display:none"></p>
     </div>
-    <!-- RIGHT: Calculator + Total Spends -->
+    <!-- RIGHT: Total Spends -->
     <div class="text-right flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
       <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <!-- Compact QDPR trigger — left of spend amount -->
-        <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:4px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
-          <span style="font-size:12px;line-height:1">📆</span><span style="font-size:11px;line-height:1;font-weight:800;color:#fff;letter-spacing:.2px">QDPR</span>
-        </button>
-        <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
-      </div>
+      <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
     </div>
   </div>
 </header>
@@ -2921,15 +2676,6 @@ function doAdminSignup() { cmSendSignupOtp(); }
       <div style="display:flex;flex-direction:column;gap:1px">
         <span id="sett-login-title">Login / Cloud</span>
         <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sett-login-sub">Sign in for backup &amp; sync</span>
-      </div>
-    </button>
-
-    <!-- Sales — Building / Floor / Flat inventory -->
-    <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();setTimeout(openSalesModal,360)" id="sett-sales-btn">
-      <span style="font-size:15px;flex-shrink:0">🏢</span>
-      <div style="display:flex;flex-direction:column;gap:1px">
-        <span>Sales</span>
-        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Buildings · Floors · Flats</span>
       </div>
     </button>
 
@@ -3489,11 +3235,7 @@ function _applyHiddenTabs() {
   _TAB_DEFS.forEach(function(t) {
     var isHidden = _hiddenTabs.indexOf(t.id) !== -1;
     document.querySelectorAll('.tab-btn[data-tab="' + t.id + '"]').forEach(function(btn) {
-      // A stylesheet rule sets `.tab-btn { display: inline-flex !important }`,
-      // which beats a plain inline style — so this must also be !important
-      // to actually hide the tab.
-      if (isHidden) btn.style.setProperty('display', 'none', 'important');
-      else btn.style.removeProperty('display');
+      btn.style.display = isHidden ? 'none' : '';
     });
   });
   // Update sub-label
@@ -4306,13 +4048,13 @@ document.addEventListener('DOMContentLoaded', function() {
         <option value="">Select Team</option>
       </select>
       <input type="number" id="w-wage" placeholder="Regular Rate ₹/hr" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <div>
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:3px">
-          <input type="checkbox" id="w-is-staff" onchange="toggleStaffFields()" style="width:13px;height:13px;accent-color:#7c3aed;cursor:pointer">
-          <label for="w-is-staff" style="font-size:10px;font-weight:800;color:#7c3aed;cursor:pointer;-webkit-tap-highlight-color:transparent">🧑‍💼 Staff</label>
-        </div>
-        <input type="number" id="w-ot-rate" placeholder="OT Rate ₹/hr (opt)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 w-full" style="box-sizing:border-box">
-        <input type="number" id="w-monthly-salary" placeholder="Monthly Salary ₹" step="any" class="px-3 py-2 border border-purple-200 rounded-xl text-sm focus:outline-none focus:border-purple-400 w-full" style="display:none;background:#faf5ff;box-sizing:border-box">
+      <input type="number" id="w-ot-rate" placeholder="OT Rate ₹/hr (opt)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <div id="w-staff-box" style="display:flex;align-items:center;gap:5px;height:38px;padding:0 8px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:0.75rem;box-sizing:border-box;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;">
+          <input type="checkbox" id="w-is-staff" onchange="toggleStaffFields()" style="width:14px;height:14px;accent-color:#7c3aed;cursor:pointer;">
+          <span id="w-staff-label-text" style="font-size:9px;font-weight:700;color:#5b21b6;line-height:1.1;white-space:nowrap;">🧑‍💼 Staff (Fixed Salary)</span>
+        </label>
+        <input type="number" id="w-monthly-salary" placeholder="Monthly Salary ₹" step="any" style="display:none;border:none;background:transparent;outline:none;font-size:12px;width:100%;min-width:0;color:#5b21b6;font-weight:700;">
       </div>
     </div>
     <button onclick="addWorker()" class="g-tor-emerald500-teal500 w-full text-white rounded-xl font-semibold active:scale-95 mt-2" style="font-size:11px;padding:8px 12px">✅ Add Worker</button>
@@ -5623,21 +5365,9 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="closeQdprProjectModal()" class="text-gray-400 text-xl">✕</button>
     </div>
     <input type="hidden" id="qs-edit-pid" value="">
-    <!-- Create New / Join with Code toggle (hidden while editing an existing project) -->
-    <div id="qdpr-proj-mode-toggle" class="flex gap-1 bg-gray-100 rounded-xl p-1 mb-3">
-      <button id="qdpr-mode-new-btn" onclick="_qdprSetProjMode('new')" class="flex-1 py-1.5 rounded-lg text-xs font-bold" style="background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff">➕ New Project</button>
-      <button id="qdpr-mode-join-btn" onclick="_qdprSetProjMode('join')" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-gray-500">🔗 Join with Code</button>
-    </div>
-    <!-- New project fields -->
-    <div id="qdpr-proj-new-fields" class="grid grid-cols-1 gap-2 mb-2">
+    <div class="grid grid-cols-1 gap-2 mb-2">
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Project Name</label><input type="text" id="qs-name" placeholder="e.g. Rampur Residency" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Site Address</label><input type="text" id="qs-address" placeholder="Full site address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-    </div>
-    <!-- Join with code fields -->
-    <div id="qdpr-proj-join-fields" class="mb-2" style="display:none">
-      <label class="text-[10px] font-bold text-gray-500 block mb-1">Project Code</label>
-      <input type="text" id="qdpr-join-code-input" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" class="w-full px-3 py-3 border border-gray-200 rounded-xl text-center font-mono text-lg font-extrabold tracking-widest focus:outline-none focus:border-indigo-400" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
-      <p class="text-[10px] text-gray-400 mt-1.5">Get this code from the site owner/contractor. You'll get read &amp; write access to only that project.</p>
     </div>
     <button id="qdpr-project-modal-save-btn" onclick="saveQdprSite()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">➕ Save Project</button>
   </div>
@@ -6063,8 +5793,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
       <!-- TAB CHIPS: Login & Create only -->
       <div id="cloud-tab-switcher" style="display:flex;gap:5px;padding:0 .9rem .55rem;">
-        <button id="ctab-admin-btn" onclick="switchCloudTab('admin')" style="flex:1;height:34px;padding:0 12px;font-size:12px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 3px 12px rgba(79,70,229,.45);">&#128273; Login</button>
-        <button id="ctab-create-btn" onclick="switchCloudTab('create')" style="flex:1;height:34px;padding:0 12px;font-size:12px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">&#10024; Create Account</button>
+        <button id="ctab-admin-btn" onclick="switchCloudTab('admin')" style="flex:1;height:34px;padding:0 10px;font-size:11px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 3px 12px rgba(79,70,229,.45);">&#128273; Login</button>
+        <button id="ctab-create-btn" onclick="switchCloudTab('create')" style="flex:1;height:34px;padding:0 10px;font-size:11px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">&#10024; Create</button>
+        <button id="ctab-join-btn" onclick="switchCloudTab('join')" style="flex:1;height:34px;padding:0 10px;font-size:11px;font-weight:800;border:none;border-radius:10px;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.1);">&#129309; Join Project</button>
       </div>
       <!-- Hidden viewer tab div kept for JS compatibility -->
       <div id="ctab-viewer-btn" style="display:none;"></div>
@@ -6208,6 +5939,35 @@ service cloud.firestore {
               <span style="font-size:11px;">📩</span>
               <p style="font-size:9px;color:#c4b5fd;">Need help? DM <a href="https://ig.me/m/sanjineer" target="_blank" rel="noopener" style="color:#f9a8d4;font-weight:800;text-decoration:none;">@Sanjineer</a> on Instagram</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JOIN PROJECT TAB — engineer/collaborator login via short code -->
+      <div id="ctab-join" style="display:none;">
+        <div id="ctab-join-prelogin" style="background:rgba(16,185,129,.1);border:1px solid rgba(52,211,153,.25);border-radius:12px;padding:.65rem;margin-bottom:.65rem;">
+          <p style="font-size:12px;font-weight:900;color:#a7f3d0;margin-bottom:.25rem;">&#129309; Join a Project</p>
+          <p style="font-size:9px;color:#6ee7b7;margin-bottom:.55rem;opacity:.85;">Got a code from your site admin? Enter it below to get access to that project only — read &amp; write, no other sites visible.</p>
+          <label style="font-size:9px;font-weight:700;color:#6ee7b7;display:block;margin-bottom:2px;">Your Name</label>
+          <input id="join-member-name" type="text" class="auth-input" placeholder="e.g. Ramesh — Site Engineer" style="margin-bottom:6px;">
+          <label style="font-size:9px;font-weight:700;color:#6ee7b7;display:block;margin-bottom:2px;">Project Code</label>
+          <input id="join-code-input" type="text" inputmode="text" maxlength="8" placeholder="e.g. 7K4QXP" autocomplete="off" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(110,231,183,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8)">
+          <button onclick="doJoinProject()" id="join-code-btn" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:11px;font-weight:800;font-size:.95rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);">&#129309; Join Project</button>
+          <p id="join-code-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.35rem;display:none;"></p>
+        </div>
+        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.55rem .75rem;">
+          <p style="font-size:9px;font-weight:700;color:#34d399;margin-bottom:.4rem;">&#8505;&#65039; About Joining</p>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:12px;">&#128274;</span><p style="font-size:9px;color:#a7f3d0;">You only see the one project tied to your code</p></div>
+            <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:12px;">&#9997;&#65039;</span><p style="font-size:9px;color:#a7f3d0;">Admin decides if you get Read-only or Read &amp; Write access</p></div>
+            <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:12px;">&#128683;</span><p style="font-size:9px;color:#a7f3d0;">Admin can revoke your code anytime from the project menu</p></div>
+          </div>
+        </div>
+        <div id="ctab-join-postlogin" style="display:none;">
+          <div style="background:rgba(16,185,129,.12);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:.75rem;text-align:center;">
+            <p style="font-size:13px;font-weight:900;color:#a7f3d0;margin-bottom:4px;">&#9989; Joined: <span id="join-active-project">—</span></p>
+            <p id="join-active-role" style="font-size:10px;color:#6ee7b7;margin-bottom:10px;">—</p>
+            <button onclick="_engineerLogout()" style="padding:.5rem 1rem;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.35);color:#fca5a5;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;">Leave Project</button>
           </div>
         </div>
       </div>
@@ -7513,15 +7273,23 @@ function delDeptEntry(i) {
 // ============================================================
 function toggleStaffFields(){
   var chk = document.getElementById('w-is-staff');
+  var labelText = document.getElementById('w-staff-label-text');
+  var salaryInput = document.getElementById('w-monthly-salary');
   var wageEl = document.getElementById('w-wage');
   var otEl = document.getElementById('w-ot-rate');
-  var salEl = document.getElementById('w-monthly-salary');
   if (!chk) return;
-  // Staff / team-salaried workers are paid a fixed monthly salary —
-  // hide Regular Rate, and swap the OT Rate box for a Monthly Salary box.
-  if (wageEl) wageEl.style.display = chk.checked ? 'none' : '';
-  if (otEl) otEl.style.display = chk.checked ? 'none' : '';
-  if (salEl) salEl.style.display = chk.checked ? '' : 'none';
+  var on = chk.checked;
+  // Swap the label text for the salary input right in the same box — no shift, no animation
+  if (labelText) labelText.style.display = on ? 'none' : '';
+  if (salaryInput) {
+    salaryInput.style.display = on ? 'block' : 'none';
+    if (on) setTimeout(function(){ salaryInput.focus(); }, 0);
+  }
+  // Staff / team-salaried workers are paid a fixed monthly salary — the hourly-rate
+  // fields aren't needed, but keep their grid slot reserved (visibility, not display)
+  // so nothing else on the page shifts.
+  if (wageEl) { wageEl.style.visibility = on ? 'hidden' : 'visible'; wageEl.disabled = on; }
+  if (otEl)   { otEl.style.visibility   = on ? 'hidden' : 'visible'; otEl.disabled   = on; }
 }
 // Selecting a Team auto-switches the worker to fixed-monthly-salary mode:
 // hourly rate fields hide, only Role + Monthly Salary remain visible.
@@ -7947,22 +7715,6 @@ function changeQdprDate(v){
 }
 
 // ── Projects CRUD (every project saved in the app is a QDPR "site") ────
-var _qdprProjMode = 'new';
-function _qdprSetProjMode(mode){
-  _qdprProjMode = mode;
-  var newBtn = document.getElementById('qdpr-mode-new-btn');
-  var joinBtn = document.getElementById('qdpr-mode-join-btn');
-  var newFields = document.getElementById('qdpr-proj-new-fields');
-  var joinFields = document.getElementById('qdpr-proj-join-fields');
-  var saveBtn = document.getElementById('qdpr-project-modal-save-btn');
-  var activeStyle = 'background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff';
-  var inactiveStyle = 'background:transparent;color:#6b7280';
-  if (newBtn) newBtn.style.cssText += ';' + (mode==='new' ? activeStyle : inactiveStyle);
-  if (joinBtn) joinBtn.style.cssText += ';' + (mode==='join' ? activeStyle : inactiveStyle);
-  if (newFields) newFields.style.display = (mode==='new') ? 'grid' : 'none';
-  if (joinFields) joinFields.style.display = (mode==='join') ? 'block' : 'none';
-  if (saveBtn) saveBtn.textContent = (mode==='join') ? '🔗 Join Project' : '➕ Save Project';
-}
 function openQdprProjectModal(pid){
   var modal = document.getElementById('qdpr-project-modal');
   if (!modal) return;
@@ -7971,9 +7723,6 @@ function openQdprProjectModal(pid){
   var pidEl = document.getElementById('qs-edit-pid');
   var nameEl = document.getElementById('qs-name');
   var addrEl = document.getElementById('qs-address');
-  var modeToggle = document.getElementById('qdpr-proj-mode-toggle');
-  var joinCodeEl = document.getElementById('qdpr-join-code-input');
-  if (joinCodeEl) joinCodeEl.value = '';
   if (pid) {
     var proj = (window.projects||[]).find(function(p){ return p.id===pid; });
     if (titleEl) titleEl.textContent = '✏️ Edit Project';
@@ -7981,15 +7730,12 @@ function openQdprProjectModal(pid){
     if (pidEl) pidEl.value = pid;
     if (nameEl) nameEl.value = proj ? (proj.name||'') : '';
     if (addrEl) addrEl.value = proj ? (proj.address||'') : '';
-    if (modeToggle) modeToggle.style.display = 'none'; // can't switch mode while editing
-    _qdprSetProjMode('new');
   } else {
     if (titleEl) titleEl.textContent = '📆 Add Project';
+    if (saveBtn) saveBtn.textContent = '➕ Save Project';
     if (pidEl) pidEl.value = '';
     if (nameEl) nameEl.value = '';
     if (addrEl) addrEl.value = '';
-    if (modeToggle) modeToggle.style.display = 'flex';
-    _qdprSetProjMode('new');
   }
   modal.style.display = 'flex';
 }
@@ -7998,20 +7744,9 @@ function closeQdprProjectModal(){
   if (modal) modal.style.display = 'none';
 }
 function saveQdprSite(){
-  var editPid = (document.getElementById('qs-edit-pid').value||'').trim();
-  if (!editPid && _qdprProjMode === 'join') {
-    var code = (document.getElementById('qdpr-join-code-input').value||'').trim();
-    if (!code) { toast('Enter a project code','err'); return; }
-    if (typeof joinProjectByCode === 'function') {
-      joinProjectByCode(code, function(){
-        closeQdprProjectModal();
-        renderQdprSites();
-      });
-    }
-    return;
-  }
   var name = (document.getElementById('qs-name').value||'').trim();
   var address = (document.getElementById('qs-address').value||'').trim();
+  var editPid = (document.getElementById('qs-edit-pid').value||'').trim();
   if (!name) { toast('Enter project name','err'); return; }
   if (editPid) {
     // Edit existing project
@@ -12872,13 +12607,6 @@ var _cloudSyncTimer = null;
 function isCloudActivated() { return safeLS.getItem(CLOUD_KEY) === '1'; }
 function getFbConfig() { try { return JSON.parse(safeLS.getItem(CLOUD_FB_CFG) || 'null'); } catch(e) { return null; } }
 function getSiteId() {
-  // Joined projects (added via someone else's share code) sync through the
-  // SAME cloud_backups row as the project owner — using their backup_key.
-  var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; });
-  if (curProj && curProj.joinedBackupKey) {
-    safeLS.setItem(CLOUD_SITE_ID, curProj.joinedBackupKey);
-    return curProj.joinedBackupKey;
-  }
   if (_adminSBUser && _adminSBUser.id) {
     var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
     // Project-aware: each project gets its own backup_key row in cloud_backups
@@ -12895,23 +12623,25 @@ function getSiteId() {
 // -- Header cloud button update --
 function updateCloudBtn() {
   var btn  = document.getElementById('cloud-hdr-btn');
-  var icon = document.getElementById('cloud-hdr-icon');
   var lbl  = document.getElementById('cloud-hdr-label');
-  var centerIcon = document.getElementById('cloud-hdr-icon-center');
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   if (btn) {
-    if (isAdmin) {
-      btn.classList.add('active-cloud');
-      if (icon) icon.textContent = '☁️';
-      if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = isAdmin ? '#86efac' : '#fbbf24'; }
+    if (window._ENGINEER_MODE) {
+      btn.style.display = 'none';
     } else {
-      btn.classList.remove('active-cloud');
-      if (icon) icon.textContent = '🔒';
-      if (lbl)  { lbl.textContent = 'Cloud'; lbl.style.color = 'rgba(255,255,255,0.6)'; }
+      btn.style.display = 'flex';
+      if (isAdmin) { btn.classList.add('active-cloud'); if (lbl) lbl.style.color = '#86efac'; }
+      else { btn.classList.remove('active-cloud'); if (lbl) lbl.style.color = 'rgba(255,255,255,0.85)'; }
     }
   }
-  // Update the visible center icon too
-  if (centerIcon) centerIcon.textContent = isAdmin ? '☁️' : '🔒';
+  updateOwnerBtn();
+}
+
+function updateOwnerBtn() {
+  var btn = document.getElementById('owner-hdr-btn');
+  if (!btn) return;
+  var isFullyActive = (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') && !!window._sbSubActive;
+  btn.style.display = (isFullyActive && !window._ENGINEER_MODE) ? 'flex' : 'none';
 }
 
 // -- Open / Close Cloud Modal --
@@ -12934,7 +12664,7 @@ function closeCloudModal() { document.getElementById('cloud-modal').classList.re
 
 // ── Tab switcher ────────────────────────────────────────────────
 function switchCloudTab(tab) {
-  ['admin','create','viewer'].forEach(function(t) {
+  ['admin','create','viewer','join'].forEach(function(t) {
     var panel = document.getElementById('ctab-' + t);
     var btn   = document.getElementById('ctab-' + t + '-btn');
     if (!panel || !btn) return;
@@ -12943,13 +12673,13 @@ function switchCloudTab(tab) {
     if (active) {
       btn.style.background = t === 'admin'
         ? 'linear-gradient(135deg,#4f46e5,#7c3aed)'
-        : t === 'create'
+        : (t === 'create' || t === 'join')
         ? 'linear-gradient(135deg,#059669,#10b981)'
         : 'linear-gradient(135deg,#d97706,#f59e0b)';
       btn.style.color = '#fff';
       btn.style.boxShadow = t === 'admin'
         ? '0 4px 14px rgba(79,70,229,.5)'
-        : t === 'create'
+        : (t === 'create' || t === 'join')
         ? '0 4px 14px rgba(5,150,105,.4)'
         : '0 4px 14px rgba(217,119,6,.45)';
       btn.style.border = 'none';
@@ -12960,6 +12690,7 @@ function switchCloudTab(tab) {
       btn.style.border = '1px solid rgba(255,255,255,.1)';
     }
   });
+  if (tab === 'join' && typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
 }
 
 function refreshCloudModalState() {
@@ -13258,10 +12989,8 @@ function cloudBackupNow(silent) {
   }
 
   function _doPush(payload) {
-    var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; });
-    var pushAdminId = (curProj && curProj.joinedOwnerUid) ? curProj.joinedOwnerUid : _adminSBUser.id;
     _sb.from('cloud_backups').upsert({
-      admin_id: pushAdminId, backup_key: siteId, data: payload
+      admin_id: _adminSBUser.id, backup_key: siteId, data: payload
     }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
       if (r.error) { if (!silent) toast('Backup failed: ' + r.error.message, 'err'); return; }
       _lastCloudTimestamp = payload.lastSync;
@@ -13394,11 +13123,9 @@ function _adminCloudPull(silent) {
   if (!_sb || !_adminSBUser) return;
   var siteId = getSiteId();
   if (!siteId) return;
-  var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; });
-  var pullAdminId = (curProj && curProj.joinedOwnerUid) ? curProj.joinedOwnerUid : _adminSBUser.id;
   _sb.from('cloud_backups')
     .select('data,updated_at')
-    .eq('admin_id', pullAdminId)
+    .eq('admin_id', _adminSBUser.id)
     .eq('backup_key', siteId)
     .single()
     .then(function(r) {
@@ -13461,6 +13188,12 @@ function startAutoSync() {
 // ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
 var _cloudPushTimer = null;
 function _scheduleCloudPush() {
+  // Engineer/collaborator sessions (joined via project code) push through their own
+  // scoped RPC channel instead of the admin cloud_backups path.
+  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
+    if (typeof _engineerSchedulePush === 'function') _engineerSchedulePush();
+    return;
+  }
   if (!isCloudActivated || typeof isCloudActivated !== 'function') return;
   if (!isCloudActivated()) return;
   if (_cloudPushTimer) clearTimeout(_cloudPushTimer);
@@ -18228,547 +17961,523 @@ document.addEventListener('keydown',function(e){
 document.addEventListener('DOMContentLoaded',function(){_cBuildStd();_cBuildSci();_cBuildUnitNumpad();calcUnitCatChange();});
 </script>
 
-<!-- ══════════════════════════════════════════════════════════════
-     OWNER DASHBOARD  +  SALES (Building / Floor / Flat) MODULE
-     Added by Claude — see owner_and_sales_schema.sql for the DB side.
-═══════════════════════════════════════════════════════════════════ -->
-<style>
-  #owner-modal, #sales-modal { display:none; position:fixed; inset:0; z-index:9998; align-items:center; justify-content:center; background:rgba(0,0,0,.7); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); padding:14px; }
-  #owner-modal.show, #sales-modal.show { display:flex; }
-  .ownx-box { width:100%; max-width:460px; max-height:88vh; overflow-y:auto; background:linear-gradient(160deg,#1a1740 0%,#2d2a6e 55%,#3d1a6e 100%); border-radius:20px; padding:16px; box-shadow:0 24px 60px rgba(0,0,0,.6); }
-  .ownx-card { background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:12px; }
-  .ownx-pill { font-size:9px; font-weight:800; padding:2px 8px; border-radius:99px; }
-  .ownx-x { width:26px; height:26px; border-radius:50%; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.07); color:#fff; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-  .ownx-back { background:none; border:none; color:#a78bfa; font-size:11px; font-weight:800; cursor:pointer; padding:4px 0; display:flex; align-items:center; gap:4px; }
-  .ownx-stat { background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px; text-align:center; }
-  .ownx-stat b { display:block; font-size:15px; color:#fff; }
-  .ownx-stat span { font-size:9px; color:rgba(255,255,255,.5); font-weight:700; text-transform:uppercase; }
-  .ownx-readonly-badge { display:inline-block; font-size:9px; font-weight:800; padding:3px 8px; border-radius:99px; background:rgba(52,211,153,.15); color:#6ee7b7; border:1px solid rgba(52,211,153,.35); }
-</style>
-
-<!-- ══════════ OWNER DASHBOARD MODAL ══════════ -->
-<div id="owner-modal" onclick="if(event.target===this)closeOwnerDashboard()">
-  <div class="ownx-box" onclick="event.stopPropagation()">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p style="font-size:14px;font-weight:900;color:#fff;margin:0;">👑 Owner Dashboard</p>
-      <button class="ownx-x" onclick="closeOwnerDashboard()">✕</button>
-    </div>
-    <div style="display:flex;gap:6px;margin-bottom:12px;">
-      <button id="owner-tab-summary-btn" onclick="switchOwnerTab('summary')" style="flex:1;padding:7px 0;border-radius:9px;border:1px solid rgba(255,255,255,.12);font-size:11px;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">📊 Summary</button>
-      <button id="owner-tab-feed-btn" onclick="switchOwnerTab('feed')" style="flex:1;padding:7px 0;border-radius:9px;border:1px solid rgba(255,255,255,.12);font-size:11px;font-weight:800;cursor:pointer;background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);">🕒 Activity Feed</button>
-    </div>
-    <div id="owner-summary-wrap"></div>
-    <div id="owner-feed-wrap" style="display:none;"></div>
-
-    <!-- Read-only detail screen for a single project. Rendered entirely
-         from the already-fetched backup JSON — never touches the app's
-         own local storage or live state, so there is nothing to edit. -->
-    <div id="owner-detail-wrap" style="display:none;">
-      <button class="ownx-back" onclick="_ownerBackToSummary()">‹ All Sites</button>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px;">
-        <p id="owner-detail-title" style="font-size:13px;font-weight:900;color:#fff;margin:0;"></p>
-        <span class="ownx-readonly-badge">👁 Read-only</span>
-      </div>
-      <p id="owner-detail-sub" style="font-size:10px;color:#a78bfa;margin:0 0 12px;"></p>
-      <div id="owner-detail-body"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════ SALES MODAL (Building → Floor → Flat) ══════════ -->
-<div id="sales-modal" onclick="if(event.target===this)closeSalesModal()">
-  <div class="ownx-box" onclick="event.stopPropagation()">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <p style="font-size:14px;font-weight:900;color:#fff;margin:0;">🏢 Sales</p>
-      <button class="ownx-x" onclick="closeSalesModal()">✕</button>
-    </div>
-
-    <!-- Screen 1: pick a project -->
-    <div id="sales-project-screen">
-      <p style="font-size:10px;color:rgba(255,255,255,.45);margin:0 0 10px;">Select a project to manage its inventory</p>
-      <div id="sales-project-list"></div>
-    </div>
-
-    <!-- Screen 2: buildings for a project -->
-    <div id="sales-buildings-screen" style="display:none;">
-      <button class="ownx-back" onclick="_salesBackToProjects()">‹ All Projects</button>
-      <p style="font-size:12px;font-weight:800;color:#fbbf24;margin:2px 0 10px;" id="sales-proj-label"></p>
-      <div id="sales-buildings-wrap"></div>
-    </div>
-
-    <!-- Screen 3: floors for a building -->
-    <div id="sales-floors-screen" style="display:none;">
-      <button class="ownx-back" onclick="_salesBackToBuildings()">‹ Buildings</button>
-      <p style="font-size:12px;font-weight:800;color:#fbbf24;margin:2px 0 10px;" id="sales-building-label"></p>
-      <div id="sales-floors-wrap"></div>
-    </div>
-
-    <!-- Screen 4: flats for a floor -->
-    <div id="sales-flats-screen" style="display:none;">
-      <button class="ownx-back" onclick="_salesBackToFloors()">‹ Floors</button>
-      <p style="font-size:12px;font-weight:800;color:#fbbf24;margin:2px 0 10px;" id="sales-floor-label"></p>
-      <div id="sales-flats-wrap"></div>
-    </div>
-  </div>
-</div>
-
+<!-- ══════════════════════════════════════════════════════════════════
+     PROJECT SHARE / JOIN-CODE SYSTEM
+     Lets an admin generate a short code per project. Anyone with the
+     code can "Join Project" and get scoped Read-only or Read & Write
+     access to that ONE project only — no other projects are visible.
+     Requires the Supabase tables + RPC functions described in the
+     accompanying SQL file (project_join_codes, project_members,
+     redeem_join_code, engineer_get_data, engineer_put_data).
+     ══════════════════════════════════════════════════════════════════ -->
 <script>
-// ══════════════════════════════════════════════════════════════
-//  CONFIG — must match is_owner() email in owner_and_sales_schema.sql
-// ══════════════════════════════════════════════════════════════
-var OWNER_EMAIL = 'YOUR-EMAIL@example.com'; // ⚠️ change this (both here and in the SQL file)
+(function(){
 
-function _isOwnerUser() {
-  return !!(_adminSBUser && _adminSBUser.email && _adminSBUser.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
+// ────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────
+function _genJoinCode() {
+  // Unambiguous charset — no 0/O/1/I
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var out = '';
+  var arr = new Uint8Array(6);
+  crypto.getRandomValues(arr);
+  for (var i = 0; i < 6; i++) out += chars[arr[i] % chars.length];
+  return out;
 }
-
-function updateOwnerBtn() {
-  var btn = document.getElementById('owner-hdr-btn');
-  if (btn) btn.style.display = _isOwnerUser() ? 'flex' : 'none';
+function _genDeviceToken() {
+  var arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(function(b){ return b.toString(36).padStart(2,'0'); }).join('').slice(0,32);
 }
-
-// Hook into existing auth-ready / signed-out callbacks without breaking them
-(function () {
-  var origReady = window._onSBAuthReady;
-  window._onSBAuthReady = function (user) {
-    if (typeof origReady === 'function') origReady(user);
-    setTimeout(updateOwnerBtn, 60);
-  };
-  var origOut = window._onSBSignedOut;
-  window._onSBSignedOut = function () {
-    if (typeof origOut === 'function') origOut();
-    updateOwnerBtn();
-  };
-})();
-document.addEventListener('DOMContentLoaded', function () { setTimeout(updateOwnerBtn, 500); });
+function _jhtml(s) { return (typeof _escHtml === 'function') ? _escHtml(s) : String(s); }
 
 // ══════════════════════════════════════════════════════════════
-//  OWNER DASHBOARD
+// ADMIN SIDE — Share a project (generate / manage join codes)
 // ══════════════════════════════════════════════════════════════
-var _ownerAllRows = [];   // [{admin_id, backup_key, email, company, lastSync, data}]
-var _ownerAdminsMap = {}; // admin_id -> email
 
-function openOwnerDashboard() {
-  if (!_isOwnerUser()) { toast('Owner access only', 'err'); return; }
-  document.getElementById('owner-modal').classList.add('show');
-  switchOwnerTab('summary');
-  _ownerLoadAll();
-}
-function closeOwnerDashboard() {
-  document.getElementById('owner-modal').classList.remove('show');
-  _ownerBackToSummary();
-}
+window.openShareProjectModal = function(projectId) {
+  if (!_sb || !_adminSBUser) {
+    if (typeof toast === 'function') toast('⚠️ Login as admin first to share a project', 'err');
+    if (typeof openAuthModal === 'function') { openAuthModal(); setTimeout(function(){ if (typeof switchCloudTab==='function') switchCloudTab('admin'); }, 50); }
+    return;
+  }
+  var proj = (window.projects || []).find(function(p){ return p.id === projectId; });
+  var pname = proj ? proj.name : 'Project';
 
-function switchOwnerTab(tab) {
-  var s = document.getElementById('owner-summary-wrap');
-  var f = document.getElementById('owner-feed-wrap');
-  var d = document.getElementById('owner-detail-wrap');
-  var bS = document.getElementById('owner-tab-summary-btn');
-  var bF = document.getElementById('owner-tab-feed-btn');
-  if (d) d.style.display = 'none';
-  if (s) s.style.display = (tab === 'summary') ? 'block' : 'none';
-  if (f) f.style.display = (tab === 'feed') ? 'block' : 'none';
-  [[bS, 'summary'], [bF, 'feed']].forEach(function (pair) {
-    if (!pair[0]) return;
-    var active = tab === pair[1];
-    pair[0].style.background = active ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : 'rgba(255,255,255,.07)';
-    pair[0].style.color = active ? '#fff' : 'rgba(255,255,255,.5)';
+  var existing = document.getElementById('_share-proj-modal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = '_share-proj-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+  modal.innerHTML =
+    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:20px 18px;width:100%;max-width:340px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+    + '<p style="font-size:14px;font-weight:900;color:#fff;margin:0 0 2px">🔗 Share "' + _jhtml(pname) + '"</p>'
+    + '<p style="font-size:10px;color:rgba(255,255,255,0.5);margin:0 0 14px">Give this code to an engineer so they can log in with read/write access to just this project.</p>'
+    + '<div id="share-proj-body"><p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Loading…</p></div>'
+    + '<button id="share-proj-close" style="width:100%;margin-top:12px;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;">Close</button>'
+    + '</div>';
+  document.body.appendChild(modal);
+  document.getElementById('share-proj-close').onclick = function(){ modal.remove(); };
+  modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
+
+  _renderShareProjBody(projectId);
+};
+
+function _renderShareProjBody(projectId) {
+  var body = document.getElementById('share-proj-body');
+  if (!body) return;
+  Promise.all([
+    _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).order('created_at', {ascending:false}).limit(1),
+    _sb.from('project_members').select('id,member_name,role,created_at,last_seen').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).order('created_at', {ascending:false})
+  ]).then(function(results) {
+    var codeRow = (results[0].data && results[0].data[0]) || null;
+    var members = results[1].data || [];
+    _paintShareProjBody(projectId, codeRow, members);
+  }).catch(function(e) {
+    body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ ' + _jhtml(e.message || 'Could not load — is the join-code table set up?') + '</p>';
   });
 }
 
-function _ownerLoadAll() {
-  var wrapS = document.getElementById('owner-summary-wrap');
-  if (wrapS) wrapS.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">Loading…</p>';
-  if (!_sb) { toast('Cloud not ready yet', 'err'); return; }
-  Promise.all([
-    _sb.from('admins').select('id,email'),
-    _sb.from('cloud_backups').select('admin_id,backup_key,data,created_at')
-  ]).then(function (results) {
-    var adminsRes = results[0], backupsRes = results[1];
-    if (adminsRes.error || backupsRes.error) {
-      toast('Owner load failed: ' + ((adminsRes.error || backupsRes.error).message), 'err');
+function _paintShareProjBody(projectId, codeRow, members) {
+  var body = document.getElementById('share-proj-body');
+  if (!body) return;
+  var role = codeRow ? codeRow.role : 'write';
+
+  var codeBlock = codeRow
+    ? (
+        '<div style="background:rgba(16,185,129,.1);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:14px;text-align:center;margin-bottom:10px;">'
+        + '<p id="share-code-text" style="font-size:28px;font-weight:900;letter-spacing:.2em;color:#a7f3d0;margin:0 0 8px;">' + _jhtml(codeRow.code) + '</p>'
+        + '<button onclick="_copyShareCode(\'' + codeRow.code + '\')" style="padding:7px 16px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📋 Copy Code</button>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;margin-bottom:12px;">'
+        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'read\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='read' ? 'rgba(251,191,36,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='read' ? 'rgba(251,191,36,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='read' ? '#fde68a' : 'rgba(255,255,255,.5)') + ';">👁️ Read-only</button>'
+        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'write\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='write' ? 'rgba(52,211,153,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='write' ? 'rgba(52,211,153,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='write' ? '#a7f3d0' : 'rgba(255,255,255,.5)') + ';">✏️ Read &amp; Write</button>'
+        + '</div>'
+        + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px;">🔄 Regenerate Code (old code stops working)</button>'
+      )
+    : (
+        '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;">➕ Generate Join Code</button>'
+      );
+
+  var memberRows = members.length
+    ? members.map(function(m) {
+        var seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : 'never synced';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+          + '<div style="flex:1;min-width:0;">'
+          + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(m.member_name || 'Unnamed') + ' <span style="font-size:9px;color:' + (m.role==='write'?'#6ee7b7':'#fde68a') + ';font-weight:700;">' + (m.role==='write'?'✏️ write':'👁️ read') + '</span></p>'
+          + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Last sync: ' + _jhtml(seen) + '</p>'
+          + '</div>'
+          + '<button onclick="_revokeMember(\'' + m.id + '\',\'' + projectId + '\')" title="Revoke access" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:#fca5a5;font-size:10px;font-weight:700;cursor:pointer;">Revoke</button>'
+          + '</div>';
+      }).join('')
+    : '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">No one has joined with this code yet</p>';
+
+  body.innerHTML = codeBlock
+    + '<div style="margin-top:6px;">'
+    + '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👥 People with access (' + members.length + ')</p>'
+    + memberRows
+    + '</div>';
+}
+
+window._copyShareCode = function(code) {
+  if (navigator.clipboard) { navigator.clipboard.writeText(code).then(function(){ toast('Code copied!','ok'); }); }
+  else { toast('Code: ' + code, 'info'); }
+};
+
+window._regenerateJoinCode = function(projectId) {
+  if (!_sb || !_adminSBUser) return;
+  var proj = (window.projects || []).find(function(p){ return p.id === projectId; });
+  var body = document.getElementById('share-proj-body');
+  if (body) body.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Generating…</p>';
+  // Deactivate any previous active codes for this project first
+  _sb.from('project_join_codes').update({active:false}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true)
+    .then(function() {
+      return _sb.from('project_join_codes').insert({
+        admin_id: _adminSBUser.id,
+        project_id: projectId,
+        project_name: proj ? proj.name : null,
+        code: _genJoinCode(),
+        role: 'write',
+        active: true
+      });
+    }).then(function(r) {
+      if (r.error) throw r.error;
+      toast('✅ New join code generated', 'ok');
+      _renderShareProjBody(projectId);
+    }).catch(function(e) {
+      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ ' + _jhtml(e.message||'Failed') + '</p>';
+    });
+};
+
+window._setJoinCodeRole = function(projectId, role) {
+  if (!_sb || !_adminSBUser) return;
+  _sb.from('project_join_codes').update({role: role}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true)
+    .then(function(r) {
+      if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
+      toast(role === 'write' ? '✏️ New joiners get Read & Write' : '👁️ New joiners get Read-only', 'ok');
+      _renderShareProjBody(projectId);
+    });
+};
+
+window._revokeMember = function(memberId, projectId) {
+  if (!_sb || !_adminSBUser) return;
+  if (!confirm('Revoke access for this person? They will be logged out on their next sync.')) return;
+  _sb.from('project_members').delete().eq('id', memberId).eq('admin_id', _adminSBUser.id)
+    .then(function(r) {
+      if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
+      toast('🚫 Access revoked', 'ok');
+      _renderShareProjBody(projectId);
+    });
+};
+
+// ══════════════════════════════════════════════════════════════
+// OWNER OVERVIEW — see every project's key numbers at once
+// ══════════════════════════════════════════════════════════════
+
+window.openOwnerOverview = function() {
+  if (!_sb || !_adminSBUser) {
+    if (typeof toast === 'function') toast('⚠️ Admin login required', 'err');
+    return;
+  }
+  var existing = document.getElementById('_owner-overview-modal');
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = '_owner-overview-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:16px;';
+  modal.innerHTML =
+    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:18px 16px;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+    + '<p style="font-size:14px;font-weight:900;color:#fff;margin:0 0 2px">👑 Owner Overview</p>'
+    + '<p style="font-size:10px;color:rgba(255,255,255,0.5);margin:0 0 12px">Every project, tab by tab, in one place.</p>'
+    + '<div id="owner-ov-body"><p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:20px">Loading all projects…</p></div>'
+    + '<button id="owner-ov-close" style="width:100%;margin-top:12px;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;">Close</button>'
+    + '</div>';
+  document.body.appendChild(modal);
+  document.getElementById('owner-ov-close').onclick = function(){ modal.remove(); };
+  modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
+
+  _sb.from('cloud_backups').select('backup_key,data,updated_at').eq('admin_id', _adminSBUser.id)
+    .then(function(r) {
+      if (r.error) throw r.error;
+      _renderOwnerOverview(r.data || []);
+    }).catch(function(e) {
+      var body = document.getElementById('owner-ov-body');
+      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ ' + _jhtml(e.message||'Could not load') + '</p>';
+    });
+};
+
+function _renderOwnerOverview(rows) {
+  var body = document.getElementById('owner-ov-body');
+  if (!body) return;
+  var projects = window.projects || [];
+  var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+
+  var cards = [];
+  var totals = { materialCost: 0, budgetPlanned: 0, msDone: 0, msTotal: 0, plOpen: 0, plTotal: 0 };
+
+  projects.forEach(function(p) {
+    var key = base + '_p' + String(p.id).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
+    var row = rows.find(function(r){ return r.backup_key === key; });
+    var d = row ? row.data : null;
+    var mats = (d && d.mats) || [];
+    var bgt  = (d && d.budget) || null;
+    var ms   = (d && d.milestones) || [];
+    var pl   = (d && d.punchlist) || [];
+
+    var materialCost = mats.reduce(function(s,m){ return s + (parseFloat(m.cost)||0); }, 0);
+    var budgetPlanned = bgt ? (parseFloat(bgt.total)||0) : 0;
+    var msDone = ms.filter(function(m){ return (m.status||'').indexOf('Completed') !== -1; }).length;
+    var plOpen = pl.filter(function(x){ return x.status !== 'resolved'; }).length;
+
+    totals.materialCost += materialCost;
+    totals.budgetPlanned += budgetPlanned;
+    totals.msDone += msDone; totals.msTotal += ms.length;
+    totals.plOpen += plOpen; totals.plTotal += pl.length;
+
+    cards.push(
+      '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:12px;margin-bottom:8px;">'
+      + '<p style="font-size:12px;font-weight:800;color:#fff;margin:0 0 8px;">' + _jhtml(p.name) + (row ? '' : ' <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.35)">(no sync yet)</span>') + '</p>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+      + _ownerStat('Materials', '₹' + Math.round(materialCost).toLocaleString('en-IN'))
+      + _ownerStat('Budget planned', '₹' + Math.round(budgetPlanned).toLocaleString('en-IN'))
+      + _ownerStat('Milestones', msDone + ' / ' + ms.length + ' done')
+      + _ownerStat('Punchlist open', plOpen + ' / ' + pl.length)
+      + '</div>'
+      + '</div>'
+    );
+  });
+
+  var totalsHtml =
+    '<div style="background:rgba(99,102,241,.15);border:1px solid rgba(129,140,248,.35);border-radius:12px;padding:12px;margin-bottom:12px;">'
+    + '<p style="font-size:10px;font-weight:800;color:#c7d2fe;margin:0 0 8px;">ACROSS ALL ' + projects.length + ' PROJECTS</p>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+    + _ownerStat('Total materials', '₹' + Math.round(totals.materialCost).toLocaleString('en-IN'))
+    + _ownerStat('Total budget', '₹' + Math.round(totals.budgetPlanned).toLocaleString('en-IN'))
+    + _ownerStat('Milestones', totals.msDone + ' / ' + totals.msTotal + ' done')
+    + _ownerStat('Punchlist open', totals.plOpen + ' / ' + totals.plTotal)
+    + '</div>'
+    + '</div>';
+
+  body.innerHTML = projects.length
+    ? (totalsHtml + cards.join(''))
+    : '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">No projects yet</p>';
+}
+
+function _ownerStat(label, value) {
+  return '<div style="background:rgba(0,0,0,.15);border-radius:8px;padding:7px 9px;">'
+    + '<p style="font-size:8.5px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;margin:0 0 2px;">' + label + '</p>'
+    + '<p style="font-size:12.5px;font-weight:800;color:#fff;margin:0;">' + value + '</p>'
+    + '</div>';
+}
+
+// ══════════════════════════════════════════════════════════════
+// ENGINEER SIDE — Join a project via code
+// ══════════════════════════════════════════════════════════════
+
+window._ENGINEER_MODE = false;
+window._ENGINEER_READONLY = false;
+var _engPushTimer = null;
+var _engSyncTimer = null;
+
+function _engKeys() {
+  return {
+    token:   'sj_eng_device_token',
+    admin:   'sj_eng_admin',
+    pid:     'sj_eng_project_id',
+    pname:   'sj_eng_project_name',
+    role:    'sj_eng_role',
+    name:    'sj_eng_member_name'
+  };
+}
+
+window.doJoinProject = function() {
+  var nameEl = document.getElementById('join-member-name');
+  var codeEl = document.getElementById('join-code-input');
+  var errEl  = document.getElementById('join-code-err');
+  var btn    = document.getElementById('join-code-btn');
+  if (errEl) errEl.style.display = 'none';
+  var memberName = nameEl ? nameEl.value.trim() : '';
+  var code = codeEl ? codeEl.value.trim().toUpperCase() : '';
+  if (!memberName) { if (errEl) { errEl.textContent = '⚠️ Apna naam dalo'; errEl.style.display = 'block'; } return; }
+  if (!code) { if (errEl) { errEl.textContent = '⚠️ Project code dalo'; errEl.style.display = 'block'; } return; }
+  if (!_sb) { if (errEl) { errEl.textContent = '⚠️ App load ho raha hai, thodi der me try karo'; errEl.style.display = 'block'; } return; }
+  if (btn) { btn.textContent = '⏳ Joining…'; btn.disabled = true; }
+
+  var deviceToken = _genDeviceToken();
+  _sb.rpc('redeem_join_code', { p_code: code, p_member_name: memberName, p_device_token: deviceToken })
+    .then(function(r) {
+      if (r.error) throw r.error;
+      var row = (r.data && r.data[0]) ? r.data[0] : null;
+      if (!row) throw new Error('Invalid or inactive code');
+      var K = _engKeys();
+      safeLS.setItem(K.token, deviceToken);
+      safeLS.setItem(K.admin, row.admin_id);
+      safeLS.setItem(K.pid,   row.project_id);
+      safeLS.setItem(K.pname, row.project_name || 'Project');
+      safeLS.setItem(K.role,  row.role || 'write');
+      safeLS.setItem(K.name,  memberName);
+      if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+      if (typeof closeAuthModal === 'function') closeAuthModal();
+      toast('✅ Joined "' + (row.project_name||'Project') + '"', 'ok');
+      _engineerStart();
+    }).catch(function(e) {
+      if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+      if (errEl) { errEl.textContent = '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
+    });
+};
+
+window._refreshJoinTabUI = function() {
+  var K = _engKeys();
+  var pre  = document.getElementById('ctab-join-prelogin');
+  var post = document.getElementById('ctab-join-postlogin');
+  var active = !!safeLS.getItem(K.token);
+  if (pre)  pre.style.display  = active ? 'none' : 'block';
+  if (post) post.style.display = active ? 'block' : 'none';
+  if (active) {
+    var pn = document.getElementById('join-active-project');
+    var pr = document.getElementById('join-active-role');
+    if (pn) pn.textContent = safeLS.getItem(K.pname) || 'Project';
+    if (pr) pr.textContent = (safeLS.getItem(K.role) === 'write') ? '✏️ Read & Write access' : '👁️ Read-only access';
+  }
+};
+
+window._engineerLogout = function() {
+  var K = _engKeys();
+  Object.keys(K).forEach(function(k){ safeLS.removeItem(K[k]); });
+  window._ENGINEER_MODE = false;
+  window._ENGINEER_READONLY = false;
+  if (_engSyncTimer) { clearInterval(_engSyncTimer); _engSyncTimer = null; }
+  var projWrap = document.getElementById('project-dropdown-wrap');
+  if (projWrap) projWrap.style.display = '';
+  var m = document.getElementById('_share-proj-modal'); if (m) m.remove();
+  toast('Left project', 'ok');
+  if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
+  setTimeout(function(){ location.reload(); }, 600);
+};
+
+// Engineer sessions use the SAME main interface as everyone else — we only
+// hide the Admin/Owner buttons (an engineer isn't the account owner) and
+// repurpose the Settings panel's "Login / Cloud" row into a "Leave Project"
+// shortcut, since engineers never need the admin login/cloud flow.
+function _applyEngineerUIMode() {
+  var K = _engKeys();
+  var pname = safeLS.getItem(K.pname) || 'Project';
+
+  var projWrap = document.getElementById('project-dropdown-wrap');
+  if (projWrap) {
+    projWrap.style.display = '';
+    projWrap.innerHTML = '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);padding:2px 8px;">' + _jhtml(pname) + '</span>';
+  }
+  if (typeof updateCloudBtn === 'function') updateCloudBtn();
+
+  var loginBtn = document.getElementById('sett-login-btn');
+  if (loginBtn) {
+    loginBtn.onclick = function(e){ _settRipple && _settRipple(e, loginBtn); closeSettingsPanel(); if (confirm('Leave this project?')) _engineerLogout(); };
+    var icon = document.getElementById('sett-login-icon');
+    var title = document.getElementById('sett-login-title');
+    var sub = document.getElementById('sett-login-sub');
+    if (icon) icon.textContent = '🤝';
+    if (title) title.textContent = 'Leave Project';
+    if (sub) sub.textContent = (safeLS.getItem(K.role) === 'write' ? 'Read & Write' : 'Read-only') + ' — ' + pname;
+  }
+}
+
+function _prefillEngineerProfile() {
+  var K = _engKeys();
+  var pname = safeLS.getItem(K.pname) || 'Project';
+  var mname = safeLS.getItem(K.name) || 'Engineer';
+  try {
+    var existing = (typeof lprof === 'function') ? lprof() : null;
+    if (!existing || (!existing.company && !existing.engineer)) {
+      if (typeof sprof === 'function') sprof({ company: pname, engineer: mname });
+      if (typeof applyProfile === 'function') applyProfile();
+    }
+  } catch(e) {}
+}
+
+function _showEngineerBar() { /* kept as a no-op for backward compatibility */ }
+
+function _engineerBuildPayload() {
+  var _allCmKeys = {};
+  var _prefix = window.currentProjectId ? ('sanj_project_' + window.currentProjectId + '_') : '';
+  try {
+    var _ls = window.localStorage;
+    for (var _ki = 0; _ki < _ls.length; _ki++) {
+      var _kk = _ls.key(_ki);
+      if (!_kk) continue;
+      var isProjectKey = _prefix && _kk.indexOf(_prefix + 'cm_') === 0;
+      if (isProjectKey) {
+        var _shortK = _kk.slice(_prefix.length);
+        var _v = safeLS.getItem(_kk);
+        if (_v !== null) _allCmKeys[_shortK] = _v;
+      }
+    }
+  } catch(e2) {}
+  return {
+    db: ld(), meta: lm(), mats: lmat(), dept: ldept(), prof: lprof(), global_prof: lglobal(),
+    machinery: lmach(), drawings: ldrw(), budget: lbgt(), milestones: lms(), punchlist: lpl(),
+    rfi: [], safety: [],
+    nid: parseInt(safeLS.getItem('cm_nid') || '1'),
+    cm_all: _allCmKeys,
+    settings: {
+      dark_mode: safeLS.getItem('sanj_dark_mode') || '0',
+      dash_view: safeLS.getItem('sanj_dash_view') || 'current',
+      hidden_tabs: safeLS.getItem('sanj_hidden_tabs') || '[]',
+      guide: safeLS.getItem('sanj_guide_enabled') || '1',
+      swipe: safeLS.getItem('sanj_swipe_enabled') || '1',
+      signatures: safeLS.getItem('sanj_signatures') || '[]'
+    },
+    lastSync: Date.now(),
+    syncedBy: safeLS.getItem(_engKeys().name) || 'Engineer',
+    version: '3.0',
+    tombstones: (typeof _loadTombstones === 'function') ? _loadTombstones() : {}
+  };
+}
+
+window._engineerSchedulePush = function() {
+  var K = _engKeys();
+  if (!safeLS.getItem(K.token)) return;
+  if (safeLS.getItem(K.role) !== 'write') {
+    toast('🔒 Read-only access — changes stay on this device only', 'info');
+    return;
+  }
+  if (_engPushTimer) clearTimeout(_engPushTimer);
+  _engPushTimer = setTimeout(function() {
+    _engPushTimer = null;
+    window._engineerPush();
+  }, 3000);
+};
+
+window._engineerPush = function() {
+  var K = _engKeys();
+  var token = safeLS.getItem(K.token);
+  if (!_sb || !token) return;
+  if (safeLS.getItem(K.role) !== 'write') return;
+  var payload = _engineerBuildPayload();
+  _sb.rpc('engineer_put_data', { p_device_token: token, p_payload: payload }).then(function(r) {
+    if (r.error) {
+      if (/not authorized/i.test(r.error.message || '')) {
+        toast('⚠️ Your access to this project was revoked', 'err');
+        window._engineerLogout();
+        return;
+      }
+      toast('⚠️ Sync failed: ' + r.error.message, 'err');
       return;
     }
-    _ownerAdminsMap = {};
-    (adminsRes.data || []).forEach(function (a) { _ownerAdminsMap[a.id] = a.email; });
-    _ownerAllRows = (backupsRes.data || []).map(function (r) {
-      var d = r.data || {};
-      return {
-        admin_id: r.admin_id,
-        backup_key: r.backup_key,
-        email: _ownerAdminsMap[r.admin_id] || d.syncedBy || '—',
-        company: (d.global_prof && d.global_prof.company) || (d.meta && d.meta.company) || r.backup_key,
-        lastSync: d.lastSync || (r.created_at ? new Date(r.created_at).getTime() : 0),
-        data: d
-      };
-    }).sort(function (a, b) { return b.lastSync - a.lastSync; });
-    _ownerRenderSummary();
-    _ownerRenderFeed();
-  }).catch(function (e) { toast('Owner load error: ' + e.message, 'err'); });
-}
+    var dot = document.getElementById('engineer-sync-dot');
+    if (dot) { dot.style.background = '#22c55e'; }
+  }).catch(function() {});
+};
 
-function _ownerTimeAgo(ts) {
-  if (!ts) return '—';
-  var diff = Date.now() - ts;
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-  return Math.floor(diff / 86400000) + 'd ago';
-}
-
-function _ownerRenderSummary() {
-  var wrap = document.getElementById('owner-summary-wrap');
-  if (!wrap) return;
-  if (!_ownerAllRows.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">No sites yet</p>'; return; }
-  wrap.innerHTML = _ownerAllRows.map(function (row, i) {
-    return '<div class="ownx-card" style="margin-bottom:8px;">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">'
-      + '<span style="font-size:12px;font-weight:800;color:#fff;">' + esc(row.company) + '</span>'
-      + '<span style="font-size:9px;color:rgba(255,255,255,.4);flex-shrink:0;margin-left:8px;">' + _ownerTimeAgo(row.lastSync) + '</span>'
-      + '</div>'
-      + '<p style="font-size:10px;color:#a78bfa;margin:0 0 8px;">' + esc(row.email) + '</p>'
-      + '<button onclick="_ownerViewDetail(' + i + ')" style="width:100%;padding:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">👁 View Details (read-only)</button>'
-      + '</div>';
-  }).join('');
-}
-
-function _ownerRenderFeed() {
-  var wrap = document.getElementById('owner-feed-wrap');
-  if (!wrap) return;
-  if (!_ownerAllRows.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:20px 0">No activity yet</p>'; return; }
-  wrap.innerHTML = _ownerAllRows.map(function (row, i) {
-    var dt = row.lastSync ? new Date(row.lastSync).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-    return '<div onclick="_ownerViewDetail(' + i + ')" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;">'
-      + '<span style="font-size:16px;flex-shrink:0;">🏗️</span>'
-      + '<div style="flex:1;min-width:0;">'
-      + '<p style="font-size:11px;font-weight:700;color:#fff;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(row.company) + '</p>'
-      + '<p style="font-size:9px;color:rgba(255,255,255,.4);margin:0;">' + esc(row.email) + ' · ' + dt + '</p>'
-      + '</div>'
-      + '</div>';
-  }).join('');
-}
-
-// ── Read-only project detail ────────────────────────────────────
-// Renders straight from the JSON already fetched into _ownerAllRows.
-// Deliberately does NOT call _applyFullBackup / write to localStorage /
-// touch AD or switchTab — there is no live app state to edit here.
-function _ownerCount(x) { return Array.isArray(x) ? x.length : (x && typeof x === 'object' ? Object.keys(x).length : 0); }
-
-function _ownerViewDetail(i) {
-  var row = _ownerAllRows[i];
-  if (!row) return;
-  var d = row.data || {};
-  var db = {};
-  try { db = d.db ? JSON.parse(d.db) : []; } catch (e) { db = []; }
-  var dprCount = _ownerCount(db);
-  var totalExpense = 0, totalWorkers = 0;
-  try {
-    (Array.isArray(db) ? db : []).forEach(function (entry) {
-      if (entry && Array.isArray(entry.expenses)) {
-        entry.expenses.forEach(function (ex) { totalExpense += Number(ex.amount) || 0; });
+window._engineerPull = function(silent) {
+  var K = _engKeys();
+  var token = safeLS.getItem(K.token);
+  if (!_sb || !token) return;
+  _sb.rpc('engineer_get_data', { p_device_token: token }).then(function(r) {
+    if (r.error) {
+      if (/not authorized/i.test(r.error.message || '')) {
+        toast('⚠️ Your access to this project was revoked', 'err');
+        window._engineerLogout();
       }
-      if (entry && Array.isArray(entry.workers)) totalWorkers += entry.workers.length;
-    });
-  } catch (e) {}
-
-  document.getElementById('owner-detail-title').textContent = row.company;
-  document.getElementById('owner-detail-sub').textContent = row.email + ' · last synced ' + _ownerTimeAgo(row.lastSync);
-
-  var body = document.getElementById('owner-detail-body');
-  body.innerHTML =
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
-    + '<div class="ownx-stat"><b>' + dprCount + '</b><span>DPR Entries</span></div>'
-    + '<div class="ownx-stat"><b>' + totalWorkers + '</b><span>Worker Logs</span></div>'
-    + '<div class="ownx-stat"><b>₹' + totalExpense.toLocaleString('en-IN') + '</b><span>Total Expenses</span></div>'
-    + '<div class="ownx-stat"><b>' + ((d.meta && d.meta.length) || 0) + '</b><span>Milestones/Meta</span></div>'
-    + '</div>'
-    + '<div class="ownx-card" style="margin-bottom:8px;">'
-    + '<p style="font-size:9px;font-weight:800;color:rgba(255,255,255,.4);text-transform:uppercase;margin:0 0 6px;">Company / GST</p>'
-    + '<p style="font-size:12px;color:#fff;margin:0;">' + esc((d.global_prof && d.global_prof.company) || row.company) + '</p>'
-    + '<p style="font-size:10px;color:rgba(255,255,255,.5);margin:2px 0 0;">' + esc((d.global_prof && d.global_prof.gst) || '—') + '</p>'
-    + '</div>'
-    + '<p style="text-align:center;font-size:9.5px;color:rgba(255,255,255,.35);margin:10px 0 0;">This is a read-only snapshot. To make changes, log in as that project\'s own admin.</p>';
-
-  document.getElementById('owner-summary-wrap').style.display = 'none';
-  document.getElementById('owner-feed-wrap').style.display = 'none';
-  document.getElementById('owner-detail-wrap').style.display = 'block';
-}
-
-function _ownerBackToSummary() {
-  var d = document.getElementById('owner-detail-wrap');
-  if (d) d.style.display = 'none';
-  switchOwnerTab('summary');
-}
-
-// ══════════════════════════════════════════════════════════════
-//  SALES — Building → Floor → Flat inventory
-// ══════════════════════════════════════════════════════════════
-var _salesCurProjectId = null;
-var _salesCurAdminId = null;
-var _salesActiveBuildingId = null;
-var _salesActiveFloorId = null;
-var _salesBuildings = [];
-var _salesFloors = [];
-var _salesFlats = [];
-var _salesStatusColors = { available: '#22c55e', booked: '#f59e0b', sold: '#ef4444' };
-
-function _bkForProject(projId) {
-  var proj = (window.projects || []).find(function (p) { return p.id === projId; });
-  if (proj && proj.joinedBackupKey) return proj.joinedBackupKey;
-  if (_adminSBUser && _adminSBUser.id) {
-    var base = 'user-' + _adminSBUser.id.replace(/-/g, '').slice(0, 12);
-    return base + '_p' + String(projId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
-  }
-  return null;
-}
-
-function openSalesModal() {
-  if (!_adminSBUser) { toast('Please login (Cloud) first to use Sales', 'err'); openCloudModal(); return; }
-  document.getElementById('sales-modal').classList.add('show');
-  _salesShowProjectPicker();
-}
-function closeSalesModal() { document.getElementById('sales-modal').classList.remove('show'); }
-
-function _salesShowProjectPicker() {
-  document.getElementById('sales-project-screen').style.display = 'block';
-  document.getElementById('sales-buildings-screen').style.display = 'none';
-  document.getElementById('sales-floors-screen').style.display = 'none';
-  document.getElementById('sales-flats-screen').style.display = 'none';
-  var wrap = document.getElementById('sales-project-list');
-  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
-
-  if (_isOwnerUser()) {
-    if (_ownerAllRows.length) {
-      _salesRenderProjectPicker(_ownerAllRows.map(function (r) { return { id: r.backup_key, admin_id: r.admin_id, label: r.company + ' · ' + r.email }; }));
-    } else {
-      Promise.all([_sb.from('admins').select('id,email'), _sb.from('cloud_backups').select('admin_id,backup_key,data,created_at')])
-        .then(function (results) {
-          (results[0].data || []).forEach(function (a) { _ownerAdminsMap[a.id] = a.email; });
-          _ownerAllRows = (results[1].data || []).map(function (r) {
-            var d = r.data || {};
-            return { admin_id: r.admin_id, backup_key: r.backup_key, email: _ownerAdminsMap[r.admin_id] || '—', company: (d.global_prof && d.global_prof.company) || r.backup_key, lastSync: d.lastSync || 0, data: d };
-          });
-          _salesRenderProjectPicker(_ownerAllRows.map(function (r) { return { id: r.backup_key, admin_id: r.admin_id, label: r.company + ' · ' + r.email }; }));
-        });
+      return;
     }
-  } else {
-    var list = (window.projects || []).map(function (p) {
-      return { id: _bkForProject(p.id), admin_id: _adminSBUser.id, label: p.name };
-    }).filter(function (x) { return x.id; });
-    _salesRenderProjectPicker(list);
+    var row = (r.data && r.data[0]) ? r.data[0] : null;
+    var dot = document.getElementById('engineer-sync-dot');
+    if (dot) dot.style.background = '#22c55e';
+    if (!row || !row.payload) { if (!silent) toast('No data yet — ask admin to sync once', 'info'); return; }
+    if (typeof _applyCloudData === 'function') _applyCloudData(row.payload, !!silent);
+  }).catch(function() {});
+};
+
+function _startEngineerSync() {
+  if (_engSyncTimer) clearInterval(_engSyncTimer);
+  _engSyncTimer = setInterval(function(){ window._engineerPull(true); }, 10000);
+}
+
+function _engineerStart() {
+  var K = _engKeys();
+  var pid = safeLS.getItem(K.pid);
+  if (!pid) return;
+  window._ENGINEER_MODE = true;
+  window._ENGINEER_READONLY = (safeLS.getItem(K.role) !== 'write');
+  // Isolated local namespace so this never collides with the device's own admin projects
+  window.currentProjectId = 'eng_' + pid;
+  _prefillEngineerProfile();
+  _applyEngineerUIMode();
+  window._engineerPull(false);
+  _startEngineerSync();
+  if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
+}
+
+// Resume an existing engineer session on page load
+document.addEventListener('DOMContentLoaded', function() {
+  var K = _engKeys();
+  if (safeLS.getItem(K.token) && safeLS.getItem(K.pid)) {
+    setTimeout(_engineerStart, 400);
   }
-}
+});
 
-function _salesRenderProjectPicker(list) {
-  var wrap = document.getElementById('sales-project-list');
-  if (!list.length) { wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No projects found</p>'; return; }
-  window._salesProjList = list;
-  wrap.innerHTML = list.map(function (p, i) {
-    return '<button onclick="_salesOpenProjectByIndex(' + i + ')" style="width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;">'
-      + '<span style="font-size:15px;flex-shrink:0;">🏢</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(p.label) + '</span><span style="color:rgba(255,255,255,.3);flex-shrink:0;">›</span>'
-      + '</button>';
-  }).join('');
-}
-
-function _salesOpenProjectByIndex(i) {
-  var p = (window._salesProjList || [])[i];
-  if (!p) return;
-  _salesCurProjectId = p.id;
-  _salesCurAdminId = p.admin_id;
-  document.getElementById('sales-project-screen').style.display = 'none';
-  document.getElementById('sales-buildings-screen').style.display = 'block';
-  document.getElementById('sales-proj-label').textContent = p.label;
-  _salesLoadBuildings();
-}
-function _salesBackToProjects() { _salesShowProjectPicker(); }
-
-function _salesLoadBuildings() {
-  var wrap = document.getElementById('sales-buildings-wrap');
-  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
-  _sb.from('buildings').select('*').eq('project_id', _salesCurProjectId).order('created_at').then(function (r) {
-    if (r.error) { toast('Load failed: ' + r.error.message, 'err'); return; }
-    _salesBuildings = r.data || [];
-    _salesRenderBuildings();
-  });
-}
-function _salesRenderBuildings() {
-  var wrap = document.getElementById('sales-buildings-wrap');
-  var html = '<button onclick="_salesAddBuilding()" style="width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">+ Add Building</button>';
-  if (!_salesBuildings.length) {
-    html += '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No buildings yet — add one above</p>';
-  } else {
-    html += _salesBuildings.map(function (b) {
-      var safeName = esc(b.name).replace(/'/g, "\\'");
-      return '<div class="ownx-card" style="margin-bottom:8px;">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;">'
-        + '<span style="font-size:12px;font-weight:800;color:#fff;">🏢 ' + esc(b.name) + '</span>'
-        + '<div style="display:flex;gap:6px;flex-shrink:0;">'
-        + '<button onclick="_salesRenameBuilding(\'' + b.id + '\',\'' + safeName + '\')" style="background:none;border:none;color:#a78bfa;font-size:12px;cursor:pointer;">✎</button>'
-        + '<button onclick="_salesDeleteBuilding(\'' + b.id + '\')" style="background:none;border:none;color:#f87171;font-size:12px;cursor:pointer;">🗑</button>'
-        + '</div></div>'
-        + '<button onclick="_salesOpenFloors(\'' + b.id + '\',\'' + safeName + '\')" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;">Manage Floors →</button>'
-        + '</div>';
-    }).join('');
-  }
-  wrap.innerHTML = html;
-}
-function _salesAddBuilding() {
-  var name = prompt('Building name (e.g. "Tower A")');
-  if (!name || !name.trim()) return;
-  _sb.from('buildings').insert({ admin_id: _salesCurAdminId, project_id: _salesCurProjectId, name: name.trim() }).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Building added', 'ok'); _salesLoadBuildings();
-  });
-}
-function _salesRenameBuilding(id, oldName) {
-  var name = prompt('Rename building', oldName);
-  if (!name || !name.trim()) return;
-  _sb.from('buildings').update({ name: name.trim() }).eq('id', id).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    _salesLoadBuildings();
-  });
-}
-function _salesDeleteBuilding(id) {
-  if (!confirm('Delete this building and all its floors/flats?')) return;
-  _sb.from('buildings').delete().eq('id', id).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Building deleted', 'ok'); _salesLoadBuildings();
-  });
-}
-
-// ── Floors ──
-function _salesOpenFloors(buildingId, buildingName) {
-  _salesActiveBuildingId = buildingId;
-  document.getElementById('sales-buildings-screen').style.display = 'none';
-  document.getElementById('sales-floors-screen').style.display = 'block';
-  document.getElementById('sales-building-label').textContent = buildingName;
-  _salesLoadFloors();
-}
-function _salesBackToBuildings() {
-  document.getElementById('sales-floors-screen').style.display = 'none';
-  document.getElementById('sales-buildings-screen').style.display = 'block';
-}
-function _salesLoadFloors() {
-  var wrap = document.getElementById('sales-floors-wrap');
-  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
-  _sb.from('floors').select('*').eq('building_id', _salesActiveBuildingId).order('floor_number').then(function (r) {
-    if (r.error) { toast('Load failed: ' + r.error.message, 'err'); return; }
-    _salesFloors = r.data || [];
-    _salesRenderFloors();
-  });
-}
-function _salesRenderFloors() {
-  var wrap = document.getElementById('sales-floors-wrap');
-  var html = '<button onclick="_salesAddFloor()" style="width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">+ Add Floor</button>';
-  if (!_salesFloors.length) html += '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No floors yet</p>';
-  else html += _salesFloors.map(function (f) {
-    var safeName = esc(f.name).replace(/'/g, "\\'");
-    return '<div class="ownx-card" style="margin-bottom:8px;">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;">'
-      + '<span style="font-size:12px;font-weight:800;color:#fff;">🏬 ' + esc(f.name) + '</span>'
-      + '<button onclick="_salesDeleteFloor(\'' + f.id + '\')" style="background:none;border:none;color:#f87171;font-size:12px;cursor:pointer;">🗑</button>'
-      + '</div>'
-      + '<button onclick="_salesOpenFlats(\'' + f.id + '\',\'' + safeName + '\')" style="margin-top:8px;width:100%;padding:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;">Manage Flats →</button>'
-      + '</div>';
-  }).join('');
-  wrap.innerHTML = html;
-}
-function _salesAddFloor() {
-  var name = prompt('Floor name (e.g. "3rd Floor")');
-  if (!name || !name.trim()) return;
-  var num = parseInt(prompt('Floor number (for sorting, e.g. 3)', String(_salesFloors.length)) || _salesFloors.length, 10) || 0;
-  _sb.from('floors').insert({ admin_id: _salesCurAdminId, building_id: _salesActiveBuildingId, name: name.trim(), floor_number: num }).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Floor added', 'ok'); _salesLoadFloors();
-  });
-}
-function _salesDeleteFloor(id) {
-  if (!confirm('Delete this floor and all its flats?')) return;
-  _sb.from('floors').delete().eq('id', id).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Floor deleted', 'ok'); _salesLoadFloors();
-  });
-}
-
-// ── Flats ──
-function _salesOpenFlats(floorId, floorName) {
-  _salesActiveFloorId = floorId;
-  document.getElementById('sales-floors-screen').style.display = 'none';
-  document.getElementById('sales-flats-screen').style.display = 'block';
-  document.getElementById('sales-floor-label').textContent = floorName;
-  _salesLoadFlats();
-}
-function _salesBackToFloors() {
-  document.getElementById('sales-flats-screen').style.display = 'none';
-  document.getElementById('sales-floors-screen').style.display = 'block';
-}
-function _salesLoadFlats() {
-  var wrap = document.getElementById('sales-flats-wrap');
-  wrap.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">Loading…</p>';
-  _sb.from('flats').select('*').eq('floor_id', _salesActiveFloorId).order('created_at').then(function (r) {
-    if (r.error) { toast('Load failed: ' + r.error.message, 'err'); return; }
-    _salesFlats = r.data || [];
-    _salesRenderFlats();
-  });
-}
-function _salesRenderFlats() {
-  var wrap = document.getElementById('sales-flats-wrap');
-  var html = '<button onclick="_salesAddFlat()" style="width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">+ Add Flat</button>';
-  if (!_salesFlats.length) html += '<p style="text-align:center;color:rgba(255,255,255,.4);font-size:11px;padding:14px 0">No flats yet</p>';
-  else html += _salesFlats.map(function (f) {
-    var col = _salesStatusColors[f.status] || '#9ca3af';
-    return '<div class="ownx-card" style="margin-bottom:8px;">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;">'
-      + '<span style="font-size:12px;font-weight:800;color:#fff;">🚪 ' + esc(f.name) + '</span>'
-      + '<span class="ownx-pill" style="background:' + col + '22;color:' + col + ';border:1px solid ' + col + '55;text-transform:capitalize;">' + esc(f.status) + '</span>'
-      + '</div>'
-      + '<p style="font-size:10px;color:rgba(255,255,255,.5);margin:4px 0 8px;">' + (f.area || 0) + ' ' + esc(f.area_unit || 'sqft') + (f.price ? ' · ₹' + Number(f.price).toLocaleString('en-IN') : '') + (f.buyer_name ? ' · ' + esc(f.buyer_name) : '') + '</p>'
-      + '<div style="display:flex;gap:5px;flex-wrap:wrap;">'
-      + ['available', 'booked', 'sold'].map(function (s) {
-        var active = f.status === s; var c = _salesStatusColors[s];
-        return '<button onclick="_salesSetFlatStatus(\'' + f.id + '\',\'' + s + '\')" style="flex:1;min-width:60px;padding:5px 0;border-radius:7px;font-size:9px;font-weight:800;text-transform:capitalize;cursor:pointer;border:1px solid ' + c + ';background:' + (active ? c : 'none') + ';color:' + (active ? '#fff' : c) + ';">' + s + '</button>';
-      }).join('')
-      + '<button onclick="_salesEditFlat(\'' + f.id + '\')" style="padding:5px 10px;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;">✎</button>'
-      + '<button onclick="_salesDeleteFlat(\'' + f.id + '\')" style="padding:5px 10px;border-radius:7px;font-size:9px;font-weight:800;cursor:pointer;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;">🗑</button>'
-      + '</div></div>';
-  }).join('');
-  wrap.innerHTML = html;
-}
-function _salesAddFlat() {
-  var name = prompt('Flat name / number (e.g. "301" or "A-1")');
-  if (!name || !name.trim()) return;
-  var area = parseFloat(prompt('Area (sqft)', '0')) || 0;
-  _sb.from('flats').insert({ admin_id: _salesCurAdminId, floor_id: _salesActiveFloorId, name: name.trim(), area: area, area_unit: 'sqft', status: 'available' }).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Flat added', 'ok'); _salesLoadFlats();
-  });
-}
-function _salesSetFlatStatus(id, status) {
-  _sb.from('flats').update({ status: status }).eq('id', id).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    _salesLoadFlats();
-  });
-}
-function _salesEditFlat(id) {
-  var f = _salesFlats.find(function (x) { return x.id === id; });
-  if (!f) return;
-  var name = prompt('Flat name', f.name); if (name === null) return;
-  var area = parseFloat(prompt('Area (sqft)', f.area)) || 0;
-  var price = parseFloat(prompt('Price (₹, optional)', f.price || '')) || null;
-  var buyer = prompt('Buyer name (optional)', f.buyer_name || '') || null;
-  _sb.from('flats').update({ name: name.trim(), area: area, price: price, buyer_name: buyer }).eq('id', id).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Flat updated', 'ok'); _salesLoadFlats();
-  });
-}
-function _salesDeleteFlat(id) {
-  if (!confirm('Delete this flat?')) return;
-  _sb.from('flats').delete().eq('id', id).then(function (r) {
-    if (r.error) { toast('Failed: ' + r.error.message, 'err'); return; }
-    toast('Flat deleted', 'ok'); _salesLoadFlats();
-  });
-}
+})();
 </script>
-
 </body>
 </html>
