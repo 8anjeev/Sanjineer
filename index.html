@@ -633,7 +633,25 @@ self.addEventListener('fetch', function(e) {
 
   // ── Persist helpers ───────────────────────────────────────────
   function _loadProjects() {
-    try { window.projects = JSON.parse(localStorage.getItem('sanj_projects') || '[]'); } catch(e) { window.projects = []; }
+    var stored = [];
+    try { stored = JSON.parse(localStorage.getItem('sanj_projects') || '[]'); } catch(e) { stored = []; }
+    if (!Array.isArray(stored)) stored = [];
+    // Merge with whatever is already in memory instead of blindly replacing
+    // window.projects. QDPR calls _loadProjects() right before rendering its
+    // list — if window.projects ever ends up with a project that (for any
+    // reason) hasn't made it into the 'sanj_projects' key yet, a straight
+    // overwrite here would silently drop it from QDPR's view even though
+    // the header dropdown (which reads window.projects directly, no
+    // reload) still shows it correctly. Merging guarantees QDPR and the
+    // header are always looking at the exact same set of projects.
+    var byId = {};
+    stored.forEach(function(p){ if (p && p.id) byId[p.id] = p; });
+    var changed = false;
+    (window.projects || []).forEach(function(p){
+      if (p && p.id && !byId[p.id]) { byId[p.id] = p; stored.push(p); changed = true; }
+    });
+    window.projects = stored;
+    if (changed) _saveProjects(); // heal storage so this stays fixed going forward
   }
   function _saveProjects() {
     try { localStorage.setItem('sanj_projects', JSON.stringify(window.projects)); } catch(e) {}
