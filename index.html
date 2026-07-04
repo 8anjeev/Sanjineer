@@ -6245,14 +6245,26 @@ function sdept(x){safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush
 function lprof(){try{return JSON.parse(safeLS.getItem(_pk(PROF))||'null');}catch(e){return null;}}
 function sprof(x){safeLS.setItem(_pk(PROF),JSON.stringify(x));_scheduleCloudPush();}
 
-// ── Global profile: company name, GST, logo — shared across ALL projects ──
-// Stored without project prefix so every project sees the same values
+// ── Global profile: company name, address, GST, logo — shared across ALL
+// of THIS device's own projects. Stored without project prefix so every
+// own project sees the same values. For projects joined via a code (which
+// belong to a DIFFERENT admin's company), we scope this key per joined
+// project instead, so a joined project's company info never overwrites —
+// or gets overwritten by — the device's own company settings or any other
+// joined project's company info.
 var GLOBAL_PROF_KEY = 'sanj_global_prof';
-function lglobal() {
-  try { return JSON.parse(localStorage.getItem(GLOBAL_PROF_KEY) || 'null'); } catch(e) { return null; }
+function _globalProfKey(scopeId) {
+  if (scopeId) return GLOBAL_PROF_KEY + '_' + scopeId;
+  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE && window.currentProjectId) {
+    return GLOBAL_PROF_KEY + '_' + window.currentProjectId;
+  }
+  return GLOBAL_PROF_KEY;
 }
-function sglobal(x) {
-  try { localStorage.setItem(GLOBAL_PROF_KEY, JSON.stringify(x)); } catch(e) {}
+function lglobal(scopeId) {
+  try { return JSON.parse(localStorage.getItem(_globalProfKey(scopeId)) || 'null'); } catch(e) { return null; }
+}
+function sglobal(x, scopeId) {
+  try { localStorage.setItem(_globalProfKey(scopeId), JSON.stringify(x)); } catch(e) {}
   _scheduleCloudPush();
 }
 // Merged profile = global fields + per-project fields combined
@@ -7832,7 +7844,11 @@ function _qdprAllSites(){
   });
   var mem = (typeof _engLoadMemberships === 'function') ? _engLoadMemberships() : [];
   var joined = mem.map(function(m){
-    return { id: 'eng_'+m.pid, name: m.pname, address: '', editable: false, canWrite: (m.role==='write'), joined: true };
+    var gp = lglobal('eng_'+m.pid) || {};
+    var pp = null;
+    try { pp = JSON.parse(localStorage.getItem('sanj_project_eng_'+m.pid+'_cm_profile') || 'null'); } catch(e) { pp = null; }
+    var addr = gp.address || (pp && pp.address) || '';
+    return { id: 'eng_'+m.pid, name: m.pname, address: addr, editable: false, canWrite: (m.role==='write'), joined: true };
   });
   return own.concat(joined);
 }
@@ -8199,9 +8215,8 @@ function qdprPrintSiteSectionHTML(site, report){
 function qdprBuildPrintBody(date, items){
   var prof = lmergedProf();
   var sections = items.map(function(it){ return qdprPrintSiteSectionHTML(it.site, it.report); }).join('<div style="height:1px;background:'+QC.border+';margin:0 0 14px"></div>');
-  var signature = '<div style="margin-top:16px;page-break-inside:avoid"><div style="font-size:11px;font-weight:700;color:'+QC.slate+';border-top:1px solid '+QC.border+';padding-top:8px;width:180px;text-align:center">Site Engineer'+(prof.engineer?(' — '+esc(prof.engineer)):'')+'</div></div>';
   return '<div style="font-family:-apple-system,\'Segoe UI\',Arial,sans-serif;color:'+QC.ink+';width:100%">'
-    +qdprPrintHeaderHTML(date, prof)+sections+signature+'</div>';
+    +qdprPrintHeaderHTML(date, prof)+sections+'</div>';
 }
 function printQdprAll(){
 try{
@@ -13003,8 +13018,10 @@ function _applyFullBackup(d) {
   if (d.dept)       sdept(d.dept);
   if (d.prof)       sprof(d.prof);
   if (d.global_prof) {
-    // Restore global profile (company, gst, logo) — no project prefix
-    try { localStorage.setItem(GLOBAL_PROF_KEY, JSON.stringify(d.global_prof)); } catch(e) {}
+    // Restore company profile (company, address, gst, logo) — scoped so a
+    // joined project's company info never clobbers the device's own, or
+    // another joined project's.
+    try { localStorage.setItem(_globalProfKey(), JSON.stringify(d.global_prof)); } catch(e) {}
   }
   if (d.machinery)  smach(d.machinery);
   if (d.drawings)   sdrw(d.drawings);
@@ -18523,25 +18540,21 @@ window.openOwnerOverview = function() {
   if (existing) existing.remove();
   var modal = document.createElement('div');
   modal.id = '_owner-overview-modal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#F3F4F8;display:flex;flex-direction:column;';
   modal.innerHTML =
-    '<div id="owner-ov-backdrop" style="position:absolute;inset:0;background:rgba(10,6,35,.45);"></div>'
-    + '<div style="position:absolute;left:0;right:0;bottom:0;max-height:92vh;background:#F3F4F8;border-radius:20px 20px 0 0;box-shadow:0 -10px 50px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;">'
-    + '<div style="width:38px;height:4px;border-radius:99px;background:rgba(0,0,0,.18);margin:8px auto 4px;flex-shrink:0"></div>'
-    + '<div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
+    '<div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
     + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">👑 Owner Overview</div><div style="color:rgba(255,255,255,.6);font-size:10px">All ' + (window.projects||[]).length + ' projects, tab by tab</div></div>'
     + '<div style="display:flex;gap:6px;flex-shrink:0">'
     + '<button onclick="openOwnerCompanyModal()" title="Company Settings" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">⚙️</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
-    + '<div style="overflow-y:auto;padding:12px 14px 28px;flex:1">'
+    + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
     + '<div id="owner-ov-filters" style="display:flex;gap:6px;margin-bottom:10px;"></div>'
     + '<div id="owner-ov-tabs" style="display:flex;gap:5px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;"></div>'
     + '<div id="owner-ov-body"></div>'
-    + '</div></div>';
+    + '</div>';
   document.body.appendChild(modal);
   document.getElementById('owner-ov-close').onclick = function(){ modal.remove(); };
-  document.getElementById('owner-ov-backdrop').onclick = function(){ modal.remove(); };
   _ownerRenderFilters();
   _ownerRenderTabs();
   _ownerRenderBody();
