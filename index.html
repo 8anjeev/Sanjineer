@@ -2680,8 +2680,8 @@ function doAdminSignup() { cmSendSignupOtp(); }
     <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();setTimeout(openEditProfile,360)">
       <span style="font-size:15px;flex-shrink:0">👤</span>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <span>Profile &amp; Logo</span>
-        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Company · engineer · logo</span>
+        <span>My Profile</span>
+        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Your name · header colour</span>
       </div>
     </button>
 
@@ -5368,6 +5368,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Site Address</label><input type="text" id="qs-address" placeholder="Full site address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
     </div>
     <button id="qdpr-project-modal-save-btn" onclick="saveQdprSite()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">➕ Save Project</button>
+    <button id="qdpr-project-modal-join-link" onclick="qdprGoToJoinProject()" style="display:none;width:100%;background:none;border:none;color:#6366f1;font-size:11.5px;font-weight:700;text-align:center;padding:10px 0 2px;cursor:pointer;">🔗 Already have a project code? Join instead</button>
   </div>
 </div>
 
@@ -5426,13 +5427,33 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeProfileModal()">
   <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1">
-      <h3 class="font-bold text-gray-800">⚙️ Profile Settings</h3>
+      <h3 class="font-bold text-gray-800">⚙️ My Profile</h3>
       <button onclick="closeProfileModal()" class="text-gray-400 text-xl">✕</button>
     </div>
-    <p class="text-xs text-gray-400 mb-2">Company & address appear on all reports. Engineer name only on Daily Report.</p>
+    <p class="text-xs text-gray-400 mb-2">Your name appears on the Daily Report. Header colour is your personal display preference.</p>
     <div class="space-y-3">
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company / Project Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Engineer / Owner Name</label><input id="edit-engineer" type="text" placeholder="e.g. Er. Sanjeev Kumar" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Engineer / Your Name</label><input id="edit-engineer" type="text" placeholder="e.g. Er. Sanjeev Kumar" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <!-- Print Header Colour -->
+      <div>
+        <label class="text-xs font-semibold text-gray-500 block mb-2">🎨 Header Colour <span class="font-normal text-gray-400">(Your display only)</span></label>
+        <div id="color-swatches" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px"></div>
+        <input type="text" id="edit-header-color" placeholder="Custom CSS e.g. #4f46e5" class="w-full px-3 py-1.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-indigo-400 mt-1" oninput="previewHeaderColor(this.value)">
+      </div>
+      <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- Owner-only: Company Settings (name, address, GST, logo) — shared across the whole company -->
+<div id="owner-company-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeOwnerCompanyModal()">
+  <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-bold text-gray-800">👑 Company Settings</h3>
+      <button onclick="closeOwnerCompanyModal()" class="text-gray-400 text-xl">✕</button>
+    </div>
+    <p class="text-xs text-gray-400 mb-2">Shown on every PDF & report across all your projects.</p>
+    <div class="space-y-3">
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Address <span class="font-normal text-gray-400">(Optional — shown on invoices)</span></label><input id="edit-address" type="text" placeholder="Company address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">GST No. <span class="font-normal text-gray-400">(Optional)</span></label><input id="edit-gst" type="text" placeholder="GST number" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <!-- Logo upload -->
@@ -5453,13 +5474,7 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <p id="logo-pro-hint" style="display:none;font-size:9px;color:#f59e0b;margin-top:3px;font-weight:600">🔒 PRO feature — tap to upgrade</p>
       </div>
-      <!-- Print Header Colour -->
-      <div>
-        <label class="text-xs font-semibold text-gray-500 block mb-2">🎨 Print Header Colour <span class="font-normal text-gray-400">(All PDF reports)</span></label>
-        <div id="color-swatches" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px"></div>
-        <input type="text" id="edit-header-color" placeholder="Custom CSS e.g. #4f46e5" class="w-full px-3 py-1.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-indigo-400 mt-1" oninput="previewHeaderColor(this.value)">
-      </div>
-      <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Profile</button>
+      <button onclick="saveOwnerCompany()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Company Settings</button>
     </div>
   </div>
 </div>
@@ -6250,7 +6265,7 @@ function lmergedProf() {
     gst:         g.gst         || p.gst         || '',
     logo:        g.logo        || p.logo        || null,
     engineer:    p.engineer    || '',
-    address:     p.address     || '',
+    address:     g.address     || p.address || '',
     headerColor: p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   };
 }
@@ -6369,10 +6384,24 @@ function mlabel(d) {
   return ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()] + ' ' + d.getFullYear();
 }
 function dedup(list) {
+  // Pick the most-recently-saved record per name+date. __ts (a real epoch
+  // timestamp) is the correct signal here. __id used to be compared, but
+  // __id is a string like "r9"/"r10"/"r100" and comparing those with ">"
+  // is a LEXICOGRAPHIC string comparison — "r9" > "r10" is true even
+  // though r10 was created after r9. Once the record counter passed 9,
+  // this made dedup randomly keep an OLDER attendance/expense entry over
+  // a newer one, which looked exactly like "my saved data got removed".
+  // Compare __ts (numeric) instead, falling back to the numeric part of
+  // __id only if __ts is somehow missing (very old records).
+  function ord(a) {
+    if (a.__ts) return a.__ts;
+    var n = parseInt(String(a.__id||'').replace(/[^0-9]/g,''), 10);
+    return isNaN(n) ? 0 : n;
+  }
   var m = {};
   list.forEach(function(a) {
     var k = a.name + '_' + a.date;
-    if (!m[k] || a.__id > m[k].__id) m[k] = a;
+    if (!m[k] || ord(a) > ord(m[k])) m[k] = a;
   });
   return Object.values(m);
 }
@@ -6485,17 +6514,35 @@ function applyProfile() {
 function openEditProfile() {
   _refreshProStatus();
   var p = lmergedProf();
-  document.getElementById('edit-company').value = p.company || '';
   document.getElementById('edit-engineer').value = p.engineer || '';
+  // Build colour swatches
+  _buildColorSwatches(p.headerColor || '');
+  document.getElementById('edit-header-color').value = p.headerColor || '';
+  document.getElementById('profile-modal').classList.add('modal-show');
+}
+
+// ── Owner-only: Company Settings (name, address, GST, logo) ──
+function openOwnerCompanyModal() {
+  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
+    if (typeof toast === 'function') toast('⚠️ Owner / admin only', 'err');
+    return;
+  }
+  _refreshProStatus();
+  var p = lmergedProf();
+  document.getElementById('edit-company').value = p.company || '';
   document.getElementById('edit-address').value = p.address || '';
   document.getElementById('edit-gst').value = p.gst || '';
+  var img = document.getElementById('edit-logo-img');
+  var prev = document.getElementById('edit-logo-preview');
+  var clr = document.getElementById('edit-logo-clear');
   if (p.logo) {
-    var img = document.getElementById('edit-logo-img');
-    var prev = document.getElementById('edit-logo-preview');
-    var clr = document.getElementById('edit-logo-clear');
     if (img) img.src = p.logo;
     if (prev) prev.style.display = 'block';
     if (clr) clr.style.display = 'inline-block';
+  } else {
+    if (img) img.removeAttribute('src');
+    if (prev) prev.style.display = 'none';
+    if (clr) clr.style.display = 'none';
   }
   // PRO hint
   var lbl = document.getElementById('logo-upload-label');
@@ -6507,10 +6554,28 @@ function openEditProfile() {
     if (lbl) { lbl.style.opacity = ''; lbl.style.borderColor = ''; lbl.style.background = ''; }
     if (hint) hint.style.display = 'none';
   }
-  // Build colour swatches
-  _buildColorSwatches(p.headerColor || '');
-  document.getElementById('edit-header-color').value = p.headerColor || '';
-  document.getElementById('profile-modal').classList.add('modal-show');
+  var m = document.getElementById('owner-company-modal');
+  if (m) m.style.display = 'flex';
+}
+function closeOwnerCompanyModal() {
+  var m = document.getElementById('owner-company-modal');
+  if (m) m.style.display = 'none';
+}
+function saveOwnerCompany() {
+  var co = document.getElementById('edit-company').value.trim();
+  if (!co) { toast('Please enter a company name', 'err'); return; }
+  var existingGlobal = lglobal() || {};
+  var logoEl  = document.getElementById('edit-logo-img');
+  var logoSrc = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
+  sglobal({
+    company: co,
+    address: document.getElementById('edit-address').value.trim(),
+    gst:     document.getElementById('edit-gst').value.trim(),
+    logo:    logoSrc || existingGlobal.logo || null
+  });
+  applyProfile();
+  closeOwnerCompanyModal();
+  toast('Company settings saved!', 'ok');
 }
 
 var _HEADER_COLORS = [
@@ -6579,27 +6644,15 @@ function closeProfileModal() {
   document.getElementById('profile-modal').classList.remove('modal-show');
 }
 function saveProfile() {
-  var co = document.getElementById('edit-company').value.trim();
   var en = document.getElementById('edit-engineer').value.trim();
-  if (!co || !en) { toast('Please fill company and engineer name', 'err'); return; }
+  if (!en) { toast('Please enter your name', 'err'); return; }
 
-  var existingGlobal  = lglobal() || {};
   var existingPerProj = lmergedProf();
-  var logoEl  = document.getElementById('edit-logo-img');
-  var logoSrc = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
   var hColor  = (document.getElementById('edit-header-color').value.trim()) || existingPerProj.headerColor || '';
 
-  // ── GLOBAL fields: same for ALL projects ──
-  sglobal({
-    company: co,
-    gst:     document.getElementById('edit-gst').value.trim(),
-    logo:    logoSrc || existingGlobal.logo || existingPerProj.logo || null
-  });
-
-  // ── PER-PROJECT fields: engineer, address, header colour ──
+  // ── PER-USER fields: engineer name, header colour ──
   sprof({
     engineer:    en,
-    address:     document.getElementById('edit-address').value.trim(),
     headerColor: hColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   });
 
@@ -7762,6 +7815,25 @@ function _qdprRefreshLiveTabsIfActive(pid){
   if (typeof updateDash === 'function') { try{ updateDash(); }catch(e){} }
 }
 
+// Every project the user can see in QDPR: their own local projects PLUS
+// any projects they joined elsewhere via a share/join code (token). Joined
+// projects use the same storage scope the engineer-join flow already uses
+// ('eng_'+pid) so their reports/materials are read from the right place.
+function _qdprAllSites(){
+  var own = (window.projects||[]).map(function(p){
+    return { id: p.id, name: p.name, address: p.address||'', editable: true, canWrite: true, joined: false };
+  });
+  var mem = (typeof _engLoadMemberships === 'function') ? _engLoadMemberships() : [];
+  var joined = mem.map(function(m){
+    return { id: 'eng_'+m.pid, name: m.pname, address: '', editable: false, canWrite: (m.role==='write'), joined: true };
+  });
+  return own.concat(joined);
+}
+function _qdprFindSite(pid){
+  var all = _qdprAllSites();
+  return all.find(function(s){ return s.id===pid; }) || null;
+}
+
 function loadQdprTab(){
   if (typeof _loadProjects === 'function') _loadProjects();
   if (!qdprState.date) qdprState.date = ist();
@@ -7807,7 +7879,22 @@ function openQdprProjectModal(pid){
     if (nameEl) nameEl.value = '';
     if (addrEl) addrEl.value = '';
   }
+  // The "Join instead" link only makes sense when adding a brand-new
+  // project, not while editing an existing one's name/address.
+  var joinLink = document.getElementById('qdpr-project-modal-join-link');
+  if (joinLink) joinLink.style.display = pid ? 'none' : 'block';
   modal.style.display = 'flex';
+}
+// Lets a user jump straight from "Add Project" to joining someone else's
+// project via a share code, instead of creating a brand-new (duplicate)
+// project of their own.
+function qdprGoToJoinProject() {
+  closeQdprProjectModal();
+  if (typeof closeQdprPanel === 'function') closeQdprPanel();
+  if (typeof openCloudModal === 'function') openCloudModal();
+  setTimeout(function() {
+    if (typeof switchCloudTab === 'function') switchCloudTab('join');
+  }, 150);
 }
 function closeQdprProjectModal(){
   var modal = document.getElementById('qdpr-project-modal');
@@ -7818,6 +7905,15 @@ function saveQdprSite(){
   var address = (document.getElementById('qs-address').value||'').trim();
   var editPid = (document.getElementById('qs-edit-pid').value||'').trim();
   if (!name) { toast('Enter project name','err'); return; }
+  // Enforce one project per name (case-insensitive) — prevents accidental
+  // duplicate projects with the same name. To add another site, use a
+  // different, distinguishing name, or use "Join instead" with a project
+  // code if you meant to join a project that already exists elsewhere.
+  var nameLower = name.toLowerCase();
+  var dupe = (window.projects||[]).find(function(p){
+    return p.id !== editPid && (p.name||'').trim().toLowerCase() === nameLower;
+  });
+  if (dupe) { toast('A project named "'+name+'" already exists — pick a different name','err'); return; }
   if (editPid) {
     // Edit existing project
     var proj = (window.projects||[]).find(function(p){ return p.id===editPid; });
@@ -7860,12 +7956,12 @@ function delQdprReport(pid, reportId){
 function renderQdprSites(){
   var el = document.getElementById('qdpr-sites-list'); if (!el) return;
   if (typeof _loadProjects === 'function') _loadProjects();
-  var projects = window.projects || [];
+  var projects = _qdprAllSites();
   var cnt = document.getElementById('qdpr-site-count');
   if (cnt) cnt.textContent = projects.length ? (projects.length+' project'+(projects.length>1?'s':'')) : '';
-  if (!projects.length) { el.innerHTML = '<div style="text-align:center;padding:40px 16px"><div style="font-size:44px;margin-bottom:12px">🏗️</div><div style="font-size:15px;font-weight:800;color:'+QC.ink+'">No Projects Yet</div><div style="font-size:12.5px;color:'+QC.fog+';margin-top:4px">Add a project above to start logging daily progress reports</div></div>'; return; }
+  if (!projects.length) { el.innerHTML = '<div style="text-align:center;padding:40px 16px"><div style="font-size:44px;margin-bottom:12px">🏗️</div><div style="font-size:15px;font-weight:800;color:'+QC.ink+'">No Projects Yet</div><div style="font-size:12.5px;color:'+QC.fog+';margin-top:4px">Add a project above, or join one with a project code</div></div>'; return; }
   el.innerHTML = projects.map(function(p){
-    var site = {__id: p.id, name: p.name, address: p.address||''};
+    var site = {__id: p.id, name: p.name, address: p.address||'', editable: p.editable, canWrite: p.canWrite, joined: p.joined};
     var pAD = qdprLoadProjAD(p.id);
     var report = pAD.find(function(d){ return d.type==='qdpr_entry' && d.date===qdprState.date; });
     return report ? qdprReportCard(site, report) : qdprEmptyCard(site);
@@ -7894,9 +7990,9 @@ function qdprReportCard(site, report){
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
-    +'<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'
+    +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
     +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
-    +'<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'
+    +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
     +'</div></div></div>'
     +'<div style="padding:13px 14px">'
     +((report.weather||report.siteNote)?('<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 12px;margin-bottom:13px;display:flex;gap:8px;align-items:flex-start"><span>'+_qdprWeatherEmoji(report.weather)+'</span><div style="font-size:12.5px"><span style="font-weight:700;color:#92400E">'+esc(report.weather||'')+'</span>'+(report.siteNote?('<span style="color:#78350F"> — '+esc(report.siteNote)+'</span>'):'')+'</div></div>'):'')
@@ -7923,21 +8019,24 @@ function qdprEmptyCard(site){
     +'<div style="color:white;font-size:15px;font-weight:800">'+esc(site.name)+'</div>'
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
-    +'<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'
+    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
     +'</div></div>'
     +'<div style="padding:16px 14px">'
     +'<div style="background:#FEF2F2;border:1.5px dashed #FCA5A5;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px;display:flex;flex-direction:column;align-items:center;gap:5px">'
     +'<div style="display:flex;align-items:center;gap:6px;color:#B91C1C;font-weight:800;font-size:13px">🔒 SITE CLOSED TODAY</div>'
     +'<div style="font-size:11.5px;color:#991B1B">No work reported for '+_qdprFmtDate(qdprState.date)+'</div>'
     +'</div>'
-    +'<button onclick="openQdprForm(\''+site.__id+'\')" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;background:linear-gradient(135deg,'+QC.navy+','+QC.royal+');color:white;box-shadow:0 2px 10px '+QC.navy+'40">➕ Add Daily Report</button>'
+    +(site.canWrite!==false
+      ? ('<button onclick="openQdprForm(\''+site.__id+'\')" style="width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;background:linear-gradient(135deg,'+QC.navy+','+QC.royal+');color:white;box-shadow:0 2px 10px '+QC.navy+'40">➕ Add Daily Report</button>')
+      : ('<p style="text-align:center;font-size:11px;color:'+QC.fog+';font-weight:600">👁️ Read-only access</p>'))
     +'</div></div>';
 }
 
 // ── Add / Edit Report modal ─────────────────────────────────
 function openQdprForm(pid, reportId){
-  var proj = (window.projects||[]).find(function(p){ return p.id===pid; }); if (!proj) return;
-  var site = {__id: pid, name: proj.name, address: proj.address||''};
+  var s = _qdprFindSite(pid); if (!s) return;
+  if (s.canWrite === false) { toast('👁️ Read-only access to this project', 'info'); return; }
+  var site = {__id: pid, name: s.name, address: s.address||''};
   qdprState.formSiteId = pid;
   qdprState.formReportId = reportId || null;
   var pAD = qdprLoadProjAD(pid);
@@ -8007,13 +8106,13 @@ function qdprFormHTML(site, isEdit){
 function qdprSetWeather(w){
   qdprFormState.weather = w;
   var modal = document.getElementById('qdpr-form-modal');
-  var proj = (window.projects||[]).find(function(p){ return p.id===qdprState.formSiteId; });
-  var site = proj ? {__id: proj.id, name: proj.name, address: proj.address||''} : null;
+  var s = _qdprFindSite(qdprState.formSiteId);
+  var site = s ? {__id: s.id, name: s.name, address: s.address||''} : null;
   if (modal && site) modal.innerHTML = qdprFormHTML(site, !!qdprState.formReportId);
 }
 function saveQdprReport(){
   var pid = qdprState.formSiteId;
-  var proj = (window.projects||[]).find(function(p){ return p.id===pid; }); if (!proj) return;
+  var s = _qdprFindSite(pid); if (!s) return;
   var rec = {
     type:'qdpr_entry', date: qdprFormState.date || qdprState.date,
     weather: qdprFormState.weather, siteNote: qdprFormState.siteNote,
@@ -8100,7 +8199,7 @@ function qdprBuildPrintBody(date, items){
 function printQdprAll(){
 try{
   if (typeof _loadProjects === 'function') _loadProjects();
-  var projects = window.projects || [];
+  var projects = _qdprAllSites();
   if (!projects.length){ toast('No projects yet','err'); return; }
   var items = projects.map(function(p){
     var site = {__id:p.id, name:p.name, address:p.address||''};
@@ -8119,8 +8218,8 @@ try{
 }
 function printQdprSite(pid){
 try{
-  var proj = (window.projects||[]).find(function(p){ return p.id===pid; }); if (!proj) return;
-  var site = {__id:proj.id, name:proj.name, address:proj.address||''};
+  var s = _qdprFindSite(pid); if (!s) return;
+  var site = {__id:s.id, name:s.name, address:s.address||''};
   var pAD = qdprLoadProjAD(pid);
   var report = pAD.find(function(d){ return d.type==='qdpr_entry'&&d.date===qdprState.date; })||null;
   var body = qdprBuildPrintBody(qdprState.date, [{site:site, report:report}]);
@@ -8547,6 +8646,12 @@ function addExpenseMaterial(){
     }
 
     // ── Cross-post to Materials Stock when type = 'material' ─────────────
+    // Only update stock if this material is ALREADY tracked in the Materials
+    // tab. A brand-new material name entered here should stay in Expenses
+    // only — it should NOT silently create a new stock item, since the
+    // material list is meant to be curated (units, min-qty alerts, etc.)
+    // rather than auto-populated from every expense line.
+    var _matStockUpdated = false;
     if (type === 'material') {
       var mats = lmat();
       var descLower = name.toLowerCase();
@@ -8555,14 +8660,13 @@ function addExpenseMaterial(){
         existing.transactions = existing.transactions || [];
         existing.transactions.push({ type:'purchase', qty:qty||1, date:date,
           note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:existing.unit||'' });
-      } else {
-        mats.push({ id:'mat'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
-          name:name, unit:'', minQty:0, created:Date.now(),
-          transactions:[{ type:'purchase', qty:qty||1, date:date,
-            note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'' }] });
+        smat(mats);
+        if (typeof viewMaterials === 'function') viewMaterials();
+        _matStockUpdated = true;
       }
-      smat(mats);
-      if (typeof viewMaterials === 'function') viewMaterials();
+      // else: new material not yet in the Materials list — leave it only
+      // in Expenses. Add it to the Materials tab first if stock tracking
+      // is wanted for it.
     }
 
     ['exp-mat-name','exp-mat-qty','exp-mat-cost','exp-mat-supplier'].forEach(function(id){
@@ -8571,7 +8675,7 @@ function addExpenseMaterial(){
     clearBill('exp');
     AD = ld();
     var label = type==='tool' ? 'Tool' : type==='others' ? 'Expense' : 'Material';
-    toast(label + ' saved!'+(type==='tool'?' ✅ Added to Tools stock.':type==='material'?' ✅ Stock updated.':''), 'ok');
+    toast(label + ' saved!'+(type==='tool'?' ✅ Added to Tools stock.':_matStockUpdated?' ✅ Stock updated.':''), 'ok');
     viewExpenses();
     updateDash();
   });
@@ -12961,9 +13065,14 @@ function _mergeRecordArrays(localArr, remoteArr, tombstones) {
       map[r.__id] = r; // remote is newer
     }
   });
-  // Filter out anything tombstoned
+  // Filter out anything tombstoned.
+  // NOTE: only drop a record if it actually HAS a tombstone newer than it.
+  // The old check "tomb < (r.__ts||0)" also silently dropped any record
+  // whose __ts was missing/0 (tomb defaults to 0, so "0 < 0" is false),
+  // which could wipe out perfectly valid records during a cloud merge.
   return Object.values(map).filter(function(r) {
     var tomb = tombstones[r.__id] || 0;
+    if (!tomb) return true; // never deleted — always keep
     return tomb < (r.__ts || 0);
   });
 }
@@ -15027,8 +15136,8 @@ function copyPrevDayAttendance() {
     // Only copy if not already entered today
     var exists = already.find(function(x){ return x.name === a.name; });
     if (!exists) {
-      var rec = { type:'attendance', date:DD, name:a.name, category:a.category, hours:a.hours, advance:0, ot_hours:0, ot_rate:a.ot_rate||0, work_done:'' };
-      add(rec); added++;
+      var rec = { type:'attendance', date:DD, name:a.name, category:a.category, hours:a.hours, advance:0, ot_hours:0, ot_rate:a.ot_rate||0, work_done:'', status:'P', payment:(parseFloat(a.hours)||0)*(parseFloat(a.hourly_wage)||0), hourly_wage:a.hourly_wage||0 };
+      ins(rec); added++;
     }
   });
   AD = ld(); toast('✅ Copied ' + added + ' workers from ' + prevDate, 'ok');
@@ -18396,20 +18505,25 @@ window.openOwnerOverview = function() {
   if (existing) existing.remove();
   var modal = document.createElement('div');
   modal.id = '_owner-overview-modal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:flex-start;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:12px;overflow-y:auto;';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;';
   modal.innerHTML =
-    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:16px 14px;width:100%;max-width:460px;margin-top:20px;margin-bottom:20px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'
-    + '<div><p style="font-size:14px;font-weight:900;color:#fff;margin:0 0 2px">👑 Owner Overview</p><p style="font-size:9.5px;color:rgba(255,255,255,0.5);margin:0">All ' + (window.projects||[]).length + ' projects, tab by tab</p></div>'
-    + '<button id="owner-ov-close" style="padding:6px 10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:9px;color:rgba(255,255,255,0.7);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">✕</button>'
-    + '</div>'
-    + '<div id="owner-ov-filters" style="display:flex;gap:5px;margin-bottom:10px;"></div>'
-    + '<div id="owner-ov-tabs" style="display:flex;gap:4px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;"></div>'
+    '<div id="owner-ov-backdrop" style="position:absolute;inset:0;background:rgba(10,6,35,.45);"></div>'
+    + '<div style="position:absolute;left:0;right:0;bottom:0;max-height:92vh;background:#F3F4F8;border-radius:20px 20px 0 0;box-shadow:0 -10px 50px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden;">'
+    + '<div style="width:38px;height:4px;border-radius:99px;background:rgba(0,0,0,.18);margin:8px auto 4px;flex-shrink:0"></div>'
+    + '<div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
+    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">👑 Owner Overview</div><div style="color:rgba(255,255,255,.6);font-size:10px">All ' + (window.projects||[]).length + ' projects, tab by tab</div></div>'
+    + '<div style="display:flex;gap:6px;flex-shrink:0">'
+    + '<button onclick="openOwnerCompanyModal()" title="Company Settings" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">⚙️</button>'
+    + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
+    + '</div></div>'
+    + '<div style="overflow-y:auto;padding:12px 14px 28px;flex:1">'
+    + '<div id="owner-ov-filters" style="display:flex;gap:6px;margin-bottom:10px;"></div>'
+    + '<div id="owner-ov-tabs" style="display:flex;gap:5px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;"></div>'
     + '<div id="owner-ov-body"></div>'
-    + '</div>';
+    + '</div></div>';
   document.body.appendChild(modal);
   document.getElementById('owner-ov-close').onclick = function(){ modal.remove(); };
-  modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
+  document.getElementById('owner-ov-backdrop').onclick = function(){ modal.remove(); };
   _ownerRenderFilters();
   _ownerRenderTabs();
   _ownerRenderBody();
@@ -18421,7 +18535,7 @@ function _ownerRenderFilters() {
   var opts = [['today','Today'],['month','This Month'],['overall','Overall']];
   wrap.innerHTML = opts.map(function(o){
     var active = _ownerFilter === o[0];
-    return '<button onclick="_ownerSetFilter(\'' + o[0] + '\')" style="flex:1;padding:7px 4px;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1px solid ' + (active?'rgba(52,211,153,.5)':'rgba(255,255,255,.12)') + ';background:' + (active?'rgba(52,211,153,.18)':'rgba(255,255,255,.05)') + ';color:' + (active?'#a7f3d0':'rgba(255,255,255,.55)') + ';">' + o[1] + '</button>';
+    return '<button onclick="_ownerSetFilter(\'' + o[0] + '\')" style="flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;border:1.5px solid ' + (active?'#4f46e5':'#e5e7eb') + ';background:' + (active?'#EEF2FF':'#fff') + ';color:' + (active?'#4338ca':'#6b7280') + ';">' + o[1] + '</button>';
   }).join('');
 }
 window._ownerSetFilter = function(f) { _ownerFilter = f; _ownerRenderFilters(); _ownerRenderBody(); };
@@ -18436,7 +18550,7 @@ function _ownerRenderTabs() {
   if (!wrap) return;
   wrap.innerHTML = OWNER_TABS.map(function(t){
     var active = _ownerTab === t[0];
-    return '<button onclick="_ownerSetTab(\'' + t[0] + '\')" style="flex-shrink:0;padding:6px 10px;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;border:1px solid ' + (active?'rgba(129,140,248,.5)':'rgba(255,255,255,.12)') + ';background:' + (active?'rgba(99,102,241,.25)':'rgba(255,255,255,.05)') + ';color:' + (active?'#c7d2fe':'rgba(255,255,255,.55)') + ';">' + t[1] + '</button>';
+    return '<button onclick="_ownerSetTab(\'' + t[0] + '\')" style="flex-shrink:0;padding:7px 11px;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;border:1.5px solid ' + (active?'#4f46e5':'#e5e7eb') + ';background:' + (active?'linear-gradient(135deg,#4f46e5,#7c3aed)':'#fff') + ';color:' + (active?'#fff':'#6b7280') + ';">' + t[1] + '</button>';
   }).join('');
 }
 window._ownerSetTab = function(t) { _ownerTab = t; _ownerRenderTabs(); _ownerRenderBody(); };
@@ -18451,29 +18565,29 @@ function _ownerRenderBody() {
 }
 
 function _siteTag(name) {
-  return '<span style="font-size:8.5px;font-weight:700;color:#a5b4fc;background:rgba(99,102,241,.15);padding:1px 6px;border-radius:5px;white-space:nowrap;flex-shrink:0;">' + _jhtml(name) + '</span>';
+  return '<span style="font-size:8.5px;font-weight:700;color:#4338ca;background:#EEF2FF;padding:2px 7px;border-radius:6px;white-space:nowrap;flex-shrink:0;">' + _jhtml(name) + '</span>';
 }
 function _ownerTotalsBar(stats) {
   return '<div style="display:grid;grid-template-columns:repeat(' + stats.length + ',1fr);gap:6px;margin-bottom:10px;">'
     + stats.map(function(s){ return _ownerStat(s[0], s[1]); }).join('') + '</div>';
 }
 function _ownerStat(label, value) {
-  return '<div style="background:rgba(0,0,0,.15);border-radius:8px;padding:7px 6px;text-align:center;">'
-    + '<p style="font-size:8px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;margin:0 0 2px;">' + label + '</p>'
-    + '<p style="font-size:12px;font-weight:800;color:#fff;margin:0;">' + value + '</p>'
+  return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:8px 6px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.04);">'
+    + '<p style="font-size:8.5px;font-weight:700;color:#9ca3af;text-transform:uppercase;margin:0 0 2px;">' + label + '</p>'
+    + '<p style="font-size:13px;font-weight:800;color:#1e1b4b;margin:0;">' + value + '</p>'
     + '</div>';
 }
 function _ownerRow(title, meta, site) {
-  return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 10px;margin-bottom:6px;">'
+  return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:9px 11px;margin-bottom:7px;box-shadow:0 1px 4px rgba(0,0,0,.04);">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">'
-    + '<p style="font-size:11.5px;font-weight:700;color:#fff;margin:0;flex:1;min-width:0;">' + title + '</p>'
+    + '<p style="font-size:11.5px;font-weight:700;color:#1e1b4b;margin:0;flex:1;min-width:0;">' + title + '</p>'
     + _siteTag(site)
     + '</div>'
-    + (meta ? '<p style="font-size:9.5px;color:rgba(255,255,255,0.45);margin:3px 0 0;">' + meta + '</p>' : '')
+    + (meta ? '<p style="font-size:9.5px;color:#6b7280;margin:3px 0 0;">' + meta + '</p>' : '')
     + '</div>';
 }
 function _ownerEmpty(msg) {
-  return '<p style="font-size:10.5px;color:rgba(255,255,255,0.3);text-align:center;padding:14px">' + msg + '</p>';
+  return '<p style="font-size:10.5px;color:#9ca3af;text-align:center;padding:14px">' + msg + '</p>';
 }
 window._ownerOpenReport = function(pid, reportId) {
   var m = document.getElementById('_owner-overview-modal'); if (m) m.remove();
@@ -18490,7 +18604,7 @@ var _ownerTabRenderers = {
       submitted += reports.length;
       reports.forEach(function(r) {
         var title = (typeof fd === 'function' ? fd(r.date) : r.date) + (r.weather ? ' · ' + _jhtml(r.weather) : '');
-        var meta = (r.siteNote ? _jhtml(r.siteNote) : 'Daily report') + ' · <a onclick="_ownerOpenReport(\'' + p.id + '\',\'' + r.__id + '\')" style="color:#93c5fd;cursor:pointer;text-decoration:underline;">View / Print</a>';
+        var meta = (r.siteNote ? _jhtml(r.siteNote) : 'Daily report') + ' · <a onclick="_ownerOpenReport(\'' + p.id + '\',\'' + r.__id + '\')" style="color:#4f46e5;cursor:pointer;text-decoration:underline;">View / Print</a>';
         rows.push({ date: r.date, html: _ownerRow(title, meta, p.name) });
       });
     });
@@ -18508,7 +18622,7 @@ var _ownerTabRenderers = {
       att.forEach(function(a) { var c = a.category||'Other'; byCat[c] = (byCat[c]||0) + 1; });
     });
     var catRows = Object.keys(byCat).sort(function(a,b){ return byCat[b]-byCat[a]; }).map(function(c) {
-      return '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:8px;margin-bottom:4px;"><span style="font-size:11px;color:#e0e7ff;font-weight:600;">' + _jhtml(c) + '</span><span style="font-size:11px;color:#a7f3d0;font-weight:800;">' + byCat[c] + '</span></div>';
+      return '<div style="display:flex;justify-content:space-between;padding:8px 11px;background:#fff;border:1px solid #e5e7eb;border-radius:9px;margin-bottom:5px;box-shadow:0 1px 4px rgba(0,0,0,.04);"><span style="font-size:11px;color:#1e1b4b;font-weight:600;">' + _jhtml(c) + '</span><span style="font-size:11px;color:#059669;font-weight:800;">' + byCat[c] + '</span></div>';
     }).join('');
     return _ownerTotalsBar([['Present (all sites)', totalPresent], ['Categories', Object.keys(byCat).length]])
       + (catRows || _ownerEmpty('No attendance in this period'));
@@ -18575,7 +18689,7 @@ var _ownerTabRenderers = {
       var d = _ownerLoadProject(p.id);
       d.AD.filter(function(x){ return x.type === 'rental' && _ownerInRange(x.borrowed_date); }).forEach(function(x) {
         if (x.is_given) given++; else received++;
-        var title = _jhtml(x.rental_name) + (x.is_given ? ' <span style="color:#6ee7b7">· Given Out</span>' : ' <span style="color:#fca5a5">· Received</span>');
+        var title = _jhtml(x.rental_name) + (x.is_given ? ' <span style="color:#059669">· Given Out</span>' : ' <span style="color:#dc2626">· Received</span>');
         var meta = (x.client_name?_jhtml(x.client_name)+' · ':'') + 'Qty '+(x.qty||1) + (x.borrowed_date?' · '+fd(x.borrowed_date):'');
         rows.push({ date: x.borrowed_date, html: _ownerRow(title, meta, p.name) });
       });
@@ -18611,7 +18725,7 @@ var _ownerTabRenderers = {
       d.pl.filter(function(x){ return _ownerInRange(x.date); }).forEach(function(x) {
         total++;
         if (x.status !== 'resolved') open++;
-        var sc = x.status==='resolved' ? '#6ee7b7' : x.status==='progress' ? '#fde68a' : '#fca5a5';
+        var sc = x.status==='resolved' ? '#059669' : x.status==='progress' ? '#d97706' : '#dc2626';
         var title = _jhtml(x.title) + ' <span style="color:'+sc+'">· ' + _jhtml(x.status||'open') + '</span>';
         var meta = (x.category?_jhtml(x.category)+' · ':'') + (x.priority?_jhtml(x.priority)+' · ':'') + (x.date?fd(x.date):'');
         rows.push({ date: x.date, html: _ownerRow(title, meta, p.name) });
@@ -18913,13 +19027,18 @@ function _applyEngineerUIMode() {
 }
 
 function _prefillEngineerProfile() {
+  // IMPORTANT: never write the project name into the "company" field.
+  // Company name must always come from the owner/admin's global profile
+  // (synced via cloud) so every user under the same admin sees the same
+  // company name in the header and on every PDF. We only prefill the
+  // engineer's own display name here as a harmless placeholder until the
+  // real cloud data (including the admin's global_prof.company) arrives.
   var m = _engActiveMembership();
-  var pname = m ? m.pname : 'Project';
   var mname = m ? m.name : 'Engineer';
   try {
     var existing = (typeof lprof === 'function') ? lprof() : null;
-    if (!existing || (!existing.company && !existing.engineer)) {
-      if (typeof sprof === 'function') sprof({ company: pname, engineer: mname });
+    if (!existing || !existing.engineer) {
+      if (typeof sprof === 'function') sprof(Object.assign({}, existing || {}, { engineer: mname }));
       if (typeof applyProfile === 'function') applyProfile();
     }
   } catch(e) {}
