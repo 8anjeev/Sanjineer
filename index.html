@@ -2526,10 +2526,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
     <div class="flex-1 flex items-center justify-center min-w-0">
       <!-- Hidden kept for JS compat -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
-      <button id="cloud-hdr-btn" class="cloud-btn flex-shrink-0" onclick="openCloudModal()" title="Admin" style="display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
-        <span id="cloud-hdr-label" style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Admin</span>
-      </button>
-      <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;">
+      <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;align-self:flex-start;margin-top:1px;">
         <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
       </button>
       <!-- Stacked: company above, project dropdown below -->
@@ -2538,7 +2535,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
         <div id="project-dropdown-wrap" style="flex-shrink:0;display:flex;align-items:center;justify-content:center"></div>
       </div>
       <!-- QDPR — mirrors Admin/Owner on the other side of center for symmetry -->
-      <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;flex-shrink:0;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
+      <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;flex-shrink:0;align-self:flex-start;margin-top:1px;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
         <span style="font-size:10px;line-height:1;font-weight:800;color:#fff;">QDPR</span>
       </button>
       <!-- Engineer name hidden — preserved for JS compat -->
@@ -5347,6 +5344,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <input type="date" id="qdpr-date-input" onchange="changeQdprDate(this.value)" style="background:rgba(255,255,255,.16);border:none;border-radius:9px;color:white;font-size:12.5px;font-weight:700;padding:6px 10px;outline:none;text-align:center;cursor:pointer">
       <button onclick="openQdprProjectModal()" title="Add Project" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center">➕</button>
+      <button onclick="openContactsPanel()" title="Contacts" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:16px;display:flex;align-items:center;justify-content:center">📞</button>
       <button onclick="printQdprAll()" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;padding:8px 12px;cursor:pointer;color:white;font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px">🖨️ Print All</button>
       <button onclick="closeQdprPanel()" style="width:30px;height:30px;flex-shrink:0;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
@@ -5370,6 +5368,54 @@ document.addEventListener('DOMContentLoaded', function() {
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Site Address</label><input type="text" id="qs-address" placeholder="Full site address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
     </div>
     <button id="qdpr-project-modal-save-btn" onclick="saveQdprSite()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">➕ Save Project</button>
+  </div>
+</div>
+
+<!-- ═══════════════ CONTACTS PANEL ═══════════════
+     Per-project phone book for suppliers / contractors / workers,
+     with a click-to-call number on every row. Reads/writes every
+     project's own contact list directly (same pattern as QDPR),
+     so it works regardless of which project is "active". -->
+<div id="contacts-panel" style="display:none;position:fixed;inset:0;z-index:9500;">
+  <div id="contacts-panel-backdrop" onclick="closeContactsPanel()" style="position:absolute;inset:0;background:rgba(10,6,35,0);transition:background .28s ease;"></div>
+  <div id="contacts-panel-sheet" style="position:absolute;left:0;right:0;bottom:0;max-height:92vh;background:#F3F4F8;border-radius:20px 20px 0 0;box-shadow:0 -10px 50px rgba(0,0,0,.45);transform:translateY(100%);transition:transform .32s cubic-bezier(0.34,1.05,0.64,1);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="width:38px;height:4px;border-radius:99px;background:rgba(0,0,0,.18);margin:8px auto 4px;flex-shrink:0"></div>
+    <div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">
+      <div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">📞 Contacts</div>
+      <select id="contacts-project-sel" onchange="onContactsProjectChange()" style="flex:1;min-width:0;background:rgba(255,255,255,.16);border:none;border-radius:9px;color:white;font-size:12px;font-weight:700;padding:7px 8px;outline:none"></select>
+      <button onclick="closeContactsPanel()" style="width:30px;height:30px;flex-shrink:0;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+    <div style="overflow-y:auto;padding:12px 14px 28px;flex:1">
+      <button onclick="openAddContactModal()" style="width:100%;padding:11px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:12.5px;cursor:pointer;margin-bottom:10px;">➕ Add Contact</button>
+      <div id="contacts-list"><p class="text-gray-400 text-center py-3 text-xs">No contacts yet</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Contact modal -->
+<div id="contact-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9600" onclick="if(event.target===this)closeAddContactModal()">
+  <div class="bg-white rounded-2xl p-4 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-2">
+      <h3 id="contact-modal-title" class="font-bold text-gray-800 text-sm">📞 Add Contact</h3>
+      <button onclick="closeAddContactModal()" class="text-gray-400 text-xl">✕</button>
+    </div>
+    <input type="hidden" id="ct-edit-id" value="">
+    <div class="grid grid-cols-1 gap-2 mb-2">
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Name</label><input type="text" id="ct-name" placeholder="e.g. Ramesh Steel Supplier" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Phone Number</label><input type="tel" id="ct-phone" placeholder="e.g. 98765 43210" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div>
+        <label class="text-[10px] font-bold text-gray-500 block mb-1">Type</label>
+        <select id="ct-role" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+          <option value="Supplier">📦 Supplier</option>
+          <option value="Contractor">🏗️ Contractor</option>
+          <option value="Worker">👷 Worker</option>
+          <option value="Vendor">🏪 Vendor</option>
+          <option value="Other">📋 Other</option>
+        </select>
+      </div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Company / Notes <span class="font-normal text-gray-400">(Optional)</span></label><input type="text" id="ct-notes" placeholder="e.g. Steel & TMT bars" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+    </div>
+    <button id="contact-modal-save-btn" onclick="saveContact()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">➕ Save Contact</button>
   </div>
 </div>
 
@@ -7387,6 +7433,17 @@ function _matCatOptionsHTML(selected, includeAll){
   });
   return opts.join('');
 }
+// Shared worker-role list — the same options used in the Add Worker
+// form's Role dropdown, reused here so QDPR's Category field is a
+// dropdown instead of free text.
+var QDPR_WORKER_ROLES = ['Mason','Labour','Carpenter','Helper','Fitter','Fitter Helper','Supervisor','Tile Mason','Tile Helper','Electrician','Elect-Helper','Plumber','Plumber Helper','Engineer','Guard'];
+function _genericOptionsHTML(options, selected){
+  var opts = ['<option value="">Select</option>'];
+  (options||[]).forEach(function(o){
+    opts.push('<option value="'+esc(o)+'"'+(o===selected?' selected':'')+'>'+esc(o)+'</option>');
+  });
+  return opts.join('');
+}
 var qdprState = { date: null, formSiteId: null, formReportId: null };
 var qdprFormState = null;
 
@@ -7426,8 +7483,8 @@ function qdprPhotoGridView(photos){
 
 // ── Row editor (Labour / Dept Work / Materials) ────────────────
 var QDPR_ROW_FIELDS = {
-  labour:      [{key:'category',label:'Category',ph:'Mason / Labour / Carpenter...'},{key:'count',label:'Count',ph:'4',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concreting, soiling of Footing 79',full:true}],
-  deptWork:    [{key:'category',label:'Category',ph:'Mason / Labour'},{key:'workers',label:'Workers',ph:'1',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concrete around RCC pipe',full:true}],
+  labour:      [{key:'category',label:'Category',type:'select',options:QDPR_WORKER_ROLES},{key:'count',label:'No.',ph:'4',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concreting, soiling of Footing 79',full:true}],
+  deptWork:    [{key:'category',label:'Category',type:'select',options:QDPR_WORKER_ROLES},{key:'workers',label:'No.',ph:'1',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concrete around RCC pipe',full:true}],
   matBought:   [{key:'material',label:'Material',ph:'Cement / Hammer beat'},{key:'matCategory',label:'Material Type',type:'select',options:MATERIAL_CATEGORIES},{key:'qty',label:'Qty',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Bags / Kg / Nos'},{key:'supplier',label:'Supplier Name',ph:'Supplier / Vendor'},{key:'amount',label:'Amount (₹)',ph:'0',type:'number'}],
   matRequired: [{key:'material',label:'Material',ph:'Binding wire / Cement'},{key:'matCategory',label:'Material Type',type:'select',options:MATERIAL_CATEGORIES},{key:'qty',label:'Qty Needed',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Kg / Bags / Nos'}]
 };
@@ -7440,28 +7497,42 @@ var QDPR_ROW_BLANKS = {
 function qdprBuildRowsHTML(section){
   var rows = qdprFormState[section] || [];
   var fields = QDPR_ROW_FIELDS[section];
+  // Labour / Dept Work: Category + No. + Floor share one compact line,
+  // Work Done starts on its own line below — everything else (materials
+  // rows) keeps the original 2-column layout.
+  var compact = (section === 'labour' || section === 'deptWork');
+  var lineFields = compact ? fields.filter(function(f){ return !f.full; }) : fields;
+  var fullFields = compact ? fields.filter(function(f){ return f.full; }) : [];
+  function renderField(f, row){
+    var control;
+    if (f.type==='select'){
+      control = '<select onchange="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 8px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:12.5px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">'
+        +_genericOptionsHTML(f.options, row[f.key]||'')
+        +'</select>';
+    } else {
+      control = '<input type="'+(f.type||'text')+'" value="'+esc(row[f.key]||'')+'" placeholder="'+(f.ph||'')+'" oninput="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">';
+    }
+    return '<div style="'+(f.full?'grid-column:1/-1':'')+'">'
+      +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">'+f.label+'</label>'
+      +control
+      +'</div>';
+  }
   return rows.map(function(row, ri){
+    var lineHtml = compact
+      ? '<div style="display:grid;grid-template-columns:'+lineFields.map(function(){return '1fr';}).join(' ')+';gap:8px'+(fullFields.length?';margin-bottom:8px':'')+'">'
+        + lineFields.map(function(f){ return renderField(f, row); }).join('')
+        + '</div>'
+        + fullFields.map(function(f){ return renderField(f, row); }).join('')
+      : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+        + fields.map(function(f){ return renderField(f, row); }).join('')
+        + '</div>';
     return '<div style="background:'+QC.snow+';border:1px solid '+QC.border+';border-radius:12px;padding:12px;margin-bottom:8px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
       +'<span style="font-size:10.5px;font-weight:700;color:'+QC.fog+'">#'+(ri+1)+'</span>'
       +(rows.length>1?'<button onclick="qdprRmRow(\''+section+'\',\''+row.id+'\')" style="font-size:10px;font-weight:700;color:'+QC.rose+';background:'+QC.rose+'15;border:none;border-radius:6px;padding:3px 8px;cursor:pointer">Remove</button>':'')
       +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-      +fields.map(function(f){
-        var control;
-        if (f.type==='select'){
-          control = '<select onchange="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">'
-            +_matCatOptionsHTML(row[f.key]||'', false)
-            +'</select>';
-        } else {
-          control = '<input type="'+(f.type||'text')+'" value="'+esc(row[f.key]||'')+'" placeholder="'+(f.ph||'')+'" oninput="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">';
-        }
-        return '<div style="'+(f.full?'grid-column:1/-1':'')+'">'
-          +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">'+f.label+'</label>'
-          +control
-          +'</div>';
-      }).join('')
-      +'</div></div>';
+      +lineHtml
+      +'</div>';
   }).join('');
 }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -12640,8 +12711,8 @@ function updateCloudBtn() {
 function updateOwnerBtn() {
   var btn = document.getElementById('owner-hdr-btn');
   if (!btn) return;
-  var isFullyActive = (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') && !!window._sbSubActive;
-  btn.style.display = (isFullyActive && !window._ENGINEER_MODE) ? 'flex' : 'none';
+  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+  btn.style.display = (isAdmin && !window._ENGINEER_MODE) ? 'flex' : 'none';
 }
 
 // -- Open / Close Cloud Modal --
@@ -16151,7 +16222,7 @@ function saveVisit() {
   var action  = document.getElementById('vt-action').value.trim();
   if (!visitor) { toast('Enter visitor name', 'err'); return; }
   var visits = lvisits();
-  visits.unshift({ id: Date.now().toString(36), date:date, type:type, visitor:visitor, org:org, notes:notes, action:action });
+  visits.unshift({ id: Date.now().toString(36), date:date, type:type, visitor:visitor, org:org, notes:notes, action:action, site_id: window.currentProjectId || null });
   svisits(visits);
   document.getElementById('vt-visitor').value = '';
   document.getElementById('vt-org').value = '';
@@ -17991,6 +18062,13 @@ function _genDeviceToken() {
   return Array.from(arr).map(function(b){ return b.toString(36).padStart(2,'0'); }).join('').slice(0,32);
 }
 function _jhtml(s) { return (typeof _escHtml === 'function') ? _escHtml(s) : String(s); }
+function _ownerMissingTableMsg(e) {
+  var msg = (e && e.message) || '';
+  if (/could not find the table|schema cache/i.test(msg)) {
+    return "⚠️ Database not set up yet — run join_code_system.sql in Supabase → SQL Editor (Settings → API → wait ~30s for the schema cache to refresh, or restart your Supabase API), then reload this page.";
+  }
+  return '⚠️ ' + _jhtml(msg || 'Something went wrong');
+}
 
 // ══════════════════════════════════════════════════════════════
 // ADMIN SIDE — Share a project (generate / manage join codes)
@@ -18035,7 +18113,7 @@ function _renderShareProjBody(projectId) {
     var members = results[1].data || [];
     _paintShareProjBody(projectId, codeRow, members);
   }).catch(function(e) {
-    body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ ' + _jhtml(e.message || 'Could not load — is the join-code table set up?') + '</p>';
+    body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
   });
 }
 
@@ -18106,7 +18184,7 @@ window._regenerateJoinCode = function(projectId) {
       toast('✅ New join code generated', 'ok');
       _renderShareProjBody(projectId);
     }).catch(function(e) {
-      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ ' + _jhtml(e.message||'Failed') + '</p>';
+      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
     });
 };
 
@@ -18132,103 +18210,434 @@ window._revokeMember = function(memberId, projectId) {
 };
 
 // ══════════════════════════════════════════════════════════════
-// OWNER OVERVIEW — see every project's key numbers at once
+// CONTACTS — per-project phone book for suppliers, contractors,
+// and workers, with a tap-to-call number on every row. Reads/writes
+// each project's own contact list directly (same _qdprProjKey
+// pattern QDPR uses), so it works no matter which project is
+// currently "active" in the app.
 // ══════════════════════════════════════════════════════════════
 
+var CONTACTS_KEY = 'cm_contacts';
+var _contactsSelectedPid = null;
+
+function _contactsLoad(pid) {
+  try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, CONTACTS_KEY)) || '[]'); } catch(e) { return []; }
+}
+function _contactsSave(pid, arr) {
+  try { safeLS.setItem(_qdprProjKey(pid, CONTACTS_KEY), JSON.stringify(arr)); } catch(e) {}
+  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+}
+
+window.openContactsPanel = function() {
+  var panel = document.getElementById('contacts-panel');
+  var backdrop = document.getElementById('contacts-panel-backdrop');
+  var sheet = document.getElementById('contacts-panel-sheet');
+  if (!panel) return;
+  panel.style.display = 'block';
+  _renderContactsProjectSelector();
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      if (backdrop) backdrop.style.background = 'rgba(10,6,35,.55)';
+      if (sheet) sheet.style.transform = 'translateY(0)';
+    });
+  });
+};
+window.closeContactsPanel = function() {
+  var backdrop = document.getElementById('contacts-panel-backdrop');
+  var sheet = document.getElementById('contacts-panel-sheet');
+  var panel = document.getElementById('contacts-panel');
+  if (backdrop) backdrop.style.background = 'rgba(10,6,35,0)';
+  if (sheet) sheet.style.transform = 'translateY(100%)';
+  setTimeout(function(){ if (panel) panel.style.display = 'none'; }, 300);
+};
+
+function _renderContactsProjectSelector() {
+  var sel = document.getElementById('contacts-project-sel');
+  if (!sel) return;
+  var projects = window.projects || [];
+  if (!projects.length) {
+    sel.innerHTML = '<option value="">No projects yet</option>';
+    _contactsSelectedPid = null;
+    _renderContactsList();
+    return;
+  }
+  if (!_contactsSelectedPid || !projects.some(function(p){ return p.id === _contactsSelectedPid; })) {
+    _contactsSelectedPid = window.currentProjectId && projects.some(function(p){ return p.id === window.currentProjectId; })
+      ? window.currentProjectId : projects[0].id;
+  }
+  sel.innerHTML = projects.map(function(p) {
+    return '<option value="' + p.id + '"' + (p.id === _contactsSelectedPid ? ' selected' : '') + '>' + _jhtml(p.name) + '</option>';
+  }).join('');
+  _renderContactsList();
+}
+window.onContactsProjectChange = function() {
+  var sel = document.getElementById('contacts-project-sel');
+  if (sel) _contactsSelectedPid = sel.value;
+  _renderContactsList();
+};
+
+var CT_ROLE_ICON = { Supplier:'📦', Contractor:'🏗️', Worker:'👷', Vendor:'🏪', Other:'📋' };
+var CT_ROLE_COLOR = { Supplier:'#818cf8', Contractor:'#f59e0b', Worker:'#34d399', Vendor:'#f472b6', Other:'#9ca3af' };
+
+function _renderContactsList() {
+  var list = document.getElementById('contacts-list');
+  if (!list) return;
+  if (!_contactsSelectedPid) { list.innerHTML = '<p class="text-gray-400 text-center py-3 text-xs">No projects yet</p>'; return; }
+  var contacts = _contactsLoad(_contactsSelectedPid).slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+  if (!contacts.length) { list.innerHTML = '<p class="text-gray-400 text-center py-3 text-xs">No contacts saved for this project yet</p>'; return; }
+  list.innerHTML = contacts.map(function(c) {
+    var icon = CT_ROLE_ICON[c.role] || '📋';
+    var col  = CT_ROLE_COLOR[c.role] || '#9ca3af';
+    var telHref = 'tel:' + String(c.phone||'').replace(/[^0-9+]/g,'');
+    return '<div style="background:#fff;border-radius:14px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:10px;">'
+      + '<div style="width:34px;height:34px;border-radius:10px;background:' + col + '22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">' + icon + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<p style="font-size:12.5px;font-weight:800;color:#1f2937;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(c.name) + '</p>'
+      + '<p style="font-size:10px;color:' + col + ';font-weight:700;margin:1px 0 0;">' + _jhtml(c.role||'Other') + (c.notes ? ' · <span style="color:#9ca3af;font-weight:600;">' + _jhtml(c.notes) + '</span>' : '') + '</p>'
+      + '</div>'
+      + '<a href="' + telHref + '" style="flex-shrink:0;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#059669,#10b981);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;text-decoration:none;">📞</a>'
+      + '<button onclick="openAddContactModal(\'' + c.id + '\')" title="Edit" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#eef2ff;border:none;color:#6366f1;font-size:11px;cursor:pointer;">✏️</button>'
+      + '<button onclick="deleteContact(\'' + c.id + '\')" title="Delete" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;font-size:11px;cursor:pointer;">✕</button>'
+      + '</div>';
+  }).join('');
+}
+
+window.openAddContactModal = function(editId) {
+  if (!_contactsSelectedPid) { toast('Add a project first', 'err'); return; }
+  var modal = document.getElementById('contact-add-modal');
+  var title = document.getElementById('contact-modal-title');
+  var idEl = document.getElementById('ct-edit-id');
+  var nameEl = document.getElementById('ct-name'), phoneEl = document.getElementById('ct-phone'),
+      roleEl = document.getElementById('ct-role'), notesEl = document.getElementById('ct-notes');
+  var existing = editId ? _contactsLoad(_contactsSelectedPid).find(function(c){ return c.id === editId; }) : null;
+  if (idEl) idEl.value = existing ? existing.id : '';
+  if (nameEl) nameEl.value = existing ? existing.name : '';
+  if (phoneEl) phoneEl.value = existing ? existing.phone : '';
+  if (roleEl) roleEl.value = existing ? existing.role : 'Supplier';
+  if (notesEl) notesEl.value = existing ? (existing.notes||'') : '';
+  if (title) title.textContent = existing ? '✏️ Edit Contact' : '📞 Add Contact';
+  if (modal) modal.style.display = 'flex';
+};
+window.closeAddContactModal = function() {
+  var modal = document.getElementById('contact-add-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+window.saveContact = function() {
+  if (!_contactsSelectedPid) return;
+  var id = document.getElementById('ct-edit-id').value;
+  var name = document.getElementById('ct-name').value.trim();
+  var phone = document.getElementById('ct-phone').value.trim();
+  var role = document.getElementById('ct-role').value;
+  var notes = document.getElementById('ct-notes').value.trim();
+  if (!name) { toast('Enter a name', 'err'); return; }
+  if (!phone) { toast('Enter a phone number', 'err'); return; }
+  var list = _contactsLoad(_contactsSelectedPid);
+  if (id) {
+    var idx = list.findIndex(function(c){ return c.id === id; });
+    if (idx > -1) list[idx] = Object.assign({}, list[idx], { name:name, phone:phone, role:role, notes:notes });
+  } else {
+    list.push({ id: uid(), name:name, phone:phone, role:role, notes:notes, created: Date.now() });
+  }
+  _contactsSave(_contactsSelectedPid, list);
+  closeAddContactModal();
+  _renderContactsList();
+  toast('✅ Contact saved', 'ok');
+};
+
+window.deleteContact = function(id) {
+  if (!_contactsSelectedPid) return;
+  askDel('Delete this contact?', function(){
+    var list = _contactsLoad(_contactsSelectedPid).filter(function(c){ return c.id !== id; });
+    _contactsSave(_contactsSelectedPid, list);
+    _renderContactsList();
+    toast('Deleted', 'ok');
+  });
+};
+
+// ══════════════════════════════════════════════════════════════
+// OWNER OVERVIEW — every project, tab by tab, with a
+// Today / This Month / Overall filter. Reads each project's own
+// local data directly (the same pattern QDPR already uses to touch
+// every project regardless of which one is "active"), so it works
+// instantly with no network round-trip.
+// ══════════════════════════════════════════════════════════════
+
+var _ownerFilter = 'overall'; // 'today' | 'month' | 'overall'
+var _ownerTab = 'reports';
+
+function _ownerInRange(dateStr) {
+  if (!dateStr) return _ownerFilter === 'overall';
+  var today = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
+  if (_ownerFilter === 'today') return dateStr === today;
+  if (_ownerFilter === 'month') return dateStr.slice(0,7) === today.slice(0,7);
+  return true;
+}
+
+function _ownerLoadProject(pid) {
+  function pk(base){ return 'sanj_project_' + pid + '_' + base; }
+  function j(key, fallback) { try { var v = safeLS.getItem(key); return v === null ? JSON.parse(fallback) : JSON.parse(v); } catch(e) { return JSON.parse(fallback); } }
+  return {
+    AD:   j(pk(DB), '[]'),
+    mats: j(pk(MATS), '[]'),
+    dept: j(pk(DEPT), '{}'),
+    bgt:  j(pk(BGT_KEY), 'null'),
+    ms:   j(pk(MS_KEY), '[]'),
+    pl:   j(pk(PL_KEY), '[]'),
+    mach: j(pk(MACH_KEY), '{}')
+  };
+}
+
 window.openOwnerOverview = function() {
-  if (!_sb || !_adminSBUser) {
-    if (typeof toast === 'function') toast('⚠️ Admin login required', 'err');
+  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
+    if (typeof toast === 'function') toast('⚠️ Admin only', 'err');
     return;
   }
   var existing = document.getElementById('_owner-overview-modal');
   if (existing) existing.remove();
   var modal = document.createElement('div');
   modal.id = '_owner-overview-modal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:16px;';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:flex-start;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:12px;overflow-y:auto;';
   modal.innerHTML =
-    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:18px 16px;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
-    + '<p style="font-size:14px;font-weight:900;color:#fff;margin:0 0 2px">👑 Owner Overview</p>'
-    + '<p style="font-size:10px;color:rgba(255,255,255,0.5);margin:0 0 12px">Every project, tab by tab, in one place.</p>'
-    + '<div id="owner-ov-body"><p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:20px">Loading all projects…</p></div>'
-    + '<button id="owner-ov-close" style="width:100%;margin-top:12px;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;">Close</button>'
+    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:16px 14px;width:100%;max-width:460px;margin-top:20px;margin-bottom:20px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'
+    + '<div><p style="font-size:14px;font-weight:900;color:#fff;margin:0 0 2px">👑 Owner Overview</p><p style="font-size:9.5px;color:rgba(255,255,255,0.5);margin:0">All ' + (window.projects||[]).length + ' projects, tab by tab</p></div>'
+    + '<button id="owner-ov-close" style="padding:6px 10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:9px;color:rgba(255,255,255,0.7);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">✕</button>'
+    + '</div>'
+    + '<div id="owner-ov-filters" style="display:flex;gap:5px;margin-bottom:10px;"></div>'
+    + '<div id="owner-ov-tabs" style="display:flex;gap:4px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;"></div>'
+    + '<div id="owner-ov-body"></div>'
     + '</div>';
   document.body.appendChild(modal);
   document.getElementById('owner-ov-close').onclick = function(){ modal.remove(); };
   modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
-
-  _sb.from('cloud_backups').select('backup_key,data,updated_at').eq('admin_id', _adminSBUser.id)
-    .then(function(r) {
-      if (r.error) throw r.error;
-      _renderOwnerOverview(r.data || []);
-    }).catch(function(e) {
-      var body = document.getElementById('owner-ov-body');
-      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ ' + _jhtml(e.message||'Could not load') + '</p>';
-    });
+  _ownerRenderFilters();
+  _ownerRenderTabs();
+  _ownerRenderBody();
 };
 
-function _renderOwnerOverview(rows) {
+function _ownerRenderFilters() {
+  var wrap = document.getElementById('owner-ov-filters');
+  if (!wrap) return;
+  var opts = [['today','Today'],['month','This Month'],['overall','Overall']];
+  wrap.innerHTML = opts.map(function(o){
+    var active = _ownerFilter === o[0];
+    return '<button onclick="_ownerSetFilter(\'' + o[0] + '\')" style="flex:1;padding:7px 4px;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1px solid ' + (active?'rgba(52,211,153,.5)':'rgba(255,255,255,.12)') + ';background:' + (active?'rgba(52,211,153,.18)':'rgba(255,255,255,.05)') + ';color:' + (active?'#a7f3d0':'rgba(255,255,255,.55)') + ';">' + o[1] + '</button>';
+  }).join('');
+}
+window._ownerSetFilter = function(f) { _ownerFilter = f; _ownerRenderFilters(); _ownerRenderBody(); };
+
+var OWNER_TABS = [
+  ['reports','📋 Reports'], ['workers','👷 Workers'], ['materials','🧱 Materials'],
+  ['machinery','⚙️ Machinery'], ['expenses','💵 Expenses'], ['rentals','📦 Rentals'],
+  ['departmental','🏗️ Dept Work'], ['punchlist','📝 Punchlist'], ['visits','🚶 Visits']
+];
+function _ownerRenderTabs() {
+  var wrap = document.getElementById('owner-ov-tabs');
+  if (!wrap) return;
+  wrap.innerHTML = OWNER_TABS.map(function(t){
+    var active = _ownerTab === t[0];
+    return '<button onclick="_ownerSetTab(\'' + t[0] + '\')" style="flex-shrink:0;padding:6px 10px;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;border:1px solid ' + (active?'rgba(129,140,248,.5)':'rgba(255,255,255,.12)') + ';background:' + (active?'rgba(99,102,241,.25)':'rgba(255,255,255,.05)') + ';color:' + (active?'#c7d2fe':'rgba(255,255,255,.55)') + ';">' + t[1] + '</button>';
+  }).join('');
+}
+window._ownerSetTab = function(t) { _ownerTab = t; _ownerRenderTabs(); _ownerRenderBody(); };
+
+function _ownerRenderBody() {
   var body = document.getElementById('owner-ov-body');
   if (!body) return;
   var projects = window.projects || [];
-  var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
-
-  var cards = [];
-  var totals = { materialCost: 0, budgetPlanned: 0, msDone: 0, msTotal: 0, plOpen: 0, plTotal: 0 };
-
-  projects.forEach(function(p) {
-    var key = base + '_p' + String(p.id).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
-    var row = rows.find(function(r){ return r.backup_key === key; });
-    var d = row ? row.data : null;
-    var mats = (d && d.mats) || [];
-    var bgt  = (d && d.budget) || null;
-    var ms   = (d && d.milestones) || [];
-    var pl   = (d && d.punchlist) || [];
-
-    var materialCost = mats.reduce(function(s,m){ return s + (parseFloat(m.cost)||0); }, 0);
-    var budgetPlanned = bgt ? (parseFloat(bgt.total)||0) : 0;
-    var msDone = ms.filter(function(m){ return (m.status||'').indexOf('Completed') !== -1; }).length;
-    var plOpen = pl.filter(function(x){ return x.status !== 'resolved'; }).length;
-
-    totals.materialCost += materialCost;
-    totals.budgetPlanned += budgetPlanned;
-    totals.msDone += msDone; totals.msTotal += ms.length;
-    totals.plOpen += plOpen; totals.plTotal += pl.length;
-
-    cards.push(
-      '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:12px;margin-bottom:8px;">'
-      + '<p style="font-size:12px;font-weight:800;color:#fff;margin:0 0 8px;">' + _jhtml(p.name) + (row ? '' : ' <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.35)">(no sync yet)</span>') + '</p>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
-      + _ownerStat('Materials', '₹' + Math.round(materialCost).toLocaleString('en-IN'))
-      + _ownerStat('Budget planned', '₹' + Math.round(budgetPlanned).toLocaleString('en-IN'))
-      + _ownerStat('Milestones', msDone + ' / ' + ms.length + ' done')
-      + _ownerStat('Punchlist open', plOpen + ' / ' + pl.length)
-      + '</div>'
-      + '</div>'
-    );
-  });
-
-  var totalsHtml =
-    '<div style="background:rgba(99,102,241,.15);border:1px solid rgba(129,140,248,.35);border-radius:12px;padding:12px;margin-bottom:12px;">'
-    + '<p style="font-size:10px;font-weight:800;color:#c7d2fe;margin:0 0 8px;">ACROSS ALL ' + projects.length + ' PROJECTS</p>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
-    + _ownerStat('Total materials', '₹' + Math.round(totals.materialCost).toLocaleString('en-IN'))
-    + _ownerStat('Total budget', '₹' + Math.round(totals.budgetPlanned).toLocaleString('en-IN'))
-    + _ownerStat('Milestones', totals.msDone + ' / ' + totals.msTotal + ' done')
-    + _ownerStat('Punchlist open', totals.plOpen + ' / ' + totals.plTotal)
-    + '</div>'
-    + '</div>';
-
-  body.innerHTML = projects.length
-    ? (totalsHtml + cards.join(''))
-    : '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">No projects yet</p>';
+  if (!projects.length) { body.innerHTML = _ownerEmpty('No projects yet'); return; }
+  var fn = _ownerTabRenderers[_ownerTab];
+  body.innerHTML = fn ? fn(projects) : '';
 }
 
+function _siteTag(name) {
+  return '<span style="font-size:8.5px;font-weight:700;color:#a5b4fc;background:rgba(99,102,241,.15);padding:1px 6px;border-radius:5px;white-space:nowrap;flex-shrink:0;">' + _jhtml(name) + '</span>';
+}
+function _ownerTotalsBar(stats) {
+  return '<div style="display:grid;grid-template-columns:repeat(' + stats.length + ',1fr);gap:6px;margin-bottom:10px;">'
+    + stats.map(function(s){ return _ownerStat(s[0], s[1]); }).join('') + '</div>';
+}
 function _ownerStat(label, value) {
-  return '<div style="background:rgba(0,0,0,.15);border-radius:8px;padding:7px 9px;">'
-    + '<p style="font-size:8.5px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;margin:0 0 2px;">' + label + '</p>'
-    + '<p style="font-size:12.5px;font-weight:800;color:#fff;margin:0;">' + value + '</p>'
+  return '<div style="background:rgba(0,0,0,.15);border-radius:8px;padding:7px 6px;text-align:center;">'
+    + '<p style="font-size:8px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;margin:0 0 2px;">' + label + '</p>'
+    + '<p style="font-size:12px;font-weight:800;color:#fff;margin:0;">' + value + '</p>'
     + '</div>';
 }
+function _ownerRow(title, meta, site) {
+  return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:8px 10px;margin-bottom:6px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;">'
+    + '<p style="font-size:11.5px;font-weight:700;color:#fff;margin:0;flex:1;min-width:0;">' + title + '</p>'
+    + _siteTag(site)
+    + '</div>'
+    + (meta ? '<p style="font-size:9.5px;color:rgba(255,255,255,0.45);margin:3px 0 0;">' + meta + '</p>' : '')
+    + '</div>';
+}
+function _ownerEmpty(msg) {
+  return '<p style="font-size:10.5px;color:rgba(255,255,255,0.3);text-align:center;padding:14px">' + msg + '</p>';
+}
+window._ownerOpenReport = function(pid, reportId) {
+  var m = document.getElementById('_owner-overview-modal'); if (m) m.remove();
+  if (typeof openQdprForm === 'function') openQdprForm(pid, reportId);
+};
+
+var _ownerTabRenderers = {
+
+  reports: function(projects) {
+    var rows = [], submitted = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      var reports = d.AD.filter(function(x){ return x.type === 'qdpr_entry' && _ownerInRange(x.date); });
+      submitted += reports.length;
+      reports.forEach(function(r) {
+        var title = (typeof fd === 'function' ? fd(r.date) : r.date) + (r.weather ? ' · ' + _jhtml(r.weather) : '');
+        var meta = (r.siteNote ? _jhtml(r.siteNote) : 'Daily report') + ' · <a onclick="_ownerOpenReport(\'' + p.id + '\',\'' + r.__id + '\')" style="color:#93c5fd;cursor:pointer;text-decoration:underline;">View / Print</a>';
+        rows.push({ date: r.date, html: _ownerRow(title, meta, p.name) });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Reports submitted', submitted], ['Sites', projects.length]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No daily reports in this period'));
+  },
+
+  workers: function(projects) {
+    var totalPresent = 0, byCat = {};
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      var att = d.AD.filter(function(x){ return x.type === 'attendance' && x.status !== 'A' && _ownerInRange(x.date); });
+      totalPresent += att.length;
+      att.forEach(function(a) { var c = a.category||'Other'; byCat[c] = (byCat[c]||0) + 1; });
+    });
+    var catRows = Object.keys(byCat).sort(function(a,b){ return byCat[b]-byCat[a]; }).map(function(c) {
+      return '<div style="display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:8px;margin-bottom:4px;"><span style="font-size:11px;color:#e0e7ff;font-weight:600;">' + _jhtml(c) + '</span><span style="font-size:11px;color:#a7f3d0;font-weight:800;">' + byCat[c] + '</span></div>';
+    }).join('');
+    return _ownerTotalsBar([['Present (all sites)', totalPresent], ['Categories', Object.keys(byCat).length]])
+      + (catRows || _ownerEmpty('No attendance in this period'));
+  },
+
+  materials: function(projects) {
+    var rows = [], total = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      d.mats.forEach(function(m) {
+        (m.transactions||[]).filter(function(t){ return t.type === 'purchase' && _ownerInRange(t.date); }).forEach(function(t) {
+          total += parseFloat(t.cost)||0;
+          var meta = '₹' + Math.round(t.cost||0).toLocaleString('en-IN') + (t.supplier?' · '+_jhtml(t.supplier):'') + (t.date?' · '+fd(t.date):'');
+          rows.push({ date: t.date, html: _ownerRow(_jhtml(m.name) + ' — ' + (t.qty||'') + ' ' + _jhtml(t.unit||m.unit||''), meta, p.name) });
+        });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Total materials cost', '₹'+Math.round(total).toLocaleString('en-IN')], ['Purchases', rows.length]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No material purchases in this period'));
+  },
+
+  machinery: function(projects) {
+    var byName = {}, totalHrs = 0, totalCost = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      Object.keys(d.mach).forEach(function(date) {
+        if (!_ownerInRange(date)) return;
+        (d.mach[date]||[]).forEach(function(s) {
+          var key = p.id + '__' + (s.name||'Machine');
+          if (!byName[key]) byName[key] = { name: s.name||'Machine', site: p.name, hours: 0, cost: 0 };
+          byName[key].hours += parseFloat(s.hours)||0;
+          byName[key].cost  += parseFloat(s.cost)||0;
+          totalHrs += parseFloat(s.hours)||0;
+          totalCost += parseFloat(s.cost)||0;
+        });
+      });
+    });
+    var rows = Object.keys(byName).map(function(k){ var m = byName[k];
+      return _ownerRow(_jhtml(m.name), m.hours.toFixed(1) + 'h · ₹' + Math.round(m.cost).toLocaleString('en-IN'), m.site);
+    });
+    return _ownerTotalsBar([['Total hours', totalHrs.toFixed(1)+'h'], ['Total cost', '₹'+Math.round(totalCost).toLocaleString('en-IN')]])
+      + (rows.length ? rows.join('') : _ownerEmpty('No machinery logged in this period'));
+  },
+
+  expenses: function(projects) {
+    var rows = [], total = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      d.AD.filter(function(x){ return x.type === 'material' && _ownerInRange(x.date); }).forEach(function(x) {
+        total += parseFloat(x.cost)||0;
+        var meta = '₹'+Math.round(x.cost||0).toLocaleString('en-IN') + (x.supplier?' · '+_jhtml(x.supplier):'') + (x.date?' · '+fd(x.date):'');
+        rows.push({ date: x.date, html: _ownerRow(_jhtml(x.material_name||'Expense') + (x.exp_type?' <span style="opacity:.5">('+_jhtml(x.exp_type)+')</span>':''), meta, p.name) });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Total expenses', '₹'+Math.round(total).toLocaleString('en-IN')], ['Purchases', rows.length]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No expenses in this period'));
+  },
+
+  rentals: function(projects) {
+    var rows = [], received = 0, given = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      d.AD.filter(function(x){ return x.type === 'rental' && _ownerInRange(x.borrowed_date); }).forEach(function(x) {
+        if (x.is_given) given++; else received++;
+        var title = _jhtml(x.rental_name) + (x.is_given ? ' <span style="color:#6ee7b7">· Given Out</span>' : ' <span style="color:#fca5a5">· Received</span>');
+        var meta = (x.client_name?_jhtml(x.client_name)+' · ':'') + 'Qty '+(x.qty||1) + (x.borrowed_date?' · '+fd(x.borrowed_date):'');
+        rows.push({ date: x.borrowed_date, html: _ownerRow(title, meta, p.name) });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Received', received], ['Given out', given]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No rental activity in this period'));
+  },
+
+  departmental: function(projects) {
+    var rows = [], total = 0, totalWorkers = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      Object.keys(d.dept).forEach(function(date) {
+        if (!_ownerInRange(date)) return;
+        (d.dept[date]||[]).forEach(function(e) {
+          total += parseFloat(e.amount)||0;
+          totalWorkers += parseInt(e.workers)||0;
+          var meta = (e.workers||0) + ' workers · ' + (e.hours||'-') + 'h · ₹' + Math.round(e.amount||0).toLocaleString('en-IN') + ' · ' + fd(date);
+          rows.push({ date: date, html: _ownerRow(_jhtml(e.cat) + ' — ' + _jhtml(e.work||'Work'), meta, p.name) });
+        });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Total cost', '₹'+Math.round(total).toLocaleString('en-IN')], ['Worker-entries', totalWorkers]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No departmental work in this period'));
+  },
+
+  punchlist: function(projects) {
+    var rows = [], open = 0, total = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      d.pl.filter(function(x){ return _ownerInRange(x.date); }).forEach(function(x) {
+        total++;
+        if (x.status !== 'resolved') open++;
+        var sc = x.status==='resolved' ? '#6ee7b7' : x.status==='progress' ? '#fde68a' : '#fca5a5';
+        var title = _jhtml(x.title) + ' <span style="color:'+sc+'">· ' + _jhtml(x.status||'open') + '</span>';
+        var meta = (x.category?_jhtml(x.category)+' · ':'') + (x.priority?_jhtml(x.priority)+' · ':'') + (x.date?fd(x.date):'');
+        rows.push({ date: x.date, html: _ownerRow(title, meta, p.name) });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Open', open], ['Total', total]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No punch list items in this period'));
+  },
+
+  visits: function(projects) {
+    var rows = [];
+    var visits = (typeof lvisits === 'function') ? lvisits() : [];
+    var byPid = {};
+    projects.forEach(function(p){ byPid[p.id] = p.name; });
+    visits.filter(function(v){ return _ownerInRange(v.date); }).forEach(function(v) {
+      var siteName = (v.site_id && byPid[v.site_id]) ? byPid[v.site_id] : 'Unassigned';
+      var meta = (v.type?_jhtml(v.type)+' · ':'') + (v.notes?_jhtml(v.notes)+' · ':'') + (v.date?fd(v.date):'');
+      rows.push({ date: v.date, html: _ownerRow(_jhtml(v.visitor) + (v.org?' — '+_jhtml(v.org):''), meta, siteName) });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Visits', rows.length]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No site visits in this period'));
+  }
+};
 
 // ══════════════════════════════════════════════════════════════
 // ENGINEER SIDE — Join a project via code
@@ -18282,7 +18691,7 @@ window.doJoinProject = function() {
       _engineerStart();
     }).catch(function(e) {
       if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
-      if (errEl) { errEl.textContent = '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
+      if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
     });
 };
 
