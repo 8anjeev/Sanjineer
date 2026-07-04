@@ -2522,22 +2522,32 @@ function doAdminSignup() { cmSendSignupOtp(); }
       <!-- URL sits directly below logo -->
       <button onclick="showUrlSheet()" style="background:none;border:none;padding:0;cursor:pointer;font-size:7.5px;color:rgba(255,255,255,0.42);line-height:1;letter-spacing:.02em;margin-top:2px;margin-left:2px;-webkit-tap-highlight-color:transparent;outline:none;">app.sanjineer.in</button>
     </div>
-    <!-- CENTER: Company name stacked above project dropdown -->
-    <div class="flex-1 flex items-center justify-center min-w-0">
+    <!-- CENTER: Company name stacked above project dropdown.
+         Uses a 3-column grid (side / center / side) so the middle stack stays
+         TRULY centered in the header regardless of whether the left "Owner"
+         button is visible or not — a plain flex+justify-center row visually
+         drags the stack off-center whenever the two side buttons have
+         unequal widths (e.g. Owner button hidden for non-owners). -->
+    <div class="flex-1 min-w-0" style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:4px">
       <!-- Hidden kept for JS compat -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
-      <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;align-self:flex-start;margin-top:1px;">
-        <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
-      </button>
+      <!-- LEFT slot (mirrors QDPR slot on the right so center stays centered) -->
+      <div style="display:flex;align-items:center;justify-content:flex-start;min-width:0">
+        <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
+          <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
+        </button>
+      </div>
       <!-- Stacked: company above, project dropdown below -->
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;max-width:200px;">
         <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;letter-spacing:.01em;max-width:190px;text-align:center"></p>
         <div id="project-dropdown-wrap" style="flex-shrink:0;display:flex;align-items:center;justify-content:center"></div>
       </div>
-      <!-- QDPR — mirrors Admin/Owner on the other side of center for symmetry -->
-      <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;margin-left:4px;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;flex-shrink:0;align-self:flex-start;margin-top:1px;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
-        <span style="font-size:10px;line-height:1;font-weight:800;color:#fff;">QDPR</span>
-      </button>
+      <!-- RIGHT slot — QDPR mirrors Admin/Owner slot on the other side for symmetry -->
+      <div style="display:flex;align-items:center;justify-content:flex-end;min-width:0">
+        <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;flex-shrink:0;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
+          <span style="font-size:10px;line-height:1;font-weight:800;color:#fff;">QDPR</span>
+        </button>
+      </div>
       <!-- Engineer name hidden — preserved for JS compat -->
       <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;display:none"></p>
     </div>
@@ -7401,14 +7411,13 @@ function toggleStaffFields(){
   if (wageEl) { wageEl.style.visibility = on ? 'hidden' : 'visible'; wageEl.disabled = on; }
   if (otEl)   { otEl.style.visibility   = on ? 'hidden' : 'visible'; otEl.disabled   = on; }
 }
-// Selecting a Team auto-switches the worker to fixed-monthly-salary mode:
-// hourly rate fields hide, only Role + Monthly Salary remain visible.
+// Selecting a Team no longer touches the Staff checkbox — Staff (fixed
+// monthly salary) is a manual choice the user makes independently of which
+// team a worker belongs to. We only keep this handler around in case future
+// team-specific logic is needed; it intentionally does nothing to w-is-staff.
 function onTeamChange(){
-  var teamEl = document.getElementById('w-team');
-  var chk = document.getElementById('w-is-staff');
-  if (!teamEl || !chk) return;
-  if (teamEl.value) { chk.checked = true; } else { chk.checked = false; }
-  toggleStaffFields();
+  // Intentionally left as a no-op for the Staff checkbox — do not auto-check
+  // or auto-uncheck 'w-is-staff' here.
 }
 
 function addWorker() {
@@ -13282,13 +13291,30 @@ function cloudRestoreNow() {
 
 // -- Auto Sync (bidirectional: push changes + pull remote changes every 25s) --
 var _adminRealtimeChannel = null;
-var _lastCloudTimestamp = 0;  // track remote lastSync to detect remote changes
+var _lastCloudTimestamp = 0;  // track remote lastSync for the admin's own active project
 
-function _applyCloudData(d, silent) {
+// Per-project "already applied" gates. QDPR merges data from every joined
+// project (see _engineerPullAll / _qdprAllSites), pulling each one's cloud
+// backup in turn. Previously all pulls shared the single _lastCloudTimestamp
+// gate above, so applying project A's data (with a newer lastSync) could
+// permanently block project B's data (an unrelated admin's clock, often
+// lower) from ever being applied — B's records/materials/address would
+// never sync down, so it looked "stuck"/missing in the QDPR list even
+// though it correctly appeared in the header's joined-projects dropdown.
+// Each joined project now gets its own independent gate, keyed by pid.
+var _lastCloudTimestampByScope = {};
+
+function _applyCloudData(d, silent, scopeKey) {
   if (!d) return;
   var remoteTs = d.lastSync || 0;
-  if (remoteTs && remoteTs < _lastCloudTimestamp) return; // already applied
-  _lastCloudTimestamp = remoteTs;
+  if (scopeKey) {
+    var _lastForScope = _lastCloudTimestampByScope[scopeKey] || 0;
+    if (remoteTs && remoteTs < _lastForScope) return; // already applied for this project
+    _lastCloudTimestampByScope[scopeKey] = remoteTs;
+  } else {
+    if (remoteTs && remoteTs < _lastCloudTimestamp) return; // already applied
+    _lastCloudTimestamp = remoteTs;
+  }
 
   // Smart merge: tombstones + per-record timestamps — same logic as cloudBackupNow
   var localTombs  = _loadTombstones();
@@ -19155,7 +19181,7 @@ window._engineerPush = function() {
 function _engApplyCloudDataToPid(pid, payload, silent) {
   var prevId = window.currentProjectId;
   window.currentProjectId = 'eng_' + pid;
-  try { if (typeof _applyCloudData === 'function') _applyCloudData(payload, true); }
+  try { if (typeof _applyCloudData === 'function') _applyCloudData(payload, true, 'eng_' + pid); }
   finally { window.currentProjectId = prevId; }
 }
 function _engPullMembership(m, silent) {
