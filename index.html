@@ -5400,13 +5400,13 @@ document.addEventListener('DOMContentLoaded', function() {
       <h3 id="contact-modal-title" class="font-bold text-gray-800 text-sm">📞 Add Contact</h3>
       <button onclick="closeAddContactModal()" class="text-gray-400 text-xl">✕</button>
     </div>
-    <input type="hidden" id="ct-edit-id" value="">
+    <input type="hidden" id="qct-edit-id" value="">
     <div class="grid grid-cols-1 gap-2 mb-2">
-      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Name</label><input type="text" id="ct-name" placeholder="e.g. Ramesh Steel Supplier" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Phone Number</label><input type="tel" id="ct-phone" placeholder="e.g. 98765 43210" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Name</label><input type="text" id="qct-name" placeholder="e.g. Ramesh Steel Supplier" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Phone Number</label><input type="tel" id="qct-phone" placeholder="e.g. 98765 43210" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div>
         <label class="text-[10px] font-bold text-gray-500 block mb-1">Type</label>
-        <select id="ct-role" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
+        <select id="qct-role" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400">
           <option value="Supplier">📦 Supplier</option>
           <option value="Contractor">🏗️ Contractor</option>
           <option value="Worker">👷 Worker</option>
@@ -5414,7 +5414,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <option value="Other">📋 Other</option>
         </select>
       </div>
-      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Company / Notes <span class="font-normal text-gray-400">(Optional)</span></label><input type="text" id="ct-notes" placeholder="e.g. Steel & TMT bars" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Company / Notes <span class="font-normal text-gray-400">(Optional)</span></label><input type="text" id="qct-notes" placeholder="e.g. Steel & TMT bars" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
     </div>
     <button id="contact-modal-save-btn" onclick="saveContact()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">➕ Save Contact</button>
   </div>
@@ -5480,7 +5480,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- Master Attendance Modal -->
-<div id="master-att-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this)closeMasterAttModal()">
+<div id="master-att-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this&&_modalGuardOk('master-att-modal'))closeMasterAtt()">
   <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl flex flex-col" style="max-height:90vh">
     <!-- Header -->
     <div class="flex items-center justify-between border-b border-gray-100" style="padding:8px 12px">
@@ -5514,7 +5514,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- Staff status + advance modal — opened by tapping a staff row's checkbox in Master Attendance -->
-<div id="ma-staff-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9700" onclick="if(event.target===this)closeMaStaffModal()">
+<div id="ma-staff-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9700" onclick="if(event.target===this&&_modalGuardOk('ma-staff-modal'))closeMaStaffModal()">
   <div class="bg-white rounded-2xl p-4 w-full max-w-xs shadow-2xl">
     <div class="flex items-center justify-between mb-3">
       <h3 class="font-bold text-gray-800 text-sm">🧑‍💼 <span id="ma-staff-modal-name">Staff</span></h3>
@@ -5576,7 +5576,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
-<div id="att-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this)closeAttModal()">
+<div id="att-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this&&_modalGuardOk('att-modal'))closeAttModal()">
   <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl" style="padding:10px 12px">
     <div class="flex items-center justify-between mb-2">
       <h3 id="att-modal-title" class="font-bold text-gray-800" style="font-size:12px">Attendance</h3>
@@ -7690,6 +7690,13 @@ function openQdprPanel(){
   if (!panel) return;
   panel.style.display = 'block';
   loadQdprTab();
+  // Refresh any token-joined projects in the background so they show
+  // up-to-date data in the merged QDPR list, not just the last-active one.
+  if (typeof window._engineerPullAll === 'function') {
+    window._engineerPullAll(true).then(function(){
+      if (panel.style.display !== 'none') renderQdprSites();
+    });
+  }
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       if (backdrop) backdrop.style.background = 'rgba(10,6,35,.55)';
@@ -8353,6 +8360,14 @@ function toggleWorkerActive() {
 function loadWorkerForEdit() {}
 function saveWorkerRates() { saveBulkWorkerRates(); }
 function _renderMwPreviewList() { _renderMwWorkerList(); }
+// ── Guard against ghost/duplicate click events (common in Android WebView
+// wrappers) that would otherwise close a modal the instant it opens, since
+// the same tap that opens it can generate a synthetic click that lands on
+// the newly-shown backdrop occupying that same screen position. ──
+var _modalOpenGuard = {};
+function _armModalGuard(id) { _modalOpenGuard[id] = Date.now(); }
+function _modalGuardOk(id) { var t = _modalOpenGuard[id]; return !t || (Date.now() - t) > 400; }
+
 function openAttModal(wid, date) {
   WID=wid; var w=AD.find(function(d){ return d.__id===wid; }); if(!w) return;
   var d=date||ist();
@@ -8376,6 +8391,7 @@ function openAttModal(wid, date) {
     document.getElementById('att-ot-hours').value=att?(att.ot_hours||''):'';
     calcAttTotal();
   }
+  _armModalGuard('att-modal');
   document.getElementById('att-modal').classList.add('modal-show');
 }
 function calcAttTotal(){
@@ -8393,7 +8409,7 @@ function calcAttTotal(){
   if(val) val.textContent=fc(total);
 }
 function closeAttModal(){ document.getElementById('att-modal').classList.remove('modal-show'); WID=null; }
-function closeMasterAttModal(){ document.getElementById('master-att-modal').classList.remove('modal-show'); }
+function closeMasterAttModal(){ closeMasterAtt(); }
 function closeManageWorkersModal(){ document.getElementById('manage-workers-modal').classList.remove('modal-show'); }
 function saveAttendance() {
   if (!WID) { toast('Error','err'); return; }
@@ -15920,6 +15936,7 @@ function openMasterAtt() {
     });
   }
   renderMasterAttWorkers();
+  _armModalGuard('master-att-modal');
   modal.style.display = 'flex';
 }
 function closeMasterAtt() {
@@ -15943,6 +15960,7 @@ function openMaStaffModal(wid){
     if (btn) btn.style.cssText = _maStatusBtnStyle(st===sd.status);
   });
   modal.dataset.status = sd.status;
+  _armModalGuard('ma-staff-modal');
   modal.style.display = 'flex';
 }
 function _maStatusBtnStyle(active){
@@ -16005,7 +16023,7 @@ function renderMasterAttWorkers() {
           if (!_maStaffData[_maKey(w.__id)]) _maStaffData[_maKey(w.__id)] = {status:curStatus, advance:curAdv};
           var sd = _maStaffData[_maKey(w.__id)];
           return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;background:'+(alreadyDone?'#fefce8':'#f5f3ff')+';border:1px solid '+(alreadyDone?'#fde047':'#ddd6fe')+'">'
-            +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" data-staff="1" checked'
+            +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" data-staff="1" '+(alreadyDone?'checked':'')
             +' style="width:16px;height:16px;accent-color:#7c3aed;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openMaStaffModal(\''+w.__id+'\')">'
             +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+w.name+' <span style="font-size:9px;color:#7c3aed;font-weight:800">STAFF</span>'+(alreadyDone?' ⚠️':'')+'</span>'
             +'<span id="ma-staff-pill-'+w.__id+'" onclick="event.stopPropagation();openMaStaffModal(\''+w.__id+'\')" style="font-size:10px;font-weight:800;border:1px solid #c4b5fd;border-radius:7px;padding:3px 8px;background:#fff;color:#5b21b6;cursor:pointer">'+sd.status+(sd.advance>0?' · ₹'+sd.advance:'')+'</span>'
@@ -18414,9 +18432,9 @@ window.openAddContactModal = function(editId) {
   if (!_contactsSelectedPid) { toast('Add a project first', 'err'); return; }
   var modal = document.getElementById('contact-add-modal');
   var title = document.getElementById('contact-modal-title');
-  var idEl = document.getElementById('ct-edit-id');
-  var nameEl = document.getElementById('ct-name'), phoneEl = document.getElementById('ct-phone'),
-      roleEl = document.getElementById('ct-role'), notesEl = document.getElementById('ct-notes');
+  var idEl = document.getElementById('qct-edit-id');
+  var nameEl = document.getElementById('qct-name'), phoneEl = document.getElementById('qct-phone'),
+      roleEl = document.getElementById('qct-role'), notesEl = document.getElementById('qct-notes');
   var existing = editId ? _contactsLoad(_contactsSelectedPid).find(function(c){ return c.id === editId; }) : null;
   if (idEl) idEl.value = existing ? existing.id : '';
   if (nameEl) nameEl.value = existing ? existing.name : '';
@@ -18433,11 +18451,11 @@ window.closeAddContactModal = function() {
 
 window.saveContact = function() {
   if (!_contactsSelectedPid) return;
-  var id = document.getElementById('ct-edit-id').value;
-  var name = document.getElementById('ct-name').value.trim();
-  var phone = document.getElementById('ct-phone').value.trim();
-  var role = document.getElementById('ct-role').value;
-  var notes = document.getElementById('ct-notes').value.trim();
+  var id = document.getElementById('qct-edit-id').value;
+  var name = document.getElementById('qct-name').value.trim();
+  var phone = document.getElementById('qct-phone').value.trim();
+  var role = document.getElementById('qct-role').value;
+  var notes = document.getElementById('qct-notes').value.trim();
   if (!name) { toast('Enter a name', 'err'); return; }
   if (!phone) { toast('Enter a phone number', 'err'); return; }
   var list = _contactsLoad(_contactsSelectedPid);
@@ -19119,31 +19137,50 @@ window._engineerPush = function() {
   }).catch(function() {});
 };
 
-window._engineerPull = function(silent) {
-  var m = _engActiveMembership();
-  if (!_sb || !m) return;
-  var pid = m.pid;
-  _sb.rpc('engineer_get_data', { p_device_token: m.token }).then(function(r) {
+// Pull cloud data for a specific membership and apply it into that
+// project's OWN local scope, regardless of which project is "active".
+function _engApplyCloudDataToPid(pid, payload, silent) {
+  var prevId = window.currentProjectId;
+  window.currentProjectId = 'eng_' + pid;
+  try { if (typeof _applyCloudData === 'function') _applyCloudData(payload, true); }
+  finally { window.currentProjectId = prevId; }
+}
+function _engPullMembership(m, silent) {
+  if (!_sb || !m) return Promise.resolve();
+  return _sb.rpc('engineer_get_data', { p_device_token: m.token }).then(function(r) {
     if (r.error) {
       if (/not authorized/i.test(r.error.message || '')) {
-        toast('⚠️ Your access to "' + m.pname + '" was revoked', 'err');
-        window._engineerLeaveProject(pid);
+        if (!silent) toast('⚠️ Your access to "' + m.pname + '" was revoked', 'err');
+        window._engineerLeaveProject(m.pid);
       }
       return;
     }
     var row = (r.data && r.data[0]) ? r.data[0] : null;
-    var dot = document.getElementById('engineer-sync-dot');
-    if (dot) dot.style.background = '#22c55e';
-    if (!row || !row.payload) { if (!silent) toast('No data yet — ask admin to sync once', 'info'); return; }
-    if (typeof _applyCloudData === 'function') _applyCloudData(row.payload, !!silent);
+    if (m.pid === _engGetActivePid()) {
+      var dot = document.getElementById('engineer-sync-dot');
+      if (dot) dot.style.background = '#22c55e';
+    }
+    if (!row || !row.payload) { if (!silent && m.pid === _engGetActivePid()) toast('No data yet — ask admin to sync once', 'info'); return; }
+    _engApplyCloudDataToPid(m.pid, row.payload, silent);
   }).catch(function() {});
+}
+window._engineerPull = function(silent) {
+  var m = _engActiveMembership();
+  if (m) _engPullMembership(m, silent);
+};
+// Pulls EVERY joined project (not just the active one) so all of them stay
+// in sync in the background — used by QDPR's merged project list and by
+// the periodic sync timer.
+window._engineerPullAll = function(silent) {
+  var list = _engLoadMemberships();
+  return Promise.all(list.map(function(m){ return _engPullMembership(m, silent); }));
 };
 
 function _startEngineerSync() {
   if (_engSyncTimer) clearInterval(_engSyncTimer);
-  // Pulls whichever project is currently active every 10s. Switching
-  // projects triggers an immediate pull for the newly active one.
-  _engSyncTimer = setInterval(function(){ window._engineerPull(true); }, 10000);
+  // Pulls EVERY joined project every 10s, so all of them stay synced —
+  // not just whichever one happens to be active.
+  _engSyncTimer = setInterval(function(){ window._engineerPullAll(true); }, 10000);
 }
 
 function _engineerStart(pid) {
