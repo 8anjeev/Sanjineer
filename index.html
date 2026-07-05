@@ -8069,6 +8069,51 @@ function closeQdprProjectModal(){
   var modal = document.getElementById('qdpr-project-modal');
   if (modal) modal.style.display = 'none';
 }
+// ── Sync a project's address into ITS OWN cm_profile ────────────
+// The admin's "Add/Edit Project" address used to be saved only into
+// window.projects[].address — which lives in a projects-LIST backup that
+// only the admin's own other devices can pull. Joined engineers have no
+// access to that list at all, so they always saw a blank (or wrong,
+// company-level) address. Each project's OWN cm_profile, on the other
+// hand, IS part of that specific project's regular cloud backup — the
+// same one engineer_get_data serves to anyone who joined it. Writing the
+// address there (in addition to the projects list, which the header
+// dropdown/admin UI still reads from) is what actually gets it to show up
+// under QDPR on a joined engineer's device.
+function _qdprSyncAddressToProfile(pid, address) {
+  var key = 'sanj_project_' + pid + '_cm_profile';
+  var prof = null;
+  try { prof = JSON.parse(safeLS.getItem(key) || 'null'); } catch(e) { prof = null; }
+  if (!prof || typeof prof !== 'object') prof = {};
+  prof.address = address;
+  try { safeLS.setItem(key, JSON.stringify(prof)); } catch(e) {}
+  if (pid === window.currentProjectId) {
+    // This IS the active project — the normal debounced cloud push
+    // already rebuilds and sends its full payload (including the profile
+    // we just updated), so nothing extra is needed.
+    if (typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch(e) {} }
+  } else {
+    // Editing some OTHER project's address while it isn't the active one
+    // (perfectly normal from the multi-project QDPR list) — push just its
+    // profile up to that project's own cloud_backups row directly, merging
+    // with whatever's already there so we never clobber its reports/data.
+    _qdprPushProfileToCloud(pid, prof);
+  }
+}
+function _qdprPushProfileToCloud(pid, prof) {
+  if (typeof _sb === 'undefined' || !_sb) return;
+  if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return;
+  var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+  var key = base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
+  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function(r) {
+    var data = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : {};
+    data.prof = prof;
+    data.updated_at = Date.now();
+    _sb.from('cloud_backups').upsert({
+      admin_id: _adminSBUser.id, backup_key: key, data: data
+    }, { onConflict: 'admin_id,backup_key' }).then(function(){}).catch(function(){});
+  }).catch(function(){});
+}
 function saveQdprSite(){
   var name = (document.getElementById('qs-name').value||'').trim();
   var address = (document.getElementById('qs-address').value||'').trim();
