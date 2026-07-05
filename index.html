@@ -740,18 +740,6 @@ self.addEventListener('fetch', function(e) {
     toast('✅ Renamed to "' + p.name + '"', 'ok');
   }
 
-  function deleteProject(projectId) {
-    if (window.projects.length <= 1) { toast('Cannot delete the only project', 'err'); return; }
-    window.projects = window.projects.filter(function(p){ return p.id !== projectId; });
-    _saveProjects();
-    if (window.currentProjectId === projectId) {
-      switchProject(window.projects[0].id);
-    } else {
-      _renderProjectDropdown();
-    }
-    toast('Project deleted', 'ok');
-  }
-
   // ── Switch project ────────────────────────────────────────────
   function switchProject(projectId) {
     if (!projectId) return;
@@ -781,9 +769,12 @@ self.addEventListener('fetch', function(e) {
     var saved = null;
     try { saved = localStorage.getItem('sanj_current_project'); } catch(e) {}
     if (window.projects.length === 0) {
-      var def = createProject('My Project');
-      window.currentProjectId = def.id;
-      try { localStorage.setItem('sanj_current_project', def.id); } catch(e) {}
+      // No placeholder project is created here anymore. A brand-new device
+      // has zero projects until the user actually chooses what to do —
+      // if they pick "Continue Offline" we create their first local project
+      // then (see _ensureLocalProject). If instead they join an existing
+      // project with a code, no empty "My Project" is ever created.
+      window.currentProjectId = null;
     } else {
       var found = window.projects.find(function(p){ return p.id === saved; });
       window.currentProjectId = found ? found.id : window.projects[0].id;
@@ -791,6 +782,23 @@ self.addEventListener('fetch', function(e) {
     }
     _renderProjectDropdown();
   }
+
+  // Creates the user's first local project on demand. Only called from
+  // flows that genuinely need an own/local project (e.g. "Continue
+  // Offline"). Never called as part of joining a project by code.
+  function _ensureLocalProject() {
+    if (window.projects.length > 0) {
+      return window.projects.find(function(p){ return p.id === window.currentProjectId; }) || window.projects[0];
+    }
+    var def = createProject('My Project');
+    def.isDefault = true; // hidden from QDPR once a real/joined project exists
+    _saveProjects();
+    window.currentProjectId = def.id;
+    try { localStorage.setItem('sanj_current_project', def.id); } catch(e) {}
+    _renderProjectDropdown();
+    return def;
+  }
+  window._ensureLocalProject = _ensureLocalProject;
 
   // ── Custom modal (replaces prompt()) ─────────────────────────
   function _showProjectModal(title, defaultVal, onConfirm, defaultAddress) {
@@ -2105,14 +2113,14 @@ function _launchApp(){
     <div id="ob-menu-section" style="width:100%;">
 
       <!-- 1. Continue Offline — primary CTA, right below logo -->
-      <button onclick="obChooseLocal()" style="width:100%;padding:15px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:16px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 8px 24px rgba(79,70,229,0.4);transition:transform .15s;display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform='scale(1)'">
-        <span style="font-size:19px;">💾</span> Continue Offline
+      <button onclick="obChooseLocal()" style="width:100%;padding:11px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:14px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 3px 10px rgba(79,70,229,0.35);transition:transform .15s;display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:17px;">💾</span> Continue Offline
       </button>
       <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.28);margin:0 0 10px;">No account needed — your data stays on this device</p>
 
       <!-- 2. Join Project — right after Continue Offline -->
-      <button onclick="obGoJoinProject()" style="width:100%;padding:12px 6px;background:rgba(217,119,6,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:13px;color:#fde68a;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .15s;margin-bottom:16px;" ontouchstart="this.style.transform='scale(.98)'" ontouchend="this.style.transform='scale(1)'">
-        <span style="font-size:16px;">🤝</span> Join a Project with Code
+      <button onclick="obGoJoinProject()" style="width:100%;padding:9px 6px;background:rgba(217,119,6,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:12px;color:#fde68a;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .15s;margin-bottom:16px;" ontouchstart="this.style.transform='scale(.98)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:15px;">🤝</span> Join a Project with Code
       </button>
 
       <!-- divider -->
@@ -2282,6 +2290,7 @@ function _obDismiss(){
 
 function obChooseLocal(){
   try{ localStorage.setItem('sanj_cloud_choice','local'); }catch(e){}
+  if (typeof window._ensureLocalProject === 'function') window._ensureLocalProject();
   _obDismiss();
 }
 
@@ -6139,7 +6148,7 @@ service cloud.firestore {
           <input id="join-member-name" type="text" class="auth-input" placeholder="e.g. Ramesh — Site Engineer" style="margin-bottom:6px;">
           <label style="font-size:9px;font-weight:700;color:#6ee7b7;display:block;margin-bottom:2px;">Project Code</label>
           <input id="join-code-input" type="text" inputmode="text" maxlength="8" placeholder="e.g. 7K4QXP" autocomplete="off" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(110,231,183,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8)">
-          <button onclick="doJoinProject()" id="join-code-btn" style="width:100%;padding:.75rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:11px;font-weight:800;font-size:.95rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);">&#129309; Join Project</button>
+          <button onclick="doJoinProject()" id="join-code-btn" style="width:100%;padding:.55rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:10px;font-weight:800;font-size:.95rem;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.35);">&#129309; Join Project</button>
           <p id="join-code-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.35rem;display:none;"></p>
         </div>
         <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.55rem .75rem;">
@@ -7964,15 +7973,27 @@ function _qdprRefreshLiveTabsIfActive(pid){
 // projects use the same storage scope the engineer-join flow already uses
 // ('eng_'+pid) so their reports/materials are read from the right place.
 function _qdprAllSites(){
-  var own = (window.projects||[]).map(function(p){
-    return { id: p.id, name: p.name, address: p.address||'', editable: true, canWrite: true, joined: false };
-  });
   var mem = (typeof _engLoadMemberships === 'function') ? _engLoadMemberships() : [];
+  var own = (window.projects||[]).map(function(p){
+    return { id: p.id, name: p.name, address: p.address||'', editable: true, canWrite: true, joined: false, isDefault: !!p.isDefault, __hasData: qdprLoadProjAD(p.id).length>0 };
+  });
+  // The very first project the app auto-creates for a brand-new device is
+  // just a blank placeholder ("My Project") — once the user has joined a
+  // real project (and never actually used the placeholder), don't show it
+  // alongside the joined project(s). If they DID start using it (it has
+  // reports), keep showing it so no data disappears.
+  if (mem.length) {
+    own = own.filter(function(p){ return !(p.isDefault && !p.__hasData); });
+  }
   var joined = mem.map(function(m){
     var gp = lglobal('eng_'+m.pid) || {};
     var pp = null;
     try { pp = JSON.parse(localStorage.getItem('sanj_project_eng_'+m.pid+'_cm_profile') || 'null'); } catch(e) { pp = null; }
-    var addr = gp.address || (pp && pp.address) || '';
+    // Prefer this project's OWN site address (set by its admin for this
+    // specific site) over the admin's company-level address — the company
+    // address is the same across every project that admin owns, so using
+    // it here would show the same address for every joined project.
+    var addr = (pp && pp.address) || gp.address || '';
     return { id: 'eng_'+m.pid, name: m.pname, address: addr, editable: false, canWrite: (m.role==='write'), joined: true };
   });
   return own.concat(joined);
@@ -8081,15 +8102,6 @@ function saveQdprSite(){
   closeQdprProjectModal();
   renderQdprSites();
 }
-function delQdprSite(pid){
-  if (typeof deleteProject !== 'function') return;
-  var proj = (window.projects||[]).find(function(p){ return p.id===pid; });
-  if (!proj) return;
-  askDel('Delete project "'+proj.name+'"? This removes it from the whole app, not just QDPR.', function(){
-    deleteProject(pid);
-    renderQdprSites();
-  });
-}
 function delQdprReport(pid, reportId){
   askDel('Delete this daily progress report?', function(){
     qdprDeleteFromProj(pid, reportId);
@@ -8141,7 +8153,6 @@ function qdprReportCard(site, report){
     +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
     +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
     +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
-    +((site.editable!==false && !site.joined)?('<button onclick="delQdprSite(\''+site.__id+'\')" title="Delete Project" style="background:rgba(239,68,68,.28);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑️</button>'):'')
     +'</div></div></div>'
     +'<div style="padding:13px 14px">'
     +((report.weather||report.siteNote)?('<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 12px;margin-bottom:13px;display:flex;gap:8px;align-items:flex-start"><span>'+_qdprWeatherEmoji(report.weather)+'</span><div style="font-size:12.5px"><span style="font-weight:700;color:#92400E">'+esc(report.weather||'')+'</span>'+(report.siteNote?('<span style="color:#78350F"> — '+esc(report.siteNote)+'</span>'):'')+'</div></div>'):'')
@@ -8170,7 +8181,6 @@ function qdprEmptyCard(site){
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
     +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
-    +((site.editable!==false && !site.joined)?('<button onclick="delQdprSite(\''+site.__id+'\')" title="Delete Project" style="background:rgba(239,68,68,.28);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">🗑️</button>'):'')
     +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
