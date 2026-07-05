@@ -730,10 +730,11 @@ self.addEventListener('fetch', function(e) {
     return proj;
   }
 
-  function renameProject(projectId, newName) {
+  function renameProject(projectId, newName, newAddress) {
     var p = window.projects.find(function(x){ return x.id === projectId; });
     if (!p || !newName || !newName.trim()) return;
     p.name = newName.trim();
+    if (newAddress !== undefined) p.address = newAddress.trim();
     _saveProjects();
     _renderProjectDropdown();
     toast('✅ Renamed to "' + p.name + '"', 'ok');
@@ -792,7 +793,7 @@ self.addEventListener('fetch', function(e) {
   }
 
   // ── Custom modal (replaces prompt()) ─────────────────────────
-  function _showProjectModal(title, defaultVal, onConfirm) {
+  function _showProjectModal(title, defaultVal, onConfirm, defaultAddress) {
     var existing = document.getElementById('_proj-input-modal');
     if (existing) existing.remove();
     var modal = document.createElement('div');
@@ -802,7 +803,10 @@ self.addEventListener('fetch', function(e) {
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:20px 18px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
       + '<p style="font-size:14px;font-weight:800;color:#fff;margin:0 0 14px">' + title + '</p>'
       + '<input id="_proj-name-input" type="text" value="' + _escHtml(defaultVal||'') + '" placeholder="Enter project name…" maxlength="60"'
-      + ' style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f0e1a;border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;font-size:14px;outline:none;margin-bottom:14px;">'
+      + ' style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f0e1a;border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;font-size:14px;outline:none;margin-bottom:10px;">'
+      + '<label style="display:block;font-size:10px;font-weight:800;color:rgba(255,255,255,0.5);margin-bottom:5px;letter-spacing:.3px">SITE ADDRESS <span style="font-weight:600;opacity:.7">(this project\'s own location — separate from your company office address)</span></label>'
+      + '<input id="_proj-address-input" type="text" value="' + _escHtml(defaultAddress||'') + '" placeholder="e.g. Plot 12, MG Road, Pune" maxlength="140"'
+      + ' style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f0e1a;border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;font-size:13px;outline:none;margin-bottom:14px;">'
       + '<div style="display:flex;gap:10px;">'
       + '<button id="_proj-cancel-btn" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
       + '<button id="_proj-confirm-btn" style="flex:1;padding:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">Save</button>'
@@ -810,11 +814,13 @@ self.addEventListener('fetch', function(e) {
       + '</div>';
     document.body.appendChild(modal);
     var inp = document.getElementById('_proj-name-input');
+    var addrInp = document.getElementById('_proj-address-input');
     var ok = function() {
       var v = inp.value.trim();
       if (!v) { inp.style.borderColor='#e11d48'; inp.focus(); return; }
+      var addr = addrInp ? addrInp.value.trim() : '';
       modal.remove();
-      onConfirm(v);
+      onConfirm(v, addr);
     };
     document.getElementById('_proj-cancel-btn').onclick = function(){ modal.remove(); };
     document.getElementById('_proj-confirm-btn').onclick = ok;
@@ -919,18 +925,22 @@ self.addEventListener('fetch', function(e) {
         if (!rproj) return;
         _projMenuOpen = false;
         menu.style.display = 'none';
-        _showProjectModal('✏️ Rename Project', rproj.name, function(newName) {
-          renameProject(rid, newName);
-        });
+        _showProjectModal('✏️ Rename Project', rproj.name, function(newName, newAddress) {
+          renameProject(rid, newName, newAddress);
+        }, rproj.address || '');
         return;
       }
       if (nb) {
         _projMenuOpen = false;
         menu.style.display = 'none';
         if (arrow) arrow.style.transform = '';
-        _showProjectModal('➕ New Project', '', function(n) {
+        _showProjectModal('➕ New Project', '', function(n, addr) {
           var proj = createProject(n);
-          if (proj) switchProject(proj.id);
+          if (proj) {
+            if (addr) proj.address = addr;
+            _saveProjects();
+            switchProject(proj.id);
+          }
         });
         return;
       }
@@ -2091,55 +2101,58 @@ function _launchApp(){
       </div>
     </div>
 
-    <!-- ── Cloud Toggle Card ── -->
-    <div style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:16px 18px;margin-bottom:1.2rem;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:20px;">☁️</span>
-          <div>
-            <p style="margin:0;font-size:13px;font-weight:700;color:#fff;">Cloud Sync</p>
-            <p style="margin:0;font-size:10px;color:rgba(255,255,255,0.4);">Backup &amp; sync across devices</p>
-          </div>
-        </div>
-        <!-- Toggle switch -->
-        <div id="ob-cloud-toggle" onclick="obToggleCloud()" style="width:50px;height:27px;border-radius:99px;background:#333;position:relative;cursor:pointer;transition:background .25s;flex-shrink:0;">
-          <div id="ob-cloud-knob" style="position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:transform .25s,box-shadow .25s;box-shadow:0 1px 4px rgba(0,0,0,0.3);"></div>
-        </div>
-      </div>
-      <!-- Info row changes based on toggle -->
-      <div id="ob-cloud-off-info" style="display:flex;align-items:flex-start;gap:7px;background:rgba(255,255,255,0.04);border-radius:10px;padding:9px 11px;">
-        <span style="font-size:13px;flex-shrink:0;margin-top:1px;">💾</span>
-        <p style="margin:0;font-size:10.5px;color:rgba(255,255,255,0.55);line-height:1.5;"><strong style="color:rgba(255,255,255,0.75);">Local Mode — Free forever.</strong> All features work offline on this device. Enable Cloud anytime from Settings.</p>
-      </div>
-      <div id="ob-cloud-on-info" style="display:none;align-items:flex-start;gap:7px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.18);border-radius:10px;padding:9px 11px;">
-        <span style="font-size:13px;flex-shrink:0;margin-top:1px;">✨</span>
-        <p style="margin:0;font-size:10.5px;color:rgba(255,255,255,0.6);line-height:1.5;"><strong style="color:#34d399;">Pro Cloud Mode.</strong> Real-time backup, viewer sharing, multi-device sync. Subscription required.</p>
-      </div>
-    </div>
+    <!-- ── MAIN CHOICE MENU: 4 aesthetic buttons ── -->
+    <div id="ob-menu-section" style="width:100%;">
 
-    <!-- ── LOCAL MODE: single CTA ── -->
-    <div id="ob-local-section" style="width:100%;">
+      <!-- 1. Continue Offline — primary CTA, right below logo -->
+      <button onclick="obChooseLocal()" style="width:100%;padding:15px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:16px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 8px 24px rgba(79,70,229,0.4);transition:transform .15s;display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:19px;">💾</span> Continue Offline
+      </button>
+      <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.28);margin:0 0 10px;">No account needed — your data stays on this device</p>
+
+      <!-- 2. Join Project — right after Continue Offline -->
+      <button onclick="obGoJoinProject()" style="width:100%;padding:12px 6px;background:rgba(217,119,6,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:13px;color:#fde68a;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .15s;margin-bottom:16px;" ontouchstart="this.style.transform='scale(.98)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:16px;">🤝</span> Join a Project with Code
+      </button>
+
+      <!-- divider -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.1);"></div>
+        <p style="font-size:9px;color:rgba(255,255,255,0.32);font-weight:700;letter-spacing:.06em;margin:0;">OR USE A CLOUD ACCOUNT</p>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.1);"></div>
+      </div>
+
       <!-- PRO features teaser -->
-      <div style="width:100%;background:linear-gradient(135deg,rgba(79,70,229,0.14),rgba(139,92,246,0.1));border:1px solid rgba(165,180,252,0.25);border-radius:14px;padding:11px 14px;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-          <span style="font-size:14px;">👑</span>
-          <p style="margin:0;font-size:12px;font-weight:800;color:#c7d2fe;">PRO Features — ₹30/month</p>
+      <div style="width:100%;background:linear-gradient(135deg,rgba(79,70,229,0.14),rgba(139,92,246,0.1));border:1px solid rgba(165,180,252,0.25);border-radius:14px;padding:10px 13px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <span style="font-size:13px;">👑</span>
+          <p style="margin:0;font-size:11.5px;font-weight:800;color:#c7d2fe;">PRO Features — ₹30/month</p>
         </div>
-        <div style="display:flex;flex-direction:column;gap:5px;">
-          <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:11px;flex-shrink:0">🗂️</span><p style="margin:0;font-size:10px;color:#a5b4fc;">Multi-Project — manage unlimited projects</p></div>
-          <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:11px;flex-shrink:0">🖼️</span><p style="margin:0;font-size:10px;color:#a5b4fc;">Your company logo on every PDF &amp; report</p></div>
-          <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:11px;flex-shrink:0">🔄</span><p style="margin:0;font-size:10px;color:#a5b4fc;">Real-time cloud sync across all devices</p></div>
-          <div style="display:flex;align-items:center;gap:7px;"><span style="font-size:11px;flex-shrink:0">👁️</span><p style="margin:0;font-size:10px;color:#a5b4fc;">Unlimited viewer accounts — free</p></div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">🗂️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Multi-Project — manage unlimited projects</p></div>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">🖼️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Your company logo on every PDF &amp; report</p></div>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">🔄</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Real-time cloud sync across all devices</p></div>
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">👁️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Unlimited viewer accounts — free</p></div>
         </div>
       </div>
-      <button onclick="obChooseLocal()" style="width:100%;padding:14px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:14px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 8px 24px rgba(79,70,229,0.4);transition:transform .15s;" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform='scale(1)'">
-        Continue Offline &nbsp;→
-      </button>
-      <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.25);margin-top:10px;">No account needed. Your data stays on this device.</p>
+
+      <!-- 3 & 4. Login / Create — compact, side by side -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button onclick="obGoLogin()" style="padding:9px 6px;background:rgba(79,70,229,0.14);border:1px solid rgba(129,140,248,0.35);border-radius:11px;color:#c7d2fe;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s;" ontouchstart="this.style.transform='scale(.96)'" ontouchend="this.style.transform='scale(1)'">
+          <span style="font-size:14px;">🔑</span>Login
+        </button>
+        <button onclick="obGoSignup()" style="padding:9px 6px;background:rgba(5,150,105,0.14);border:1px solid rgba(52,211,153,0.35);border-radius:11px;color:#a7f3d0;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s;" ontouchstart="this.style.transform='scale(.96)'" ontouchend="this.style.transform='scale(1)'">
+          <span style="font-size:14px;">✨</span>Create Account
+        </button>
+      </div>
     </div>
 
     <!-- ── CLOUD MODE: login / create tabs ── -->
     <div id="ob-cloud-section" style="display:none;width:100%;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <p style="margin:0;font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);">Cloud Account</p>
+        <button onclick="obShowMenu()" title="Back" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
+      </div>
       <!-- Tab switcher -->
       <div style="display:flex;gap:5px;background:rgba(255,255,255,0.06);border-radius:12px;padding:4px;margin-bottom:14px;">
         <button id="ob-tab-login" onclick="obSwitchAuthTab('login')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;transition:all .18s;">🔑 Login</button>
@@ -2183,40 +2196,66 @@ function _launchApp(){
       </div>
 
       <p style="text-align:center;margin-top:12px;font-size:10px;color:rgba(255,255,255,0.25);">Cloud features require a subscription after free trial.</p>
-      <button onclick="obChooseLocal()" style="display:block;margin:8px auto 0;background:none;border:none;color:rgba(255,255,255,0.3);font-size:10px;cursor:pointer;text-decoration:underline;">Skip — use offline instead</button>
     </div>
 
   </div>
 </div>
 
 <script>
-var _obCloud = false; // toggle state
-
-function obToggleCloud(){
-  _obCloud = !_obCloud;
-  var tog = document.getElementById('ob-cloud-toggle');
-  var knob = document.getElementById('ob-cloud-knob');
-  var offInfo = document.getElementById('ob-cloud-off-info');
-  var onInfo  = document.getElementById('ob-cloud-on-info');
-  var localSec = document.getElementById('ob-local-section');
+// ── Onboard menu navigation: 4 buttons → Continue Offline / Login / Create / Join Project ──
+function obShowMenu(){
+  var menuSec  = document.getElementById('ob-menu-section');
   var cloudSec = document.getElementById('ob-cloud-section');
-  if(_obCloud){
-    tog.style.background = 'linear-gradient(135deg,#059669,#10b981)';
-    knob.style.transform  = 'translateX(23px)';
-    knob.style.boxShadow  = '0 1px 8px rgba(16,185,129,0.5)';
-    offInfo.style.display = 'none';
-    onInfo.style.display  = 'flex';
-    localSec.style.display = 'none';
-    cloudSec.style.display = 'block';
-  } else {
-    tog.style.background = '#333';
-    knob.style.transform  = 'translateX(0)';
-    knob.style.boxShadow  = '0 1px 4px rgba(0,0,0,0.3)';
-    offInfo.style.display = 'flex';
-    onInfo.style.display  = 'none';
-    localSec.style.display = 'block';
-    cloudSec.style.display = 'none';
+  if (menuSec)  menuSec.style.display  = 'block';
+  if (cloudSec) cloudSec.style.display = 'none';
+}
+
+function obGoLogin(){
+  var menuSec  = document.getElementById('ob-menu-section');
+  var cloudSec = document.getElementById('ob-cloud-section');
+  if (menuSec)  menuSec.style.display  = 'none';
+  if (cloudSec) cloudSec.style.display = 'block';
+  obSwitchAuthTab('login');
+}
+
+function obGoSignup(){
+  var menuSec  = document.getElementById('ob-menu-section');
+  var cloudSec = document.getElementById('ob-cloud-section');
+  if (menuSec)  menuSec.style.display  = 'none';
+  if (cloudSec) cloudSec.style.display = 'block';
+  obSwitchAuthTab('signup');
+}
+
+// "Join Project" needs no login — open the existing Join Project modal (code entry)
+// ON TOP of the onboarding screen (we don't dismiss onboarding yet). This way, if the
+// user closes the modal (✕) without joining, they land right back on the 4-button menu.
+function obGoJoinProject(){
+  var cm = document.getElementById('cloud-modal');
+  if (cm) cm.style.zIndex = '99999'; // rise above the onboarding overlay (z-index 99998)
+  window._obOnboardingPending = true;
+  if (typeof openCloudModal === 'function') {
+    openCloudModal();
+    // Let the modal render before switching tabs
+    setTimeout(function(){
+      if (typeof switchCloudTab === 'function') switchCloudTab('join');
+    }, 40);
   }
+}
+
+// Called once a Join Project actually succeeds (see doJoinProject) — this is the
+// moment the user has "entered the app", so now we dismiss onboarding for real.
+function _obEnterAppAfterJoin(){
+  var ao = document.getElementById('auth-onboard');
+  if (ao && ao.style.display === 'flex') {
+    ao.style.transition = 'opacity .35s ease';
+    ao.style.opacity    = '0';
+    setTimeout(function(){
+      ao.style.display = 'none';
+      ao.style.opacity = '';
+      if (typeof _launchApp === 'function') _launchApp();
+    }, 360);
+  }
+  window._obOnboardingPending = false;
 }
 
 function obSwitchAuthTab(tab){
@@ -8102,6 +8141,7 @@ function qdprReportCard(site, report){
     +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
     +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
     +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
+    +((site.editable!==false && !site.joined)?('<button onclick="delQdprSite(\''+site.__id+'\')" title="Delete Project" style="background:rgba(239,68,68,.28);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑️</button>'):'')
     +'</div></div></div>'
     +'<div style="padding:13px 14px">'
     +((report.weather||report.siteNote)?('<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 12px;margin-bottom:13px;display:flex;gap:8px;align-items:flex-start"><span>'+_qdprWeatherEmoji(report.weather)+'</span><div style="font-size:12.5px"><span style="font-weight:700;color:#92400E">'+esc(report.weather||'')+'</span>'+(report.siteNote?('<span style="color:#78350F"> — '+esc(report.siteNote)+'</span>'):'')+'</div></div>'):'')
@@ -8128,7 +8168,10 @@ function qdprEmptyCard(site){
     +'<div style="color:white;font-size:15px;font-weight:800">'+esc(site.name)+'</div>'
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
+    +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
     +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
+    +((site.editable!==false && !site.joined)?('<button onclick="delQdprSite(\''+site.__id+'\')" title="Delete Project" style="background:rgba(239,68,68,.28);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">🗑️</button>'):'')
+    +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
     +'<div style="background:#FEF2F2;border:1.5px dashed #FCA5A5;border-radius:10px;padding:14px;text-align:center;margin-bottom:14px;display:flex;flex-direction:column;align-items:center;gap:5px">'
@@ -12951,7 +12994,10 @@ function openCloudModal() {
     setTimeout(function(){ clearInterval(check); }, 8000);
   }
 }
-function closeCloudModal() { document.getElementById('cloud-modal').classList.remove('show'); }
+function closeCloudModal() {
+  document.getElementById('cloud-modal').classList.remove('show');
+  document.getElementById('cloud-modal').style.zIndex = ''; // undo onboarding z-index bump, if any
+}
 
 // ── Tab switcher ────────────────────────────────────────────────
 function switchCloudTab(tab) {
@@ -19002,10 +19048,12 @@ window.doJoinProject = function() {
       if (alreadyJoined) list[idx] = membership; else list.push(membership);
       _engSaveMemberships(list);
       _engSetActivePid(row.project_id);
+      try { localStorage.setItem('sanj_cloud_choice', 'joined'); } catch(e) {}
 
       if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
       if (codeEl) codeEl.value = '';
       if (typeof closeAuthModal === 'function') closeAuthModal();
+      if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
       toast((alreadyJoined ? '✅ Re-joined "' : '✅ Joined "') + (row.project_name||'Project') + '"', 'ok');
       _engineerStart(row.project_id);
     }).catch(function(e) {
