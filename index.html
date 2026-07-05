@@ -655,6 +655,59 @@ self.addEventListener('fetch', function(e) {
   }
   function _saveProjects() {
     try { localStorage.setItem('sanj_projects', JSON.stringify(window.projects)); } catch(e) {}
+    _pushProjectListToCloud();
+  }
+
+  // ── Cloud backup of the PROJECT LIST itself ───────────────────
+  // Previously only each project's DATA (attendance, materials, reports…)
+  // was backed up to cloud, keyed per-project. The list of projects
+  // (names/ids/addresses) that fills the header dropdown + QDPR lived only
+  // in this device's localStorage — so a brand-new device/login never saw
+  // your projects at all. This pushes/pulls that list too, using its own
+  // dedicated backup_key so it never collides with any individual
+  // project's data row.
+  var _projectListCloudTimer = null;
+  function _projectListBackupKey() {
+    if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return null;
+    return 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) + '_projectslist';
+  }
+  function _pushProjectListToCloud() {
+    if (typeof _sb === 'undefined' || !_sb) return;
+    var key = _projectListBackupKey();
+    if (!key) return;
+    // Small debounce so rapid create/rename actions don't fire a burst of writes
+    if (_projectListCloudTimer) clearTimeout(_projectListCloudTimer);
+    _projectListCloudTimer = setTimeout(function() {
+      _sb.from('cloud_backups').upsert({
+        admin_id: _adminSBUser.id,
+        backup_key: key,
+        data: { projects: window.projects, updated_at: Date.now() }
+      }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
+        // Silent — this is a background sync of the project list, not a
+        // user-initiated backup, so we don't toast success/failure here.
+      });
+    }, 500);
+  }
+  function _pullProjectListFromCloud() {
+    if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser) return;
+    var key = _projectListBackupKey();
+    if (!key) return;
+    _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function(r) {
+      if (!r || r.error || !r.data || !r.data.data || !Array.isArray(r.data.data.projects)) return;
+      var remote = r.data.data.projects;
+      // Merge by id — union of local + remote, never dropping a project
+      // that only exists on one side (same safe merge used by _loadProjects).
+      var byId = {};
+      (window.projects || []).forEach(function(p){ if (p && p.id) byId[p.id] = p; });
+      var changed = false;
+      remote.forEach(function(p){ if (p && p.id && !byId[p.id]) { byId[p.id] = p; changed = true; } });
+      if (changed) {
+        window.projects = Object.keys(byId).map(function(id){ return byId[id]; });
+        try { localStorage.setItem('sanj_projects', JSON.stringify(window.projects)); } catch(e) {}
+        if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+        if (typeof renderQdprSites === 'function') renderQdprSites();
+      }
+    }).catch(function(e){});
   }
   function _genProjectId() {
     return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -13031,6 +13084,10 @@ function autoInitCloud() {
     // Pull from cloud FIRST on every app open — apply if cloud is newer than local
     // This ensures a device always starts with the latest data from any other device
     _adminCloudPull(true);
+    // Also pull the project LIST itself (names/ids/addresses), so any
+    // project already saved/backed up shows up automatically in the
+    // header dropdown and QDPR list on this device/login too.
+    if (typeof _pullProjectListFromCloud === 'function') _pullProjectListFromCloud();
     startAutoSync();
   }
 }
@@ -14276,6 +14333,9 @@ function onAdminLoginSuccess(email, user, app) {
   if (!isCloudActivated()) safeLS.setItem(CLOUD_KEY, '1');
   updateCloudBtn();
   startAutoSync();
+  // Pull the project list (names/ids/addresses) saved to cloud from any
+  // device, so it auto-fills the header dropdown + QDPR right after login.
+  if (typeof _pullProjectListFromCloud === 'function') _pullProjectListFromCloud();
   // Restore latest cloud data — use siteId or fallback to any backup for this admin
   // Always scope backup key to this admin's user ID — unique per user
   var siteId = 'user-' + user.id.replace(/-/g,'').slice(0,12);
