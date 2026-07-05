@@ -700,7 +700,20 @@ self.addEventListener('fetch', function(e) {
       var byId = {};
       (window.projects || []).forEach(function(p){ if (p && p.id) byId[p.id] = p; });
       var changed = false;
-      remote.forEach(function(p){ if (p && p.id && !byId[p.id]) { byId[p.id] = p; changed = true; } });
+      remote.forEach(function(p){
+        if (!p || !p.id) return;
+        if (!byId[p.id]) { byId[p.id] = p; changed = true; return; }
+        // Project already known locally too — still refresh its name/address
+        // from the cloud copy (only when the cloud has a real value) so
+        // edits made on ANOTHER device actually reach this one. Without
+        // this, an address edited elsewhere would never arrive here because
+        // the id already existed and the old merge skipped it entirely —
+        // this is exactly why a project's address sometimes appeared
+        // missing or stale in the QDPR list on a different device.
+        var local = byId[p.id];
+        if (p.name && p.name !== local.name) { local.name = p.name; changed = true; }
+        if (p.address && p.address !== local.address) { local.address = p.address; changed = true; }
+      });
       if (changed) {
         window.projects = Object.keys(byId).map(function(id){ return byId[id]; });
         try { localStorage.setItem('sanj_projects', JSON.stringify(window.projects)); } catch(e) {}
@@ -734,7 +747,15 @@ self.addEventListener('fetch', function(e) {
     var p = window.projects.find(function(x){ return x.id === projectId; });
     if (!p || !newName || !newName.trim()) return;
     p.name = newName.trim();
-    if (newAddress !== undefined) p.address = newAddress.trim();
+    if (newAddress !== undefined) {
+      p.address = newAddress.trim();
+      // Also push the address into THIS project's own cm_profile (the copy
+      // that actually gets cloud-backed-up and read by joined engineers /
+      // other devices) — without this, the address only lived in the
+      // projects LIST backup, which joined members never see, so they'd
+      // see a blank or stale (company-level) address instead.
+      if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(projectId, p.address);
+    }
     _saveProjects();
     _renderProjectDropdown();
     toast('✅ Renamed to "' + p.name + '"', 'ok');
@@ -945,7 +966,13 @@ self.addEventListener('fetch', function(e) {
         _showProjectModal('➕ New Project', '', function(n, addr) {
           var proj = createProject(n);
           if (proj) {
-            if (addr) proj.address = addr;
+            if (addr) {
+              proj.address = addr;
+              // Sync into the new project's own cm_profile too, so its
+              // address backs up/pulls correctly from the very first save
+              // (same reasoning as in renameProject above).
+              if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(proj.id, addr);
+            }
             _saveProjects();
             switchProject(proj.id);
           }
@@ -6403,7 +6430,14 @@ function sglobal(x, scopeId) {
   _scheduleCloudPush();
 }
 // Merged profile = global fields + per-project fields combined
-// Per-project fields (address, engineer, headerColor) override global defaults
+// Per-project fields (address, engineer, headerColor) override global defaults.
+// IMPORTANT: address is per-PROJECT (each site has its own location) while
+// company/gst/logo are per-COMPANY (shared across every project the admin
+// owns). Address must therefore check the project's own profile FIRST and
+// only fall back to the company-level address if the project has none set —
+// otherwise every project would incorrectly display the company office
+// address instead of its own site address (see also the identical
+// project-first precedence used for joined projects in _qdprAllSites()).
 function lmergedProf() {
   var g = lglobal() || {};
   var p = lprof() || {};
@@ -6412,7 +6446,7 @@ function lmergedProf() {
     gst:         g.gst         || p.gst         || '',
     logo:        g.logo        || p.logo        || null,
     engineer:    p.engineer    || '',
-    address:     g.address     || p.address || '',
+    address:     p.address || g.address || '',
     headerColor: p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   };
 }
@@ -8133,6 +8167,10 @@ function saveQdprSite(){
     var proj = (window.projects||[]).find(function(p){ return p.id===editPid; });
     if (!proj) { toast('Project not found','err'); return; }
     proj.name = name; proj.address = address;
+    // Push into THIS project's own cm_profile so it backs up/pulls
+    // correctly for the admin's other devices AND any joined engineers —
+    // the projects LIST alone (window.projects) is not visible to them.
+    if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(editPid, address);
     if (typeof _saveProjects === 'function') _saveProjects();
     if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
     toast('Project updated ✓','ok');
@@ -8140,7 +8178,11 @@ function saveQdprSite(){
     // Add new project
     if (typeof createProject !== 'function') { toast('Cannot create project here','err'); return; }
     var newProj = createProject(name);
-    if (newProj && address) { newProj.address = address; if (typeof _saveProjects === 'function') _saveProjects(); }
+    if (newProj && address) {
+      newProj.address = address;
+      if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(newProj.id, address);
+      if (typeof _saveProjects === 'function') _saveProjects();
+    }
     if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
     toast('Project saved ✓','ok');
   }
