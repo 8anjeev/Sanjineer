@@ -2652,7 +2652,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
   </div>
 </div>
 
-<div id="settings-panel" style="display:none;position:fixed;inset:0;z-index:200;align-items:flex-start;justify-content:flex-start;pointer-events:none;" onclick="if(event.target===this)closeAllAndSettings()">
+<div id="settings-panel" style="display:none;position:fixed;inset:0;z-index:500000;align-items:flex-start;justify-content:flex-start;pointer-events:none;" onclick="if(event.target===this)closeAllAndSettings()">
   <!-- Backdrop -->
   <div id="sett-backdrop" style="position:absolute;inset:0;background:rgba(0,0,0,0);backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);transition:background .28s ease,backdrop-filter .28s ease,-webkit-backdrop-filter .28s ease;"></div>
   <!-- Drawer -->
@@ -3001,6 +3001,12 @@ function openSettingsPanel() {
   var drawer  = document.getElementById('sett-drawer');
   var gear    = document.getElementById('sett-gear');
   if (!panel) return;
+
+  // Close any other overlay that might already be open — Settings should
+  // always be reachable and on top, never left stacked behind/under
+  // whatever the user had open before tapping the gear icon.
+  try { if (typeof closeQdprPanel === 'function') closeQdprPanel(); } catch(e) {}
+  try { if (typeof window.closeContactsPanel === 'function') window.closeContactsPanel(); } catch(e) {}
 
   // Sync login state
   try {
@@ -18938,6 +18944,13 @@ function _engLoadMemberships() {
   }
   return list;
 }
+// This whole engineer/joined-project module runs inside an IIFE, so plain
+// function declarations here are NOT visible to the rest of the app by
+// default. QDPR's project-merge logic (_qdprAllSites, in a different
+// <script> block) needs to call this one specifically to find joined
+// projects — without this export it silently saw zero joined projects,
+// no matter how many were actually joined.
+window._engLoadMemberships = _engLoadMemberships;
 function _engSaveMemberships(list) {
   try { safeLS.setItem(_engKeys().list, JSON.stringify(list)); } catch(e) {}
 }
