@@ -2916,6 +2916,14 @@ function doAdminSignup() { cmSendSignupOtp(); }
   var _cache    = {};        // synchronous mirror
   var _ready    = false;
   var _queue    = [];        // pending writes while IDB opens
+  // Keys the app wrote (or deleted) WHILE the IndexedDB cursor scan below
+  // is still running. The scan reads old data from IDB key-by-key and can
+  // take multiple event-loop turns; without this guard, a brand-new entry
+  // typed in during that window gets silently overwritten a moment later
+  // when the scan reaches that key's old value — the record would appear
+  // to "vanish" a few seconds after saving, with no error and no action
+  // taken by the user. Once _ready is true this guard is no longer needed.
+  var _touchedDuringLoad = {};
 
   // ── Open IDB ──────────────────────────────────────────────
   function _openDB() {
@@ -2932,9 +2940,16 @@ function doAdminSignup() { cmSendSignupOtp(); }
       var all = store.openCursor();
       all.onsuccess = function(ev) {
         var cursor = ev.target.result;
-        if (cursor) { _cache[cursor.key] = cursor.value; cursor.continue(); }
+        if (cursor) {
+          // Never clobber a value the app itself wrote/deleted during
+          // this same loading window — that write is guaranteed newer
+          // than whatever IndexedDB had on disk when the scan started.
+          if (!_touchedDuringLoad[cursor.key]) _cache[cursor.key] = cursor.value;
+          cursor.continue();
+        }
         else {
           _ready = true;
+          _touchedDuringLoad = {}; // loading window is over, no longer needed
           // Flush pending writes
           _queue.forEach(function(fn){ fn(); });
           _queue = [];
@@ -2980,12 +2995,14 @@ function doAdminSignup() { cmSendSignupOtp(); }
     },
     setItem: function(key, value) {
       _cache[key] = value;
+      if (!_ready) _touchedDuringLoad[key] = true;
       _idbSet(key, value);
       // Also keep real localStorage in sync as backup
       try { if (_origLS) _origLS.setItem(key, value); } catch(e) {}
     },
     removeItem: function(key) {
       delete _cache[key];
+      if (!_ready) _touchedDuringLoad[key] = true;
       _idbRemove(key);
       try { if (_origLS) _origLS.removeItem(key); } catch(e) {}
     },
@@ -6386,10 +6403,52 @@ var _memStore = {};
 var _ls = (function() {
   try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); return localStorage; } catch(e) { return null; }
 })();
+// Keys whose real localStorage write failed (e.g. storage full / private mode).
+// For these keys we MUST keep serving the in-memory copy, otherwise the next
+// read would silently fall back to the old, stale value on disk and the
+// just-entered record would look like it "disappeared" a few seconds later.
+var _lsBrokenKeys = {};
+var _lsWarnedFull = false;
 var safeLS = {
-  getItem: function(k) { if (_ls) { try { return _ls.getItem(k); } catch(e) {} } return _memStore[k] !== undefined ? _memStore[k] : null; },
-  setItem: function(k, v) { if (_ls) { try { _ls.setItem(k, v); } catch(e) {} } _memStore[k] = v; },
-  removeItem: function(k) { if (_ls) { try { _ls.removeItem(k); } catch(e) {} } delete _memStore[k]; }
+  getItem: function(k) {
+    if (_ls && !_lsBrokenKeys[k]) {
+      try {
+        var v = _ls.getItem(k);
+        // Prefer the freshest copy: if we also hold this key in memory (this
+        // session wrote it), memory is always at least as new as disk.
+        if (_memStore[k] !== undefined) return _memStore[k];
+        return v;
+      } catch(e) { _lsBrokenKeys[k] = true; }
+    }
+    return _memStore[k] !== undefined ? _memStore[k] : null;
+  },
+  setItem: function(k, v) {
+    // Always write memory first — this is what every read checks first,
+    // so nothing entered in this session can ever be lost mid-session even
+    // if the disk write below fails.
+    _memStore[k] = v;
+    if (_ls) {
+      try {
+        _ls.setItem(k, v);
+        delete _lsBrokenKeys[k]; // disk write succeeded, all good
+      } catch(e) {
+        _lsBrokenKeys[k] = true;
+        if (!_lsWarnedFull) {
+          _lsWarnedFull = true;
+          try {
+            if (typeof toast === 'function') {
+              toast('⚠️ Device storage is full — data is kept safe in this session, but please free up space / re-open the app soon so it saves permanently.', 'err');
+            }
+          } catch(e2) {}
+        }
+      }
+    }
+  },
+  removeItem: function(k) {
+    delete _memStore[k];
+    delete _lsBrokenKeys[k];
+    if (_ls) { try { _ls.removeItem(k); } catch(e) {} }
+  }
 };
 
 // ── Firebase compat snap helpers ─────────────────────────────
@@ -6599,42 +6658,8 @@ var VM = new Date(), DD = ist(), DTD = ist();
 var PDEL = null, DTMR = null, PWA = null;
 var NID = parseInt(safeLS.getItem('cm_nid') || '1');
 
-// ── Per-device unique salt ───────────────────────────────────────────
-// Persisted once per install/browser so record IDs from different
-// devices can NEVER collide, even if both start counting from 1.
-//
-// ROOT CAUSE OF "MY ENTRY DISAPPEARED BY ITSELF":
-// gid() used to return only 'r'+NID — a purely local counter. Two
-// different devices/logins both create "r1", "r2", "r3"... independently.
-// When cloud sync later merges data by __id (see _mergeRecordArrays),
-// two completely unrelated records that happen to share the same local
-// counter value (e.g. device A's attendance entry "r5" and device B's
-// expense entry "r5") are treated as the SAME record — the merge keeps
-// only whichever has the newer __ts and silently, permanently discards
-// the other. No delete button pressed, no error shown — the record
-// just never reappears after the next sync, which looks exactly like
-// "I typed it in and it vanished within seconds."
-// Making the ID globally unique (device salt + counter + timestamp)
-// makes this class of collision structurally impossible.
-var _DEV_SALT = (function() {
-  var s = null;
-  try { s = safeLS.getItem('cm_dev_salt'); } catch(e) {}
-  if (!s) {
-    try {
-      var arr = new Uint8Array(5);
-      crypto.getRandomValues(arr);
-      s = Array.from(arr).map(function(b){ return b.toString(36); }).join('');
-    } catch(e) { s = Math.random().toString(36).slice(2, 9); }
-    try { safeLS.setItem('cm_dev_salt', s); } catch(e) {}
-  }
-  return s;
-})();
-
 function gid() {
-  // Still starts with 'r' and still increments NID (kept for any legacy
-  // numeric-fallback sorting), but is now globally unique across every
-  // device/browser/login that will ever touch this project's data.
-  var id = 'r' + _DEV_SALT + '_' + (NID++) + '_' + Date.now().toString(36);
+  var id = 'r' + NID++;
   safeLS.setItem('cm_nid', NID);
   return id;
 }
@@ -13449,13 +13474,7 @@ function autoInitCloud() {
 function _applyFullBackup(d) {
   if (!d) return;
   // Core tab data
-  // Write directly to storage instead of calling sd(d.db) — sd() also
-  // schedules a cloud push (_scheduleCloudPush), and this function is
-  // itself invoked as part of APPLYING data pulled from the cloud. Doing
-  // sd() here meant every pull silently queued another push 3s later,
-  // which could race with a genuinely new local edit and needlessly
-  // widen the window for the ID-collision bug described above near gid().
-  if (d.db)         { try { safeLS.setItem(_pk(DB), JSON.stringify(d.db)); } catch(e) {} AD = ld(); }
+  if (d.db)         { sd(d.db); AD = ld(); }
   if (d.meta)       sm(d.meta);
   if (d.mats)       smat(d.mats);
   if (d.dept)       sdept(d.dept);
@@ -13489,19 +13508,7 @@ function _applyFullBackup(d) {
   if (d.settings) {
     if (d.settings.dark_mode   !== undefined) safeLS.setItem('sanj_dark_mode', d.settings.dark_mode);
     if (d.settings.dash_view   !== undefined) safeLS.setItem('sanj_dash_view', d.settings.dash_view);
-    if (d.settings.hidden_tabs !== undefined) {
-      safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
-      // FIX: writing the new value to storage alone doesn't move the tabs —
-      // _hiddenTabs is an in-memory array read once at load, and the tab
-      // buttons only get shown/hidden when _applyHiddenTabs() runs. Without
-      // this, a hide/unhide done on one device wouldn't visibly take effect
-      // on another device until a manual reload.
-      try {
-        _hiddenTabs = JSON.parse(d.settings.hidden_tabs || '[]');
-        if (typeof _applyHiddenTabs === 'function') _applyHiddenTabs();
-        if (typeof _renderTabChips === 'function') _renderTabChips();
-      } catch(e) {}
-    }
+    if (d.settings.hidden_tabs !== undefined) safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
     if (d.settings.guide       !== undefined) safeLS.setItem('sanj_guide_enabled', d.settings.guide);
     if (d.settings.swipe       !== undefined) safeLS.setItem('sanj_swipe_enabled', d.settings.swipe);
     if (d.settings.signatures  !== undefined && d.settings.signatures !== '[]') {
