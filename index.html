@@ -2680,7 +2680,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
 
 <!-- ========== SETTINGS PANEL ========== -->
 <!-- URL bottom sheet -->
-<div id="url-sheet" style="display:none;position:fixed;inset:0;z-index:9999;align-items:flex-end;justify-content:center;pointer-events:none;" onclick="if(event.target===this)closeUrlSheet()">
+<div id="url-sheet" style="display:none;position:fixed;inset:0;z-index:9999;align-items:flex-end;justify-content:center;pointer-events:none;" onclick="if(event.target===this&&_modalGuardOk('url-sheet'))closeUrlSheet()">
   <div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);"></div>
   <div id="url-sheet-inner" style="position:relative;z-index:1;width:100%;max-width:480px;background:linear-gradient(160deg,#1a1740,#2d2a6e);border-radius:20px 20px 0 0;padding:20px 16px 32px;transform:translateY(100%);transition:transform .3s cubic-bezier(0.34,1.15,0.64,1);">
     <div style="width:36px;height:4px;background:rgba(255,255,255,0.2);border-radius:99px;margin:0 auto 18px;"></div>
@@ -2700,7 +2700,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
   </div>
 </div>
 
-<div id="settings-panel" style="display:none;position:fixed;inset:0;z-index:500000;align-items:flex-start;justify-content:flex-start;pointer-events:none;" onclick="if(event.target===this)closeAllAndSettings()">
+<div id="settings-panel" style="display:none;position:fixed;inset:0;z-index:500000;align-items:flex-start;justify-content:flex-start;pointer-events:none;" onclick="if(event.target===this&&_modalGuardOk('settings-panel'))closeAllAndSettings()">
   <!-- Backdrop -->
   <div id="sett-backdrop" style="position:absolute;inset:0;background:rgba(0,0,0,0);backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);transition:background .28s ease,backdrop-filter .28s ease,-webkit-backdrop-filter .28s ease;"></div>
   <!-- Drawer -->
@@ -2836,6 +2836,18 @@ function doAdminSignup() { cmSendSignupOtp(); }
         </div>
       </div>
       <div class="tog-track on" id="guide-sett-toggle"><div class="tog-thumb"></div></div>
+    </div>
+
+    <!-- Geo Tagging Toggle -->
+    <div class="sett-switch sett-row" onclick="toggleGeoTagFromSettings()" style="cursor:pointer;" id="sett-geotag-row">
+      <div class="sett-switch-label">
+        <span style="font-size:15px;flex-shrink:0">📍</span>
+        <div style="display:flex;flex-direction:column;gap:1px">
+          <span style="color:#fff;font-size:11px">Geo Tagging</span>
+          <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="geotag-sett-sub">Stamp location on photos</span>
+        </div>
+      </div>
+      <div class="tog-track on" id="geotag-sett-toggle"><div class="tog-thumb"></div></div>
     </div>
 
     <!-- Swipe to Switch Tabs -->
@@ -3049,6 +3061,7 @@ function openSettingsPanel() {
   var drawer  = document.getElementById('sett-drawer');
   var gear    = document.getElementById('sett-gear');
   if (!panel) return;
+  _armModalGuard('settings-panel');
 
   // Close any other overlay that might already be open — Settings should
   // always be reachable and on top, never left stacked behind/under
@@ -3085,6 +3098,14 @@ function openSettingsPanel() {
     if (sub) sub.textContent = _swipeGlobalEnabled ? 'Swipe left/right to navigate' : 'Swipe disabled';
   })();
 
+  // Sync geo tagging toggle state
+  (function(){
+    var tog = document.getElementById('geotag-sett-toggle');
+    var sub = document.getElementById('geotag-sett-sub');
+    if (tog) { if (_geoTagEnabled) tog.classList.add('on'); else tog.classList.remove('on'); }
+    if (sub) sub.textContent = _geoTagEnabled ? 'Stamp location on photos' : 'Photos saved without location';
+  })();
+
   panel.style.display = 'flex';
   panel.style.pointerEvents = 'auto';
   // Force reflow then animate
@@ -3111,6 +3132,7 @@ function showUrlSheet() {
   var s = document.getElementById('url-sheet');
   var inner = document.getElementById('url-sheet-inner');
   if (!s) return;
+  _armModalGuard('url-sheet');
   s.style.display = 'flex';
   s.style.pointerEvents = 'auto';
   requestAnimationFrame(function(){
@@ -3331,6 +3353,22 @@ function _applyGuideEnabled(on) {
 
 function toggleGuideFromSettings() {
   _applyGuideEnabled(!_guideEnabled);
+}
+
+// Geo Tagging toggle from Settings — controls whether captured photos get
+// the location/address/date stamp burned onto them.
+var _geoTagEnabled = true;
+try { _geoTagEnabled = localStorage.getItem('sanj_geotag_enabled') !== '0'; } catch(e) {}
+function _applyGeoTagEnabled(on) {
+  _geoTagEnabled = on;
+  try { localStorage.setItem('sanj_geotag_enabled', on ? '1' : '0'); } catch(e) {}
+  var track = document.getElementById('geotag-sett-toggle');
+  var sub   = document.getElementById('geotag-sett-sub');
+  if (track) { on ? track.classList.add('on') : track.classList.remove('on'); }
+  if (sub)   sub.textContent = on ? 'Stamp location on photos' : 'Photos saved without location';
+}
+function toggleGeoTagFromSettings() {
+  _applyGeoTagEnabled(!_geoTagEnabled);
 }
 
 // ── Manage Tabs ───────────────────────────────────────────────
@@ -5491,7 +5529,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- QDPR Add/Edit Project modal — opened from the ➕ button in the QDPR header -->
-<div id="qdpr-project-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9600" onclick="if(event.target===this)closeQdprProjectModal()">
+<div id="qdpr-project-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9600" onclick="if(event.target===this&&_modalGuardOk('qdpr-project-modal'))closeQdprProjectModal()">
   <div class="bg-white rounded-2xl p-4 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-2">
       <h3 id="qdpr-project-modal-title" class="font-bold text-gray-800 text-sm">📆 Add Project</h3>
@@ -5529,7 +5567,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- Add / Edit Contact modal -->
-<div id="contact-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9600" onclick="if(event.target===this)closeAddContactModal()">
+<div id="contact-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm items-center justify-center p-4" style="display:none;z-index:9600" onclick="if(event.target===this&&_modalGuardOk('contact-add-modal'))closeAddContactModal()">
   <div class="bg-white rounded-2xl p-4 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-2">
       <h3 id="contact-modal-title" class="font-bold text-gray-800 text-sm">📞 Add Contact</h3>
@@ -5559,7 +5597,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Edit Profile -->
 
-<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeProfileModal()">
+<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('profile-modal'))closeProfileModal()">
   <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1">
       <h3 class="font-bold text-gray-800">⚙️ My Profile</h3>
@@ -5580,7 +5618,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- Owner-only: Company Settings (name, address, GST, logo) — shared across the whole company -->
-<div id="owner-company-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeOwnerCompanyModal()">
+<div id="owner-company-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('owner-company-modal'))closeOwnerCompanyModal()">
   <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1">
       <h3 class="font-bold text-gray-800">👑 Company Settings</h3>
@@ -5670,7 +5708,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ===== MANAGE WORKERS MODAL ===== -->
-<div id="manage-workers-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this)closeManageWorkersModal()">
+<div id="manage-workers-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-3" style="display:none" onclick="if(event.target===this&&_modalGuardOk('manage-workers-modal'))closeManageWorkersModal()">
   <div class="bg-white rounded-2xl w-full shadow-2xl overflow-y-auto" style="max-width:360px;max-height:90vh;padding:12px 14px">
     <div class="flex items-center justify-between mb-3">
       <h3 style="font-size:14px;font-weight:900;color:#1f2937">⚙️ Manage Workers</h3>
@@ -5765,7 +5803,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Contractor Payment Modal -->
 
-<div id="ct-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeCTModal()">
+<div id="ct-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('ct-modal'))closeCTModal()">
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-2"><h3 id="ct-modal-title" class="font-bold text-gray-800">Add Payment</h3><button onclick="closeCTModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
@@ -5778,7 +5816,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Material Purchase Modal -->
 
-<div id="mat-purchase-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeMatModal()">
+<div id="mat-purchase-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('mat-purchase-modal'))closeMatModal()">
   <div class="bg-white rounded-2xl p-3 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
     <div class="flex items-center justify-between mb-2"><h3 id="mat-modal-title" class="font-bold text-gray-800 text-sm">📦 Material Received</h3><button onclick="closeMatModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
@@ -5829,7 +5867,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Material Use Modal -->
 
-<div id="mat-use-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeMatUseModal()">
+<div id="mat-use-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('mat-use-modal'))closeMatUseModal()">
   <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-2"><h3 id="mat-use-title" class="font-bold text-gray-800">🔨 Mark as Used</h3><button onclick="closeMatUseModal()" class="text-gray-400 text-xl">✕</button></div>
     <div class="space-y-3">
@@ -5875,7 +5913,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Departmental Work Add Modal -->
 
-<div id="dept-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeDeptModal()">
+<div id="dept-add-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('dept-add-modal'))closeDeptModal()">
   <div class="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-4">
       <h3 class="font-bold text-gray-800">🏗️ Add Departmental Work</h3>
@@ -5929,7 +5967,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- APK Modal -->
 
-<div id="apk-modal" onclick="if(event.target===this)hideApkModal()">
+<div id="apk-modal" onclick="if(event.target===this&&_modalGuardOk('apk-modal'))hideApkModal()">
   <div class="apk-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
       <div style="display:flex;align-items:center;gap:.75rem"><div style="width:44px;height:44px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px">📲</div><div><p style="color:white;font-weight:800;font-size:1rem;margin:0">Download as APK</p><p style="color:#a5b4fc;font-size:.72rem;margin:0">Sanjineer for Android</p></div></div>
@@ -5951,7 +5989,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ====== CLOUD MODAL ====== -->
-<div id="cloud-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeCloudModal()">
+<div id="cloud-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('cloud-modal'))closeCloudModal()">
   <div style="background:linear-gradient(160deg,#0f0c29,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.14);border-radius:1.4rem;width:100%;max-width:390px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.75);">
 
     <!-- FIXED TOP -->
@@ -6176,7 +6214,7 @@ service cloud.firestore {
 
 
 <!-- ====== VIEWER LINK MODAL ====== -->
-<div id="viewer-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeViewerModal()">
+<div id="viewer-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('viewer-modal'))closeViewerModal()">
   <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:380px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
       <p style="font-size:15px;font-weight:900;color:white;">🔗 Viewer Link</p>
@@ -6198,7 +6236,7 @@ service cloud.firestore {
 </div>
 
 <!-- ====== VIEWER ACCOUNT MANAGEMENT MODAL ====== -->
-<div id="viewer-mgmt-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] items-center justify-center p-4" style="display:none" onclick="if(event.target===this)closeViewerMgmt()">
+<div id="viewer-mgmt-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('viewer-mgmt-modal'))closeViewerMgmt()">
   <div style="background:linear-gradient(160deg,#0f0c29,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.15);border-radius:1.75rem;padding:0;width:100%;max-width:420px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
 
     <!-- Header -->
@@ -6274,7 +6312,7 @@ service cloud.firestore {
 </div>
 
 <!-- ====== PAYMENT LANDING MODAL ====== -->
-<div id="pay-landing-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] items-center justify-center p-3" style="display:none" onclick="if(event.target===this)closePayLanding()">
+<div id="pay-landing-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] items-center justify-center p-3" style="display:none" onclick="if(event.target===this&&_modalGuardOk('pay-landing-modal')&&!_payLandingAfterAuth)closePayLanding()">
   <div style="background:linear-gradient(135deg,#0f172a,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.18);border-radius:1.25rem;padding:1rem;width:100%;max-width:380px;max-height:92vh;overflow-y:auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;">
       <div style="display:flex;align-items:center;gap:8px;">
@@ -6665,6 +6703,7 @@ function openEditProfile() {
   // Build colour swatches
   _buildColorSwatches(p.headerColor || '');
   document.getElementById('edit-header-color').value = p.headerColor || '';
+  _armModalGuard('profile-modal');
   document.getElementById('profile-modal').classList.add('modal-show');
 }
 
@@ -6702,6 +6741,7 @@ function openOwnerCompanyModal() {
     if (hint) hint.style.display = 'none';
   }
   var m = document.getElementById('owner-company-modal');
+  _armModalGuard('owner-company-modal');
   if (m) m.style.display = 'flex';
 }
 function closeOwnerCompanyModal() {
@@ -6897,7 +6937,7 @@ function clearProfileLogo() {
 // ============================================================
 // APK / PWA
 // ============================================================
-function showApkModal(){ document.getElementById('apk-modal').classList.add('show'); }
+function showApkModal(){ _armModalGuard('apk-modal'); document.getElementById('apk-modal').classList.add('show'); }
 function hideApkModal(){ document.getElementById('apk-modal').classList.remove('show'); }
 function triggerPWAInstall(){
   if (PWA) { PWA.prompt(); PWA.userChoice.then(function(){ hideApkModal(); PWA = null; }); }
@@ -7231,6 +7271,197 @@ function loadPhotos() {
     }).join('');
   });
 }
+// ============================================================
+// GEO-TAG STAMPING — burns a "GPS Map Camera"-style overlay (place
+// name + address, lat/long, date-time, and a small map+pin graphic)
+// onto photos captured through the app, so site photos carry visible
+// proof of where and when they were taken.
+// ============================================================
+var _geoStampCache = null; // reused briefly so several photos in one report don't each re-request GPS + re-geocode
+function _geoStampGetLocation() {
+  var now = Date.now();
+  if (_geoStampCache && (now - _geoStampCache.ts) < 3*60*1000) return Promise.resolve(_geoStampCache);
+  return new Promise(function(resolve) {
+    if (!('geolocation' in navigator)) { resolve(null); return; }
+    var settled = false;
+    var timer = setTimeout(function(){ if (!settled) { settled = true; resolve(null); } }, 9000);
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      if (settled) return; settled = true; clearTimeout(timer);
+      var lat = pos.coords.latitude, lon = pos.coords.longitude;
+      var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+lat+'&lon='+lon+'&zoom=16&addressdetails=1';
+      var geoTimer = setTimeout(function() {
+        var result = { ts: now, lat: lat, lon: lon, addr: null };
+        _geoStampCache = result; resolve(result);
+      }, 6000);
+      fetch(url, { headers: { 'Accept': 'application/json' } }).then(function(r){ return r.json(); }).then(function(data) {
+        clearTimeout(geoTimer);
+        var result = { ts: now, lat: lat, lon: lon, addr: data || null };
+        _geoStampCache = result; resolve(result);
+      }).catch(function() {
+        clearTimeout(geoTimer);
+        var result = { ts: now, lat: lat, lon: lon, addr: null };
+        _geoStampCache = result; resolve(result);
+      });
+    }, function() {
+      if (settled) return; settled = true; clearTimeout(timer);
+      resolve(null); // permission denied / unavailable — caller falls back to an unstamped photo
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 5*60*1000 });
+  });
+}
+function _geoFlagEmoji(countryCode) {
+  if (!countryCode || countryCode.length !== 2) return '';
+  var cc = countryCode.toUpperCase(), A = 0x1F1E6;
+  return String.fromCodePoint(A + (cc.charCodeAt(0)-65)) + String.fromCodePoint(A + (cc.charCodeAt(1)-65));
+}
+function _geoRoundRectPath(ctx,x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function _geoFillTextClipped(ctx, text, x, y, maxW) {
+  var m = ctx.font.match(/(\d+)px/); var size = m ? parseInt(m[1],10) : 14;
+  while (ctx.measureText(text).width > maxW && size > 9) { size -= 1; ctx.font = ctx.font.replace(/\d+px/, size+'px'); }
+  ctx.fillText(text, x, y);
+}
+function _geoFillWrappedText(ctx, text, x, y, maxW, lineH, maxLines) {
+  var words = String(text).split(' '), line = '', lines = 0;
+  for (var i=0;i<words.length;i++) {
+    var test = line + (line?' ':'') + words[i];
+    if (ctx.measureText(test).width > maxW && line) {
+      if (lines >= maxLines-1) {
+        var rest = words.slice(i).join(' ');
+        while (ctx.measureText(rest+'…').width > maxW && rest.length>1) rest = rest.slice(0,-1);
+        ctx.fillText(line, x, y); y += lineH;
+        ctx.fillText(rest + '…', x, y); return y + lineH;
+      }
+      ctx.fillText(line, x, y); y += lineH; line = words[i]; lines++;
+    } else { line = test; }
+  }
+  if (line) { ctx.fillText(line, x, y); y += lineH; }
+  return y;
+}
+function _geoStampDraw(ctx, w, h, geo, projectAddress) {
+  var cardH = Math.max(Math.round(h*0.24), 104);
+  var cardW = Math.round(w*0.92);
+  var x0 = Math.round((w - cardW)/2);
+  var y0 = Math.round((h - cardH)/2);
+
+  // Dim the whole photo slightly so the centered card stays readable
+  // against any background, then draw the card itself on top.
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  _geoRoundRectPath(ctx, x0, y0, cardW, cardH, 14); ctx.clip();
+  ctx.fillStyle = 'rgba(10,10,20,.68)'; ctx.fillRect(x0, y0, cardW, cardH);
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1.5;
+  _geoRoundRectPath(ctx, x0, y0, cardW, cardH, 14); ctx.stroke();
+
+  var pad = Math.round(w*0.022);
+  var mapSize = cardH - pad*2, mapX = x0 + pad, mapY = y0 + pad;
+
+  // Stylised mini-map + pin (drawn, not a fetched tile image — avoids
+  // canvas-tainting/CORS issues with third-party map tile servers).
+  ctx.save();
+  _geoRoundRectPath(ctx, mapX, mapY, mapSize, mapSize, 8); ctx.clip();
+  ctx.fillStyle = '#cfe8d8'; ctx.fillRect(mapX, mapY, mapSize, mapSize);
+  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
+  for (var gx=mapX; gx<mapX+mapSize; gx+=mapSize/4){ ctx.beginPath(); ctx.moveTo(gx,mapY); ctx.lineTo(gx,mapY+mapSize); ctx.stroke(); }
+  for (var gy=mapY; gy<mapY+mapSize; gy+=mapSize/4){ ctx.beginPath(); ctx.moveTo(mapX,gy); ctx.lineTo(mapX+mapSize,gy); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(120,150,120,.5)';
+  ctx.fillRect(mapX, mapY+mapSize*0.55, mapSize, mapSize*0.12);
+  ctx.fillRect(mapX+mapSize*0.6, mapY, mapSize*0.14, mapSize);
+  var pinX = mapX+mapSize*0.5, pinY = mapY+mapSize*0.42, pinR = mapSize*0.14;
+  ctx.beginPath(); ctx.arc(pinX, pinY, pinR, Math.PI*1.05, -Math.PI*0.05); ctx.lineTo(pinX, pinY+pinR*1.9); ctx.closePath();
+  ctx.fillStyle = '#e11d48'; ctx.fill();
+  ctx.beginPath(); ctx.arc(pinX, pinY, pinR*0.42, 0, Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.5;
+  _geoRoundRectPath(ctx, mapX, mapY, mapSize, mapSize, 8); ctx.stroke();
+
+  var tx = mapX + mapSize + pad, tw = x0 + cardW - pad - tx;
+  var a = (geo && geo.addr && geo.addr.address) || {};
+
+  // The ONE address line shown — prefer the project's own configured
+  // address (plot/sector/area/city/state/pincode, as the admin typed it
+  // in Add/Edit Project) since that's precise and India-specific detail
+  // that live reverse-geocoding usually can't resolve. Only fall back to
+  // the GPS reverse-geocode result if no project address is set.
+  var addrLine = (projectAddress && projectAddress.trim()) ||
+    [a.road, (a.suburb||a.neighbourhood), (a.city||a.town||a.village), [a.state,a.postcode].filter(Boolean).join(' '), a.country].filter(Boolean).join(', ') ||
+    (geo ? 'Location captured' : 'Location unavailable');
+
+  var latlon = geo ? ('Lat '+geo.lat.toFixed(6)+', Long '+geo.lon.toFixed(6)) : '';
+  var dt = new Date();
+  var dateStr = dt.toLocaleDateString('en-GB') + ', ' + dt.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',hour12:true});
+  var tzOff = -dt.getTimezoneOffset();
+  var tzStr = 'GMT' + (tzOff>=0?'+':'-') + String(Math.floor(Math.abs(tzOff)/60)).padStart(2,'0') + ':' + String(Math.abs(tzOff)%60).padStart(2,'0');
+
+  ctx.textBaseline = 'top'; ctx.fillStyle = '#fff';
+  var titleSize = Math.max(Math.round(w*0.0225), 13);
+  ctx.font = '800 '+titleSize+'px Arial, sans-serif';
+  var ly = _geoFillWrappedText(ctx, addrLine, tx, mapY, tw, titleSize+5, 3);
+
+  var lineSize = Math.max(Math.round(w*0.0155), 10);
+  ctx.font = '500 '+lineSize+'px Arial, sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.92)';
+  ly += 4;
+  if (latlon) { ctx.fillText(latlon, tx, ly); ly += lineSize+5; }
+  ctx.fillText(dateStr + ' ' + tzStr, tx, ly);
+}
+// Main entry point — takes a File, returns Promise<dataURL> of the
+// resized + geo-stamped JPEG. Falls back to a plain resized photo if
+// location/geocoding isn't available (capture still succeeds either way).
+// Resolves a project's own configured address — the one the admin typed
+// into Add/Edit Project (plot/sector/area/city/state/pincode) — whether
+// it's the currently active project, another of the admin's own projects,
+// or a project the current user joined. This is what the geo-tag stamp
+// shows as the primary location line, since it's precise and India-specific
+// in a way live GPS reverse-geocoding usually isn't.
+function _geoResolveProjectAddress(pid) {
+  try {
+    if (!pid) pid = window.currentProjectId;
+    if (!pid) return '';
+    if (pid === window.currentProjectId && typeof lmergedProf === 'function') {
+      var m = lmergedProf();
+      if (m && m.address) return m.address;
+    }
+    var own = (window.projects||[]).find(function(p){ return p.id===pid; });
+    if (own && own.address) return own.address;
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem('sanj_project_'+pid+'_cm_profile') || 'null'); } catch(e) { raw = null; }
+    if (raw && raw.address) return raw.address;
+  } catch(e) {}
+  return '';
+}
+function geoStampImageFile(file, maxWidth, quality, pid) {
+  maxWidth = maxWidth || 1280; quality = quality || 0.85;
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var projectAddress = _geoResolveProjectAddress(pid);
+        var finish = function(geo) {
+          try {
+            var w = img.width, h = img.height;
+            if (w > maxWidth) { h = Math.round(h*(maxWidth/w)); w = maxWidth; }
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            if (geo !== false) _geoStampDraw(ctx, w, h, geo, projectAddress);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          } catch (err) { reject(err); }
+        };
+        if (!_geoTagEnabled) { finish(false); return; } // Geo Tagging turned off in Settings — plain resized photo, no location request at all
+        _geoStampGetLocation().then(finish);
+      };
+      img.onerror = function(){ reject(new Error('Image load failed')); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function(){ reject(new Error('File read failed')); };
+    reader.readAsDataURL(file);
+  });
+}
 function addPhoto(e) {
   var files = e.target.files;
   if (!files || !files.length) return;
@@ -7238,47 +7469,25 @@ function addPhoto(e) {
   if (keys.length >= 4) { toast('Max 4 photos allowed', 'err'); e.target.value = ''; return; }
   var f = files[0];
   if (!f) { e.target.value = ''; return; }
-  var reader = new FileReader();
-  reader.onload = function(ev) {
-    var dataUrl = ev.target.result;
-    if (!dataUrl) { toast('Could not read image', 'err'); return; }
-    var img = new Image();
-    img.onload = function() {
-      try {
-        var MAX = 1280;
-        var w = img.width, h = img.height;
-        if (w > MAX || h > MAX) {
-          var ratio = Math.min(MAX / w, MAX / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
-        }
-        var canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        var compressed = canvas.toDataURL('image/jpeg', 0.82);
-        var curKeys = lphkeys()[DD] || [];
-        if (curKeys.length >= 4) { toast('Max 4 photos already saved', 'err'); return; }
-        var idbKey = 'ph_' + DD + '_' + Date.now();
-        idbPut(idbKey, compressed, function(ok) {
-          if (!ok) { toast('Could not save photo — try again', 'err'); return; }
-          var idx = lphkeys();
-          var arr = idx[DD] || [];
-          arr.push(idbKey);
-          idx[DD] = arr;
-          sphkeys(idx);
-          loadPhotos();
-          toast('Photo ' + arr.length + ' of 4 saved ✓', 'ok');
-        });
-      } catch (err) {
-        toast('Error processing photo', 'err');
-      }
-    };
-    img.onerror = function() { toast('Could not load image', 'err'); };
-    img.src = dataUrl;
-  };
-  reader.onerror = function() { toast('Could not read file', 'err'); };
+  if (_geoTagEnabled) toast('📍 Tagging location…', 'info');
+  geoStampImageFile(f, 1280, 0.82, window.currentProjectId).then(function(compressed) {
+    var curKeys = lphkeys()[DD] || [];
+    if (curKeys.length >= 4) { toast('Max 4 photos already saved', 'err'); return; }
+    var idbKey = 'ph_' + DD + '_' + Date.now();
+    idbPut(idbKey, compressed, function(ok) {
+      if (!ok) { toast('Could not save photo — try again', 'err'); return; }
+      var idx = lphkeys();
+      var arr = idx[DD] || [];
+      arr.push(idbKey);
+      idx[DD] = arr;
+      sphkeys(idx);
+      loadPhotos();
+      toast('Photo ' + arr.length + ' of 4 saved ✓', 'ok');
+    });
+  }).catch(function() {
+    toast('Error processing photo', 'err');
+  });
   e.target.value = '';
-  reader.readAsDataURL(f);
 }
 function removePhoto(i) {
   var idx = lphkeys(), keys = idx[DD] || [];
@@ -7498,6 +7707,7 @@ function renderDept() {
 }
 function openAddDeptModal() {
   ['da-cat','da-workers','da-hours','da-work','da-qty','da-unit','da-amount'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  _armModalGuard('dept-add-modal');
   document.getElementById('dept-add-modal').classList.add('modal-show');
 }
 function closeDeptModal(){ document.getElementById('dept-add-modal').classList.remove('modal-show'); }
@@ -7598,6 +7808,7 @@ function openManageWorkers() {
   _mwUpdateSelCount();
   document.getElementById('mw-wage').value = '';
   document.getElementById('mw-ot-rate').value = '';
+  _armModalGuard('manage-workers-modal');
   document.getElementById('manage-workers-modal').style.display = 'flex';
 }
 
@@ -7819,8 +8030,9 @@ async function onQdprPhotoChange(input){
   if (room<=0){ toast('Maximum '+QDPR_MAX_PHOTOS+' photos allowed','err'); input.value=''; return; }
   var toProcess = files.slice(0, room);
   if (files.length>room) toast('Only '+room+' more photo(s) added (max '+QDPR_MAX_PHOTOS+')','err');
+  if (toProcess.length && _geoTagEnabled) toast('📍 Tagging location…', 'info');
   for (var i=0;i<toProcess.length;i++){
-    try{ var dataUrl = await qdprResizeImageFile(toProcess[i]); qdprFormState.photos.push({id:uid(), src:dataUrl}); }
+    try{ var dataUrl = await geoStampImageFile(toProcess[i], 1000, 0.78, qdprState.formSiteId); qdprFormState.photos.push({id:uid(), src:dataUrl}); }
     catch(e){ console.error('QDPR photo processing failed', e); }
   }
   input.value='';
@@ -8034,6 +8246,7 @@ function changeQdprDate(v){
 function openQdprProjectModal(pid){
   var modal = document.getElementById('qdpr-project-modal');
   if (!modal) return;
+  _armModalGuard('qdpr-project-modal');
   var titleEl = document.getElementById('qdpr-project-modal-title');
   var saveBtn = document.getElementById('qdpr-project-modal-save-btn');
   var pidEl = document.getElementById('qs-edit-pid');
@@ -9117,6 +9330,7 @@ function openMatPurchaseModal(id){
   var mpCatEl=document.getElementById('mp-category');
   if (mpCatEl) mpCatEl.innerHTML=_matCatOptionsHTML(item.category||'', false);
   clearBill('mp');
+  _armModalGuard('mat-purchase-modal');
   document.getElementById('mat-purchase-modal').classList.add('modal-show');
 }
 function closeMatModal(){ document.getElementById('mat-purchase-modal').classList.remove('modal-show'); }
@@ -9140,6 +9354,7 @@ function openMatUseModal(id){
   MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
   document.getElementById('mat-use-title').textContent='Mark Used — '+item.name+' ('+getbal(item)+' '+item.unit+' in stock)';
   document.getElementById('mu-date').value=ist(); document.getElementById('mu-qty').value=''; document.getElementById('mu-note').value='';
+  _armModalGuard('mat-use-modal');
   document.getElementById('mat-use-modal').classList.add('modal-show');
 }
 function closeMatUseModal(){ document.getElementById('mat-use-modal').classList.remove('modal-show'); }
@@ -9850,6 +10065,7 @@ function openCTModal(cid){
 CID=cid; var c=AD.find(function(d){ return d.__id===cid; }); if(!c) return;
 document.getElementById('ct-modal-title').textContent='Add Advance — '+c.contractor_name;
 document.getElementById('ct-pay-date').value=ist(); document.getElementById('ct-pay-amt').value='';
+_armModalGuard('ct-modal');
 document.getElementById('ct-modal').classList.add('modal-show');
 }
 function closeCTModal(){ document.getElementById('ct-modal').classList.remove('modal-show'); CID=null; }
@@ -11997,21 +12213,6 @@ function boqEditSub(secId,itemId,subId,field,val){
   boqSave(data); boqUpdateBars(); boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
 }
 
-function boqEdit(secId,itemId,field,val){
-  var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
-  var item=sec.items.find(function(i){return i.id===itemId;}); if(!item) return;
-  if(['tenderQty','prevQty','todayQty'].indexOf(field)>=0){ val=parseFloat(val)||0; if(val<0)val=0; }
-  item[field]=val;
-  if(field==='todayQty'||field==='prevQty'||field==='tenderQty'){
-    var tender=parseFloat(item.tenderQty)||0;
-    if(tender>0){
-      item.prevDone=Math.min(100,Math.round((parseFloat(item.prevQty)||0)/tender*100*10)/10);
-      item.todayDone=Math.min(100,Math.round((parseFloat(item.todayQty)||0)/tender*100*10)/10);
-    }
-  }
-  boqSave(data); boqUpdateBars(); boqUpdateDailySummary(); boqUpdateGantt(); boqUpdateSummaryStats();
-}
-
 /* ── Computed ── */
 function boqTotalQty(item){ return (parseFloat(item.prevQty)||0)+(parseFloat(item.todayQty)||0); }
 function boqTotalPct(item){
@@ -13046,6 +13247,7 @@ function updateOwnerBtn() {
 // -- Open / Close Cloud Modal --
 function openCloudModal() {
   refreshCloudModalState();
+  _armModalGuard('cloud-modal');
   document.getElementById('cloud-modal').classList.add('show');
   // If admin is logged in but DB check still pending, retry once it completes
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
@@ -13681,6 +13883,7 @@ function openViewerModal() {
   // Supabase: no credentials in URL — viewer logs in with email+password
   var viewerUrl = base + '?vlogin=1';
   document.getElementById('viewer-link-text').textContent = viewerUrl;
+  _armModalGuard('viewer-modal');
   document.getElementById('viewer-modal').classList.add('show');
 }
 function closeViewerModal() { document.getElementById('viewer-modal').classList.remove('show'); }
@@ -14658,7 +14861,13 @@ var _adminSBUser = null; // Supabase user object when logged in
 function _getAdminDb() { return _sb || null; } // shim for any remaining callers
 var _pendingAuthApp = null, _pendingAuthUser = null, _pendingAuthEmail = null;
 // Legacy vars kept to avoid reference errors in unchanged code
-var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null, _cloudSyncTimer = null;
+// NOTE: _cloudSyncTimer is intentionally NOT redeclared here — it already
+// exists (declared near startAutoSync()). Re-zeroing it here used to wipe
+// out the live setInterval handle, so a running sync/backup/pull loop
+// could never be found/cleared again (orphaned interval -> stale data,
+// intermittent "delay" in backup/sync/pull, and duplicate timers stacking
+// up on re-login). Keep this a no-op for that variable.
+var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null;
 
 // ================================================================
 // ── VIEWER ACCOUNT MANAGEMENT ─────────────────────────────────
@@ -14675,6 +14884,7 @@ var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null, _cloudSyncTimer 
 
 function openViewerMgmt() {
   loadViewerAccounts();
+  _armModalGuard('viewer-mgmt-modal');
   document.getElementById('viewer-mgmt-modal').classList.add('show');
 }
 function closeViewerMgmt() {
@@ -15196,6 +15406,7 @@ var _payLandingAfterAuth = false;
 function openPayLanding(afterAuth) {
   _payLandingAfterAuth = !!afterAuth;
   var modal = document.getElementById('pay-landing-modal');
+  _armModalGuard('pay-landing-modal');
   modal.classList.add('show');
   // If afterAuth=true: hide X button, show locked message
   var closeBtn = document.getElementById('pay-close-btn');
@@ -18680,6 +18891,7 @@ window.openAddContactModal = function(editId) {
   if (roleEl) roleEl.value = existing ? existing.role : 'Supplier';
   if (notesEl) notesEl.value = existing ? (existing.notes||'') : '';
   if (title) title.textContent = existing ? '✏️ Edit Contact' : '📞 Add Contact';
+  _armModalGuard('contact-add-modal');
   if (modal) modal.style.display = 'flex';
 };
 window.closeAddContactModal = function() {
