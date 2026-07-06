@@ -6599,8 +6599,42 @@ var VM = new Date(), DD = ist(), DTD = ist();
 var PDEL = null, DTMR = null, PWA = null;
 var NID = parseInt(safeLS.getItem('cm_nid') || '1');
 
+// ── Per-device unique salt ───────────────────────────────────────────
+// Persisted once per install/browser so record IDs from different
+// devices can NEVER collide, even if both start counting from 1.
+//
+// ROOT CAUSE OF "MY ENTRY DISAPPEARED BY ITSELF":
+// gid() used to return only 'r'+NID — a purely local counter. Two
+// different devices/logins both create "r1", "r2", "r3"... independently.
+// When cloud sync later merges data by __id (see _mergeRecordArrays),
+// two completely unrelated records that happen to share the same local
+// counter value (e.g. device A's attendance entry "r5" and device B's
+// expense entry "r5") are treated as the SAME record — the merge keeps
+// only whichever has the newer __ts and silently, permanently discards
+// the other. No delete button pressed, no error shown — the record
+// just never reappears after the next sync, which looks exactly like
+// "I typed it in and it vanished within seconds."
+// Making the ID globally unique (device salt + counter + timestamp)
+// makes this class of collision structurally impossible.
+var _DEV_SALT = (function() {
+  var s = null;
+  try { s = safeLS.getItem('cm_dev_salt'); } catch(e) {}
+  if (!s) {
+    try {
+      var arr = new Uint8Array(5);
+      crypto.getRandomValues(arr);
+      s = Array.from(arr).map(function(b){ return b.toString(36); }).join('');
+    } catch(e) { s = Math.random().toString(36).slice(2, 9); }
+    try { safeLS.setItem('cm_dev_salt', s); } catch(e) {}
+  }
+  return s;
+})();
+
 function gid() {
-  var id = 'r' + NID++;
+  // Still starts with 'r' and still increments NID (kept for any legacy
+  // numeric-fallback sorting), but is now globally unique across every
+  // device/browser/login that will ever touch this project's data.
+  var id = 'r' + _DEV_SALT + '_' + (NID++) + '_' + Date.now().toString(36);
   safeLS.setItem('cm_nid', NID);
   return id;
 }
@@ -13415,7 +13449,13 @@ function autoInitCloud() {
 function _applyFullBackup(d) {
   if (!d) return;
   // Core tab data
-  if (d.db)         { sd(d.db); AD = ld(); }
+  // Write directly to storage instead of calling sd(d.db) — sd() also
+  // schedules a cloud push (_scheduleCloudPush), and this function is
+  // itself invoked as part of APPLYING data pulled from the cloud. Doing
+  // sd() here meant every pull silently queued another push 3s later,
+  // which could race with a genuinely new local edit and needlessly
+  // widen the window for the ID-collision bug described above near gid().
+  if (d.db)         { try { safeLS.setItem(_pk(DB), JSON.stringify(d.db)); } catch(e) {} AD = ld(); }
   if (d.meta)       sm(d.meta);
   if (d.mats)       smat(d.mats);
   if (d.dept)       sdept(d.dept);
@@ -13449,7 +13489,19 @@ function _applyFullBackup(d) {
   if (d.settings) {
     if (d.settings.dark_mode   !== undefined) safeLS.setItem('sanj_dark_mode', d.settings.dark_mode);
     if (d.settings.dash_view   !== undefined) safeLS.setItem('sanj_dash_view', d.settings.dash_view);
-    if (d.settings.hidden_tabs !== undefined) safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
+    if (d.settings.hidden_tabs !== undefined) {
+      safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
+      // FIX: writing the new value to storage alone doesn't move the tabs —
+      // _hiddenTabs is an in-memory array read once at load, and the tab
+      // buttons only get shown/hidden when _applyHiddenTabs() runs. Without
+      // this, a hide/unhide done on one device wouldn't visibly take effect
+      // on another device until a manual reload.
+      try {
+        _hiddenTabs = JSON.parse(d.settings.hidden_tabs || '[]');
+        if (typeof _applyHiddenTabs === 'function') _applyHiddenTabs();
+        if (typeof _renderTabChips === 'function') _renderTabChips();
+      } catch(e) {}
+    }
     if (d.settings.guide       !== undefined) safeLS.setItem('sanj_guide_enabled', d.settings.guide);
     if (d.settings.swipe       !== undefined) safeLS.setItem('sanj_swipe_enabled', d.settings.swipe);
     if (d.settings.signatures  !== undefined && d.settings.signatures !== '[]') {
