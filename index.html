@@ -1019,6 +1019,35 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   window._sbSubActive = false; // Only set to true after DB verification
   window._sbSubChecked = false; // Set to true once DB check completes
 
+  // ── Plan tier helper ──────────────────────────────────────────
+  // Single source of truth for turning an `admins` DB row into the
+  // three local flags the rest of the app reads: window.isProUser,
+  // window.isEnterpriseUser, window.userPlan ('free'|'pro'|'enterprise').
+  //
+  // IMPORTANT — grandfathering existing subscribers:
+  // Older paid rows were written before the `plan` column existed, so
+  // `data.plan` will be undefined for them. Any row with subscribed=true
+  // and no explicit plan is treated as 'pro' — their existing ₹30/month
+  // access keeps working exactly as before; they are never silently
+  // downgraded, and never asked to pay again just because this feature
+  // shipped later.
+  window._applyPlanFromAdminRow = function(data) {
+    data = data || {};
+    var now = Date.now();
+    var endDate = data.subscription_end_date || 0;
+    var active = !!data.subscribed && endDate > now;
+    var plan = active ? (data.plan || 'pro') : 'free';
+    window.userPlan = plan;
+    window.isProUser = active; // pro AND enterprise both get everything "pro" already unlocks
+    window.isEnterpriseUser = active && plan === 'enterprise';
+    try {
+      localStorage.setItem('isProUser', active ? 'true' : 'false');
+      localStorage.setItem('cm_plan', plan);
+    } catch(e) {}
+    return plan;
+  };
+
+
   // Init Supabase client (SDK loaded synchronously via CDN)
   function _initSB() {
     if (_sb) return;
@@ -2326,11 +2355,10 @@ function _handleOtpSuccess(user, email, onDismiss) {
     var now = Date.now();
     var endDate = data.subscription_end_date || 0;
     var isActive = data.subscribed && endDate > now;
+    window._applyPlanFromAdminRow(data);
     if (isActive) {
       window._sbSubActive = true;
       safeLS.setItem('cm_sub_end', String(endDate));
-      window.isProUser = true;
-      try { localStorage.setItem('isProUser', 'true'); } catch(e) {}
       onAdminLoginSuccess(email, user, null);
       onDismiss();
     } else {
@@ -2916,14 +2944,6 @@ function doAdminSignup() { cmSendSignupOtp(); }
   var _cache    = {};        // synchronous mirror
   var _ready    = false;
   var _queue    = [];        // pending writes while IDB opens
-  // Keys the app wrote (or deleted) WHILE the IndexedDB cursor scan below
-  // is still running. The scan reads old data from IDB key-by-key and can
-  // take multiple event-loop turns; without this guard, a brand-new entry
-  // typed in during that window gets silently overwritten a moment later
-  // when the scan reaches that key's old value — the record would appear
-  // to "vanish" a few seconds after saving, with no error and no action
-  // taken by the user. Once _ready is true this guard is no longer needed.
-  var _touchedDuringLoad = {};
 
   // ── Open IDB ──────────────────────────────────────────────
   function _openDB() {
@@ -2940,16 +2960,9 @@ function doAdminSignup() { cmSendSignupOtp(); }
       var all = store.openCursor();
       all.onsuccess = function(ev) {
         var cursor = ev.target.result;
-        if (cursor) {
-          // Never clobber a value the app itself wrote/deleted during
-          // this same loading window — that write is guaranteed newer
-          // than whatever IndexedDB had on disk when the scan started.
-          if (!_touchedDuringLoad[cursor.key]) _cache[cursor.key] = cursor.value;
-          cursor.continue();
-        }
+        if (cursor) { _cache[cursor.key] = cursor.value; cursor.continue(); }
         else {
           _ready = true;
-          _touchedDuringLoad = {}; // loading window is over, no longer needed
           // Flush pending writes
           _queue.forEach(function(fn){ fn(); });
           _queue = [];
@@ -2995,14 +3008,12 @@ function doAdminSignup() { cmSendSignupOtp(); }
     },
     setItem: function(key, value) {
       _cache[key] = value;
-      if (!_ready) _touchedDuringLoad[key] = true;
       _idbSet(key, value);
       // Also keep real localStorage in sync as backup
       try { if (_origLS) _origLS.setItem(key, value); } catch(e) {}
     },
     removeItem: function(key) {
       delete _cache[key];
-      if (!_ready) _touchedDuringLoad[key] = true;
       _idbRemove(key);
       try { if (_origLS) _origLS.removeItem(key); } catch(e) {}
     },
@@ -6341,15 +6352,19 @@ service cloud.firestore {
       </div>
       <button id="pay-close-btn" onclick="_safeClosePayLanding()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);font-size:16px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:auto;">✕</button>
     </div>
+    <div style="display:flex;gap:6px;margin-bottom:.6rem;">
+      <button id="plan-tab-pro" onclick="_selectPlanTier('pro')" style="flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid #4f46e5;background:rgba(79,70,229,.25);color:#fff;font-weight:800;font-size:12px;cursor:pointer;">Pro</button>
+      <button id="plan-tab-ent" onclick="_selectPlanTier('enterprise')" style="flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:rgba(255,255,255,.65);font-weight:800;font-size:12px;cursor:pointer;">Enterprise <span style="background:#f59e0b;color:#1e1b4b;font-size:8px;padding:1px 5px;border-radius:6px;margin-left:2px;">NEW</span></button>
+    </div>
     <div id="pay-locked-msg" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:9px;padding:6px 10px;margin-bottom:.6rem;display:none;">
       <p style="font-size:10px;color:#fca5a5;font-weight:700;">🔒 Subscription required to use Cloud</p>
       <p style="font-size:9px;color:#fca5a5;margin-top:1px;opacity:.8;">Pay to activate, or <button onclick="_cancelAndLogout()" style="background:none;border:none;color:#fbbf24;font-size:9px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">cancel & logout</button></p>
     </div>
-    <div style="text-align:center;padding:.65rem 0;margin-bottom:.7rem;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);">
+    <div id="plan-price-block" style="text-align:center;padding:.65rem 0;margin-bottom:.7rem;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);">
       <p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>
       <p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>
     </div>
-    <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.75rem;padding:.65rem;margin-bottom:.75rem;">
+    <div id="plan-features-block" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.75rem;padding:.65rem;margin-bottom:.75rem;">
       <div class="cloud-feature-row"><span style="font-size:14px">🔄</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Real-time Cloud Sync</p><p style="font-size:9px;color:#a78bfa">All devices stay in sync automatically</p></div></div>
       <div class="cloud-feature-row"><span style="font-size:14px">🗂️</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Multi-Project Creation</p><p style="font-size:9px;color:#a78bfa">Manage unlimited projects — switch instantly</p></div></div>
       <div class="cloud-feature-row"><span style="font-size:14px">🖼️</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Your Logo on All PDFs</p><p style="font-size:9px;color:#a78bfa">Company logo appears on every report &amp; bill PDF</p></div></div>
@@ -6357,7 +6372,7 @@ service cloud.firestore {
       <div class="cloud-feature-row"><span style="font-size:14px">🔒</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Tab-level Permissions</p><p style="font-size:9px;color:#a78bfa">Control what each viewer can see &amp; print</p></div></div>
       <div class="cloud-feature-row"><span style="font-size:14px">💾</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Auto Backup</p><p style="font-size:9px;color:#a78bfa">Never lose a day's data</p></div></div>
     </div>
-    <button onclick="startSubscriptionPayment()" id="sub-pay-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.75rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.4rem;box-shadow:0 4px 16px rgba(79,70,229,.5);min-height:auto;height:auto;">
+    <button onclick="startSubscriptionPayment(_selectedPlanTier)" id="sub-pay-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.75rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.4rem;box-shadow:0 4px 16px rgba(79,70,229,.5);min-height:auto;height:auto;">
       💳 Subscribe ₹30/month
     </button>
     <p style="text-align:center;font-size:9px;color:#7c3aed">🔒 Powered by Razorpay · UPI / Card / NetBanking accepted</p>
@@ -6403,52 +6418,10 @@ var _memStore = {};
 var _ls = (function() {
   try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); return localStorage; } catch(e) { return null; }
 })();
-// Keys whose real localStorage write failed (e.g. storage full / private mode).
-// For these keys we MUST keep serving the in-memory copy, otherwise the next
-// read would silently fall back to the old, stale value on disk and the
-// just-entered record would look like it "disappeared" a few seconds later.
-var _lsBrokenKeys = {};
-var _lsWarnedFull = false;
 var safeLS = {
-  getItem: function(k) {
-    if (_ls && !_lsBrokenKeys[k]) {
-      try {
-        var v = _ls.getItem(k);
-        // Prefer the freshest copy: if we also hold this key in memory (this
-        // session wrote it), memory is always at least as new as disk.
-        if (_memStore[k] !== undefined) return _memStore[k];
-        return v;
-      } catch(e) { _lsBrokenKeys[k] = true; }
-    }
-    return _memStore[k] !== undefined ? _memStore[k] : null;
-  },
-  setItem: function(k, v) {
-    // Always write memory first — this is what every read checks first,
-    // so nothing entered in this session can ever be lost mid-session even
-    // if the disk write below fails.
-    _memStore[k] = v;
-    if (_ls) {
-      try {
-        _ls.setItem(k, v);
-        delete _lsBrokenKeys[k]; // disk write succeeded, all good
-      } catch(e) {
-        _lsBrokenKeys[k] = true;
-        if (!_lsWarnedFull) {
-          _lsWarnedFull = true;
-          try {
-            if (typeof toast === 'function') {
-              toast('⚠️ Device storage is full — data is kept safe in this session, but please free up space / re-open the app soon so it saves permanently.', 'err');
-            }
-          } catch(e2) {}
-        }
-      }
-    }
-  },
-  removeItem: function(k) {
-    delete _memStore[k];
-    delete _lsBrokenKeys[k];
-    if (_ls) { try { _ls.removeItem(k); } catch(e) {} }
-  }
+  getItem: function(k) { if (_ls) { try { return _ls.getItem(k); } catch(e) {} } return _memStore[k] !== undefined ? _memStore[k] : null; },
+  setItem: function(k, v) { if (_ls) { try { _ls.setItem(k, v); } catch(e) {} } _memStore[k] = v; },
+  removeItem: function(k) { if (_ls) { try { _ls.removeItem(k); } catch(e) {} } delete _memStore[k]; }
 };
 
 // ── Firebase compat snap helpers ─────────────────────────────
@@ -6471,11 +6444,18 @@ function sd(d){safeLS.setItem(_pk(DB),JSON.stringify(d));_scheduleCloudPush();}
 function lm(){try{return JSON.parse(safeLS.getItem(_pk(META))||'{}');}catch(e){return {};}}
 function sm(x){safeLS.setItem(_pk(META),JSON.stringify(x));_scheduleCloudPush();}
 function lmat(){try{return JSON.parse(safeLS.getItem(_pk(MATS))||'[]');}catch(e){return [];}}
-function smat(x){safeLS.setItem(_pk(MATS),JSON.stringify(x));_scheduleCloudPush();}
+function smat(x){ try { x = _autoStampArray(lmat(), x || []); } catch(e) {} safeLS.setItem(_pk(MATS),JSON.stringify(x));_scheduleCloudPush();}
 function ldept(){try{return JSON.parse(safeLS.getItem(_pk(DEPT))||'{}');}catch(e){return {};}}
-function sdept(x){safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush();}
+function sdept(x){ try { x = _autoStampKeyed(ldept(), x || {}); } catch(e) {} safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush();}
 function lprof(){try{return JSON.parse(safeLS.getItem(_pk(PROF))||'null');}catch(e){return null;}}
-function sprof(x){safeLS.setItem(_pk(PROF),JSON.stringify(x));_scheduleCloudPush();}
+function sprof(x){
+  try {
+    var ftsK = _pk(PROF) + '_fts';
+    var oldFts = JSON.parse(safeLS.getItem(ftsK) || '{}');
+    safeLS.setItem(ftsK, JSON.stringify(_diffFts(lprof(), x || {}, oldFts)));
+  } catch(e) {}
+  safeLS.setItem(_pk(PROF),JSON.stringify(x));_scheduleCloudPush();
+}
 
 // ── Global profile: company name, address, GST, logo — shared across ALL
 // of THIS device's own projects. Stored without project prefix so every
@@ -6496,6 +6476,11 @@ function lglobal(scopeId) {
   try { return JSON.parse(localStorage.getItem(_globalProfKey(scopeId)) || 'null'); } catch(e) { return null; }
 }
 function sglobal(x, scopeId) {
+  try {
+    var ftsK = _globalProfKey(scopeId) + '_fts';
+    var oldFts = JSON.parse(localStorage.getItem(ftsK) || '{}');
+    localStorage.setItem(ftsK, JSON.stringify(_diffFts(lglobal(scopeId), x || {}, oldFts)));
+  } catch(e) {}
   try { localStorage.setItem(_globalProfKey(scopeId), JSON.stringify(x)); } catch(e) {}
   _scheduleCloudPush();
 }
@@ -6658,8 +6643,42 @@ var VM = new Date(), DD = ist(), DTD = ist();
 var PDEL = null, DTMR = null, PWA = null;
 var NID = parseInt(safeLS.getItem('cm_nid') || '1');
 
+// ── Per-device unique salt ───────────────────────────────────────────
+// Persisted once per install/browser so record IDs from different
+// devices can NEVER collide, even if both start counting from 1.
+//
+// ROOT CAUSE OF "MY ENTRY DISAPPEARED BY ITSELF":
+// gid() used to return only 'r'+NID — a purely local counter. Two
+// different devices/logins both create "r1", "r2", "r3"... independently.
+// When cloud sync later merges data by __id (see _mergeRecordArrays),
+// two completely unrelated records that happen to share the same local
+// counter value (e.g. device A's attendance entry "r5" and device B's
+// expense entry "r5") are treated as the SAME record — the merge keeps
+// only whichever has the newer __ts and silently, permanently discards
+// the other. No delete button pressed, no error shown — the record
+// just never reappears after the next sync, which looks exactly like
+// "I typed it in and it vanished within seconds."
+// Making the ID globally unique (device salt + counter + timestamp)
+// makes this class of collision structurally impossible.
+var _DEV_SALT = (function() {
+  var s = null;
+  try { s = safeLS.getItem('cm_dev_salt'); } catch(e) {}
+  if (!s) {
+    try {
+      var arr = new Uint8Array(5);
+      crypto.getRandomValues(arr);
+      s = Array.from(arr).map(function(b){ return b.toString(36); }).join('');
+    } catch(e) { s = Math.random().toString(36).slice(2, 9); }
+    try { safeLS.setItem('cm_dev_salt', s); } catch(e) {}
+  }
+  return s;
+})();
+
 function gid() {
-  var id = 'r' + NID++;
+  // Still starts with 'r' and still increments NID (kept for any legacy
+  // numeric-fallback sorting), but is now globally unique across every
+  // device/browser/login that will ever touch this project's data.
+  var id = 'r' + _DEV_SALT + '_' + (NID++) + '_' + Date.now().toString(36);
   safeLS.setItem('cm_nid', NID);
   return id;
 }
@@ -7774,7 +7793,7 @@ function saveDeptEntry() {
   var cat = document.getElementById('da-cat').value;
   var workers = parseInt(document.getElementById('da-workers').value)||0;
   if (!cat || !workers) { toast('Select category and enter workers','err'); return; }
-  var entry = { cat:cat, workers:workers, hours:parseFloat(document.getElementById('da-hours').value)||0, work:document.getElementById('da-work').value.trim(), qty:document.getElementById('da-qty').value, unit:document.getElementById('da-unit').value.trim(), amount:parseFloat(document.getElementById('da-amount').value)||0 };
+  var entry = { id:'dept'+Date.now()+Math.random().toString(36).slice(2,6), __ts:Date.now(), cat:cat, workers:workers, hours:parseFloat(document.getElementById('da-hours').value)||0, work:document.getElementById('da-work').value.trim(), qty:document.getElementById('da-qty').value, unit:document.getElementById('da-unit').value.trim(), amount:parseFloat(document.getElementById('da-amount').value)||0 };
   var store = ldept(); if (!store[DTD]) store[DTD]=[];
   store[DTD].push(entry); sdept(store);
   closeDeptModal(); toast('Entry saved','ok'); renderDept();
@@ -7782,6 +7801,8 @@ function saveDeptEntry() {
 function delDeptEntry(i) {
   askDel('Delete this entry?', function(){
     var store = ldept(); if (!store[DTD]) return;
+    var removed = store[DTD][i];
+    if (removed && removed.id && typeof _addTombstone === 'function') _addTombstone('dept__'+removed.id, Date.now());
     store[DTD].splice(i,1); if (!store[DTD].length) delete store[DTD];
     sdept(store); toast('Deleted','ok'); renderDept();
   });
@@ -8302,8 +8323,118 @@ function changeQdprDate(v){
 }
 
 // ── Projects CRUD (every project saved in the app is a QDPR "site") ────
+// ══════════════════════════════════════════════════════════════
+// PROJECT LIST — persistence for window.projects (the admin's own
+// list of construction sites/projects). This is the missing piece
+// that "Add Project" / the QDPR project modal / contacts project
+// selector / owner dashboard were all already calling but which was
+// never implemented — createProject() etc. didn't exist, so every
+// "Add Project" attempt failed with "Cannot create project here".
+//
+// Storage: local list lives in localStorage under PROJECTS_KEY, and
+// is mirrored to the SAME generic `cloud_backups` table every other
+// per-project backup already uses (a dedicated backup_key, not a
+// schema change), so this needs no new Supabase tables/columns and
+// carries none of the "column doesn't exist" risk a new DB table would.
+//
+// Tier limits:
+//   Free       — max 1 project
+//   Pro        — unlimited projects, but no cross-device sharing
+//   Enterprise — unlimited projects + can share/invite via join code
+// ══════════════════════════════════════════════════════════════
+var PROJECTS_KEY = 'cm_projects_list';
+
+function _projectCloudKeyBase() {
+  if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return null;
+  return 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+}
+
+function _loadProjects() {
+  try { window.projects = JSON.parse(safeLS.getItem(PROJECTS_KEY) || '[]'); }
+  catch(e) { window.projects = window.projects || []; }
+  if (!Array.isArray(window.projects)) window.projects = [];
+  return window.projects;
+}
+
+function _saveProjects() {
+  try { safeLS.setItem(PROJECTS_KEY, JSON.stringify(window.projects || [])); } catch(e) {}
+  _pushProjectListToCloud();
+}
+
+function _pushProjectListToCloud() {
+  if (typeof _sb === 'undefined' || !_sb) return;
+  var base = _projectCloudKeyBase();
+  if (!base) return;
+  _sb.from('cloud_backups').upsert({
+    admin_id: _adminSBUser.id,
+    backup_key: base + '_projects_list',
+    data: { projects: window.projects || [], updated_at: Date.now() }
+  }, { onConflict: 'admin_id,backup_key' }).then(function(){}).catch(function(){});
+}
+
+// Pulls the admin's project list down from the cloud (called after login
+// and periodically) so a project added on one device shows up on another.
+// Merges by id rather than blindly overwriting, so a project created
+// moments ago locally (before its own push lands) never gets wiped out
+// by an older remote snapshot arriving late.
+function _pullProjectListFromCloud() {
+  if (typeof _sb === 'undefined' || !_sb) return;
+  var base = _projectCloudKeyBase();
+  if (!base) return;
+  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', base + '_projects_list').maybeSingle().then(function(r) {
+    var remote = (r && r.data && r.data.data && Array.isArray(r.data.data.projects)) ? r.data.data.projects : null;
+    if (!remote) return;
+    var local = window.projects || [];
+    var map = {};
+    local.forEach(function(p){ map[p.id] = p; });
+    remote.forEach(function(p){ map[p.id] = p; }); // remote wins on conflict — project list is only ever edited from admin devices
+    window.projects = Object.keys(map).map(function(k){ return map[k]; });
+    try { safeLS.setItem(PROJECTS_KEY, JSON.stringify(window.projects)); } catch(e) {}
+    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    if (typeof renderQdprSites === 'function') renderQdprSites();
+  }).catch(function(){});
+}
+
+// How many of the admin's OWN projects (not counting ones joined via
+// someone else's share code) the current plan allows.
+function _ownProjectLimit() {
+  if (window.isProUser || window.isEnterpriseUser) return Infinity;
+  return 1; // Free tier
+}
+
+function createProject(name) {
+  _loadProjects();
+  var ownCount = (window.projects || []).filter(function(p){ return p.editable !== false; }).length;
+  if (ownCount >= _ownProjectLimit()) {
+    if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Multiple Projects');
+    return null;
+  }
+  var proj = {
+    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    name: name,
+    address: '',
+    editable: true,
+    canWrite: true,
+    created_at: Date.now()
+  };
+  window.projects = window.projects || [];
+  window.projects.push(proj);
+  _saveProjects();
+  return proj;
+}
+
+// Best-effort: only touches the header project dropdown if it exists in
+// the current view. Safe no-op everywhere else.
+function _renderProjectDropdown() {
+  var sel = document.getElementById('project-dropdown') || document.getElementById('header-project-select');
+  if (!sel) return;
+  var projects = window.projects || [];
+  sel.innerHTML = projects.map(function(p){
+    return '<option value="' + p.id + '"' + (p.id === window.currentProjectId ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+  }).join('');
+}
+
 function openQdprProjectModal(pid){
-  var modal = document.getElementById('qdpr-project-modal');
   if (!modal) return;
   _armModalGuard('qdpr-project-modal');
   var titleEl = document.getElementById('qdpr-project-modal-title');
@@ -8418,7 +8549,8 @@ function saveQdprSite(){
     // Add new project
     if (typeof createProject !== 'function') { toast('Cannot create project here','err'); return; }
     var newProj = createProject(name);
-    if (newProj && address) {
+    if (!newProj) return; // Limit hit — createProject() already showed the upgrade prompt
+    if (address) {
       newProj.address = address;
       if (typeof _saveProjects === 'function') _saveProjects();
       if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(newProj.id, address);
@@ -8455,6 +8587,14 @@ function renderQdprSites(){
   }).join('');
 }
 
+function _qdprShareBtnHtml(pid) {
+  var action = window.isEnterpriseUser
+    ? "openShareProjectModal('" + pid + "')"
+    : "_showUpgradePopup('Project Sharing')";
+  return '<button onclick="' + action + '" title="Share Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex;position:relative">🔗'
+    + (window.isEnterpriseUser ? '' : '<span style="position:absolute;top:-3px;right:-3px;background:#f59e0b;color:#1e1b4b;font-size:7px;font-weight:900;padding:1px 3px;border-radius:5px;line-height:1;">PRO+</span>')
+    + '</button>';
+}
 function qdprReportCard(site, report){
   var dW = (report.deptWork||[]).reduce(function(s,d){ return s+(Number(d.workers)||0); },0);
   var lRows = (report.labour||[]).filter(function(l){ return l.category; }).map(function(l){
@@ -8478,6 +8618,7 @@ function qdprReportCard(site, report){
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
     +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
+    +(site.editable!==false?_qdprShareBtnHtml(site.__id):'')
     +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
     +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
     +'</div></div></div>'
@@ -8507,7 +8648,7 @@ function qdprEmptyCard(site){
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
-    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
+    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'+_qdprShareBtnHtml(site.__id)):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
     +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
@@ -9321,7 +9462,7 @@ function addMaterialItem(){
   toast('Material added','ok'); viewMaterials(); updateDash();
 }
 function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
-function delMaterialItem(id){ askDel('Delete material?', function(){ smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); updateDash(); }); }
+function delMaterialItem(id){ askDel('Delete material?', function(){ if (typeof _addTombstone === 'function') _addTombstone('mat__'+id, Date.now()); smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); updateDash(); }); }
 // ── BILL / RECEIPT — unified handler (image + PDF, all contexts) ──────────────
 // ctx = 'mp' (mat purchase modal), 'exp' (expenses tab), 'rb' (rental borrow), 'rg' (rental given)
 var BILLS = {};
@@ -11470,7 +11611,7 @@ var DRW_KEY='cm_drawings';
 var _currentRoom='R1';
 var ROOMS=['R1','R2','R3','R4','R5','R6','R7','R8'];
 function ldrw(){try{return JSON.parse(safeLS.getItem(_pk(DRW_KEY))||'{}');}catch(e){return {};}}
-function sdrw(x){safeLS.setItem(_pk(DRW_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function sdrw(x){ try { x = _autoStampKeyed(ldrw(), x || {}); } catch(e) {} safeLS.setItem(_pk(DRW_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function initDrawingsTab(){
   buildRoomTabs();renderDrawings();
@@ -11507,7 +11648,7 @@ function saveDrawing(){
   function doSave(fileData,fileName){
     var store=ldrw();
     if(!store[_currentRoom])store[_currentRoom]=[];
-    store[_currentRoom].push({id:'d'+Date.now(),name:name,type:type,floor:floor,rev:rev,file:fileData,fileName:fileName,date:ist()});
+    store[_currentRoom].push({id:'d'+Date.now(),__ts:Date.now(),name:name,type:type,floor:floor,rev:rev,file:fileData,fileName:fileName,date:ist()});
     sdrw(store);
     ['drw-name','drw-rev'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
     if(fileEl)fileEl.value='';
@@ -11568,6 +11709,7 @@ function downloadDrawing(id,room){
 function delDrawing(room,id){
   askDel('Delete this drawing?', function(){
     var store=ldrw();
+    if (typeof _addTombstone === 'function') _addTombstone('drw__'+id, Date.now());
     if(store[room])store[room]=store[room].filter(function(d){return d.id!==id;});
     sdrw(store);buildRoomTabs();renderDrawings();toast('Deleted','ok');
   });
@@ -11578,7 +11720,14 @@ function delDrawing(room,id){
 // ============================================================
 var BGT_KEY='cm_budget';
 function lbgt(){try{return JSON.parse(safeLS.getItem(_pk(BGT_KEY))||'null');}catch(e){return null;}}
-function sbgt(x){safeLS.setItem(_pk(BGT_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function sbgt(x){
+  try {
+    var ftsK = _pk(BGT_KEY) + '_fts';
+    var oldFts = JSON.parse(safeLS.getItem(ftsK) || '{}');
+    safeLS.setItem(ftsK, JSON.stringify(_diffFts(lbgt(), x || {}, oldFts)));
+  } catch(e) {}
+  safeLS.setItem(_pk(BGT_KEY),JSON.stringify(x));_scheduleCloudPush();
+}
 
 function loadBudgetTab(){
   var b=lbgt();
@@ -11647,7 +11796,7 @@ function renderBudgetStats(){
 // ============================================================
 var MS_KEY='cm_milestones';
 function lms(){try{return JSON.parse(safeLS.getItem(_pk(MS_KEY))||'[]');}catch(e){return [];}}
-function sms(x){safeLS.setItem(_pk(MS_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function sms(x){ try { x = _autoStampArray(lms(), x || []); } catch(e) {} safeLS.setItem(_pk(MS_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function loadScheduleTab(){
   renderSchedule(); setTimeout(renderGantt, 200);
@@ -11657,7 +11806,7 @@ function addMilestone(){
   var title=document.getElementById('ms-title').value.trim();
   if(!title){toast('Milestone title required','err');return;}
   var ms=lms();
-  ms.push({id:'ms'+Date.now(),title:title,start:document.getElementById('ms-start').value,end:document.getElementById('ms-end').value,status:document.getElementById('ms-status').value,notes:document.getElementById('ms-notes').value.trim(),done:false});
+  ms.push({id:'ms'+Date.now(),__ts:Date.now(),title:title,start:document.getElementById('ms-start').value,end:document.getElementById('ms-end').value,status:document.getElementById('ms-status').value,notes:document.getElementById('ms-notes').value.trim(),done:false});
   sms(ms);
   ['ms-title','ms-start','ms-end','ms-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   renderSchedule();toast('Milestone added!','ok');
@@ -11692,9 +11841,9 @@ function renderSchedule(){
 
 function markMsDone(id){
   var ms=lms(),m=ms.find(function(x){return x.id===id;});
-  if(m)m.status='✅ Completed';sms(ms);renderSchedule();toast('Marked complete!','ok');
+  if(m){m.status='✅ Completed';m.__ts=Date.now();}sms(ms);renderSchedule();toast('Marked complete!','ok');
 }
-function delMs(id){askDel('Delete this milestone?',function(){var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');});}
+function delMs(id){askDel('Delete this milestone?',function(){if (typeof _addTombstone === 'function') _addTombstone('ms__'+id, Date.now()); var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');});}
 
 // ============================================================
 // SCHEDULE SUB-TAB SWITCHER
@@ -12743,7 +12892,7 @@ function boqParseTextToStructure(text){
 // ============================================================
 var PL_KEY='cm_punchlist';
 function lpl(){try{return JSON.parse(safeLS.getItem(_pk(PL_KEY))||'[]');}catch(e){return [];}}
-function spl(x){safeLS.setItem(_pk(PL_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function spl(x){ try { x = _autoStampArray(lpl(), x || []); } catch(e) {} safeLS.setItem(_pk(PL_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function loadPunchTab(){renderPunchList();}
 
@@ -12751,7 +12900,7 @@ function addPunchItem(){
   var title=document.getElementById('pl-title').value.trim();
   if(!title){toast('Issue title required','err');return;}
   var list=lpl();
-  list.push({id:'pl'+Date.now(),title:title,location:document.getElementById('pl-location').value.trim(),category:document.getElementById('pl-category').value,priority:document.getElementById('pl-priority').value,assigned:document.getElementById('pl-assigned').value.trim(),date:document.getElementById('pl-date').value||ist(),due:document.getElementById('pl-due').value,status:'open',created:Date.now()});
+  list.push({id:'pl'+Date.now(),__ts:Date.now(),title:title,location:document.getElementById('pl-location').value.trim(),category:document.getElementById('pl-category').value,priority:document.getElementById('pl-priority').value,assigned:document.getElementById('pl-assigned').value.trim(),date:document.getElementById('pl-date').value||ist(),due:document.getElementById('pl-due').value,status:'open',created:Date.now()});
   spl(list);
   ['pl-title','pl-location','pl-assigned'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   renderPunchList();toast('Added to punch list!','ok');
@@ -12792,8 +12941,8 @@ function renderPunchList(){
   }).join('');
 }
 
-function updatePunchStatus(id,status){var list=lpl(),p=list.find(function(x){return x.id===id;});if(p)p.status=status;spl(list);renderPunchList();toast('Updated','ok');}
-function delPunch(id){askDel('Delete this punch list item?',function(){var list=lpl().filter(function(p){return p.id!==id;});spl(list);renderPunchList();toast('Deleted','ok');});}
+function updatePunchStatus(id,status){var list=lpl(),p=list.find(function(x){return x.id===id;});if(p){p.status=status;p.__ts=Date.now();}spl(list);renderPunchList();toast('Updated','ok');}
+function delPunch(id){askDel('Delete this punch list item?',function(){if (typeof _addTombstone === 'function') _addTombstone('pl__'+id, Date.now()); var list=lpl().filter(function(p){return p.id!==id;});spl(list);renderPunchList();toast('Deleted','ok');});}
 
 // ============================================================
 // BILL
@@ -13474,7 +13623,13 @@ function autoInitCloud() {
 function _applyFullBackup(d) {
   if (!d) return;
   // Core tab data
-  if (d.db)         { sd(d.db); AD = ld(); }
+  // Write directly to storage instead of calling sd(d.db) — sd() also
+  // schedules a cloud push (_scheduleCloudPush), and this function is
+  // itself invoked as part of APPLYING data pulled from the cloud. Doing
+  // sd() here meant every pull silently queued another push 3s later,
+  // which could race with a genuinely new local edit and needlessly
+  // widen the window for the ID-collision bug described above near gid().
+  if (d.db)         { try { safeLS.setItem(_pk(DB), JSON.stringify(d.db)); } catch(e) {} AD = ld(); }
   if (d.meta)       sm(d.meta);
   if (d.mats)       smat(d.mats);
   if (d.dept)       sdept(d.dept);
@@ -13508,7 +13663,19 @@ function _applyFullBackup(d) {
   if (d.settings) {
     if (d.settings.dark_mode   !== undefined) safeLS.setItem('sanj_dark_mode', d.settings.dark_mode);
     if (d.settings.dash_view   !== undefined) safeLS.setItem('sanj_dash_view', d.settings.dash_view);
-    if (d.settings.hidden_tabs !== undefined) safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
+    if (d.settings.hidden_tabs !== undefined) {
+      safeLS.setItem('sanj_hidden_tabs', d.settings.hidden_tabs);
+      // FIX: writing the new value to storage alone doesn't move the tabs —
+      // _hiddenTabs is an in-memory array read once at load, and the tab
+      // buttons only get shown/hidden when _applyHiddenTabs() runs. Without
+      // this, a hide/unhide done on one device wouldn't visibly take effect
+      // on another device until a manual reload.
+      try {
+        _hiddenTabs = JSON.parse(d.settings.hidden_tabs || '[]');
+        if (typeof _applyHiddenTabs === 'function') _applyHiddenTabs();
+        if (typeof _renderTabChips === 'function') _renderTabChips();
+      } catch(e) {}
+    }
     if (d.settings.guide       !== undefined) safeLS.setItem('sanj_guide_enabled', d.settings.guide);
     if (d.settings.swipe       !== undefined) safeLS.setItem('sanj_swipe_enabled', d.settings.swipe);
     if (d.settings.signatures  !== undefined && d.settings.signatures !== '[]') {
@@ -13542,65 +13709,157 @@ function _mergeTombstones(localT, remoteT) {
   return merged;
 }
 
-// ── Smart per-record merge for array data (attendance, expenses, etc.) ──
-// Rule: newest __ts wins; if tombstone for that id is newer than __ts → deleted wins
-function _mergeRecordArrays(localArr, remoteArr, tombstones) {
+// ══════════════════════════════════════════════════════════════════
+// GENERIC SMART-MERGE ENGINE
+// Every store in the app falls into one of three shapes. Instead of a
+// bespoke merge function per store (which is how db/machinery worked
+// before, and how mats/milestones/punchlist/drawings/dept DIDN'T work —
+// they were blindly overwritten wholesale on every pull, see below),
+// there is now one generic implementation per shape, reused everywhere:
+//
+//   1. _mergeArrayStore  — flat array of records with an id + timestamp
+//      (attendance/expenses, materials, milestones, punchlist)
+//   2. _mergeKeyedStore  — object keyed by date/room/etc., each value an
+//      array of the above (machinery sessions, dept work, drawings)
+//   3. _mergeFieldBag    — a single scalar object with no natural item
+//      list (project profile, company info, budget) — merges PER FIELD
+//      using a companion last-modified-per-key map, so editing the
+//      budget on one device and the profile address on another can
+//      never stomp each other even though both live in "one object".
+// ══════════════════════════════════════════════════════════════════
+
+// Rule: newest ts wins; if tombstone for that id is newer than ts → deleted wins
+function _mergeArrayStore(localArr, remoteArr, tombstones, idField, tsField, tombPrefix) {
+  idField = idField || '__id'; tsField = tsField || '__ts'; tombPrefix = tombPrefix || '';
   var map = {};
-  // Index local records by __id
+  var idless = []; // items with no id at all — never deduped, just unioned so they can never be silently dropped
   (localArr || []).forEach(function(r) {
-    if (r.__id) map[r.__id] = r;
+    if (r[idField]) map[r[idField]] = r; else idless.push(r);
   });
-  // Merge remote: keep if newer __ts and not tombstoned
   (remoteArr || []).forEach(function(r) {
-    if (!r.__id) return;
-    var tomb = tombstones[r.__id] || 0;
-    if (tomb >= (r.__ts || 0)) return; // deleted — skip
-    var local = map[r.__id];
-    if (!local || (r.__ts || 0) > (local.__ts || 0)) {
-      map[r.__id] = r; // remote is newer
+    if (!r[idField]) {
+      // Only add a remote id-less item if an identical one isn't already present locally
+      var dup = idless.some(function(x){ return JSON.stringify(x) === JSON.stringify(r); });
+      if (!dup) idless.push(r);
+      return;
+    }
+    var tomb = tombstones[tombPrefix + r[idField]] || 0;
+    if (tomb >= (r[tsField] || 0)) return; // deleted — skip
+    var local = map[r[idField]];
+    // Missing timestamps (older records created before this feature)
+    // are treated as tied — whichever side already has the record wins,
+    // so legacy untimestamped data never gets silently discarded.
+    if (!local || (r[tsField] || 0) > (local[tsField] || 0)) {
+      map[r[idField]] = r;
     }
   });
-  // Filter out anything tombstoned.
-  // NOTE: only drop a record if it actually HAS a tombstone newer than it.
-  // The old check "tomb < (r.__ts||0)" also silently dropped any record
-  // whose __ts was missing/0 (tomb defaults to 0, so "0 < 0" is false),
-  // which could wipe out perfectly valid records during a cloud merge.
-  return Object.values(map).filter(function(r) {
-    var tomb = tombstones[r.__id] || 0;
-    if (!tomb) return true; // never deleted — always keep
-    return tomb < (r.__ts || 0);
+  var idHaving = Object.values(map).filter(function(r) {
+    var tomb = tombstones[tombPrefix + r[idField]] || 0;
+    if (!tomb) return true;
+    return tomb < (r[tsField] || 0);
   });
+  return idless.concat(idHaving);
 }
 
-// ── Smart merge for machinery store (keyed by date → array of sessions) ──
-function _mergeMachinery(local, remote, tombstones) {
+// Object keyed by date/room/etc. → array of items. Merges each key's
+// array independently via _mergeArrayStore, and keeps any key that only
+// exists on one side (nothing here ever silently drops a whole day/room
+// just because the other device didn't have it yet).
+function _mergeKeyedStore(local, remote, tombstones, idField, tsField, tombPrefix) {
+  idField = idField || 'id'; tsField = tsField || '__ts'; tombPrefix = tombPrefix || '';
   var merged = JSON.parse(JSON.stringify(local || {}));
-  Object.keys(remote || {}).forEach(function(date) {
-    var rSessions = remote[date] || [];
-    var lSessions = merged[date] || [];
-    // Build map of local sessions by id
-    var lMap = {};
-    lSessions.forEach(function(s) { if (s.id) lMap[s.id] = s; });
-    rSessions.forEach(function(s) {
-      if (!s.id) return;
-      var tombKey = 'mach__' + s.id;
-      var tomb = tombstones[tombKey] || 0;
-      if (tomb >= (s.__ts || 0)) return; // deleted on another device — skip
-      var local = lMap[s.id];
-      if (!local || (s.__ts || 0) > (local.__ts || 0)) {
-        lMap[s.id] = s; // remote session is newer
-      }
-    });
-    // Filter out tombstoned sessions
-    merged[date] = Object.values(lMap).filter(function(s) {
-      var tombKey = 'mach__' + s.id;
-      var tomb = tombstones[tombKey] || 0;
-      return tomb < (s.__ts || 0);
-    });
-    if (merged[date].length === 0) delete merged[date];
+  Object.keys(remote || {}).forEach(function(key) {
+    var rList = remote[key] || [];
+    var lList = merged[key] || [];
+    merged[key] = _mergeArrayStore(lList, rList, tombstones, idField, tsField, tombPrefix);
+  });
+  Object.keys(merged).forEach(function(key) {
+    if (Array.isArray(merged[key]) && merged[key].length === 0) delete merged[key];
   });
   return merged;
 }
+
+function _mergeRecordArrays(localArr, remoteArr, tombstones) {
+  return _mergeArrayStore(localArr, remoteArr, tombstones, '__id', '__ts', '');
+}
+
+function _mergeMachinery(local, remote, tombstones) {
+  return _mergeKeyedStore(local, remote, tombstones, 'id', '__ts', 'mach__');
+}
+
+// Per-field merge for single-object stores. `localFts`/`remoteFts` are
+// companion {fieldName: lastModifiedMs} maps — see _diffFts() below,
+// which is how each field's timestamp gets set every time its setter
+// (sprof/sglobal/sbgt) is called.
+function _mergeFieldBag(localObj, localFts, remoteObj, remoteFts) {
+  localObj = localObj || {}; remoteObj = remoteObj || {};
+  localFts = localFts || {}; remoteFts = remoteFts || {};
+  var keys = {};
+  Object.keys(localObj).forEach(function(k){ keys[k] = 1; });
+  Object.keys(remoteObj).forEach(function(k){ keys[k] = 1; });
+  var out = {};
+  Object.keys(keys).forEach(function(k) {
+    var lt = localFts[k] || 0, rt = remoteFts[k] || 0;
+    if (rt > lt && (k in remoteObj)) out[k] = remoteObj[k];
+    else if (k in localObj) out[k] = localObj[k];
+    else out[k] = remoteObj[k];
+  });
+  var mergedFts = {};
+  Object.keys(keys).forEach(function(k) { mergedFts[k] = Math.max(localFts[k] || 0, remoteFts[k] || 0); });
+  return { obj: out, fts: mergedFts };
+}
+
+// Called from every setter that backs a field-bag store: compares the
+// new object to the previous one and stamps `now` only on the keys that
+// actually changed, leaving every untouched key's timestamp exactly as
+// it was — that's what lets _mergeFieldBag tell "this field changed
+// just now on this device" apart from "this field hasn't moved in weeks".
+function _diffFts(oldObj, newObj, oldFts) {
+  oldObj = oldObj || {}; newObj = newObj || {}; oldFts = oldFts || {};
+  var now = Date.now();
+  var fts = Object.assign({}, oldFts);
+  var keys = {};
+  Object.keys(oldObj).forEach(function(k){ keys[k] = 1; });
+  Object.keys(newObj).forEach(function(k){ keys[k] = 1; });
+  Object.keys(keys).forEach(function(k) {
+    if (JSON.stringify(oldObj[k]) !== JSON.stringify(newObj[k])) fts[k] = now;
+  });
+  return fts;
+}
+function _ftsKey(baseKey) { return baseKey + '_fts'; }
+
+// Compares oldArr vs newArr by id and stamps __ts=now on any item that's
+// new or actually changed, while preserving the existing __ts on items
+// that are byte-for-byte identical to before. This is what lets stores
+// like materials/milestones/punchlist get correct per-item merge
+// timestamps automatically, without every single edit function needing
+// to remember to set __ts itself.
+function _autoStampArray(oldArr, newArr) {
+  var oldMap = {};
+  (oldArr || []).forEach(function(m){ if (m && m.id) oldMap[m.id] = m; });
+  (newArr || []).forEach(function(m){
+    if (!m || !m.id) return;
+    var prev = oldMap[m.id];
+    var prevNoTs = prev ? Object.assign({}, prev) : null;
+    if (prevNoTs) delete prevNoTs.__ts;
+    var curNoTs = Object.assign({}, m);
+    delete curNoTs.__ts;
+    if (!prev || JSON.stringify(prevNoTs) !== JSON.stringify(curNoTs)) {
+      m.__ts = Date.now(); // new or genuinely changed
+    } else {
+      m.__ts = prev.__ts || Date.now(); // unchanged — keep its original timestamp
+    }
+  });
+  return newArr;
+}
+function _autoStampKeyed(oldObj, newObj) {
+  Object.keys(newObj || {}).forEach(function(k){
+    newObj[k] = _autoStampArray((oldObj || {})[k], newObj[k]);
+  });
+  return newObj;
+}
+
+
 
 // -- Backup Now (Supabase) — FETCH BEFORE PUSH pattern --
 // Step 1: Fetch latest from cloud
@@ -13632,16 +13891,20 @@ function cloudBackupNow(silent) {
         }
       }
     } catch(e2) {}
+    function _readFts(key) { try { return JSON.parse(safeLS.getItem(key + '_fts') || '{}'); } catch(e) { return {}; } }
     return {
       db:         ld(),
       meta:       lm(),
       mats:       lmat(),
       dept:       ldept(),
       prof:       lprof(),
+      prof_fts:   _readFts(_pk(PROF)),
       global_prof: lglobal(),  // company, gst, logo — same for all projects
+      global_prof_fts: _readFts(_globalProfKey()),
       machinery:  lmach(),
       drawings:   ldrw(),
       budget:     lbgt(),
+      budget_fts: _readFts(_pk(BGT_KEY)),
       milestones: lms(),
       punchlist:  lpl(),
       rfi: [], safety: [],
@@ -13710,6 +13973,43 @@ function cloudBackupNow(silent) {
         if (JSON.stringify(mergedMach) !== JSON.stringify(localMach)) {
           try { safeLS.setItem(_pk('cm_machinery'), JSON.stringify(mergedMach)); } catch(e) {}
         }
+
+        // Materials / milestones / punchlist (flat arrays)
+        var _absorbArr = function(loadFn, key, remoteArr, tombPrefix) {
+          var localArr = loadFn();
+          var merged = _mergeArrayStore(localArr, remoteArr || [], mergedTombs, 'id', '__ts', tombPrefix);
+          if (JSON.stringify(merged) !== JSON.stringify(localArr)) {
+            try { safeLS.setItem(_pk(key), JSON.stringify(merged)); } catch(e) {}
+          }
+        };
+        _absorbArr(lmat, MATS,   cloudData.mats,       'mat__');
+        _absorbArr(lms,  MS_KEY, cloudData.milestones, 'ms__');
+        _absorbArr(lpl,  PL_KEY, cloudData.punchlist,  'pl__');
+
+        // Dept work / Drawings (keyed by date/room)
+        var _absorbKeyed = function(loadFn, key, remoteObj, tombPrefix) {
+          var localObj = loadFn();
+          var merged = _mergeKeyedStore(localObj, remoteObj || {}, mergedTombs, 'id', '__ts', tombPrefix);
+          if (JSON.stringify(merged) !== JSON.stringify(localObj)) {
+            try { safeLS.setItem(_pk(key), JSON.stringify(merged)); } catch(e) {}
+          }
+        };
+        _absorbKeyed(ldept, DEPT,    cloudData.dept,     'dept__');
+        _absorbKeyed(ldrw,  DRW_KEY, cloudData.drawings, 'drw__');
+
+        // Profile / company info / budget — per-field merge
+        var _absorbFieldBag = function(loadFn, keyFn, remoteObj, remoteFts) {
+          if (!remoteObj) return;
+          var baseKey = keyFn();
+          var ftsK = baseKey + '_fts';
+          var localFts; try { localFts = JSON.parse(safeLS.getItem(ftsK) || '{}'); } catch(e) { localFts = {}; }
+          var result = _mergeFieldBag(loadFn(), localFts, remoteObj, remoteFts || {});
+          try { safeLS.setItem(baseKey, JSON.stringify(result.obj)); } catch(e) {}
+          try { safeLS.setItem(ftsK, JSON.stringify(result.fts)); } catch(e) {}
+        };
+        _absorbFieldBag(lprof, function(){ return _pk(PROF); }, cloudData.prof, cloudData.prof_fts);
+        _absorbFieldBag(lglobal, function(){ return _globalProfKey(); }, cloudData.global_prof, cloudData.global_prof_fts);
+        _absorbFieldBag(lbgt, function(){ return _pk(BGT_KEY); }, cloudData.budget, cloudData.budget_fts);
 
         // Update _lastCloudTimestamp so _adminCloudPull doesn't re-apply this
         _lastCloudTimestamp = cloudData.lastSync || _lastCloudTimestamp;
@@ -13783,10 +14083,63 @@ function _applyCloudData(d, silent, scopeKey) {
   var mergedMach = _mergeMachinery(lmach(), d.machinery || {}, mergedTombs);
   try { safeLS.setItem(_pk('cm_machinery'), JSON.stringify(mergedMach)); } catch(e) {}
 
-  // Apply everything else (settings, profile, BOQ, etc.) from cloud as before
+  // ── Everything below used to be applied as a blind wholesale overwrite
+  // by _applyFullBackup — whichever device's data arrived LAST simply won,
+  // even if the other device had a newer, still-unsynced edit sitting
+  // locally. That's the "blindly pushing/pulling" problem: two people on
+  // two devices, one edits materials stock while the other edits the
+  // budget, and depending on sync timing either edit could vanish even
+  // though they never touched the same thing. Each store now merges on
+  // its own actual timestamps instead of one device's copy just winning.
+
+  // Materials (array of items; id + __ts)
+  var mergedMats = _mergeArrayStore(lmat(), d.mats || [], mergedTombs, 'id', '__ts', 'mat__');
+  try { safeLS.setItem(_pk(MATS), JSON.stringify(mergedMats)); } catch(e) {}
+
+  // Milestones (array; id + __ts)
+  var mergedMs = _mergeArrayStore(lms(), d.milestones || [], mergedTombs, 'id', '__ts', 'ms__');
+  try { safeLS.setItem(_pk(MS_KEY), JSON.stringify(mergedMs)); } catch(e) {}
+
+  // Punchlist (array; id + __ts)
+  var mergedPl = _mergeArrayStore(lpl(), d.punchlist || [], mergedTombs, 'id', '__ts', 'pl__');
+  try { safeLS.setItem(_pk(PL_KEY), JSON.stringify(mergedPl)); } catch(e) {}
+
+  // Dept work + Drawings (keyed by date/room → array of items)
+  var mergedDept = _mergeKeyedStore(ldept(), d.dept || {}, mergedTombs, 'id', '__ts', 'dept__');
+  try { safeLS.setItem(_pk(DEPT), JSON.stringify(mergedDept)); } catch(e) {}
+  var mergedDrw = _mergeKeyedStore(ldrw(), d.drawings || {}, mergedTombs, 'id', '__ts', 'drw__');
+  try { safeLS.setItem(_pk(DRW_KEY), JSON.stringify(mergedDrw)); } catch(e) {}
+
+  // Profile / company info / budget — single objects with no natural item
+  // list, so they merge PER FIELD via the companion "_fts" timestamp map
+  // that sprof()/sglobal()/sbgt() maintain on every save.
+  function _mergeFieldBagStore(baseKey, localObj, remoteObj, remoteFts) {
+    var ftsK = baseKey + '_fts';
+    var localFts;
+    try { localFts = JSON.parse(safeLS.getItem(ftsK) || '{}'); } catch(e) { localFts = {}; }
+    var result = _mergeFieldBag(localObj, localFts, remoteObj, remoteFts || {});
+    try { safeLS.setItem(baseKey, JSON.stringify(result.obj)); } catch(e) {}
+    try { safeLS.setItem(ftsK, JSON.stringify(result.fts)); } catch(e) {}
+    return result.obj;
+  }
+  var mergedProf = d.prof ? _mergeFieldBagStore(_pk(PROF), lprof(), d.prof, d.prof_fts) : lprof();
+  var mergedGlobalProf = d.global_prof ? _mergeFieldBagStore(_globalProfKey(), lglobal(), d.global_prof, d.global_prof_fts) : lglobal();
+  var mergedBgt = d.budget ? _mergeFieldBagStore(_pk(BGT_KEY), lbgt(), d.budget, d.budget_fts) : lbgt();
+
+  // Apply everything else (settings, BOQ, etc.) from cloud as before —
+  // the stores merged above are substituted in so _applyFullBackup writes
+  // the already-merged result rather than the raw remote copy.
   var dMerged = JSON.parse(JSON.stringify(d));
   dMerged.db = mergedDb;
   dMerged.machinery = mergedMach;
+  dMerged.mats = mergedMats;
+  dMerged.milestones = mergedMs;
+  dMerged.punchlist = mergedPl;
+  dMerged.dept = mergedDept;
+  dMerged.drawings = mergedDrw;
+  if (mergedProf) dMerged.prof = mergedProf;
+  if (mergedGlobalProf) dMerged.global_prof = mergedGlobalProf;
+  if (mergedBgt) dMerged.budget = mergedBgt;
   _applyFullBackup(dMerged);
   applyProfile();
   try { renderDashboard(); } catch(e) {}
@@ -14595,6 +14948,7 @@ function doSmartLogin() {
         var endDate = data.subscription_end_date || 0;
         // ONLY trust Supabase DB — no localStorage fallback
         var isActive = data.subscribed && endDate > now;
+        window._applyPlanFromAdminRow(data);
         safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
         safeLS.setItem(ADMIN_EMAIL_KEY, email);
         _adminSBUser = user;
@@ -14688,8 +15042,9 @@ function onAdminLoginSuccess(email, user, app) {
   var emailEl = document.getElementById('cloud-admin-email');
   if (emailEl) emailEl.textContent = email;
   // Fetch subscription expiry from Supabase
-  _sb.from('admins').select('subscription_end_date,subscribed').eq('id', user.id).single().then(function(r) {
+  _sb.from('admins').select('*').eq('id', user.id).single().then(function(r) {
     if (!r.error && r.data) {
+      window._applyPlanFromAdminRow(r.data);
       var endDate = r.data.subscription_end_date;
       var expiryEl = document.getElementById('cloud-sub-expiry');
       if (expiryEl && endDate) {
@@ -14874,13 +15229,14 @@ function restoreAdminSession() {
           var user = r.data.session.user;
           _adminSBUser = user; _adminUser = user;
           // Verify subscription from DB — ONLY source of truth
-          _sb.from('admins').select('subscribed,subscription_end_date')
+          _sb.from('admins').select('*')
             .eq('id', user.id).single().then(function(aRes) {
             if (!aRes.error && aRes.data) {
               var d = aRes.data;
               var endDate = d.subscription_end_date || 0;
               var isActive = d.subscribed && endDate > Date.now();
               window._sbSubActive = isActive;
+              window._applyPlanFromAdminRow(d);
               if (isActive) {
                 safeLS.setItem('cm_sub_end', String(endDate)); // for display only
               } else {
@@ -15472,6 +15828,7 @@ function openPayLanding(afterAuth) {
   var lockedMsg = document.getElementById('pay-locked-msg');
   if (closeBtn) closeBtn.style.display = afterAuth ? 'none' : 'flex';
   if (lockedMsg) lockedMsg.style.display = afterAuth ? 'flex' : 'none';
+  if (typeof _selectPlanTier === 'function') _selectPlanTier('pro');
 }
 function closePayLanding() {
   document.getElementById('pay-landing-modal').classList.remove('show');
@@ -15500,39 +15857,122 @@ function _cancelAndLogout() {
 }
 
 // Open viewer login as inline modal (no URL param needed)
-function startSubscriptionPayment() {
+// PLAN_PRICING: single source of truth for both tiers' amounts (in paise)
+// and display strings, so the modal, the Razorpay call, and the DB write
+// can never disagree with each other.
+var PLAN_PRICING = {
+  pro:        { amount: 3000, rupees: 30, label: 'Pro',        desc: 'Admin Subscription — ₹30/month' },
+  enterprise: { amount: 9000, rupees: 90, fullRupees: 99, label: 'Enterprise', desc: 'Enterprise Subscription — ₹90/month (launch price, usually ₹99)' }
+};
+
+var _selectedPlanTier = 'pro';
+
+// Toggles the pricing modal between Pro and Enterprise views. Purely a
+// display/selection concern — the actual charge only happens when the
+// person taps Subscribe, via startSubscriptionPayment(_selectedPlanTier).
+function _selectPlanTier(plan) {
+  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
+  _selectedPlanTier = plan;
+  var proTab = document.getElementById('plan-tab-pro');
+  var entTab = document.getElementById('plan-tab-ent');
+  if (proTab && entTab) {
+    var onStyle  = 'flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid #4f46e5;background:rgba(79,70,229,.25);color:#fff;font-weight:800;font-size:12px;cursor:pointer;';
+    var offStyle = 'flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:rgba(255,255,255,.65);font-weight:800;font-size:12px;cursor:pointer;';
+    proTab.setAttribute('style', plan === 'pro' ? onStyle : offStyle);
+    entTab.setAttribute('style', (plan === 'enterprise' ? onStyle : offStyle) + ' display:flex; align-items:center; justify-content:center; gap:4px;');
+  }
+  var priceBlock = document.getElementById('plan-price-block');
+  if (priceBlock) {
+    if (plan === 'enterprise') {
+      priceBlock.innerHTML =
+        '<p style="color:rgba(255,255,255,.4);font-size:14px;font-weight:700;text-decoration:line-through;line-height:1;margin-bottom:2px;">₹99/month</p>'
+        + '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹90<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
+        + '<p style="font-size:10px;color:#34d399;margin-top:3px;font-weight:700;">🎉 Launch discount — locked in for as long as you stay subscribed</p>';
+    } else {
+      priceBlock.innerHTML =
+        '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
+        + '<p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>';
+    }
+  }
+  // Enterprise gets one extra row on top of everything Pro already has —
+  // cross-device project sharing (join-code invites for engineers).
+  var entRow = document.getElementById('plan-feature-sharing-row');
+  if (plan === 'enterprise' && !entRow) {
+    var featBlock = document.getElementById('plan-features-block');
+    if (featBlock) {
+      var row = document.createElement('div');
+      row.id = 'plan-feature-sharing-row';
+      row.className = 'cloud-feature-row';
+      row.innerHTML = '<span style="font-size:14px">🔗</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Share Projects Across Devices <span style="background:#f59e0b;color:#1e1b4b;font-size:8px;padding:1px 5px;border-radius:6px;">ENTERPRISE</span></p><p style="font-size:9px;color:#a78bfa">Invite engineers with a join code, per project</p></div>';
+      featBlock.appendChild(row);
+    }
+  } else if (plan !== 'enterprise' && entRow) {
+    entRow.remove();
+  }
+  var btn = document.getElementById('sub-pay-btn');
+  if (btn && !btn.disabled) btn.textContent = _planBtnLabel(plan);
+}
+
+// Feature → which plan unlocks it, shown when a gated action is attempted.
+// 'Logo Upload' / 'Multiple Projects' → Pro already covers these.
+// 'Project Sharing' / cross-device invite → needs Enterprise.
+var _UPGRADE_FEATURE_PLAN = {
+  'Logo Upload': 'pro',
+  'Multiple Projects': 'pro',
+  'Project Sharing': 'enterprise',
+  'Cross-Device Sharing': 'enterprise'
+};
+function _showUpgradePopup(featureName) {
+  var plan = _UPGRADE_FEATURE_PLAN[featureName] || 'pro';
+  if (typeof toast === 'function') {
+    toast('🔒 ' + (featureName || 'This feature') + ' needs ' + (plan === 'enterprise' ? 'Enterprise' : 'Pro'), 'err');
+  }
+  if (typeof openPayLanding === 'function') openPayLanding(false);
+  setTimeout(function() { if (typeof _selectPlanTier === 'function') _selectPlanTier(plan); }, 30);
+}
+
+function startSubscriptionPayment(plan) {
+  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
   if (typeof Razorpay === 'undefined') {
     toast('Payment gateway load ho raha hai…', 'ok');
     var s = document.createElement('script');
     s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    s.onload = function() { _openSubscriptionRazorpay(); };
+    s.onload = function() { _openSubscriptionRazorpay(plan); };
     s.onerror = function() { toast('Payment load failed. Internet check karo.', 'err'); };
     document.head.appendChild(s);
     return;
   }
-  _openSubscriptionRazorpay();
+  _openSubscriptionRazorpay(plan);
 }
 
-function _openSubscriptionRazorpay() {
-  var btn = document.getElementById('sub-pay-btn');
+function _planBtnId(plan) { return 'sub-pay-btn'; }
+function _planBtnLabel(plan) {
+  var p = PLAN_PRICING[plan];
+  return '💳 Subscribe ₹' + p.rupees + '/month';
+}
+
+function _openSubscriptionRazorpay(plan) {
+  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
+  var p = PLAN_PRICING[plan];
+  var btn = document.getElementById(_planBtnId(plan));
   if (btn) { btn.textContent = '⏳ Opening payment…'; btn.disabled = true; }
   var userEmail = (_pendingAuthEmail) || (safeLS.getItem(ADMIN_EMAIL_KEY)) || '';
   var options = {
     key: 'rzp_live_SRrnyG5XusYMpE',
-    amount: 3000,
+    amount: p.amount,
     currency: 'INR',
     name: 'Sanjineer Cloud',
-    description: 'Admin Subscription — ₹30/month',
+    description: p.desc,
     image: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="%234f46e5"/><text x="40" y="55" font-size="36" text-anchor="middle">%F0%9F%8F%97</text></svg>',
     prefill: { name: '', email: userEmail, contact: '' },
-    notes: { purpose: 'sanjineer_cloud_subscription' },
+    notes: { purpose: 'sanjineer_cloud_subscription', plan: plan },
     theme: { color: '#4f46e5' },
     handler: function(response) {
-      onSubscriptionPaymentSuccess(response);
+      onSubscriptionPaymentSuccess(response, plan);
     },
     modal: {
       ondismiss: function() {
-        if (btn) { btn.textContent = '💳 Subscribe ₹30/month'; btn.disabled = false; }
+        if (btn) { btn.textContent = _planBtnLabel(plan); btn.disabled = false; }
       }
     }
   };
@@ -15540,22 +15980,28 @@ function _openSubscriptionRazorpay() {
     var rzp = new Razorpay(options);
     rzp.on('payment.failed', function(resp) {
       toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err');
-      if (btn) { btn.textContent = '💳 Subscribe ₹30/month'; btn.disabled = false; }
+      if (btn) { btn.textContent = _planBtnLabel(plan); btn.disabled = false; }
     });
     rzp.open();
   } catch(e) {
     toast('Payment error: ' + e.message, 'err');
-    if (btn) { btn.textContent = '💳 Subscribe ₹30/month'; btn.disabled = false; }
+    if (btn) { btn.textContent = _planBtnLabel(plan); btn.disabled = false; }
   }
 }
 
-function onSubscriptionPaymentSuccess(response) {
+function onSubscriptionPaymentSuccess(response, plan) {
+  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
+  var p = PLAN_PRICING[plan];
   var payId = response.razorpay_payment_id || ('LIVE_' + Date.now());
   var subEnd = Date.now() + (30 * 24 * 60 * 60 * 1000);
   // Store payment ID locally for display/reference only (NOT for auth decisions)
   safeLS.setItem(CLOUD_KEY, '1');
   safeLS.setItem('cm_rzp_payment_id', payId); // display only
   safeLS.setItem('cm_sub_end', String(subEnd)); // display only — real auth is from DB
+  safeLS.setItem('cm_plan', plan); // display only — real auth/plan is from DB
+  window.userPlan = plan;
+  window.isProUser = true;
+  window.isEnterpriseUser = plan === 'enterprise';
 
   var user = _pendingAuthUser || _adminSBUser;
 
@@ -15565,7 +16011,7 @@ function onSubscriptionPaymentSuccess(response) {
       _sb.auth.getUser().then(function(r) {
         if (r.data && r.data.user) {
           _adminSBUser = r.data.user;
-          onSubscriptionPaymentSuccess(response); // retry with user
+          onSubscriptionPaymentSuccess(response, plan); // retry with user
         } else {
           toast('✅ Payment done! Please login again to activate.', 'ok');
           closePayLanding(); openCloudModal();
@@ -15580,22 +16026,31 @@ function onSubscriptionPaymentSuccess(response) {
 
   if (_sb) {
     // Write to DB — retried 3 times to ensure it lands
-    var _writeSubscription = function(tries) {
-      _sb.from('admins').upsert({
+    var _writeSubscription = function(tries, includePlan) {
+      var payload = {
         id: user.id,
         email: user.email || safeLS.getItem(ADMIN_EMAIL_KEY) || '',
         subscribed: true,
         subscribed_at: Date.now(),
         subscription_end_date: subEnd,
         last_payment_id: payId
-      }, { onConflict: 'id' }).then(function(r) {
-        if (r.error && tries > 0) setTimeout(function(){ _writeSubscription(tries-1); }, 2000);
+      };
+      if (includePlan) payload.plan = plan;
+      _sb.from('admins').upsert(payload, { onConflict: 'id' }).then(function(r) {
+        if (r.error) {
+          // If the DB doesn't have a `plan` column yet (older schema), retry
+          // WITHOUT it so the core subscription (subscribed/dates/payment id)
+          // still lands — a missing optional column must never drop the
+          // whole payment confirmation and leave someone who paid locked out.
+          if (includePlan) { _writeSubscription(tries, false); return; }
+          if (tries > 0) setTimeout(function(){ _writeSubscription(tries-1, false); }, 2000);
+        }
       });
       _sb.from('payments').insert({
-        admin_id: user.id, razorpay_id: payId, amount: 3000, purpose: 'sanjineer_cloud_subscription'
+        admin_id: user.id, razorpay_id: payId, amount: p.amount, purpose: 'sanjineer_cloud_subscription_' + plan
       }).catch(function(){});
     };
-    _writeSubscription(3);
+    _writeSubscription(3, true);
   }
 
   var _email = _pendingAuthEmail || (user && user.email) || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
