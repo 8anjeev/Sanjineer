@@ -8339,6 +8339,7 @@ function changeQdprDate(v){
 }
 
 function openQdprProjectModal(pid){
+  var modal = document.getElementById('qdpr-project-modal');
   if (!modal) return;
   _armModalGuard('qdpr-project-modal');
   var titleEl = document.getElementById('qdpr-project-modal-title');
@@ -8490,15 +8491,6 @@ function renderQdprSites(){
     return report ? qdprReportCard(site, report) : qdprEmptyCard(site);
   }).join('');
 }
-
-function _qdprShareBtnHtml(pid) {
-  var action = window.isEnterpriseUser
-    ? "openShareProjectModal('" + pid + "')"
-    : "_showUpgradePopup('Project Sharing')";
-  return '<button onclick="' + action + '" title="Share Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex;position:relative">🔗'
-    + (window.isEnterpriseUser ? '' : '<span style="position:absolute;top:-3px;right:-3px;background:#f59e0b;color:#1e1b4b;font-size:7px;font-weight:900;padding:1px 3px;border-radius:5px;line-height:1;">PRO+</span>')
-    + '</button>';
-}
 function qdprReportCard(site, report){
   var dW = (report.deptWork||[]).reduce(function(s,d){ return s+(Number(d.workers)||0); },0);
   var lRows = (report.labour||[]).filter(function(l){ return l.category; }).map(function(l){
@@ -8522,7 +8514,6 @@ function qdprReportCard(site, report){
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
     +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
-    +(site.editable!==false?_qdprShareBtnHtml(site.__id):'')
     +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
     +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
     +'</div></div></div>'
@@ -8552,7 +8543,7 @@ function qdprEmptyCard(site){
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
-    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'+_qdprShareBtnHtml(site.__id)):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
+    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
     +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
@@ -19274,15 +19265,17 @@ function _renderContactsList() {
     var icon = CT_ROLE_ICON[c.role] || '📋';
     var col  = CT_ROLE_COLOR[c.role] || '#9ca3af';
     var telHref = 'tel:' + String(c.phone||'').replace(/[^0-9+]/g,'');
-    return '<div style="background:#fff;border-radius:14px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:10px;">'
-      + '<div style="width:34px;height:34px;border-radius:10px;background:' + col + '22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">' + icon + '</div>'
+    return '<div style="background:#fff;border-radius:12px;padding:8px 10px;margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;align-items:center;gap:8px;">'
+      + '<div style="width:28px;height:28px;border-radius:9px;background:' + col + '22;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">' + icon + '</div>'
       + '<div style="flex:1;min-width:0;">'
-      + '<p style="font-size:12.5px;font-weight:800;color:#1f2937;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(c.name) + '</p>'
-      + '<p style="font-size:10px;color:' + col + ';font-weight:700;margin:1px 0 0;">' + _jhtml(c.role||'Other') + (c.notes ? ' · <span style="color:#9ca3af;font-weight:600;">' + _jhtml(c.notes) + '</span>' : '') + '</p>'
+      + '<p style="font-size:12.5px;font-weight:800;color:#1f2937;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(c.name) + ' <span style="font-weight:600;font-size:10px;color:' + col + ';">(' + _jhtml(c.role||'Other') + (c.notes ? ' · ' + _jhtml(c.notes) : '') + ')</span></p>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:2px;">'
+      + '<p style="font-size:11px;color:#6b7280;font-weight:600;margin:0;white-space:nowrap;flex-shrink:0;">' + (c.phone ? _jhtml(c.phone) : '—') + '</p>'
+      + (c.phone ? ('<a href="' + telHref + '" style="flex:0 0 33%;display:flex;align-items:center;justify-content:center;gap:4px;padding:4px 6px;border-radius:99px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-size:10px;font-weight:800;text-decoration:none;">📞 Call</a>') : '')
       + '</div>'
-      + '<a href="' + telHref + '" style="flex-shrink:0;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#059669,#10b981);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;text-decoration:none;">📞</a>'
-      + '<button onclick="openAddContactModal(\'' + c.id + '\')" title="Edit" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#eef2ff;border:none;color:#6366f1;font-size:11px;cursor:pointer;">✏️</button>'
-      + '<button onclick="deleteContact(\'' + c.id + '\')" title="Delete" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;font-size:11px;cursor:pointer;">✕</button>'
+      + '</div>'
+      + '<button onclick="openAddContactModal(\'' + c.id + '\')" title="Edit" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:#eef2ff;border:none;color:#6366f1;font-size:10px;cursor:pointer;">✏️</button>'
+      + '<button onclick="deleteContact(\'' + c.id + '\')" title="Delete" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;font-size:10px;cursor:pointer;">✕</button>'
       + '</div>';
   }).join('');
 }
