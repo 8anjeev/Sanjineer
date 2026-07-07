@@ -720,9 +720,15 @@ self.addEventListener('fetch', function(e) {
   }
 
   // ── CRUD ──────────────────────────────────────────────────────
+  // Free tier: max 1 own project. Pro/Enterprise: unlimited.
+  function _ownProjectLimit() {
+    return (window.isProUser || window.isEnterpriseUser) ? Infinity : 1;
+  }
   function createProject(name) {
-    // Multi-project creation is temporarily unrestricted for all users
-    // (free tier will be reintroduced later)
+    if ((window.projects || []).length >= _ownProjectLimit()) {
+      if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Multiple Projects');
+      return null;
+    }
     var id = _genProjectId();
     var proj = { id: id, name: name || ('Project ' + (window.projects.length + 1)), created_at: Date.now() };
     window.projects.push(proj);
@@ -972,8 +978,13 @@ self.addEventListener('fetch', function(e) {
     return true;
   }
 
-  // ── PRO upgrade popup ─────────────────────────────────────────
+  // ── PRO/ENTERPRISE upgrade popup ──────────────────────────────
   function _showUpgradePopup(featureName) {
+    // _UPGRADE_FEATURE_PLAN is defined later in the file (near the pricing
+    // modal) but this function is only ever CALLED after the whole page
+    // has loaded, so it's always available by then.
+    var plan = (typeof _UPGRADE_FEATURE_PLAN !== 'undefined' && _UPGRADE_FEATURE_PLAN[featureName]) || 'pro';
+    var planLabel = plan === 'enterprise' ? 'ENTERPRISE' : 'PRO';
     _showProjectModal('🔒 PRO Feature', '', null); // reuse modal shell differently
     var existing = document.getElementById('_proj-input-modal');
     if (existing) existing.remove();
@@ -983,9 +994,9 @@ self.addEventListener('fetch', function(e) {
     modal.innerHTML =
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 18px;width:100%;max-width:300px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
       + '<div style="font-size:32px;margin-bottom:12px">👑</div>'
-      + '<p style="font-size:15px;font-weight:800;color:#fff;margin:0 0 8px">PRO Feature</p>'
+      + '<p style="font-size:15px;font-weight:800;color:#fff;margin:0 0 8px">' + planLabel + ' Feature</p>'
       + '<p style="font-size:12px;color:rgba(255,255,255,0.6);margin:0 0 20px;line-height:1.5">'
-      + (featureName||'This feature') + ' is only available for PRO users.</p>'
+      + (featureName||'This feature') + ' is only available for ' + planLabel + ' users.</p>'
       + '<div style="display:flex;gap:10px;">'
       + '<button id="_pro-cancel" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">Later</button>'
       + '<button id="_pro-upgrade" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#f97316);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">Upgrade ✨</button>'
@@ -995,7 +1006,12 @@ self.addEventListener('fetch', function(e) {
     document.getElementById('_pro-cancel').onclick = function(){ modal.remove(); };
     document.getElementById('_pro-upgrade').onclick = function(){
       modal.remove();
-      if (typeof openPayLanding === 'function') openPayLanding();
+      if (typeof openPayLanding === 'function') {
+        openPayLanding();
+        // openPayLanding() defaults the pricing modal to the Pro tab —
+        // switch it to Enterprise when that's the tier this feature needs.
+        if (plan === 'enterprise') setTimeout(function(){ if (typeof _selectPlanTier === 'function') _selectPlanTier('enterprise'); }, 30);
+      }
       else toast('Visit app.sanjineer.in to upgrade', 'info');
     };
     modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
@@ -8320,118 +8336,6 @@ function changeQdprDate(v){
   qdprState.date = v;
   var dayEl = document.getElementById('qdpr-date-day'); if (dayEl) dayEl.textContent = _qdprDayName(v);
   renderQdprSites();
-}
-
-// ── Projects CRUD (every project saved in the app is a QDPR "site") ────
-// ══════════════════════════════════════════════════════════════
-// PROJECT LIST — persistence for window.projects (the admin's own
-// list of construction sites/projects). This is the missing piece
-// that "Add Project" / the QDPR project modal / contacts project
-// selector / owner dashboard were all already calling but which was
-// never implemented — createProject() etc. didn't exist, so every
-// "Add Project" attempt failed with "Cannot create project here".
-//
-// Storage: local list lives in localStorage under PROJECTS_KEY, and
-// is mirrored to the SAME generic `cloud_backups` table every other
-// per-project backup already uses (a dedicated backup_key, not a
-// schema change), so this needs no new Supabase tables/columns and
-// carries none of the "column doesn't exist" risk a new DB table would.
-//
-// Tier limits:
-//   Free       — max 1 project
-//   Pro        — unlimited projects, but no cross-device sharing
-//   Enterprise — unlimited projects + can share/invite via join code
-// ══════════════════════════════════════════════════════════════
-var PROJECTS_KEY = 'cm_projects_list';
-
-function _projectCloudKeyBase() {
-  if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return null;
-  return 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
-}
-
-function _loadProjects() {
-  try { window.projects = JSON.parse(safeLS.getItem(PROJECTS_KEY) || '[]'); }
-  catch(e) { window.projects = window.projects || []; }
-  if (!Array.isArray(window.projects)) window.projects = [];
-  return window.projects;
-}
-
-function _saveProjects() {
-  try { safeLS.setItem(PROJECTS_KEY, JSON.stringify(window.projects || [])); } catch(e) {}
-  _pushProjectListToCloud();
-}
-
-function _pushProjectListToCloud() {
-  if (typeof _sb === 'undefined' || !_sb) return;
-  var base = _projectCloudKeyBase();
-  if (!base) return;
-  _sb.from('cloud_backups').upsert({
-    admin_id: _adminSBUser.id,
-    backup_key: base + '_projects_list',
-    data: { projects: window.projects || [], updated_at: Date.now() }
-  }, { onConflict: 'admin_id,backup_key' }).then(function(){}).catch(function(){});
-}
-
-// Pulls the admin's project list down from the cloud (called after login
-// and periodically) so a project added on one device shows up on another.
-// Merges by id rather than blindly overwriting, so a project created
-// moments ago locally (before its own push lands) never gets wiped out
-// by an older remote snapshot arriving late.
-function _pullProjectListFromCloud() {
-  if (typeof _sb === 'undefined' || !_sb) return;
-  var base = _projectCloudKeyBase();
-  if (!base) return;
-  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', base + '_projects_list').maybeSingle().then(function(r) {
-    var remote = (r && r.data && r.data.data && Array.isArray(r.data.data.projects)) ? r.data.data.projects : null;
-    if (!remote) return;
-    var local = window.projects || [];
-    var map = {};
-    local.forEach(function(p){ map[p.id] = p; });
-    remote.forEach(function(p){ map[p.id] = p; }); // remote wins on conflict — project list is only ever edited from admin devices
-    window.projects = Object.keys(map).map(function(k){ return map[k]; });
-    try { safeLS.setItem(PROJECTS_KEY, JSON.stringify(window.projects)); } catch(e) {}
-    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
-    if (typeof renderQdprSites === 'function') renderQdprSites();
-  }).catch(function(){});
-}
-
-// How many of the admin's OWN projects (not counting ones joined via
-// someone else's share code) the current plan allows.
-function _ownProjectLimit() {
-  if (window.isProUser || window.isEnterpriseUser) return Infinity;
-  return 1; // Free tier
-}
-
-function createProject(name) {
-  _loadProjects();
-  var ownCount = (window.projects || []).filter(function(p){ return p.editable !== false; }).length;
-  if (ownCount >= _ownProjectLimit()) {
-    if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Multiple Projects');
-    return null;
-  }
-  var proj = {
-    id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-    name: name,
-    address: '',
-    editable: true,
-    canWrite: true,
-    created_at: Date.now()
-  };
-  window.projects = window.projects || [];
-  window.projects.push(proj);
-  _saveProjects();
-  return proj;
-}
-
-// Best-effort: only touches the header project dropdown if it exists in
-// the current view. Safe no-op everywhere else.
-function _renderProjectDropdown() {
-  var sel = document.getElementById('project-dropdown') || document.getElementById('header-project-select');
-  if (!sel) return;
-  var projects = window.projects || [];
-  sel.innerHTML = projects.map(function(p){
-    return '<option value="' + p.id + '"' + (p.id === window.currentProjectId ? ' selected' : '') + '>' + esc(p.name) + '</option>';
-  }).join('');
 }
 
 function openQdprProjectModal(pid){
@@ -15922,14 +15826,6 @@ var _UPGRADE_FEATURE_PLAN = {
   'Project Sharing': 'enterprise',
   'Cross-Device Sharing': 'enterprise'
 };
-function _showUpgradePopup(featureName) {
-  var plan = _UPGRADE_FEATURE_PLAN[featureName] || 'pro';
-  if (typeof toast === 'function') {
-    toast('🔒 ' + (featureName || 'This feature') + ' needs ' + (plan === 'enterprise' ? 'Enterprise' : 'Pro'), 'err');
-  }
-  if (typeof openPayLanding === 'function') openPayLanding(false);
-  setTimeout(function() { if (typeof _selectPlanTier === 'function') _selectPlanTier(plan); }, 30);
-}
 
 function startSubscriptionPayment(plan) {
   plan = plan === 'enterprise' ? 'enterprise' : 'pro';
