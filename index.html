@@ -558,12 +558,27 @@ self.addEventListener('fetch', function(e) {
   });
 
   // ── 4. Replay queued mutations when back online ─────────────────────────────
+  var _replayInFlight = false;
   async function _replayOfflineQueue() {
     if (!window._offlineQueue.length) return;
+    if (_replayInFlight) { if (window._SANJ_SYNC_DEBUG) console.log('[sync] replay skipped (already running)'); return; } // loading lock — never run two replays at once
+    _replayInFlight = true;
     var queue = window._offlineQueue.slice();
     var failed = [];
     for (var i = 0; i < queue.length; i++) {
       var entry = queue[i];
+      // Skip a queued mutation if it was tagged for a project that has
+      // since been deleted — replaying it would resurrect/write data for
+      // a project the user intentionally removed. (Entries with no
+      // project_id, or made before any project existed, still replay.)
+      if (entry.project_id && Array.isArray(window.projects) && window.projects.length > 0) {
+        var _stillExists = window.projects.some(function(p){ return p.id === entry.project_id; });
+        if (!_stillExists) {
+          if (window._SANJ_SYNC_DEBUG) console.log('[sync] offline entry SKIPPED (project deleted)', 'project_id=' + entry.project_id, 'ts=' + entry.ts);
+          continue; // drop it — do not add to failed (so it won't be retried forever)
+        }
+      }
+      if (window._SANJ_SYNC_DEBUG) console.log('[sync] replaying offline entry', 'project_id=' + (entry.project_id||'—'), 'method=' + entry.method, 'queuedAt=' + entry.ts);
       try {
         var resp = await fetch(entry.url, {
           method: entry.method,
@@ -577,6 +592,7 @@ self.addEventListener('fetch', function(e) {
     }
     window._offlineQueue = failed;
     _saveOfflineQueue();
+    _replayInFlight = false;
     if (failed.length === 0) {
       _hideOfflineBanner();
       if (typeof toast === 'function') toast('✅ ' + (queue.length - failed.length) + ' offline changes synced!', 'ok');
@@ -630,6 +646,25 @@ self.addEventListener('fetch', function(e) {
   <script>
   window.currentProjectId = null;
   window.projects = [];
+
+  // ── Project epoch guard ─────────────────────────────────────────
+  // Every switchProject() bumps this counter. Any in-flight async cloud
+  // pull/push that was started for a PREVIOUS project must check its
+  // captured epoch against the live one before writing anything to
+  // localStorage or to the cloud — otherwise a slow response for the
+  // project you just left can land on top of the project you just
+  // opened (or push the new project's data into the old project's
+  // cloud row). This is the root cause behind records "disappearing"
+  // or projects' data mixing after a fast project switch.
+  window._projectEpoch = 0;
+  function _sanjLog() {
+    if (!window._SANJ_SYNC_DEBUG) return;
+    try {
+      var args = ['[sync]', 'epoch=' + window._projectEpoch, 'pid=' + (window.currentProjectId||'—')];
+      console.log.apply(console, args.concat(Array.prototype.slice.call(arguments)));
+    } catch(e) {}
+  }
+  window._sanjLog = _sanjLog;
 
   // ── Persist helpers ───────────────────────────────────────────
   function _loadProjects() {
@@ -747,18 +782,46 @@ self.addEventListener('fetch', function(e) {
   }
 
   // ── Switch project ────────────────────────────────────────────
+  var _switchProjectReloadTimer = null;
   function switchProject(projectId) {
-    if (!projectId) return;
+    if (!projectId || projectId === window.currentProjectId) return;
     _projMenuOpen = false;
+
+    // Bump the epoch FIRST, before touching currentProjectId. Any cloud
+    // pull/push already in flight for the old project captured the old
+    // epoch and will now see a mismatch and discard its result instead
+    // of writing into the new project's storage.
+    window._projectEpoch++;
+    var _epoch = window._projectEpoch;
+    _sanjLog('switchProject ->', projectId);
+
+    // Cancel any queued reload from a previous rapid switch — otherwise
+    // two overlapping setTimeout reloads can render tab data for the
+    // wrong project (whichever timer happens to fire last).
+    if (_switchProjectReloadTimer) { clearTimeout(_switchProjectReloadTimer); _switchProjectReloadTimer = null; }
+    // Cancel any pending debounced cloud push — it was scheduled for the
+    // OLD project's edits and must not fire against the new project.
+    if (typeof _cloudPushTimer !== 'undefined' && _cloudPushTimer) { clearTimeout(_cloudPushTimer); _cloudPushTimer = null; }
+
     window.currentProjectId = projectId;
     try { localStorage.setItem('sanj_current_project', projectId); } catch(e) {}
     _renderProjectDropdown();
-    // Pull this project's cloud backup first (getSiteId now returns project-specific key)
+
+    // Pull this project's cloud backup first (getSiteId now returns project-specific key).
+    // _adminCloudPull captures this epoch internally and will no-op if the
+    // user switches again before the response arrives.
     if (typeof _adminCloudPull === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
       _adminCloudPull(true);
     }
+    // Re-scope the realtime subscription to the new project (tears down
+    // the old project's channel and opens one filtered to this project only).
+    if (typeof _startAdminRealtime === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
+      _startAdminRealtime();
+    }
     // Reload the currently active tab with the new project's data
-    setTimeout(function() {
+    _switchProjectReloadTimer = setTimeout(function() {
+      _switchProjectReloadTimer = null;
+      if (window._projectEpoch !== _epoch) return; // superseded by another switch
       try {
         AD = ld();
         applyProfile();
@@ -6458,10 +6521,10 @@ function snapData(snap) {
   return snap || {};
 }
 
-function ld(){try{return JSON.parse(safeLS.getItem(_pk(DB))||'[]');}catch(e){return [];}}
-function sd(d){safeLS.setItem(_pk(DB),JSON.stringify(d));_scheduleCloudPush();}
+function ld(){try{var _v=JSON.parse(safeLS.getItem(_pk(DB))||'[]');if(window._SANJ_SYNC_DEBUG)_sanjLog('load db','key='+_pk(DB),'count='+(_v&&_v.length));return _v;}catch(e){return [];}}
+function sd(d){safeLS.setItem(_pk(DB),JSON.stringify(d));if(window._SANJ_SYNC_DEBUG)_sanjLog('save db','key='+_pk(DB),'count='+(d&&d.length),'ts='+Date.now());_scheduleCloudPush();}
 function lm(){try{return JSON.parse(safeLS.getItem(_pk(META))||'{}');}catch(e){return {};}}
-function sm(x){safeLS.setItem(_pk(META),JSON.stringify(x));_scheduleCloudPush();}
+function sm(x){safeLS.setItem(_pk(META),JSON.stringify(x));if(window._SANJ_SYNC_DEBUG)_sanjLog('save meta','key='+_pk(META),'ts='+Date.now());_scheduleCloudPush();}
 function lmat(){try{return JSON.parse(safeLS.getItem(_pk(MATS))||'[]');}catch(e){return [];}}
 function smat(x){ try { x = _autoStampArray(lmat(), x || []); } catch(e) {} safeLS.setItem(_pk(MATS),JSON.stringify(x));_scheduleCloudPush();}
 function ldept(){try{return JSON.parse(safeLS.getItem(_pk(DEPT))||'{}');}catch(e){return {};}}
@@ -13769,6 +13832,14 @@ function cloudBackupNow(silent) {
   if (!_adminSBUser) { if (!silent) toast('Login required to backup', 'err'); return; }
   var siteId = getSiteId();
   if (!siteId) { if (!silent) toast('No Site ID configured', 'err'); return; }
+  // Captured at call time. _buildLocalPayload() and the remote-merge step
+  // below run inside an async .then() — if the user switches projects
+  // before that resolves, both would read the NEW project's live data
+  // (via _pk()/getSiteId()) while still writing/pushing under this OLD
+  // project's siteId, silently corrupting the old project's cloud row
+  // with the new project's data. Guard every step against that.
+  var _epoch = window._projectEpoch;
+  function _staleProject() { return window._projectEpoch !== _epoch || getSiteId() !== siteId; }
 
   function _buildLocalPayload() {
     var _allCmKeys = {};
@@ -13868,6 +13939,16 @@ function cloudBackupNow(silent) {
     .eq('backup_key', siteId)
     .single()
     .then(function(fetchResult) {
+      if (_staleProject()) {
+        // The user switched projects while this fetch was in flight. Bail
+        // out completely — do NOT merge remote data into local storage
+        // (would write project B's live data through project A's _pk())
+        // and do NOT push (would overwrite project A's cloud row with
+        // project B's data). The newly active project will schedule its
+        // own push/pull when it needs to.
+        _sanjLog('backup ABORTED (project switched mid-fetch)', 'siteId=' + siteId);
+        return;
+      }
       var cloudData = (fetchResult.data && fetchResult.data.data) ? fetchResult.data.data : null;
 
       if (cloudData) {
@@ -13938,10 +14019,13 @@ function cloudBackupNow(silent) {
       }
 
       // Step 4: Build payload from merged local state and push
+      if (_staleProject()) { _sanjLog('backup push ABORTED (project switched)', 'siteId=' + siteId); return; }
       _doPush(_buildLocalPayload());
     })
     .catch(function() {
-      // Offline or first backup — push local directly
+      // Offline or first backup — push local directly, unless the project
+      // has since changed (see _staleProject note above).
+      if (_staleProject()) { _sanjLog('backup push ABORTED (project switched, offline path)', 'siteId=' + siteId); return; }
       _doPush(_buildLocalPayload());
     });
 }
@@ -13952,8 +14036,14 @@ function cloudRestoreNow() {
   if (!_adminSBUser) { toast('Login required to restore', 'err'); return; }
   var siteId = getSiteId();
   if (!siteId) { toast('No Site ID', 'err'); return; }
+  var _epoch = window._projectEpoch; // capture before the (blocking) confirm() and the async fetch
   if (!confirm('⚠️ This will replace ALL local data with cloud data. Continue?')) return;
   _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', siteId).single().then(function(r) {
+    if (window._projectEpoch !== _epoch || getSiteId() !== siteId) {
+      _sanjLog('restore ABORTED (project switched)', 'siteId=' + siteId);
+      toast('Project changed — restore cancelled. Please retry.', 'err');
+      return;
+    }
     if (r.error || !r.data) { toast('No cloud data found for this Site ID', 'err'); return; }
     var d = r.data.data;
     _applyFullBackup(d);
@@ -14085,52 +14175,71 @@ function _applyCloudData(d, silent, scopeKey) {
   }
 }
 
+var _adminCloudPullInFlight = false;
 function _adminCloudPull(silent) {
   if (!_sb || !_adminSBUser) return;
   var siteId = getSiteId();
   if (!siteId) return;
+  // Loading lock — don't stack overlapping pulls for the same project.
+  if (_adminCloudPullInFlight) { _sanjLog('pull skipped (already in flight)'); return; }
+  _adminCloudPullInFlight = true;
+  var _epoch = window._projectEpoch;
+  var _reqStart = Date.now();
+  _sanjLog('pull start', 'siteId=' + siteId);
   _sb.from('cloud_backups')
     .select('data,updated_at')
     .eq('admin_id', _adminSBUser.id)
     .eq('backup_key', siteId)
     .single()
     .then(function(r) {
+      _adminCloudPullInFlight = false;
+      // Discard this response if the user has switched projects since the
+      // request was sent, OR if the active project's siteId no longer
+      // matches the one we queried — either way, applying it now would
+      // write project A's cloud data into project B's local storage.
+      if (window._projectEpoch !== _epoch || getSiteId() !== siteId) {
+        _sanjLog('pull DISCARDED (stale)', 'reqSite=' + siteId, 'nowSite=' + getSiteId(), 'tookMs=' + (Date.now() - _reqStart));
+        return;
+      }
       if (r.error || !r.data || !r.data.data) return;
       var remoteTs = r.data.data.lastSync || 0;
       // Apply cloud data if it's strictly newer than what we last applied.
       // On first open _lastCloudTimestamp is 0 so this always pulls on startup.
       if (remoteTs > _lastCloudTimestamp) {
+        _sanjLog('pull applied', 'remoteTs=' + remoteTs, 'tookMs=' + (Date.now() - _reqStart));
         _applyCloudData(r.data.data, !!silent);
       }
-    }).catch(function(e) {});
+    }).catch(function(e) { _adminCloudPullInFlight = false; });
 }
 
+var _adminRealtimeSiteId = null; // which project's siteId the current channel is scoped to
 function _startAdminRealtime() {
   if (!_sb || !_adminSBUser) return;
+  var siteId = getSiteId();
+  if (!siteId) return;
+  if (_adminRealtimeChannel && _adminRealtimeSiteId === siteId) return; // already subscribed to this project
   if (_adminRealtimeChannel) {
     try { _sb.removeChannel(_adminRealtimeChannel); } catch(e) {}
     _adminRealtimeChannel = null;
   }
+  _adminRealtimeSiteId = siteId;
+  _sanjLog('realtime subscribe', 'siteId=' + siteId);
   try {
     _adminRealtimeChannel = _sb
-      .channel('admin-sync-' + _adminSBUser.id)
+      .channel('admin-sync-' + siteId)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'cloud_backups',
-        filter: 'admin_id=eq.' + _adminSBUser.id
+        // Scoped to THIS project's row only -- each project gets its own
+        // subscription (point 9). backup_key already encodes the admin id
+        // (see getSiteId()), so this can't cross into another admin's data.
+        filter: 'backup_key=eq.' + siteId
       }, function(payload) {
         try {
-          // CRITICAL: this subscription is filtered only by admin_id, so it
-          // fires for updates to EVERY project this admin owns — not just
-          // the one currently open. Without this check, updating Project B
-          // on any device would get Project B's entire dataset merged
-          // straight into Project A's local storage (via _applyCloudData,
-          // which writes through _pk()/getSiteId() for whatever project is
-          // CURRENTLY ACTIVE) — and Project A's next auto-push would then
-          // permanently bake that contamination into Project A's own cloud
-          // row. This is a real cause of records "randomly" appearing,
-          // disappearing, or getting mixed between projects.
+          // Defense in depth: re-check we're still looking at the same
+          // project in case a switch happened between subscribe and this
+          // event firing, before the old channel had a chance to tear down.
           if (payload && payload.new && payload.new.backup_key !== getSiteId()) return;
           if (payload && payload.new && payload.new.data) {
             _applyCloudData(payload.new.data, true);
@@ -14190,9 +14299,15 @@ function _scheduleCloudPush() {
   }
   if (!isCloudActivated || typeof isCloudActivated !== 'function') return;
   if (!isCloudActivated()) return;
+  var _epoch = window._projectEpoch;
   if (_cloudPushTimer) clearTimeout(_cloudPushTimer);
   _cloudPushTimer = setTimeout(function() {
     _cloudPushTimer = null;
+    // If the project changed since this save was made, drop this push —
+    // switchProject() already cancels the timer on switch, but this is a
+    // second line of defense against any code path that schedules a push
+    // without going through switchProject's cleanup.
+    if (window._projectEpoch !== _epoch) { _sanjLog('scheduled push dropped (project switched)'); return; }
     cloudBackupNow(true); // silent push after user finishes editing
   }, 3000); // 3s debounce — waits until user stops making changes
 }
