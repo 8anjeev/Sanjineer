@@ -1041,18 +1041,21 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   // window.isEnterpriseUser, window.userPlan ('free'|'pro'|'enterprise').
   //
   // IMPORTANT — grandfathering existing subscribers:
+  // Before Pro/Enterprise existed as separate tiers, there was only ONE
+  // paid plan at ₹30/month, and it already included everything Enterprise
+  // now offers (multi-project + cross-device sharing via join codes).
   // Older paid rows were written before the `plan` column existed, so
-  // `data.plan` will be undefined for them. Any row with subscribed=true
-  // and no explicit plan is treated as 'pro' — their existing ₹30/month
-  // access keeps working exactly as before; they are never silently
-  // downgraded, and never asked to pay again just because this feature
-  // shipped later.
+  // `data.plan` will be undefined for them — any such row is treated as
+  // 'enterprise' (full access, same ₹30 rate), never downgraded to the
+  // narrower new Pro tier and never asked to re-subscribe. Only brand-new
+  // subscriptions going forward explicitly choose Pro (₹30) or Enterprise
+  // (₹99, launch-priced ₹90) and get exactly what they picked.
   window._applyPlanFromAdminRow = function(data) {
     data = data || {};
     var now = Date.now();
     var endDate = data.subscription_end_date || 0;
     var active = !!data.subscribed && endDate > now;
-    var plan = active ? (data.plan || 'pro') : 'free';
+    var plan = active ? (data.plan || 'enterprise') : 'free';
     window.userPlan = plan;
     window.isProUser = active; // pro AND enterprise both get everything "pro" already unlocks
     window.isEnterpriseUser = active && plan === 'enterprise';
@@ -13820,17 +13823,41 @@ function cloudBackupNow(silent) {
     };
   }
 
-  function _doPush(payload) {
+  function _doPush(payload, _retriesLeft) {
+    if (_retriesLeft === undefined) _retriesLeft = 4;
     _sb.from('cloud_backups').upsert({
       admin_id: _adminSBUser.id, backup_key: siteId, data: payload
     }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
-      if (r.error) { if (!silent) toast('Backup failed: ' + r.error.message, 'err'); return; }
+      if (r.error) {
+        // Could be transient (network blip, temporary Supabase error) — retry
+        // with backoff rather than silently losing this push forever. The
+        // data itself is always safe locally either way; this only affects
+        // how fast it reaches the cloud/other devices.
+        if (_retriesLeft > 0) {
+          setTimeout(function(){ _doPush(payload, _retriesLeft - 1); }, 3000);
+          return;
+        }
+        safeLS.setItem('cm_push_pending', '1'); // picked up by the online-reconnect handler
+        if (!silent) toast('Backup failed: ' + r.error.message, 'err');
+        return;
+      }
+      safeLS.removeItem('cm_push_pending');
       _lastCloudTimestamp = payload.lastSync;
       var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
       var el = document.getElementById('cloud-sync-time');
       if (el) el.textContent = 'Synced: ' + now;
       if (!silent) toast('☁️ Backed up to cloud!', 'ok');
       updateCloudBtn();
+    }).catch(function(err) {
+      // Actual network failure (offline, DNS, etc.) throws instead of
+      // resolving with r.error — without this catch it was an unhandled
+      // rejection and the push vanished with no retry at all.
+      if (_retriesLeft > 0) {
+        setTimeout(function(){ _doPush(payload, _retriesLeft - 1); }, 3000);
+      } else {
+        safeLS.setItem('cm_push_pending', '1');
+        if (!silent) toast('Backup failed (offline?) — will retry when back online', 'err');
+      }
     });
   }
 
@@ -14094,6 +14121,17 @@ function _startAdminRealtime() {
         filter: 'admin_id=eq.' + _adminSBUser.id
       }, function(payload) {
         try {
+          // CRITICAL: this subscription is filtered only by admin_id, so it
+          // fires for updates to EVERY project this admin owns — not just
+          // the one currently open. Without this check, updating Project B
+          // on any device would get Project B's entire dataset merged
+          // straight into Project A's local storage (via _applyCloudData,
+          // which writes through _pk()/getSiteId() for whatever project is
+          // CURRENTLY ACTIVE) — and Project A's next auto-push would then
+          // permanently bake that contamination into Project A's own cloud
+          // row. This is a real cause of records "randomly" appearing,
+          // disappearing, or getting mixed between projects.
+          if (payload && payload.new && payload.new.backup_key !== getSiteId()) return;
           if (payload && payload.new && payload.new.data) {
             _applyCloudData(payload.new.data, true);
             var el = document.getElementById('cloud-sync-dot');
@@ -14122,6 +14160,23 @@ function startAutoSync() {
   _startAdminRealtime();
   // Pull immediately on start to get latest cloud data before user edits
   setTimeout(function() { _adminCloudPull(true); }, 1500);
+
+  // ── Reconnect handling ──────────────────────────────────────────
+  // If the device was offline (network dropped mid-edit, tunnel/tower
+  // dead zone on site, etc.), don't wait up to 10s for the next poll —
+  // the moment the browser reports connectivity again, immediately push
+  // whatever was queued locally and pull the latest, so edits made while
+  // offline reach the cloud (and other devices) as fast as possible.
+  if (!window._sanjOnlineHandlerAttached) {
+    window._sanjOnlineHandlerAttached = true;
+    window.addEventListener('online', function() {
+      if (!_getAdminDb() || !isCloudActivated()) return;
+      if (safeLS.getItem('cm_push_pending') === '1') {
+        cloudBackupNow(true);
+      }
+      _adminCloudPull(true);
+    });
+  }
 }
 
 // ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
@@ -14573,6 +14628,11 @@ function _viewerLoadData(adminId, projId) {
         filter: 'admin_id=eq.' + adminId
       }, function(payload) {
         try {
+          // Same bug class as the admin-side subscription: filtered only by
+          // admin_id, so without this check a viewer scoped to ONE project
+          // would have a DIFFERENT project's data applied here whenever the
+          // admin updates that other project from any device.
+          if (_viewerBackupKey && payload && payload.new && payload.new.backup_key !== _viewerBackupKey) return;
           if (payload && payload.new && payload.new.data) {
             applyViewerData(payload.new.data, true);
             _showViewerSyncDot('pulse');
@@ -19974,10 +20034,11 @@ window._engineerSchedulePush = function() {
   }, 3000);
 };
 
-window._engineerPush = function() {
+window._engineerPush = function(_retriesLeft) {
   var m = _engActiveMembership();
   if (!_sb || !m) return;
   if (m.role !== 'write') return;
+  if (_retriesLeft === undefined) _retriesLeft = 4;
   var pid = m.pid;
   var payload = _engineerBuildPayload();
   _sb.rpc('engineer_put_data', { p_device_token: m.token, p_payload: payload }).then(function(r) {
@@ -19987,13 +20048,42 @@ window._engineerPush = function() {
         window._engineerLeaveProject(pid);
         return;
       }
-      toast('⚠️ Sync failed: ' + r.error.message, 'err');
+      // Network hiccup or transient server error (e.g. "TypeError: Load
+      // failed" when connectivity drops mid-request) — retry with backoff
+      // instead of giving up after one attempt. The entry is already saved
+      // locally either way; this only affects how fast it reaches the
+      // owner's dashboard / other devices on this project.
+      if (_retriesLeft > 0) {
+        setTimeout(function(){ window._engineerPush(_retriesLeft - 1); }, 3000);
+        return;
+      }
+      safeLS.setItem('cm_eng_push_pending', '1');
+      toast('⚠️ Sync failed: ' + r.error.message + ' — will retry when back online', 'err');
       return;
     }
+    safeLS.removeItem('cm_eng_push_pending');
     var dot = document.getElementById('engineer-sync-dot');
     if (dot) { dot.style.background = '#22c55e'; }
-  }).catch(function() {});
+  }).catch(function() {
+    if (_retriesLeft > 0) {
+      setTimeout(function(){ window._engineerPush(_retriesLeft - 1); }, 3000);
+    } else {
+      safeLS.setItem('cm_eng_push_pending', '1');
+      toast('⚠️ Sync failed — offline. Will retry when back online', 'err');
+    }
+  });
 };
+
+// The instant the browser regains connectivity, retry any engineer push
+// that failed while offline rather than waiting for the next manual edit.
+if (!window._sanjEngOnlineHandlerAttached) {
+  window._sanjEngOnlineHandlerAttached = true;
+  window.addEventListener('online', function() {
+    if (safeLS.getItem('cm_eng_push_pending') === '1' && typeof window._engineerPush === 'function') {
+      window._engineerPush();
+    }
+  });
+}
 
 // Pull cloud data for a specific membership and apply it into that
 // project's OWN local scope, regardless of which project is "active".
