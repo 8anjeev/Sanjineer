@@ -775,7 +775,12 @@ self.addEventListener('fetch', function(e) {
     var p = window.projects.find(function(x){ return x.id === projectId; });
     if (!p || !newName || !newName.trim()) return;
     p.name = newName.trim();
-    if (newAddress !== undefined) p.address = newAddress.trim();
+    if (newAddress !== undefined) {
+      p.address = newAddress.trim();
+      // Keep this project's own QDPR-facing profile in sync — window.projects[].address
+      // alone only reaches the admin's own devices, not QDPR or joined-by-link engineers.
+      if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(projectId, p.address);
+    }
     _saveProjects();
     _renderProjectDropdown();
     toast('✅ Renamed to "' + p.name + '"', 'ok');
@@ -1014,7 +1019,10 @@ self.addEventListener('fetch', function(e) {
         _showProjectModal('➕ New Project', '', function(n, addr) {
           var proj = createProject(n);
           if (proj) {
-            if (addr) proj.address = addr;
+            if (addr) {
+              proj.address = addr;
+              if (typeof _qdprSyncAddressToProfile === 'function') _qdprSyncAddressToProfile(proj.id, addr);
+            }
             _saveProjects();
             switchProject(proj.id);
           }
@@ -2047,42 +2055,116 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 <body>
 
 <!-- ========== WELCOME OVERLAY (first-time only, before any data) ========== -->
-<div id="welcome-overlay" style="display:none;position:fixed;inset:0;z-index:99999;overflow:hidden;background:#0a0818;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;">
-  <div style="position:absolute;top:-120px;left:-80px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,#4f46e5,#7c3aed);filter:blur(80px);opacity:0.55;animation:wBlob 14s ease-in-out infinite;pointer-events:none;"></div>
-  <div style="position:absolute;bottom:-80px;right:-60px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,#9333ea,#4f46e5);filter:blur(80px);opacity:0.55;animation:wBlob 10s ease-in-out infinite reverse;pointer-events:none;"></div>
-  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;"></div>
+<div id="welcome-overlay" style="display:none;position:fixed;inset:0;z-index:99999;overflow:hidden;background:#07050f;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;">
+  <div id="w-parallax" style="position:absolute;inset:0;pointer-events:none;">
+    <div id="w-blob1" style="position:absolute;top:-120px;left:-80px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,#4f46e5,#7c3aed);filter:blur(80px);opacity:0.55;animation:wBlob 14s ease-in-out infinite;"></div>
+    <div id="w-blob2" style="position:absolute;bottom:-80px;right:-60px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,#9333ea,#4f46e5);filter:blur(80px);opacity:0.55;animation:wBlob 10s ease-in-out infinite reverse;"></div>
+    <div id="w-blob3" style="position:absolute;top:38%;left:50%;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,#f59e0b,#f97316);filter:blur(95px);opacity:0.22;animation:wBlob 16s ease-in-out infinite;animation-delay:-4s;"></div>
+  </div>
+  <div id="w-mesh" style="position:absolute;inset:0;background:conic-gradient(from 0deg at 50% 50%,rgba(99,102,241,0.08),rgba(147,51,234,0.06),rgba(245,158,11,0.05),rgba(99,102,241,0.08));animation:wMesh 22s linear infinite;pointer-events:none;mix-blend-mode:screen;"></div>
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;mask-image:radial-gradient(circle at 50% 40%,black,transparent 75%);"></div>
+  <div id="w-particles" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;"></div>
   <div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#4f46e5,#9333ea,#f59e0b,transparent);opacity:0.6;"></div>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
     @keyframes wBlob{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-28px) scale(1.06);}}
+    @keyframes wMesh{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
     @keyframes wFUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
     @keyframes wPls{0%,100%{box-shadow:0 0 4px #6366f1;}50%{box-shadow:0 0 12px #6366f1,0 0 22px #6366f1aa;}}
-    .wa1{opacity:0;animation:wFUp .7s ease .1s forwards;}.wa2{opacity:0;animation:wFUp .7s ease .25s forwards;}
-    .wa3{opacity:0;animation:wFUp .7s ease .4s forwards;}.wa4{opacity:0;animation:wFUp .7s ease .55s forwards;}
-    .wa5{opacity:0;animation:wFUp .7s ease .7s forwards;}.wa6{opacity:0;animation:wFUp .7s ease .85s forwards;}
-    .w-go{position:relative;width:100%;padding:15px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;border:none;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 8px 30px rgba(79,70,229,0.45);transition:transform .18s,box-shadow .18s;overflow:hidden;}
-    .w-go:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(79,70,229,0.55);}
+    @keyframes wRing{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+    @keyframes wRingRev{0%{transform:rotate(360deg);}100%{transform:rotate(0deg);}}
+    @keyframes wShimmer{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+    @keyframes wFloatUp{0%{transform:translateY(0) translateX(0);opacity:0;}10%{opacity:.7;}90%{opacity:.4;}100%{transform:translateY(-420px) translateX(var(--wf-drift,20px));opacity:0;}}
+    @keyframes wChipIn{from{opacity:0;transform:translateY(10px) scale(.85);}to{opacity:1;transform:translateY(0) scale(1);}}
+    .wa1{opacity:0;animation:wFUp .7s cubic-bezier(.22,1,.36,1) .1s forwards;}.wa2{opacity:0;animation:wFUp .7s cubic-bezier(.22,1,.36,1) .25s forwards;}
+    .wa3{opacity:0;animation:wFUp .7s cubic-bezier(.22,1,.36,1) .4s forwards;}.wa4{opacity:0;animation:wFUp .7s cubic-bezier(.22,1,.36,1) .55s forwards;}
+    .wa5{opacity:0;animation:wFUp .7s cubic-bezier(.22,1,.36,1) .7s forwards;}.wa6{opacity:0;animation:wFUp .7s cubic-bezier(.22,1,.36,1) .85s forwards;}
+    .w-title{background:linear-gradient(90deg,#818cf8,#c084fc,#f59e0b,#c084fc,#818cf8);background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:wShimmer 6s ease-in-out infinite;}
+    .w-logo-wrap{position:relative;width:86px;height:86px;}
+    .w-logo-ring{position:absolute;inset:-14px;border-radius:28px;background:conic-gradient(from 0deg,#4f46e5,#c084fc,#f59e0b,#4f46e5);opacity:.55;filter:blur(1px);animation:wRing 6s linear infinite;-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}
+    .w-logo-ring2{position:absolute;inset:-24px;border-radius:34px;border:1px dashed rgba(255,255,255,0.18);animation:wRingRev 14s linear infinite;}
+    .w-go{position:relative;width:100%;padding:15px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;border:none;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 8px 30px rgba(79,70,229,0.45);transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s;overflow:hidden;}
+    .w-go:hover{transform:translateY(-2px) scale(1.015);box-shadow:0 14px 40px rgba(79,70,229,0.6);}
+    .w-go:active{transform:translateY(0) scale(.98);}
     .w-go .wsm{position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.13),transparent);transition:left .5s;}
     .w-go:hover .wsm{left:100%;}
     .w-ig{width:100%;padding:13px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);font-family:'DM Sans',sans-serif;font-weight:500;font-size:.88rem;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;text-decoration:none;backdrop-filter:blur(8px);}
     .w-ig:hover{background:rgba(255,255,255,0.10);border-color:rgba(255,255,255,0.22);transform:translateY(-1px);}
-    .w-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:99px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,0.55);font-family:'DM Sans',sans-serif;}
+    .w-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:99px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,0.55);font-family:'DM Sans',sans-serif;opacity:0;animation:wChipIn .45s cubic-bezier(.34,1.56,.64,1) both;animation-delay:.75s;transition:transform .18s,background .18s,color .18s,border-color .18s;}
+    .w-chip:hover{transform:translateY(-2px) scale(1.05);background:rgba(99,102,241,0.16);border-color:rgba(129,140,248,0.4);color:rgba(255,255,255,0.85);}
+    .wa4 .w-chip:nth-child(1){animation-delay:.72s;}.wa4 .w-chip:nth-child(2){animation-delay:.76s;}.wa4 .w-chip:nth-child(3){animation-delay:.80s;}
+    .wa4 .w-chip:nth-child(4){animation-delay:.84s;}.wa4 .w-chip:nth-child(5){animation-delay:.88s;}.wa4 .w-chip:nth-child(6){animation-delay:.92s;}
+    .wa4 .w-chip:nth-child(7){animation-delay:.96s;}.wa4 .w-chip:nth-child(8){animation-delay:1.00s;}.wa4 .w-chip:nth-child(9){animation-delay:1.04s;}
+    .wa4 .w-chip:nth-child(10){animation-delay:1.08s;}.wa4 .w-chip:nth-child(11){animation-delay:1.12s;}.wa4 .w-chip:nth-child(12){animation-delay:1.16s;}
+    .wa4 .w-chip:nth-child(13){animation-delay:1.20s;}.wa4 .w-chip:nth-child(14){animation-delay:1.24s;}.wa4 .w-chip:nth-child(15){animation-delay:1.28s;}
+    .wa4 .w-chip:nth-child(16){animation-delay:1.32s;}.wa4 .w-chip:nth-child(17){animation-delay:1.36s;}.wa4 .w-chip:nth-child(18){animation-delay:1.40s;}
   </style>
   <div style="position:relative;z-index:2;width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;">
     <div class="wa1" style="display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);border-radius:99px;padding:5px 14px;font-size:10.5px;font-weight:500;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.4rem;font-family:'DM Sans',sans-serif;"><span style="width:6px;height:6px;border-radius:50%;background:#6366f1;flex-shrink:0;animation:wPls 2s ease-in-out infinite;"></span>Construction Management App</div>
-    <div class="wa2" style="position:relative;margin-bottom:1.3rem;"><div style="position:absolute;inset:-20px;background:radial-gradient(circle,rgba(99,102,241,0.28) 0%,transparent 70%);z-index:-1;"></div><div style="width:86px;height:86px;background:linear-gradient(145deg,#f97316,#fb923c,#fdba74);border-radius:22px;overflow:hidden;box-shadow:0 0 40px rgba(249,115,22,0.55),0 0 80px rgba(249,115,22,0.2);position:relative;"><img crossorigin="anonymous" src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:86px;height:86px;object-fit:cover;display:block;" onerror="this.style.display='none'"></div></div>
-    <h1 class="wa3" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.3rem,9vw,3.2rem);line-height:1.05;text-align:center;color:#fff;letter-spacing:-.02em;margin:0 0 .75rem 0;">Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span></h1>
+    <div class="wa2" style="position:relative;margin-bottom:1.3rem;">
+      <div style="position:absolute;inset:-20px;background:radial-gradient(circle,rgba(99,102,241,0.28) 0%,transparent 70%);z-index:-1;"></div>
+      <div class="w-logo-wrap" id="w-logo-wrap">
+        <div class="w-logo-ring2"></div>
+        <div class="w-logo-ring"></div>
+        <div style="width:86px;height:86px;background:linear-gradient(145deg,#f97316,#fb923c,#fdba74);border-radius:22px;overflow:hidden;box-shadow:0 0 40px rgba(249,115,22,0.55),0 0 80px rgba(249,115,22,0.2);position:relative;transition:transform .25s cubic-bezier(.34,1.56,.64,1);"><img crossorigin="anonymous" src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:86px;height:86px;object-fit:cover;display:block;" onerror="this.style.display='none'"></div>
+      </div>
+    </div>
+    <h1 class="wa3" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.3rem,9vw,3.2rem);line-height:1.05;text-align:center;color:#fff;letter-spacing:-.02em;margin:0 0 .75rem 0;">Sanj<span class="w-title">ineer</span></h1>
     <p class="wa3" style="font-size:.88rem;line-height:1.65;color:rgba(255,255,255,0.48);text-align:center;max-width:280px;margin:0 0 1.7rem 0;font-weight:300;font-family:'DM Sans',sans-serif;">Your all-in-one site management tool — built for engineers who get things done.</p>
     <div class="wa4" style="display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:1.9rem;max-width:310px;">
       <span class="w-chip">📊 Dashboard</span><span class="w-chip">📋 Daily Report</span><span class="w-chip">📅 Attendance</span><span class="w-chip">⚙️ Machinery</span><span class="w-chip">💰 Expenses</span><span class="w-chip">🧱 Materials</span><span class="w-chip">🔧 Tools</span><span class="w-chip">📐 Drawings</span><span class="w-chip">📦 Rentals</span><span class="w-chip">🏗️ Dept Work</span><span class="w-chip">👥 Teams</span><span class="w-chip">📊 Budget</span><span class="w-chip">📅 Schedule</span><span class="w-chip">📋 BOQ DPR</span><span class="w-chip">📋 Punch List</span><span class="w-chip">🧾 Bill</span><span class="w-chip">💼 Quotation</span><span class="w-chip">🏛️ Site Visits</span>
     </div>
     <div class="wa5" style="display:flex;flex-direction:column;gap:11px;width:100%;">
-      <button class="w-go" onclick="dismissWelcome()"><span class="wsm"></span>Get Started<span style="width:22px;height:22px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;">→</span></button>
+      <button class="w-go" id="w-go-btn" onclick="dismissWelcome()"><span class="wsm"></span>Get Started<span style="width:22px;height:22px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;">→</span></button>
       <a href="https://www.instagram.com/sanjineer" target="_blank" rel="noopener" class="w-ig"><span style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" stroke="white" stroke-width="2.2"/><circle cx="12" cy="12" r="4" stroke="white" stroke-width="2.2"/><circle cx="17.5" cy="6.5" r="1.2" fill="white"/></svg></span><span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;"><span style="font-weight:700;font-size:13px;color:#fff;">@sanjineer</span><span style="font-size:10px;color:rgba(255,255,255,0.42);">Follow for updates &amp; DM for support</span></span><svg style="margin-left:auto;opacity:0.35;flex-shrink:0;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>
     </div>
     <p class="wa6" style="margin-top:1.5rem;font-size:10px;color:rgba(255,255,255,0.2);text-align:center;font-family:'DM Sans',sans-serif;">Made with ❤️ for site engineers</p>
   </div>
 </div>
+<script>
+// ── Landing page premium micro-interactions: floating particles + mouse parallax ──
+(function(){
+  function initWelcomeFX(){
+    var overlay = document.getElementById('welcome-overlay');
+    var pWrap = document.getElementById('w-particles');
+    if (!overlay || !pWrap || pWrap.dataset.built) return;
+    pWrap.dataset.built = '1';
+    // Floating dust particles
+    var n = window.innerWidth < 480 ? 14 : 22;
+    for (var i = 0; i < n; i++) {
+      var d = document.createElement('div');
+      var size = 2 + Math.random() * 3;
+      var left = Math.random() * 100;
+      var dur = 9 + Math.random() * 10;
+      var delay = Math.random() * 12;
+      var drift = (Math.random() * 60 - 30) + 'px';
+      var hueSet = ['#818cf8', '#c084fc', '#f59e0b', '#34d399'];
+      d.style.cssText = 'position:absolute;left:' + left + '%;bottom:-10px;width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + hueSet[i % hueSet.length] + ';opacity:0;filter:blur(.3px);box-shadow:0 0 6px currentColor;--wf-drift:' + drift + ';animation:wFloatUp ' + dur + 's ease-in ' + delay + 's infinite;';
+      pWrap.appendChild(d);
+    }
+    // Subtle mouse-move parallax on blobs + logo (desktop only)
+    if (window.matchMedia && window.matchMedia('(pointer:fine)').matches) {
+      var b1 = document.getElementById('w-blob1'), b2 = document.getElementById('w-blob2'), b3 = document.getElementById('w-blob3');
+      var logo = document.getElementById('w-logo-wrap');
+      overlay.addEventListener('mousemove', function(e){
+        var x = (e.clientX / window.innerWidth - 0.5);
+        var y = (e.clientY / window.innerHeight - 0.5);
+        if (b1) b1.style.transform = 'translate(' + (x * 22) + 'px,' + (y * 22) + 'px)';
+        if (b2) b2.style.transform = 'translate(' + (x * -26) + 'px,' + (y * -26) + 'px)';
+        if (b3) b3.style.transform = 'translate(' + (x * 16) + 'px,' + (y * 16) + 'px)';
+        if (logo) logo.style.transform = 'rotateY(' + (x * 14) + 'deg) rotateX(' + (y * -14) + 'deg)';
+      });
+      overlay.style.perspective = '700px';
+      if (logo) logo.style.transformStyle = 'preserve-3d';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    // welcome-overlay may be display:none initially; run FX setup regardless,
+    // it's inert (no layout cost) until the overlay is actually shown.
+    initWelcomeFX();
+  });
+})();
+</script>
 <script>
 var WELCOME_FLAG='sanj_welcomed';
 var WELCOME_VER='sanj_welcome_v2'; // bump this string to re-show welcome on new app version
@@ -2201,18 +2283,38 @@ function _launchApp(){
 <!-- ═══════════════════════════════════════════════════════════
      AUTH ONBOARD — shows after welcome, before main app
      ═══════════════════════════════════════════════════════════ -->
-<div id="auth-onboard" style="display:none;position:fixed;inset:0;z-index:99998;background:#0a0818;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;overflow-y:auto;">
+<div id="auth-onboard" style="display:none;position:fixed;inset:0;z-index:99998;background:#07050f;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;overflow-y:auto;">
   <!-- blobs -->
-  <div style="position:absolute;top:-80px;right:-60px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,#4f46e5,#7c3aed);filter:blur(70px);opacity:0.45;pointer-events:none;"></div>
-  <div style="position:absolute;bottom:-60px;left:-40px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,#059669,#0d9488);filter:blur(70px);opacity:0.35;pointer-events:none;"></div>
-  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);background-size:36px 36px;pointer-events:none;"></div>
+  <div style="position:absolute;top:-80px;right:-60px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,#4f46e5,#7c3aed);filter:blur(70px);opacity:0.45;pointer-events:none;animation:wBlob 13s ease-in-out infinite;"></div>
+  <div style="position:absolute;bottom:-60px;left:-40px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,#059669,#0d9488);filter:blur(70px);opacity:0.35;pointer-events:none;animation:wBlob 11s ease-in-out infinite reverse;"></div>
+  <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);background-size:36px 36px;pointer-events:none;mask-image:radial-gradient(circle at 50% 35%,black,transparent 75%);"></div>
 
-  <div style="position:relative;z-index:2;width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;">
+  <style>
+    @keyframes obUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+    .ob-card{opacity:0;animation:obUp .55s cubic-bezier(.22,1,.36,1) forwards;}
+    .ob-fx1{animation-delay:.05s;}.ob-fx2{animation-delay:.15s;}.ob-fx3{animation-delay:.25s;}.ob-fx4{animation-delay:.35s;}.ob-fx5{animation-delay:.45s;}
+    .ob-primary-btn{position:relative;overflow:hidden;transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s;}
+    .ob-primary-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(79,70,229,0.5);}
+    .ob-primary-btn:active{transform:scale(.98);}
+    .ob-primary-btn .ob-sheen{position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.16),transparent);transition:left .5s;}
+    .ob-primary-btn:hover .ob-sheen{left:100%;}
+    .ob-ghost-btn{transition:transform .15s cubic-bezier(.34,1.56,.64,1),background .15s,border-color .15s;}
+    .ob-ghost-btn:hover{transform:translateY(-1px);filter:brightness(1.12);}
+    .ob-ghost-btn:active{transform:scale(.97);}
+    .ob-feat-row{display:flex;align-items:center;gap:8px;padding:5px 0;}
+    .ob-feat-ic{width:20px;height:20px;border-radius:6px;background:rgba(165,180,252,0.16);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+  </style>
+
+  <div class="ob-card ob-fx1" style="position:relative;z-index:2;width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;background:rgba(255,255,255,0.035);border:1px solid rgba(255,255,255,0.09);border-radius:22px;padding:1.5rem 1.25rem 1.35rem;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 20px 60px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.06);">
+    <div style="position:absolute;top:0;left:14px;right:14px;height:1px;background:linear-gradient(90deg,transparent,rgba(129,140,248,0.5),rgba(192,132,252,0.5),transparent);"></div>
 
     <!-- Logo + name -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.6rem;">
-      <div style="width:46px;height:46px;background:linear-gradient(145deg,#f97316,#fb923c);border-radius:14px;overflow:hidden;box-shadow:0 0 24px rgba(249,115,22,0.5);flex-shrink:0;">
-        <img src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:46px;height:46px;object-fit:cover;" onerror="this.style.display='none'">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem;">
+      <div style="position:relative;width:46px;height:46px;flex-shrink:0;">
+        <div style="position:absolute;inset:-6px;border-radius:16px;background:conic-gradient(from 0deg,#4f46e5,#c084fc,#f59e0b,#4f46e5);opacity:.5;filter:blur(1px);animation:wRing 7s linear infinite;-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 2px));"></div>
+        <div style="position:relative;width:46px;height:46px;background:linear-gradient(145deg,#f97316,#fb923c);border-radius:14px;overflow:hidden;box-shadow:0 0 24px rgba(249,115,22,0.5);">
+          <img src="https://cdn.jsdelivr.net/gh/8anjeev/Sanjineer@main/assets/logo.png" style="width:46px;height:46px;object-fit:cover;" onerror="this.style.display='none'">
+        </div>
       </div>
       <div>
         <p style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;color:#fff;margin:0;line-height:1;">Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span></p>
@@ -2224,43 +2326,44 @@ function _launchApp(){
     <div id="ob-menu-section" style="width:100%;">
 
       <!-- 1. Continue Offline — primary CTA, right below logo -->
-      <button onclick="obChooseLocal()" style="width:100%;padding:11px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:14px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 3px 10px rgba(79,70,229,0.35);transition:transform .15s;display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;" ontouchstart="this.style.transform='scale(.97)'" ontouchend="this.style.transform='scale(1)'">
-        <span style="font-size:17px;">💾</span> Continue Offline
+      <button class="ob-primary-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:12px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:14px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,0.4);display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;">
+        <span class="ob-sheen"></span>
+        <span style="width:26px;height:26px;background:rgba(255,255,255,0.18);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💾</span> Continue Offline
       </button>
-      <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.28);margin:0 0 10px;">No account needed — your data stays on this device</p>
+      <p class="ob-card ob-fx2" style="text-align:center;font-size:10px;color:rgba(255,255,255,0.32);margin:0 0 10px;">No account needed — your data stays on this device</p>
 
       <!-- 2. Join Project — right after Continue Offline -->
-      <button onclick="obGoJoinProject()" style="width:100%;padding:9px 6px;background:rgba(217,119,6,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:12px;color:#fde68a;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .15s;margin-bottom:16px;" ontouchstart="this.style.transform='scale(.98)'" ontouchend="this.style.transform='scale(1)'">
+      <button class="ob-ghost-btn ob-card ob-fx3" onclick="obGoJoinProject()" style="width:100%;padding:10px 6px;background:rgba(217,119,6,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:12px;color:#fde68a;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:16px;">
         <span style="font-size:15px;">🤝</span> Join a Project with Code
       </button>
 
       <!-- divider -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div style="flex:1;height:1px;background:rgba(255,255,255,0.1);"></div>
-        <p style="font-size:9px;color:rgba(255,255,255,0.32);font-weight:700;letter-spacing:.06em;margin:0;">OR USE A CLOUD ACCOUNT</p>
-        <div style="flex:1;height:1px;background:rgba(255,255,255,0.1);"></div>
+      <div class="ob-card ob-fx3" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.14));"></div>
+        <p style="font-size:9px;color:rgba(255,255,255,0.35);font-weight:700;letter-spacing:.06em;margin:0;white-space:nowrap;">OR USE A CLOUD ACCOUNT</p>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,0.14),transparent);"></div>
       </div>
 
       <!-- PRO features teaser -->
-      <div style="width:100%;background:linear-gradient(135deg,rgba(79,70,229,0.14),rgba(139,92,246,0.1));border:1px solid rgba(165,180,252,0.25);border-radius:14px;padding:10px 13px;margin-bottom:12px;">
+      <div class="ob-card ob-fx4" style="width:100%;background:linear-gradient(135deg,rgba(79,70,229,0.16),rgba(139,92,246,0.1));border:1px solid rgba(165,180,252,0.25);border-radius:14px;padding:11px 13px;margin-bottom:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
           <span style="font-size:13px;">👑</span>
-          <p style="margin:0;font-size:11.5px;font-weight:800;color:#c7d2fe;">PRO Features — ₹30/month</p>
+          <p style="margin:0;font-size:11.5px;font-weight:800;color:#c7d2fe;">PRO &amp; Enterprise — from ₹30/month</p>
         </div>
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">🗂️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Multi-Project — manage unlimited projects</p></div>
-          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">🖼️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Your company logo on every PDF &amp; report</p></div>
-          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">🔄</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Real-time cloud sync across all devices</p></div>
-          <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:10px;flex-shrink:0">👁️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Unlimited viewer accounts — free</p></div>
+        <div style="display:flex;flex-direction:column;">
+          <div class="ob-feat-row"><span class="ob-feat-ic">🗂️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Multi-Project — manage unlimited projects</p></div>
+          <div class="ob-feat-row"><span class="ob-feat-ic">🖼️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Your company logo on every PDF &amp; report</p></div>
+          <div class="ob-feat-row"><span class="ob-feat-ic">🔄</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Real-time cloud sync across all devices</p></div>
+          <div class="ob-feat-row"><span class="ob-feat-ic">👁️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Unlimited viewer accounts — free</p></div>
         </div>
       </div>
 
       <!-- 3 & 4. Login / Create — compact, side by side -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <button onclick="obGoLogin()" style="padding:9px 6px;background:rgba(79,70,229,0.14);border:1px solid rgba(129,140,248,0.35);border-radius:11px;color:#c7d2fe;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s;" ontouchstart="this.style.transform='scale(.96)'" ontouchend="this.style.transform='scale(1)'">
+      <div class="ob-card ob-fx5" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <button class="ob-ghost-btn" onclick="obGoLogin()" style="padding:10px 6px;background:rgba(79,70,229,0.14);border:1px solid rgba(129,140,248,0.35);border-radius:11px;color:#c7d2fe;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
           <span style="font-size:14px;">🔑</span>Login
         </button>
-        <button onclick="obGoSignup()" style="padding:9px 6px;background:rgba(5,150,105,0.14);border:1px solid rgba(52,211,153,0.35);border-radius:11px;color:#a7f3d0;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s;" ontouchstart="this.style.transform='scale(.96)'" ontouchend="this.style.transform='scale(1)'">
+        <button class="ob-ghost-btn" onclick="obGoSignup()" style="padding:10px 6px;background:rgba(5,150,105,0.14);border:1px solid rgba(52,211,153,0.35);border-radius:11px;color:#a7f3d0;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
           <span style="font-size:14px;">✨</span>Create Account
         </button>
       </div>
@@ -2272,45 +2375,65 @@ function _launchApp(){
         <p style="margin:0;font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);">Cloud Account</p>
         <button onclick="obShowMenu()" title="Back" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
       </div>
+      <style>
+        .ob-input{transition:border-color .18s,box-shadow .18s,background .18s;}
+        .ob-input:focus{border-color:rgba(165,180,252,.6)!important;box-shadow:0 0 0 3px rgba(99,102,241,0.18);background:rgba(255,255,255,.1)!important;}
+        .ob-tab-btn{transition:all .18s cubic-bezier(.34,1.56,.64,1);}
+        .ob-submit-btn{transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s,filter .16s;}
+        .ob-submit-btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08);}
+        .ob-submit-btn:active:not(:disabled){transform:scale(.98);}
+      </style>
       <!-- Tab switcher -->
       <div style="display:flex;gap:5px;background:rgba(255,255,255,0.06);border-radius:12px;padding:4px;margin-bottom:14px;">
-        <button id="ob-tab-login" onclick="obSwitchAuthTab('login')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;transition:all .18s;">🔑 Login</button>
-        <button id="ob-tab-signup" onclick="obSwitchAuthTab('signup')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:transparent;color:rgba(255,255,255,0.5);transition:all .18s;">✨ Create ID</button>
+        <button id="ob-tab-login" class="ob-tab-btn" onclick="obSwitchAuthTab('login')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">🔑 Login</button>
+        <button id="ob-tab-signup" class="ob-tab-btn" onclick="obSwitchAuthTab('signup')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:transparent;color:rgba(255,255,255,0.5);">✨ Create ID</button>
       </div>
 
       <!-- LOGIN panel — OTP flow -->
       <div id="ob-panel-login">
         <!-- Step 1: Email input -->
         <div id="ob-otp-step1">
-          <input id="ob-login-email" type="email" placeholder="your@email.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;" oninput="this.style.borderColor='rgba(255,255,255,.3)'">
+          <input id="ob-login-email" class="ob-input" type="email" placeholder="your@email.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
           <p id="ob-login-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-send-otp-btn" onclick="obSendOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.45);">📧 Send OTP</button>
+          <button id="ob-send-otp-btn" class="ob-submit-btn" onclick="obSendOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.45);">📧 Send OTP</button>
         </div>
         <!-- Step 2: OTP verification -->
         <div id="ob-otp-step2" style="display:none;">
           <p id="ob-otp-sent-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 10px;text-align:center;font-weight:600;"></p>
-          <input id="ob-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);this.style.borderColor='rgba(165,180,252,.6)'">
+          <input id="ob-otp-input" class="ob-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);">
           <p id="ob-otp-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-verify-otp-btn" onclick="obVerifyOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Login</button>
-          <button onclick="obResetOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
+          <button id="ob-verify-otp-btn" class="ob-submit-btn" onclick="obVerifyOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Login</button>
+          <button class="ob-ghost-btn" onclick="obResetOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
         </div>
       </div>
 
       <!-- SIGNUP panel — OTP only (same flow, account auto-created) -->
       <div id="ob-panel-signup" style="display:none;">
+        <!-- Plan toggle: Pro vs Enterprise (both launch-priced ₹30/mo) -->
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:10px;margin-bottom:12px;">
+          <div id="ob-plan-toggle" style="display:flex;gap:5px;background:rgba(0,0,0,0.25);border-radius:11px;padding:4px;margin-bottom:9px;">
+            <button type="button" id="ob-plan-btn-pro" onclick="obSelectSignupPlan('pro')" style="flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">Pro</button>
+            <button type="button" id="ob-plan-btn-ent" onclick="obSelectSignupPlan('enterprise')" style="flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;gap:4px;">Enterprise<span style="background:#f59e0b;color:#1e1b4b;font-size:8px;font-weight:800;padding:1px 5px;border-radius:6px;">NEW</span></button>
+          </div>
+          <div id="ob-plan-price-line" style="display:flex;align-items:baseline;justify-content:center;gap:7px;margin-bottom:2px;">
+            <span id="ob-plan-strike" style="display:none;font-size:12px;font-weight:700;color:rgba(255,255,255,0.35);text-decoration:line-through;">₹99/mo</span>
+            <span style="font-size:22px;font-weight:900;color:#fff;line-height:1;">₹30<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);">/month</span></span>
+          </div>
+          <p id="ob-plan-desc" style="text-align:center;font-size:9.5px;color:rgba(255,255,255,0.4);margin:0;">Unlimited projects · logo on PDFs · cloud sync · viewers</p>
+        </div>
         <p style="font-size:10px;color:rgba(255,255,255,0.5);margin:0 0 10px;text-align:center;">Enter your email — we'll send a verification code to create your account.</p>
         <div id="ob-signup-step1">
-          <input id="ob-signup-name" type="text" placeholder="Your Name / Site Name (optional)" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;" oninput="this.style.borderColor='rgba(255,255,255,.3)'">
-          <input id="ob-signup-email" type="email" placeholder="admin@example.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;" oninput="this.style.borderColor='rgba(255,255,255,.3)'">
+          <input id="ob-signup-name" class="ob-input" type="text" placeholder="Your Name / Site Name (optional)" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
+          <input id="ob-signup-email" class="ob-input" type="email" placeholder="admin@example.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
           <p id="ob-signup-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-signup-btn" onclick="obSendSignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);">📧 Send OTP</button>
+          <button id="ob-signup-btn" class="ob-submit-btn" onclick="obSendSignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);">📧 Send OTP</button>
         </div>
         <div id="ob-signup-step2" style="display:none;">
           <p id="ob-signup-otp-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 10px;text-align:center;font-weight:600;"></p>
-          <input id="ob-signup-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);this.style.borderColor='rgba(165,180,252,.6)'">
+          <input id="ob-signup-otp-input" class="ob-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);">
           <p id="ob-signup-otp-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-verify-signup-btn" onclick="obVerifySignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Create Account</button>
-          <button onclick="obResetSignupOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
+          <button id="ob-verify-signup-btn" class="ob-submit-btn" onclick="obVerifySignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Create Account</button>
+          <button class="ob-ghost-btn" onclick="obResetSignupOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
         </div>
       </div>
 
@@ -2343,6 +2466,31 @@ function obGoSignup(){
   if (menuSec)  menuSec.style.display  = 'none';
   if (cloudSec) cloudSec.style.display = 'block';
   obSwitchAuthTab('signup');
+  obSelectSignupPlan('pro');
+}
+
+// ── Plan toggle on the Create Account panel: Pro vs Enterprise ──
+// Both are launch-priced at ₹30/month; Enterprise additionally unlocks
+// cross-device project sharing and shows its usual ₹99 struck through.
+// The choice made here is carried through to the post-signup payment
+// screen (see openPayLanding), so whichever tier the person taps is
+// exactly what they're charged for and what gets activated.
+window._obSelectedPlan = 'pro';
+function obSelectSignupPlan(plan){
+  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
+  window._obSelectedPlan = plan;
+  var proBtn = document.getElementById('ob-plan-btn-pro');
+  var entBtn = document.getElementById('ob-plan-btn-ent');
+  var onStyle  = 'flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;';
+  var offStyle = 'flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);';
+  if (proBtn) proBtn.setAttribute('style', plan === 'pro' ? onStyle : offStyle);
+  if (entBtn) entBtn.setAttribute('style', (plan === 'enterprise' ? onStyle : offStyle) + 'display:flex;align-items:center;justify-content:center;gap:4px;');
+  var strike = document.getElementById('ob-plan-strike');
+  var descEl = document.getElementById('ob-plan-desc');
+  if (strike) strike.style.display = plan === 'enterprise' ? 'inline' : 'none';
+  if (descEl) descEl.textContent = plan === 'enterprise'
+    ? 'Everything in Pro + cross-device project sharing via join code'
+    : 'Unlimited projects · logo on PDFs · cloud sync · viewers';
 }
 
 // "Join Project" needs no login — open the existing Join Project modal (code entry)
@@ -2357,6 +2505,13 @@ function obGoJoinProject(){
     // Let the modal render before switching tabs
     setTimeout(function(){
       if (typeof switchCloudTab === 'function') switchCloudTab('join');
+      // Coming from "Join a Project with Code" on the welcome screen — the
+      // person already chose to join, so don't tempt them with Login/Create
+      // tabs here. Just the Join Project form, full width.
+      var adminBtn  = document.getElementById('ctab-admin-btn');
+      var createBtn = document.getElementById('ctab-create-btn');
+      if (adminBtn)  adminBtn.style.display  = 'none';
+      if (createBtn) createBtn.style.display = 'none';
     }, 40);
   }
 }
@@ -2920,7 +3075,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
       <span style="font-size:15px;flex-shrink:0">👤</span>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span>My Profile</span>
-        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Your name · header colour</span>
+        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">Company info · name · header colour</span>
       </div>
     </button>
 
@@ -5537,7 +5692,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="grid grid-cols-2 gap-2 mb-2">
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Sheet No.</label><input type="text" id="ms-no" placeholder="MS-001" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="ms-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Item / Description</label><input type="text" id="ms-title" placeholder="e.g. Brick Masonry — First Floor" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Item / Description</label><input type="text" id="msh-title" placeholder="e.g. Brick Masonry — First Floor" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Location / Notes</label><input type="text" id="ms-location" placeholder="Location / Remarks" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
     </div>
     <!-- Measurement rows table -->
@@ -5707,14 +5862,48 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Edit Profile -->
 
-<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('profile-modal'))closeProfileModal()">
-  <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl">
+<div id="profile-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none;overflow-y:auto" onclick="if(event.target===this&&_modalGuardOk('profile-modal'))closeProfileModal()">
+  <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl" style="max-height:92vh;overflow-y:auto">
     <div class="flex items-center justify-between mb-1">
       <h3 class="font-bold text-gray-800">⚙️ My Profile</h3>
       <button onclick="closeProfileModal()" class="text-gray-400 text-xl">✕</button>
     </div>
-    <p class="text-xs text-gray-400 mb-2">Your name appears on the Daily Report. Header colour is your personal display preference.</p>
+    <p class="text-xs text-gray-400 mb-2">Company details appear on every PDF & report. Your name and header colour are your personal display preference.</p>
     <div class="space-y-3">
+      <!-- Company Settings (name, address, GST, logo) — shared across the whole company. -->
+      <!-- Editable by everyone EXCEPT users who joined this project via a project code/link — -->
+      <!-- the basic company setup is done once by the project owner. -->
+      <div>
+        <h4 class="text-xs font-bold text-gray-700 flex items-center gap-1">👑 Company Settings</h4>
+        <p class="text-[10px] text-gray-400 mb-2">Shown on every PDF & report across all your projects.</p>
+      </div>
+      <p id="profile-company-lock-note" style="display:none;font-size:10px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:5px 8px;margin:-4px 0 2px">🔒 Only the project owner can edit company details. You can still edit your name and header colour below.</p>
+      <div id="profile-company-section" class="space-y-3">
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Address <span class="font-normal text-gray-400">(Optional — shown on invoices)</span></label><input id="edit-address" type="text" placeholder="Company address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">GST No. <span class="font-normal text-gray-400">(Optional)</span></label><input id="edit-gst" type="text" placeholder="GST number" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <!-- Logo upload -->
+        <div>
+          <label class="text-xs font-semibold text-gray-500 block mb-1">Company Logo <span class="font-normal text-gray-400">(Optional — shown on PDFs)</span>
+            <span style="display:inline-flex;align-items:center;padding:1px 6px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;border-radius:99px;font-size:9px;font-weight:800;margin-left:4px;letter-spacing:.04em;vertical-align:middle">PRO</span>
+          </label>
+          <div class="flex items-center gap-3">
+            <label id="logo-upload-label" class="flex-1 flex items-center gap-2 px-3 py-2 bg-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl cursor-pointer active:scale-95" onclick="if(!window._isProfileOwner){event.preventDefault();return false;}if(!window.isProUser){event.preventDefault();_showUpgradePopup('Logo Upload');return false;}">
+              <span style="font-size:13px">🖼️</span>
+              <span class="text-xs font-bold text-indigo-600">Upload Logo</span><span class="text-xs text-indigo-400 ml-1">PNG / JPG</span>
+              <input type="file" id="edit-logo-file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml,image/*" class="hidden" onchange="loadProfileLogo(event)">
+            </label>
+            <div id="edit-logo-preview" style="display:none;width:48px;height:48px;border-radius:8px;border:2px solid #e5e7eb;overflow:hidden;flex-shrink:0">
+              <img id="edit-logo-img" style="width:100%;height:100%;object-fit:contain">
+            </div>
+            <button id="edit-logo-clear" onclick="clearProfileLogo()" style="display:none;padding:0 12px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✕</button>
+          </div>
+          <p id="logo-pro-hint" style="display:none;font-size:9px;color:#f59e0b;margin-top:3px;font-weight:600">🔒 PRO feature — tap to upgrade</p>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #f1f5f9;margin:2px 0 0"></div>
+
       <div><label class="text-xs font-semibold text-gray-500 block mb-1">Engineer / Your Name</label><input id="edit-engineer" type="text" placeholder="e.g. Er. Sanjeev Kumar" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <!-- Print Header Colour -->
       <div>
@@ -5722,42 +5911,8 @@ document.addEventListener('DOMContentLoaded', function() {
         <div id="color-swatches" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px"></div>
         <input type="text" id="edit-header-color" placeholder="Custom CSS e.g. #4f46e5" class="w-full px-3 py-1.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-indigo-400 mt-1" oninput="previewHeaderColor(this.value)">
       </div>
-      <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Profile</button>
-    </div>
-  </div>
-</div>
 
-<!-- Owner-only: Company Settings (name, address, GST, logo) — shared across the whole company -->
-<div id="owner-company-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('owner-company-modal'))closeOwnerCompanyModal()">
-  <div class="bg-white rounded-2xl p-3 w-full max-w-sm shadow-2xl">
-    <div class="flex items-center justify-between mb-1">
-      <h3 class="font-bold text-gray-800">👑 Company Settings</h3>
-      <button onclick="closeOwnerCompanyModal()" class="text-gray-400 text-xl">✕</button>
-    </div>
-    <p class="text-xs text-gray-400 mb-2">Shown on every PDF & report across all your projects.</p>
-    <div class="space-y-3">
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Company Name</label><input id="edit-company" type="text" placeholder="e.g. Sanjeev Constructions" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Address <span class="font-normal text-gray-400">(Optional — shown on invoices)</span></label><input id="edit-address" type="text" placeholder="Company address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div><label class="text-xs font-semibold text-gray-500 block mb-1">GST No. <span class="font-normal text-gray-400">(Optional)</span></label><input id="edit-gst" type="text" placeholder="GST number" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <!-- Logo upload -->
-      <div>
-        <label class="text-xs font-semibold text-gray-500 block mb-1">Company Logo <span class="font-normal text-gray-400">(Optional — shown on PDFs)</span>
-          <span style="display:inline-flex;align-items:center;padding:1px 6px;background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;border-radius:99px;font-size:9px;font-weight:800;margin-left:4px;letter-spacing:.04em;vertical-align:middle">PRO</span>
-        </label>
-        <div class="flex items-center gap-3">
-          <label id="logo-upload-label" class="flex-1 flex items-center gap-2 px-3 py-2 bg-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl cursor-pointer active:scale-95" onclick="if(!window.isProUser){event.preventDefault();_showUpgradePopup('Logo Upload');return false;}">
-            <span style="font-size:13px">🖼️</span>
-            <span class="text-xs font-bold text-indigo-600">Upload Logo</span><span class="text-xs text-indigo-400 ml-1">PNG / JPG</span>
-            <input type="file" id="edit-logo-file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml,image/*" class="hidden" onchange="loadProfileLogo(event)">
-          </label>
-          <div id="edit-logo-preview" style="display:none;width:48px;height:48px;border-radius:8px;border:2px solid #e5e7eb;overflow:hidden;flex-shrink:0">
-            <img id="edit-logo-img" style="width:100%;height:100%;object-fit:contain">
-          </div>
-          <button id="edit-logo-clear" onclick="clearProfileLogo()" style="display:none;padding:0 12px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">✕</button>
-        </div>
-        <p id="logo-pro-hint" style="display:none;font-size:9px;color:#f59e0b;margin-top:3px;font-weight:600">🔒 PRO feature — tap to upgrade</p>
-      </div>
-      <button onclick="saveOwnerCompany()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Company Settings</button>
+      <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Profile</button>
     </div>
   </div>
 </div>
@@ -6899,25 +7054,25 @@ function applyProfile() {
   // Apply saved header colour to app header
   setTimeout(applyHeaderColor, 50);
 }
+// Company Settings are editable by everyone EXCEPT a user who joined this
+// specific project via a project code/link (_ENGINEER_MODE) — the basic
+// company setup is a one-time thing done by the project owner. This is
+// intentionally independent of cloud sign-in / PRO status, so offline-only
+// and non-PRO users who are NOT joined-by-link still get full access.
+function _isProfileOwnerNow() {
+  return !window._ENGINEER_MODE;
+}
+
 function openEditProfile() {
   _refreshProStatus();
   var p = lmergedProf();
+
+  // ── Personal fields: name, header colour — editable by everyone ──
   document.getElementById('edit-engineer').value = p.engineer || '';
-  // Build colour swatches
   _buildColorSwatches(p.headerColor || '');
   document.getElementById('edit-header-color').value = p.headerColor || '';
-  _armModalGuard('profile-modal');
-  document.getElementById('profile-modal').classList.add('modal-show');
-}
 
-// ── Owner-only: Company Settings (name, address, GST, logo) ──
-function openOwnerCompanyModal() {
-  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
-    if (typeof toast === 'function') toast('⚠️ Owner / admin only', 'err');
-    return;
-  }
-  _refreshProStatus();
-  var p = lmergedProf();
+  // ── Company fields: name, address, GST, logo — owner/admin only ──
   document.getElementById('edit-company').value = p.company || '';
   document.getElementById('edit-address').value = p.address || '';
   document.getElementById('edit-gst').value = p.gst || '';
@@ -6933,39 +7088,38 @@ function openOwnerCompanyModal() {
     if (prev) prev.style.display = 'none';
     if (clr) clr.style.display = 'none';
   }
-  // PRO hint
+
+  var isOwner = _isProfileOwnerNow();
+  window._isProfileOwner = isOwner; // read by the logo-upload label's inline guard
+
+  var section  = document.getElementById('profile-company-section');
+  var lockNote = document.getElementById('profile-company-lock-note');
+  var coInputs = ['edit-company', 'edit-address', 'edit-gst'];
+  coInputs.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.readOnly = !isOwner;
+  });
+  if (section) section.style.opacity = isOwner ? '' : '0.6';
+  if (lockNote) lockNote.style.display = isOwner ? 'none' : 'block';
+
+  var fileEl = document.getElementById('edit-logo-file');
+  if (fileEl) fileEl.disabled = !isOwner;
+  var clrBtn = document.getElementById('edit-logo-clear');
+  if (clrBtn) clrBtn.style.pointerEvents = isOwner ? '' : 'none';
+
+  // PRO hint (owner only — logo upload is irrelevant/locked for non-owners)
   var lbl = document.getElementById('logo-upload-label');
   var hint = document.getElementById('logo-pro-hint');
-  if (!window.isProUser) {
+  if (isOwner && !window.isProUser) {
     if (lbl) { lbl.style.opacity = '0.55'; lbl.style.borderColor = '#fcd34d'; lbl.style.background = '#fffbeb'; }
     if (hint) hint.style.display = 'block';
   } else {
-    if (lbl) { lbl.style.opacity = ''; lbl.style.borderColor = ''; lbl.style.background = ''; }
+    if (lbl) { lbl.style.opacity = isOwner ? '' : '0.5'; lbl.style.borderColor = isOwner ? '' : '#e5e7eb'; lbl.style.background = isOwner ? '' : '#f8fafc'; lbl.style.cursor = isOwner ? 'pointer' : 'not-allowed'; }
     if (hint) hint.style.display = 'none';
   }
-  var m = document.getElementById('owner-company-modal');
-  _armModalGuard('owner-company-modal');
-  if (m) m.style.display = 'flex';
-}
-function closeOwnerCompanyModal() {
-  var m = document.getElementById('owner-company-modal');
-  if (m) m.style.display = 'none';
-}
-function saveOwnerCompany() {
-  var co = document.getElementById('edit-company').value.trim();
-  if (!co) { toast('Please enter a company name', 'err'); return; }
-  var existingGlobal = lglobal() || {};
-  var logoEl  = document.getElementById('edit-logo-img');
-  var logoSrc = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
-  sglobal({
-    company: co,
-    address: document.getElementById('edit-address').value.trim(),
-    gst:     document.getElementById('edit-gst').value.trim(),
-    logo:    logoSrc || existingGlobal.logo || null
-  });
-  applyProfile();
-  closeOwnerCompanyModal();
-  toast('Company settings saved!', 'ok');
+
+  _armModalGuard('profile-modal');
+  document.getElementById('profile-modal').classList.add('modal-show');
 }
 
 var _HEADER_COLORS = [
@@ -7040,7 +7194,7 @@ function saveProfile() {
   var existingPerProj = lmergedProf();
   var hColor  = (document.getElementById('edit-header-color').value.trim()) || existingPerProj.headerColor || '';
 
-  // ── PER-USER fields: engineer name, header colour ──
+  // ── PER-USER fields: engineer name, header colour — everyone can save these ──
   // Merge into whatever's already in this project's profile (rather than
   // replacing it outright) — otherwise saving your name/colour here would
   // silently wipe out the project's own address, which QDPR stores in this
@@ -7050,6 +7204,24 @@ function saveProfile() {
     engineer:    en,
     headerColor: hColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   }));
+
+  // ── COMPANY fields: name, address, GST, logo — owner/admin only ──
+  // Re-check ownership here (not just trust the UI's read-only state) so a
+  // joined-by-link user can never write company data even if the DOM were
+  // tampered with.
+  if (_isProfileOwnerNow()) {
+    var co = document.getElementById('edit-company').value.trim();
+    if (!co) { toast('Please enter a company name', 'err'); return; }
+    var existingGlobal = lglobal() || {};
+    var logoEl  = document.getElementById('edit-logo-img');
+    var logoSrc = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
+    sglobal({
+      company: co,
+      address: document.getElementById('edit-address').value.trim(),
+      gst:     document.getElementById('edit-gst').value.trim(),
+      logo:    logoSrc || existingGlobal.logo || null
+    });
+  }
 
   applyProfile();
   applyHeaderColor();
@@ -7097,6 +7269,7 @@ function applyHeaderColor() {
     +'}';
 }
 function loadProfileLogo(evt) {
+  if (!_isProfileOwnerNow()) { toast('⚠️ Only the project owner can edit company details', 'err'); return; }
   if (!window.isProUser) { _showUpgradePopup('Logo Upload'); return; }
   var file = evt.target.files[0]; if (!file) return;
   var reader = new FileReader();
@@ -7120,6 +7293,7 @@ function loadProfileLogo(evt) {
   reader.readAsDataURL(file);
 }
 function clearProfileLogo() {
+  if (!_isProfileOwnerNow()) { toast('⚠️ Only the project owner can edit company details', 'err'); return; }
   var g = lglobal() || {};
   g.logo = null;
   sglobal(g);
@@ -13491,6 +13665,15 @@ function updateOwnerBtn() {
 
 // -- Open / Close Cloud Modal --
 function openCloudModal() {
+  // Reset any onboarding-only tab restrictions from a previous "Join Project"
+  // pass, unless we're mid-onboarding right now (obGoJoinProject sets this
+  // flag right before calling openCloudModal, then re-hides the tabs itself).
+  if (!window._obOnboardingPending) {
+    var adminBtn  = document.getElementById('ctab-admin-btn');
+    var createBtn = document.getElementById('ctab-create-btn');
+    if (adminBtn)  adminBtn.style.display  = '';
+    if (createBtn) createBtn.style.display = '';
+  }
   refreshCloudModalState();
   _armModalGuard('cloud-modal');
   document.getElementById('cloud-modal').classList.add('show');
@@ -13509,6 +13692,16 @@ function openCloudModal() {
 function closeCloudModal() {
   document.getElementById('cloud-modal').classList.remove('show');
   document.getElementById('cloud-modal').style.zIndex = ''; // undo onboarding z-index bump, if any
+  // If this was the onboarding "Join Project" modal and it's being closed
+  // without a successful join, clear the flag and restore the normal
+  // Login/Create/Join tabs so a later Settings → Cloud open isn't affected.
+  if (window._obOnboardingPending) {
+    window._obOnboardingPending = false;
+    var adminBtn  = document.getElementById('ctab-admin-btn');
+    var createBtn = document.getElementById('ctab-create-btn');
+    if (adminBtn)  adminBtn.style.display  = '';
+    if (createBtn) createBtn.style.display = '';
+  }
 }
 
 // ── Tab switcher ────────────────────────────────────────────────
@@ -13563,9 +13756,7 @@ function refreshCloudModalState() {
     if (adminPanel && !document.getElementById('ctab-admin-postlogin')) {
       adminPanel.innerHTML =
         '<div id="ctab-admin-prelogin" style="display:none"></div>'
-        + '<div id="ctab-admin-postlogin" style="display:block">'
-        + document.getElementById('ctab-admin-postlogin-tpl') ? '' : ''
-        + '</div>';
+        + '<div id="ctab-admin-postlogin" style="display:block"></div>';
       // Reload the page to restore full UI — safer than rebuilding HTML inline
       toast('✅ Cloud ready! Refreshing…', 'ok');
       setTimeout(function(){ location.reload(); }, 800);
@@ -16046,7 +16237,7 @@ function openPayLanding(afterAuth) {
   var lockedMsg = document.getElementById('pay-locked-msg');
   if (closeBtn) closeBtn.style.display = afterAuth ? 'none' : 'flex';
   if (lockedMsg) lockedMsg.style.display = afterAuth ? 'flex' : 'none';
-  if (typeof _selectPlanTier === 'function') _selectPlanTier('pro');
+  if (typeof _selectPlanTier === 'function') _selectPlanTier(window._obSelectedPlan || 'pro');
 }
 function closePayLanding() {
   document.getElementById('pay-landing-modal').classList.remove('show');
@@ -16080,7 +16271,7 @@ function _cancelAndLogout() {
 // can never disagree with each other.
 var PLAN_PRICING = {
   pro:        { amount: 3000, rupees: 30, label: 'Pro',        desc: 'Admin Subscription — ₹30/month' },
-  enterprise: { amount: 9000, rupees: 90, fullRupees: 99, label: 'Enterprise', desc: 'Enterprise Subscription — ₹90/month (launch price, usually ₹99)' }
+  enterprise: { amount: 3000, rupees: 30, fullRupees: 99, label: 'Enterprise', desc: 'Enterprise Subscription — ₹30/month (launch price, usually ₹99)' }
 };
 
 var _selectedPlanTier = 'pro';
@@ -16104,7 +16295,7 @@ function _selectPlanTier(plan) {
     if (plan === 'enterprise') {
       priceBlock.innerHTML =
         '<p style="color:rgba(255,255,255,.4);font-size:14px;font-weight:700;text-decoration:line-through;line-height:1;margin-bottom:2px;">₹99/month</p>'
-        + '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹90<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
+        + '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
         + '<p style="font-size:10px;color:#34d399;margin-top:3px;font-weight:700;">🎉 Launch discount — locked in for as long as you stay subscribed</p>';
     } else {
       priceBlock.innerHTML =
@@ -17768,7 +17959,7 @@ function _getMsRows(){
 function saveMeasurementSheet(){
   var sheetNo=(document.getElementById('ms-no')||{}).value||'MS-001';
   var date=(document.getElementById('ms-date')||{}).value||ist();
-  var title=(document.getElementById('ms-title')||{}).value||'';
+  var title=(document.getElementById('msh-title')||{}).value||'';
   var location=(document.getElementById('ms-location')||{}).value||'';
   var rows=_getMsRows().filter(function(r){return r.desc||r.nos;});
   if(!rows.length){toast('Add at least one row','err');return;}
@@ -17805,7 +17996,7 @@ function reprintMsSheet(id){
 function printMeasurementSheet(){
   var sheetNo=(document.getElementById('ms-no')||{}).value||'MS-001';
   var date=(document.getElementById('ms-date')||{}).value||ist();
-  var title=(document.getElementById('ms-title')||{}).value||'';
+  var title=(document.getElementById('msh-title')||{}).value||'';
   var location=(document.getElementById('ms-location')||{}).value||'';
   var rows=_getMsRows().filter(function(r){return r.desc||r.nos;});
   if(!rows.length){toast('Add at least one row','err');return;}
@@ -19704,7 +19895,7 @@ window.openOwnerOverview = function() {
     '<div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
     + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">👑 Owner Overview</div><div style="color:rgba(255,255,255,.6);font-size:10px">All ' + (window.projects||[]).length + ' projects, tab by tab</div></div>'
     + '<div style="display:flex;gap:6px;flex-shrink:0">'
-    + '<button onclick="openOwnerCompanyModal()" title="Company Settings" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">⚙️</button>'
+    + '<button onclick="openEditProfile()" title="Profile & Company Settings" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">⚙️</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
     + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
