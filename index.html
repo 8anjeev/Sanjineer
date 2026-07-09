@@ -6502,9 +6502,52 @@ var _ls = (function() {
 })();
 var safeLS = {
   getItem: function(k) { if (_ls) { try { return _ls.getItem(k); } catch(e) {} } return _memStore[k] !== undefined ? _memStore[k] : null; },
-  setItem: function(k, v) { if (_ls) { try { _ls.setItem(k, v); } catch(e) {} } _memStore[k] = v; },
+  setItem: function(k, v) { if (_ls) { try { _ls.setItem(k, v); } catch(e) {} } _memStore[k] = v; _touchCmModTs(k); },
   removeItem: function(k) { if (_ls) { try { _ls.removeItem(k); } catch(e) {} } delete _memStore[k]; }
 };
+
+// ── Per-key "last modified" tracking for the generic cm_all bucket ──
+// db/meta/matstore/dept/profile/machinery/drawings/budget/milestones/
+// punchlist/tombstones all have dedicated, real per-record merge logic
+// (see _mergeArrayStore etc.). Every OTHER cm_ store (BOQ, quotations,
+// invoices, POs, suppliers, subcon bills, visits, tools, rentals,
+// contract, ...) is saved generically through this same safeLS.setItem
+// and travels in the catch-all "cm_all" bucket, which historically had
+// NO timestamp protection at all — whichever device's pull/push happened
+// to land last simply won, even over a newer unsynced local edit. This
+// records a modified-at timestamp per key (skipping the already-merged
+// dedicated keys and the tracking map itself) so cm_all can do a real
+// "newest wins" comparison instead of a blind overwrite.
+var _CM_TS_DEDICATED = {
+  'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
+  'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
+  'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+};
+var _cmTsInHook = false;
+function _touchCmModTs(fullKey) {
+  if (_cmTsInHook) return; // re-entrancy guard: the ts-map's own write goes through this same setItem
+  if (!fullKey) return;
+  if (fullKey.slice(-10) === '_cm_mod_ts') return;
+  var prefix = (typeof window !== 'undefined' && window.currentProjectId) ? ('sanj_project_' + window.currentProjectId + '_') : '';
+  var shortK;
+  if (prefix) {
+    if (fullKey.indexOf(prefix + 'cm_') !== 0) return; // not a cm_ key for the ACTIVE project
+    shortK = fullKey.slice(prefix.length);
+  } else {
+    if (fullKey.indexOf('cm_') !== 0) return; // legacy/unscoped only
+    shortK = fullKey;
+  }
+  if (_CM_TS_DEDICATED[shortK]) return; // has its own real merge logic already
+  _cmTsInHook = true;
+  try {
+    var mapKey = (typeof _pk === 'function' ? _pk('_cm_mod_ts') : '_cm_mod_ts');
+    var map; try { map = JSON.parse(safeLS.getItem(mapKey) || '{}'); } catch(e) { map = {}; }
+    map[shortK] = Date.now();
+    safeLS.setItem(mapKey, JSON.stringify(map));
+  } catch(e) {}
+  _cmTsInHook = false;
+}
+function _loadCmModTs() { try { return JSON.parse(safeLS.getItem(typeof _pk === 'function' ? _pk('_cm_mod_ts') : '_cm_mod_ts') || '{}'); } catch(e) { return {}; } }
 
 // ── Firebase compat snap helpers ─────────────────────────────
 // Firebase compat SDK: snap.exists is a boolean.
@@ -11839,18 +11882,42 @@ var BOQ_KEY    = 'cm_boq_schedule';
 var BOQ_PI_KEY = 'cm_boq_project_info';
 var BOQ_TD_KEY = 'cm_boq_today_details'; // today's work details
 
-function boqLoad(){ try{ return JSON.parse(safeLS.getItem(BOQ_KEY)||'{"sections":[]}'); }catch(e){ return {sections:[]}; } }
-function boqSave(d){ safeLS.setItem(BOQ_KEY,JSON.stringify(d)); }
+function boqLoad(){
+  try{
+    var scoped = safeLS.getItem(_pk(BOQ_KEY));
+    if (scoped == null) {
+      // One-time migration: this data used to live under a single global
+      // key shared by every project (a real bug — editing BOQ in one
+      // project overwrote it for all projects, and it was never synced
+      // to the cloud at all). Copy it into the CURRENT project's scoped
+      // key once, so whichever project happens to load first keeps
+      // seeing its data; the old global key is left untouched.
+      var legacy = safeLS.getItem(BOQ_KEY);
+      if (legacy != null) { safeLS.setItem(_pk(BOQ_KEY), legacy); scoped = legacy; }
+    }
+    return JSON.parse(scoped||'{"sections":[]}');
+  }catch(e){ return {sections:[]}; }
+}
+function boqSave(d){ safeLS.setItem(_pk(BOQ_KEY),JSON.stringify(d)); _scheduleCloudPush(); }
 function loadBoqTab(){ boqRender(); }
 
 /* ── Project Info ── */
-function boqLoadPI(){ try{ return JSON.parse(safeLS.getItem(BOQ_PI_KEY)||'{}'); }catch(e){ return {}; } }
+function boqLoadPI(){
+  try{
+    var scoped = safeLS.getItem(_pk(BOQ_PI_KEY));
+    if (scoped == null) {
+      var legacy = safeLS.getItem(BOQ_PI_KEY); // one-time migration, see boqLoad() note
+      if (legacy != null) { safeLS.setItem(_pk(BOQ_PI_KEY), legacy); scoped = legacy; }
+    }
+    return JSON.parse(scoped||'{}');
+  }catch(e){ return {}; }
+}
 function boqSaveProjectInfo(){
   var pi={work:(document.getElementById('boq-pi-work')||{}).value||'',client:(document.getElementById('boq-pi-client')||{}).value||'',
     contractor:(document.getElementById('boq-pi-contractor')||{}).value||'',consultant:(document.getElementById('boq-pi-consultant')||{}).value||'',
     wo:(document.getElementById('boq-pi-wo')||{}).value||'',weather:(document.getElementById('boq-pi-weather')||{}).value||'Clear',
     commDate:(document.getElementById('boq-pi-start')||{}).value||'',stipDate:(document.getElementById('boq-pi-end')||{}).value||''};
-  safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info saved!','ok');
+  safeLS.setItem(_pk(BOQ_PI_KEY),JSON.stringify(pi)); _scheduleCloudPush(); toast('Project info saved!','ok');
 }
 function boqPopulatePI(pi){
   var m={'boq-pi-work':pi.work,'boq-pi-client':pi.client,'boq-pi-contractor':pi.contractor,
@@ -11869,7 +11936,7 @@ function boqFetchProjectInfo(){
       if(obj.workOrderNo||obj.wo_no) pi.wo=obj.workOrderNo||obj.wo_no;
       if(obj.startDate||obj.commencement_date) pi.commDate=obj.startDate||obj.commencement_date;
       if(obj.endDate||obj.completion_date) pi.stipDate=obj.endDate||obj.completion_date;
-      boqPopulatePI(pi); safeLS.setItem(BOQ_PI_KEY,JSON.stringify(pi)); toast('Project info loaded!','ok'); return;
+      boqPopulatePI(pi); safeLS.setItem(_pk(BOQ_PI_KEY),JSON.stringify(pi)); _scheduleCloudPush(); toast('Project info loaded!','ok'); return;
     }}catch(e){}
   }
   var saved=boqLoadPI(); if(saved.work){ boqPopulatePI(saved); toast('Loaded saved info','ok'); }
@@ -11877,8 +11944,17 @@ function boqFetchProjectInfo(){
 }
 
 /* ── Today's Work Details ── */
-function boqLoadTD(date){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; } }
-function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(BOQ_TD_KEY)||'{}'); all[date]=data; safeLS.setItem(BOQ_TD_KEY,JSON.stringify(all)); }catch(e){} }
+function boqLoadTD(date){
+  try{
+    var scoped = safeLS.getItem(_pk(BOQ_TD_KEY));
+    if (scoped == null) {
+      var legacy = safeLS.getItem(BOQ_TD_KEY); // one-time migration, see boqLoad() note
+      if (legacy != null) { safeLS.setItem(_pk(BOQ_TD_KEY), legacy); scoped = legacy; }
+    }
+    var all=JSON.parse(scoped||'{}'); return all[date]||{labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''};
+  }catch(e){ return {labour:[],machinery:[],workdesc:'',status:'In Progress',remarks:''}; }
+}
+function boqSaveTD(date,data){ try{ var all=JSON.parse(safeLS.getItem(_pk(BOQ_TD_KEY))||'{}'); all[date]=data; safeLS.setItem(_pk(BOQ_TD_KEY),JSON.stringify(all)); _scheduleCloudPush(); }catch(e){} }
 function boqOpenTodayModal(){
   var date=(document.getElementById('boq-dpr-date')||{}).value||ist();
   var lbl=document.getElementById('boq-modal-date-label');
@@ -13581,7 +13657,7 @@ function autoInitCloud() {
 }
 
 // ── MASTER RESTORE: applies ALL backed-up data to local storage ──────────────
-function _applyFullBackup(d) {
+function _applyFullBackup(d, forceOverwrite) {
   if (!d) return;
   // Core tab data
   // Write directly to storage instead of calling sd(d.db) — sd() also
@@ -13610,10 +13686,47 @@ function _applyFullBackup(d) {
   // All cm_ keys (BOQ schedule, BOQ today data per date, BOQ project info,
   //   visits, quotations, subcon bills, PO, suppliers, invoices, tools, rentals, etc.)
   if (d.cm_all && typeof d.cm_all === 'object') {
+    // Guard against old cloud backups (pushed before this fix) whose cm_all
+    // bucket still contains a raw, unmerged duplicate of cm_data/cm_meta/
+    // cm_matstore/cm_dept/cm_profile/cm_machinery/cm_drawings/cm_budget/
+    // cm_milestones/cm_punchlist/cm_tombstones — applying those would
+    // silently undo the proper merge this function just did a few lines
+    // above for exactly those same keys.
+    var _dedicatedKeys = {
+      'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
+      'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
+      'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+    };
+    // Newest-wins per key, using the modified-at map each side sends along.
+    // Before this, every one of these modules (BOQ, quotations, invoices,
+    // POs, suppliers, subcon bills, visits, tools, rentals, contract...)
+    // was overwritten unconditionally by whatever arrived in a pull, even
+    // if the local copy was edited more recently and hadn't synced yet
+    // — the single biggest remaining source of "my changes disappeared."
+    var _localTs  = _loadCmModTs();
+    var _remoteTs = (d.cm_all_ts && typeof d.cm_all_ts === 'object') ? d.cm_all_ts : {};
+    var _newTsMap = JSON.parse(JSON.stringify(_localTs));
     Object.keys(d.cm_all).forEach(function(k) {
+      if (_dedicatedKeys[k]) return;
       var v = d.cm_all[k];
-      if (v !== null && v !== undefined) safeLS.setItem(_pk(k), v);
+      if (v === null || v === undefined) return;
+      var lt = _localTs[k] || 0;
+      var rt = _remoteTs[k] || 0;
+      // No timestamp on either side (legacy/never-tracked data): fall back
+      // to applying it, same as the old behavior, so nothing silently
+      // stops syncing just because it predates this fix. forceOverwrite
+      // (set by an explicit, user-confirmed "restore from cloud") always
+      // applies the remote copy regardless of timestamps — that action's
+      // whole point is to discard local state, so silently keeping a
+      // "newer" local key there would contradict what the user asked for.
+      if (!forceOverwrite && lt && rt && rt <= lt) {
+        _sanjLog('cm_all SKIPPED (local newer)', 'key=' + k, 'localTs=' + lt, 'remoteTs=' + rt);
+        return; // local edit is newer (or tied) — keep it, discard the remote copy
+      }
+      safeLS.setItem(_pk(k), v);
+      if (rt) _newTsMap[k] = rt;
     });
+    try { safeLS.setItem(_pk('_cm_mod_ts'), JSON.stringify(_newTsMap)); } catch(e) {}
   }
   // Legacy: old backup format (v2.1) used separate boq_schedule + extra keys
   if (d.boq_schedule) safeLS.setItem(_pk('cm_boq_schedule'), d.boq_schedule);
@@ -13843,6 +13956,20 @@ function cloudBackupNow(silent) {
 
   function _buildLocalPayload() {
     var _allCmKeys = {};
+    // These already have their own dedicated field in the payload AND their
+    // own real per-record/per-field merge logic (see _mergeArrayStore /
+    // _mergeKeyedStore / _mergeFieldBag above). If they were also swept into
+    // the generic cm_all bucket below, _applyFullBackup() would write them
+    // a SECOND time using the raw, unmerged remote copy — silently undoing
+    // the careful merge that had just run moments earlier on every single
+    // pull. This is a real, serious bug: it means edits made on Device A
+    // could vanish immediately after a background sync from Device B, even
+    // though the merge engine "successfully" resolved them first.
+    var _dedicatedKeys = {
+      'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
+      'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
+      'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+    };
     var _prefix = window.currentProjectId ? ('sanj_project_' + window.currentProjectId + '_') : '';
     try {
       var _ls = window.localStorage;
@@ -13855,6 +13982,7 @@ function cloudBackupNow(silent) {
         if (isProjectKey || isLegacyKey) {
           // Store under short key (strip project prefix) so cloud payload format stays clean
           var _shortK = _prefix ? _kk.slice(_prefix.length) : _kk;
+          if (_dedicatedKeys[_shortK]) continue; // has its own merged field — don't duplicate it here
           var _v = safeLS.getItem(_kk);
           if (_v !== null) _allCmKeys[_shortK] = _v;
         }
@@ -13879,6 +14007,7 @@ function cloudBackupNow(silent) {
       rfi: [], safety: [],
       nid: parseInt(safeLS.getItem('cm_nid') || '1'),
       cm_all: _allCmKeys,
+      cm_all_ts: _loadCmModTs(),
       settings: {
         dark_mode:    safeLS.getItem('sanj_dark_mode') || '0',
         dash_view:    safeLS.getItem('sanj_dash_view') || 'current',
@@ -14046,7 +14175,7 @@ function cloudRestoreNow() {
     }
     if (r.error || !r.data) { toast('No cloud data found for this Site ID', 'err'); return; }
     var d = r.data.data;
-    _applyFullBackup(d);
+    _applyFullBackup(d, true); // forceOverwrite: user explicitly confirmed replacing ALL local data
     // also keep legacy field compat for very old backups
     if (d.nid) safeLS.setItem('cm_nid', d.nid);
     AD = ld(); applyProfile(); renderDashboard();
@@ -15236,19 +15365,35 @@ function doAdminLogout() {
   // Stop any viewer polling
   if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; }
   // Clear ALL app + cloud data from localStorage so a new login starts fresh
-  var _allKeys = [
+  var _baseKeys = [
     'cm_data','cm_db','cm_meta','cm_matstore','cm_dept','cm_profile','cm_phkeys',
     'cm_machinery','cm_drawings','cm_budget','cm_milestones','cm_punchlist',
     'cm_tombstones','cm_visits','cm_contract','cm_invoices','cm_quotations',
     'cm_suppliers','cm_subcon_bills','cm_po','cm_project','cm_site_info',
     'cm_site_id','cm_nid','cm_photos','cm_fb_cfg','cm_fb_config',
     'cm_boq_schedule','cm_boq_today_details','cm_boq_dpr_date',
-    'cm_boq_last_reset_date','cm_boq_project_info',
+    'cm_boq_last_reset_date','cm_boq_project_info'
+  ];
+  var _allKeys = _baseKeys.slice();
+  // Every one of the base keys above is actually stored per-project under
+  // _pk()'s "sanj_project_<id>_<baseKey>" prefix (see _pk()). The list
+  // above only ever matched the old un-prefixed keys, so logging out
+  // used to leave every real project's data sitting in localStorage
+  // despite the "all local data cleared" message. Clear the scoped
+  // version for every known project too.
+  try {
+    (window.projects || []).forEach(function(p) {
+      if (!p || !p.id) return;
+      _baseKeys.forEach(function(k) { _allKeys.push('sanj_project_' + p.id + '_' + k); });
+    });
+  } catch(e) {}
+  _allKeys.push(
     'cm_admin_role','cm_admin_email',
     'cm_cloud','cm_cloud_activated','cm_cloud_site',
     'cm_sub_end','cm_rzp_payment_id',
+    'sanj_projects','sanj_current_project',
     ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, CLOUD_KEY
-  ];
+  );
   // deduplicate and remove
   var _seen = {};
   _allKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; safeLS.removeItem(k); } });
@@ -15261,6 +15406,9 @@ function doAdminLogout() {
   } catch(e){}
   // Reset in-memory data
   AD = [];
+  window.projects = [];
+  window.currentProjectId = null;
+  window._projectEpoch++; // invalidate any pull/push still in flight for the old session
   toast('Logged out. All local data cleared.', 'ok');
   updateCloudBtn();
   refreshCloudModalState();
