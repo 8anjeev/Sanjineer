@@ -1513,6 +1513,11 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
        Drawings/Budget/PunchList) stayed visible & stacked at once. This class always wins
        because it's more specific than .dt-split, regardless of screen width. */
     .tab-content.tab-hidden{display:none !important;}
+    /* Same fix applied to inner dt-split sub-tab sections (Tools: Add/Assign,
+       Rentals: We Rented/Given Out) — these also use .dt-split's display:grid !important
+       on desktop, which beat inline style="display:none", so both sub-tab panels stayed
+       visible/overlapping at once. */
+    .dt-split.tab-hidden{display:none !important;}
     /* Show dashboard by default if JS hasn't run yet */
     body:not(.js-ready) #tab-dashboard{display:block!important;}
     body.js-ready .tab-content{}
@@ -1967,12 +1972,61 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       }
       .dt-split > .dt-l .col-span-2 { grid-column: 1 / -1 !important; }
 
-      /* Sticky left rail so forms/filters stay visible while scrolling records */
-      .dt-split > .dt-l { position: sticky !important; top: 8px !important; }
+      /* Sticky left rail so forms/filters stay visible while scrolling records.
+         top uses a CSS var (set per-element by JS) so multiple stacked .dt-l
+         panels in the same column each get their OWN offset instead of all
+         competing for the same top:8px — which is what caused panels/chips
+         to overlap each other while scrolling. Falls back to 8px until JS runs. */
+      .dt-split > .dt-l { position: sticky !important; top: var(--dtl-top, 8px) !important; }
 
       /* Right column record tables: keep a touch narrower than full bleed
          (skips Quotation & Site Visits per request — those stay untouched) */
       .dt-cap { max-width: 1080px !important; }
+    }
+  </style>
+  <style id="desktop-layout-tweaks">
+    @media (min-width: 1024px) {
+      /* ── Attendance: Master Attendance button = same size as Save Worker button ── */
+      #att-master-btn {
+        grid-column: 1 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding: 8px 12px !important;
+      }
+      /* ── Attendance: tighter gap between Print panel and Add Worker panel ── */
+      #att-print-panel { margin-bottom: 6px !important; }
+
+      /* ── Machinery: Print button sits directly under the date selector ── */
+      #mach-date-panel { margin-bottom: 0 !important; }
+      #mach-print-day-btn { width: 100% !important; margin-top: 8px !important; }
+      #mach-print-panel { margin-top: 8px !important; }
+      /* ── Machinery: relocated month-print + filters panel ── */
+      #mach-filters-panel { margin-top: 8px !important; }
+      #mach-filters-panel #mach-print-month-btn { width: 100% !important; margin-bottom: 10px !important; }
+      #mach-filters-panel #mach-filters-row { grid-template-columns: 1fr !important; }
+
+      /* ── Tools: stock table relocated below the active form in the left column ── */
+      #tools-stock-panel { margin-top: 12px !important; margin-bottom: 0 !important; }
+
+      /* ── Uniform sizing for small "header action" buttons (Load, +Add Session,
+         Manage Workers, Print…) so they don't render at different sizes next
+         to each other in the desktop left rail. Mobile is untouched — this
+         class only takes effect inside this >=1024px media query. ── */
+      .hdr-action-btn {
+        height: 30px !important;
+        min-width: 96px !important;
+        padding: 0 14px !important;
+        font-size: 11px !important;
+        line-height: 1 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        white-space: nowrap !important;
+        box-sizing: border-box !important;
+      }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -4509,20 +4563,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="tab-attendance" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
   <!-- Worker Attendance Print Panel -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="att-print-panel">
     <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print Worker Attendance <span class="font-normal text-gray-400">— select worker & month</span></p>
     <div class="flex gap-2 items-center flex-wrap">
       <select id="att-print-worker" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
         <option value="">-- Select Worker --</option>
       </select>
       <select id="att-print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-      <button onclick="printWorkerAttendance()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="printWorkerAttendance()" class="hdr-action-btn g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">➕ Add Worker</p>
-      <button onclick="openManageWorkers()" class="g-tor-violet500-purple500 text-white rounded-xl font-semibold active:scale-95" style="font-size:10px;padding:0 12px">⚙️ Manage Workers</button>
+      <button onclick="openManageWorkers()" class="hdr-action-btn g-tor-violet500-purple500 text-white rounded-xl font-semibold active:scale-95" style="font-size:10px;padding:0 12px">⚙️ Manage Workers</button>
     </div>
     <div class="grid grid-cols-2 gap-2">
       <input type="text" id="w-name" placeholder="Worker Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -4552,7 +4606,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Master Attendance -->
-  <button onclick="openMasterAtt()" class="dt-r w-full mb-3 active:scale-95 g-tor-indigo500-purple500 rounded-2xl shadow-xl" style="padding:12px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;cursor:pointer">
+  <button id="att-master-btn" onclick="openMasterAtt()" class="dt-l mb-3 active:scale-95 g-tor-indigo500-purple500 rounded-2xl shadow-xl" style="padding:12px 16px;width:75%;margin-left:auto;margin-right:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;cursor:pointer">
     <span style="font-size:13px;font-weight:800;color:#fff;line-height:1">🗂️ Master Atten.</span>
     <span style="font-size:10px;color:rgba(255,255,255,0.75);font-weight:500;line-height:1">Select to mark attendance</span>
   </button>
@@ -4622,24 +4676,26 @@ document.addEventListener('DOMContentLoaded', function() {
       <button id="exp-save-btn" onclick="addExpenseMaterial()" class="g-tor-amber500-orange500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:9px 0">💾 Save Entry</button>
     </div>
   </div>
-  <div class="dt-r grid grid-cols-3 gap-2.5 mb-3">
-    <div class="g-tobr-emerald500-teal500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-emerald-100 leading-none">Material Cost</p><p id="exp-mat-total" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
-    <div class="g-tobr-cyan500-sky500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-cyan-100 leading-none">Cash In</p><p id="exp-petty-in" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
-    <div class="g-tobr-violet500-purple500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-violet-100 leading-none">Remaining</p><p id="exp-petty-left" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
-  </div>
-  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
-    <div class="flex items-center gap-2 mb-2">
-      <p class="text-xs font-semibold text-gray-500 flex-shrink-0">💰 Expense Ledger</p>
-      <select id="exp-month-filter" class="flex-1 min-w-0 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400" style="font-size:11px;padding:4px 8px" onchange="viewExpenses()">
-        <option value="">Select Month</option>
-      </select>
-      <button onclick="printExpenses()" class="g-tor-emerald500-teal500 text-white rounded-lg font-semibold active:scale-95 flex-shrink-0" style="font-size:11px;padding:0 12px">🖨️ Print</button>
+  <div class="dt-r">
+    <div class="grid grid-cols-3 gap-2.5 mb-3">
+      <div class="g-tobr-emerald500-teal500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-emerald-100 leading-none">Material Cost</p><p id="exp-mat-total" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
+      <div class="g-tobr-cyan500-sky500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-cyan-100 leading-none">Cash In</p><p id="exp-petty-in" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
+      <div class="g-tobr-violet500-purple500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-violet-100 leading-none">Remaining</p><p id="exp-petty-left" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
     </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead><tr class="g-tor-emerald500-teal500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Date</th><th class="px-3 py-2 text-left">Description</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
-        <tbody id="expenses-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No expenses yet</td></tr></tbody>
-      </table>
+    <div class="bg-white rounded-2xl p-3 shadow-xl">
+      <div class="flex items-center gap-2 mb-2">
+        <p class="text-xs font-semibold text-gray-500 flex-shrink-0">💰 Expense Ledger</p>
+        <select id="exp-month-filter" class="flex-1 min-w-0 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400" style="font-size:11px;padding:4px 8px" onchange="viewExpenses()">
+          <option value="">Select Month</option>
+        </select>
+        <button onclick="printExpenses()" class="g-tor-emerald500-teal500 text-white rounded-lg font-semibold active:scale-95 flex-shrink-0" style="font-size:11px;padding:0 12px">🖨️ Print</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead><tr class="g-tor-emerald500-teal500 text-white"><th class="px-3 py-2 text-left rounded-l-lg">Date</th><th class="px-3 py-2 text-left">Description</th><th class="px-3 py-2 text-center">Qty</th><th class="px-3 py-2 text-right">Amount</th><th class="px-3 py-2 text-center rounded-r-lg">Del</th></tr></thead>
+          <tbody id="expenses-table"><tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No expenses yet</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -4756,7 +4812,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="tab-tools" class="tab-content tab-hidden" style="display:none">
   <!-- Auto-updating Tool Stock Table (always visible on top) -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl" id="tools-stock-panel">
     <p class="text-sm font-bold text-gray-700 mb-2">📦 Tool Stock</p>
     <div class="overflow-x-auto">
       <table class="w-full text-xs">
@@ -4772,14 +4828,14 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Sub-tab buttons -->
-  <div class="flex gap-2 mb-3">
+  <div class="flex gap-2 mb-3" id="tool-subtabs-row">
     <button id="tool-subtab-add" onclick="switchToolSubTab('add')" class="flex-1 py-2 rounded-xl text-sm font-bold text-white active:scale-95" style="background:linear-gradient(135deg,#7c3aed,#9333ea)">🔧 Add Tools</button>
     <button id="tool-subtab-assign" onclick="switchToolSubTab('assign')" class="flex-1 py-2 rounded-xl text-sm font-bold active:scale-95 border-2 border-purple-300 text-purple-700 bg-white">📋 Assign Tools</button>
   </div>
 
   <!-- ADD TOOLS sub-section -->
   <div id="tool-sec-add" class="dt-split dt-cap">
-    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="tool-add-dtl">
       <p class="text-sm font-bold text-gray-700 mb-3">+ Add Tool / Equipment</p>
       <div class="grid grid-cols-2 gap-2.5">
         <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -4807,8 +4863,8 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- ASSIGN TOOLS sub-section -->
-  <div id="tool-sec-assign" class="dt-split dt-cap" style="display:none">
-    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div id="tool-sec-assign" class="dt-split dt-cap tab-hidden">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="tool-assign-dtl">
       <p class="text-sm font-bold text-gray-700 mb-3">📋 Assign Tool to Worker</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Select Tool</label>
@@ -4838,7 +4894,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">🖨️ Print by Client <span class="font-normal text-gray-400">— filter by month</span></p>
-      <button onclick="printRentalByClient()" style="padding:0 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 3px 10px rgba(79,70,229,0.35)">🖨️ Print</button>
+      <button onclick="printRentalByClient()" class="hdr-action-btn" style="padding:0 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 3px 10px rgba(79,70,229,0.35)">🖨️ Print</button>
     </div>
 
 <!-- Client selector -->
@@ -4921,7 +4977,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- Given Out Section -->
 
-  <div id="rsec-given" class="dt-split dt-cap" style="display:none">
+  <div id="rsec-given" class="dt-split dt-cap tab-hidden" style="display:none">
     <div class="dt-l bg-white rounded-2xl p-3 shadow-xl">
       <p class="text-xs font-semibold text-gray-500 mb-2">💰 Given to Others</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
@@ -5029,7 +5085,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="tab-boq" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
 
   <!-- ══ HERO HEADER ══ -->
-  <div class="dt-full" style="background:linear-gradient(135deg,#0f2244 0%,#1a3a6b 50%,#0f2244 100%);border-radius:18px;padding:16px 14px 14px;margin-bottom:12px;box-shadow:0 8px 32px rgba(15,34,68,0.45);position:relative;overflow:hidden">
+  <div class="dt-l" style="background:linear-gradient(135deg,#0f2244 0%,#1a3a6b 50%,#0f2244 100%);border-radius:18px;padding:16px 14px 14px;margin-bottom:12px;box-shadow:0 8px 32px rgba(15,34,68,0.45);position:relative;overflow:hidden">
     <div style="position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;background:rgba(251,191,36,0.08);pointer-events:none"></div>
     <div style="position:absolute;bottom:-20px;left:-20px;width:70px;height:70px;border-radius:50%;background:rgba(99,102,241,0.12);pointer-events:none"></div>
     <div style="text-align:center;margin-bottom:10px">
@@ -5081,6 +5137,20 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
+  <!-- Today's Work Details card (top of right column, aligned with header) -->
+  <div class="dt-r">
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">🌅 Today's Work Details</p>
+      <button onclick="boqOpenTodayModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;display:flex;align-items:center;gap:5px">
+        <span>✏️</span> Fill Daily Status
+      </button>
+    </div>
+    <div id="boq-today-summary-card">
+      <p style="font-size:11px;color:#9ca3af;text-align:center;padding:12px 0">Tap "Fill Daily Status" to add today's work details</p>
+    </div>
+  </div>
+
   <!-- Project Info -->
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
@@ -5111,19 +5181,6 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Today's Work Details card -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <div class="flex items-center justify-between mb-2">
-      <p class="text-sm font-bold text-gray-700">🌅 Today's Work Details</p>
-      <button onclick="boqOpenTodayModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;display:flex;align-items:center;gap:5px">
-        <span>✏️</span> Fill Daily Status
-      </button>
-    </div>
-    <div id="boq-today-summary-card">
-      <p style="font-size:11px;color:#9ca3af;text-align:center;padding:12px 0">Tap "Fill Daily Status" to add today's work details</p>
-    </div>
-  </div>
-
   <!-- Import / Add BOQ -->
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
@@ -5148,7 +5205,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- BOQ Table -->
-  <div id="boq-table-wrap" class="dt-r mb-3">
+  <div id="boq-table-wrap" class="mb-3">
     <div class="text-center py-10 bg-white rounded-2xl shadow-xl">
       <span style="font-size:40px">📋</span>
       <p class="font-semibold text-gray-600 mt-2">No BOQ data yet</p>
@@ -5157,9 +5214,10 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Gantt -->
-  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
+  <div class="bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
     <p class="text-sm font-bold text-gray-700 mb-3">📊 BOQ Gantt Chart</p>
     <div id="boq-gantt-view" style="overflow-x:auto"></div>
+  </div>
   </div>
 
 </div><!-- end tab-boq -->
@@ -5236,12 +5294,12 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ===== MACHINERY ===== -->
 <div id="tab-machinery" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
   <!-- Date selector -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-2 shadow-xl" id="mach-date-panel">
     <div class="flex items-center justify-between gap-2 mb-1">
       <p class="text-xs font-bold text-gray-700">📅 Select Date</p>
       <div class="flex items-center gap-2">
         <input type="date" id="mach-date" class="border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" style="padding:4px 8px">
-        <button onclick="loadMachinery()" class="g-tor-emerald500-teal500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">📂 Load</button>
+        <button onclick="loadMachinery()" class="hdr-action-btn g-tor-emerald500-teal500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">📂 Load</button>
       </div>
     </div>
     <p id="mach-date-label" class="text-amber-600 font-semibold" style="font-size:11px"></p>
@@ -5250,7 +5308,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">⚙️ Log Machine Hours</p>
-      <button onclick="addMachineSession()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Session</button>
+      <button onclick="addMachineSession()" class="hdr-action-btn g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Session</button>
     </div>
     <div class="grid grid-cols-2 gap-2">
       <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Machine Name</label>
@@ -5280,11 +5338,20 @@ document.addEventListener('DOMContentLoaded', function() {
       <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Notes <span class="font-normal text-gray-400 normal-case">(opt)</span></label><input type="text" id="mach-notes" placeholder="Work done / fuel…" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400"></div>
     </div>
   </div>
+  <!-- Print buttons — bottom of left column -->
+  <div class="dt-l bg-white rounded-2xl p-3 shadow-xl" id="mach-print-panel">
+    <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print</p>
+    <div class="grid grid-cols-2 gap-2" id="mach-print-btns-row">
+      <button id="mach-print-day-btn" onclick="printMachinery()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:8px 0">🖨️ Print</button>
+      <button id="mach-print-month-btn" onclick="printMachineryMonth()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:8px 0">🖨️ Print Month</button>
+    </div>
+  </div>
+  <!-- Desktop-only: month print + filters relocate here via JS on wide screens -->
+  <div class="dt-l bg-white rounded-2xl p-3 shadow-xl" id="mach-filters-panel" style="display:none"></div>
   <!-- Sessions List -->
   <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📋 Sessions — <span id="mach-sessions-date">—</span></p>
-      <button onclick="printMachinery()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">🖨️ Print Day</button>
     </div>
     <div id="mach-sessions-list"><div class="text-center py-8"><div style="font-size:40px">🚧</div><p class="font-semibold text-gray-600 mt-2">No sessions on <span id="mach-empty-date">—</span></p></div></div>
   </div>
@@ -5292,10 +5359,9 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">📊 Monthly Summary</p>
-      <button onclick="printMachineryMonth()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">🖨️ Print</button>
     </div>
     <!-- Filters row -->
-    <div class="grid grid-cols-3 gap-2 mb-3">
+    <div class="grid grid-cols-3 gap-2 mb-3" id="mach-filters-row">
       <div>
         <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Month</label>
         <select id="mach-month-sel" class="w-full border border-gray-200 rounded-xl text-xs bg-white focus:outline-none" style="padding:5px 8px" onchange="renderMachMonthly()"></select>
@@ -7642,13 +7708,14 @@ function setupRentalTabs() {
       ['borrow','given'].forEach(function(x) {
         var sec = document.getElementById('rsec-' + x);
         var tb  = document.getElementById('rtab-' + x);
-        if (sec) sec.style.display = 'none';
+        if (sec) { sec.style.display = 'none'; sec.classList.add('tab-hidden'); }
         if (tb)  { tb.style.background='rgba(255,255,255,0.15)'; tb.style.color='#374151'; }
       });
       var sec = document.getElementById('rsec-' + rt);
-      if (sec) sec.style.display = 'block';
+      if (sec) { sec.style.display = 'block'; sec.classList.remove('tab-hidden'); }
       if (rt === 'borrow') { btn.style.background='linear-gradient(135deg,#f43f5e,#ec4899)'; btn.style.color='#fff'; }
       else                  { btn.style.background='linear-gradient(135deg,#10b981,#14b8a6)'; btn.style.color='#fff'; }
+      if (typeof window._recalcStickyOffsets === 'function') setTimeout(window._recalcStickyOffsets, 0);
     });
   });
   setTimeout(function() {
@@ -10029,14 +10096,17 @@ function switchToolSubTab(tab){
   var addSec=document.getElementById('tool-sec-add'),assignSec=document.getElementById('tool-sec-assign');
   var addBtn=document.getElementById('tool-subtab-add'),assignBtn=document.getElementById('tool-subtab-assign');
   if(tab==='add'){
-    if(addSec)addSec.style.display='block';if(assignSec)assignSec.style.display='none';
+    if(addSec){addSec.style.display='block';addSec.classList.remove('tab-hidden');}
+    if(assignSec){assignSec.style.display='none';assignSec.classList.add('tab-hidden');}
     if(addBtn){addBtn.style.background='linear-gradient(135deg,#7c3aed,#9333ea)';addBtn.style.color='white';addBtn.style.border='none';}
     if(assignBtn){assignBtn.style.background='white';assignBtn.style.color='#7c3aed';assignBtn.style.border='2px solid #c4b5fd';}
   } else {
-    if(addSec)addSec.style.display='none';if(assignSec)assignSec.style.display='block';
+    if(addSec){addSec.style.display='none';addSec.classList.add('tab-hidden');}
+    if(assignSec){assignSec.style.display='block';assignSec.classList.remove('tab-hidden');}
     if(assignBtn){assignBtn.style.background='linear-gradient(135deg,#4f46e5,#6366f1)';assignBtn.style.color='white';assignBtn.style.border='none';}
     if(addBtn){addBtn.style.background='white';addBtn.style.color='#7c3aed';addBtn.style.border='2px solid #c4b5fd';}
   }
+  if (typeof applyToolsDesktopLayout === 'function') applyToolsDesktopLayout();
 }
 
 function addTool(){
@@ -21283,6 +21353,123 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+})();
+</script>
+<script>
+// ══════════════════════════════════════════════════════════════
+// DESKTOP-ONLY LAYOUT REPOSITIONING (>=1024px)
+// Moves specific elements to new visual positions on laptop/desktop
+// screens only. On mobile/tablet these elements stay exactly where
+// they were originally authored — nothing here touches mobile.
+// ══════════════════════════════════════════════════════════════
+(function(){
+  function isDesktopViewport(){
+    return (window.innerWidth || document.documentElement.clientWidth || 0) >= 1024;
+  }
+
+  // ── Machinery: Print(day) button -> under Select Date;
+  //    Print Month + filters -> relocated left-column panel ──
+  var _machDesktopApplied = false;
+  function applyMachineryDesktopLayout(){
+    var isDesktop = isDesktopViewport();
+    var dayBtn = document.getElementById('mach-print-day-btn');
+    var monthBtn = document.getElementById('mach-print-month-btn');
+    var datePanel = document.getElementById('mach-date-panel');
+    var printPanel = document.getElementById('mach-print-panel');
+    var printRow = document.getElementById('mach-print-btns-row');
+    var filtersPanel = document.getElementById('mach-filters-panel');
+    var filtersRow = document.getElementById('mach-filters-row');
+    var monthlyList = document.getElementById('mach-monthly-list');
+    if (!dayBtn || !monthBtn || !datePanel || !printPanel || !printRow || !filtersPanel || !filtersRow || !monthlyList) return;
+
+    if (isDesktop && !_machDesktopApplied) {
+      datePanel.appendChild(dayBtn);
+      filtersPanel.appendChild(monthBtn);
+      filtersPanel.appendChild(filtersRow);
+      printPanel.style.display = 'none';
+      filtersPanel.style.display = 'block';
+      _machDesktopApplied = true;
+    } else if (!isDesktop && _machDesktopApplied) {
+      printRow.insertBefore(dayBtn, monthBtn);
+      if (monthlyList.parentNode) monthlyList.parentNode.insertBefore(filtersRow, monthlyList);
+      printPanel.style.display = '';
+      filtersPanel.style.display = 'none';
+      _machDesktopApplied = false;
+    }
+  }
+
+  // ── Tools: Tool Stock table -> left column, below the active form ──
+  var _toolsDesktopApplied = false;
+  function applyToolsDesktopLayout(){
+    var isDesktop = isDesktopViewport();
+    var stockPanel = document.getElementById('tools-stock-panel');
+    var subtabsRow = document.getElementById('tool-subtabs-row');
+    var addDtl = document.getElementById('tool-add-dtl');
+    var assignDtl = document.getElementById('tool-assign-dtl');
+    var addSec = document.getElementById('tool-sec-add');
+    if (!stockPanel || !subtabsRow || !addDtl || !assignDtl || !addSec || !subtabsRow.parentNode) return;
+
+    if (isDesktop) {
+      var activeDtl = (addSec.style.display === 'none') ? assignDtl : addDtl;
+      if (stockPanel.parentNode !== activeDtl) activeDtl.appendChild(stockPanel);
+      _toolsDesktopApplied = true;
+    } else if (_toolsDesktopApplied) {
+      subtabsRow.parentNode.insertBefore(stockPanel, subtabsRow);
+      _toolsDesktopApplied = false;
+    }
+  }
+  window.applyToolsDesktopLayout = applyToolsDesktopLayout;
+
+  // ── Stack sticky .dt-l panels so they never overlap ──
+  // Every .dt-l panel is position:sticky. When several sit in the same
+  // column (e.g. Machinery: date panel, log form, filters panel — or
+  // Rentals/Attendance/Tools sub-panels) they used to all stick at the
+  // same top:8px and overlap each other on scroll. This walks each
+  // visible .dt-split column and gives each visible .dt-l an
+  // accumulating --dtl-top offset (via CSS var, see desktop-layout-tweaks
+  // style block) so they stack cleanly one below another instead.
+  var BASE_TOP = 8, GAP = 14;
+  function recalcStickyOffsets(){
+    if (!isDesktopViewport()) return;
+    document.querySelectorAll('.dt-split').forEach(function(split){
+      if (split.offsetParent === null) return; // whole tab/section hidden
+      var acc = BASE_TOP;
+      var kids = split.querySelectorAll(':scope > .dt-l');
+      kids.forEach(function(el){
+        if (el.offsetParent === null || getComputedStyle(el).display === 'none') return;
+        el.style.setProperty('--dtl-top', acc + 'px');
+        acc += el.offsetHeight + GAP;
+      });
+    });
+  }
+  window._recalcStickyOffsets = recalcStickyOffsets;
+
+  var _stickyRaf = null;
+  function scheduleStickyRecalc(){
+    if (_stickyRaf) cancelAnimationFrame(_stickyRaf);
+    _stickyRaf = requestAnimationFrame(function(){ _stickyRaf = null; recalcStickyOffsets(); });
+  }
+
+  function applyAllDesktopLayouts(){
+    applyMachineryDesktopLayout();
+    applyToolsDesktopLayout();
+    scheduleStickyRecalc();
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyAllDesktopLayouts, 0); });
+  window.addEventListener('resize', applyAllDesktopLayouts);
+  window.addEventListener('load', applyAllDesktopLayouts);
+
+  // Recalculate after the main tab changes (event already dispatched by switchTab)
+  document.addEventListener('sanjineer-tab-changed', function(){ setTimeout(scheduleStickyRecalc, 0); });
+
+  // Recalculate after any sub-tab toggle (Tools Add/Assign, Rentals We
+  // Rented/Given Out) — delegated so no existing click handlers are touched.
+  document.addEventListener('click', function(e){
+    if (e.target.closest('.rental-tab') || e.target.closest('#tool-subtabs-row')) {
+      setTimeout(scheduleStickyRecalc, 0);
+    }
+  });
 })();
 </script>
 </body>
