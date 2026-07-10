@@ -1120,7 +1120,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   // 'enterprise' (full access, same ₹30 rate), never downgraded to the
   // narrower new Pro tier and never asked to re-subscribe. Only brand-new
   // subscriptions going forward explicitly choose Pro (₹30) or Enterprise
-  // (₹99, launch-priced ₹90) and get exactly what they picked.
+  // (₹99, launch-priced ₹30) and get exactly what they picked.
   window._applyPlanFromAdminRow = function(data) {
     data = data || {};
     var now = Date.now();
@@ -3342,7 +3342,13 @@ function openSettingsPanel() {
     var s = document.getElementById('sett-login-sub');
     var ic= document.getElementById('sett-login-icon');
     if (isIn) {
-      if (t) t.textContent = 'Cloud Account';
+      // Show which plan this cloud account is on, right ahead of the
+      // "Cloud Account" label, so it's visible at a glance from Settings
+      // without having to open the Cloud modal itself.
+      var _planPrefix = window.isEnterpriseUser ? '👑 Enterprise · '
+                       : window.isProUser        ? '⭐ Pro · '
+                       : 'Admin · ';
+      if (t) t.textContent = _planPrefix + 'Cloud Account';
       if (s) s.textContent = 'Manage backup & sync';
       if (ic) ic.textContent = '☁️';
     } else {
@@ -16238,6 +16244,7 @@ function openPayLanding(afterAuth) {
   if (closeBtn) closeBtn.style.display = afterAuth ? 'none' : 'flex';
   if (lockedMsg) lockedMsg.style.display = afterAuth ? 'flex' : 'none';
   if (typeof _selectPlanTier === 'function') _selectPlanTier(window._obSelectedPlan || 'pro');
+  window._obSelectedPlan = 'pro'; // consume-once: only the signup toggle right before this call should influence it
 }
 function closePayLanding() {
   document.getElementById('pay-landing-modal').classList.remove('show');
@@ -16329,7 +16336,8 @@ var _UPGRADE_FEATURE_PLAN = {
   'Logo Upload': 'pro',
   'Multiple Projects': 'pro',
   'Project Sharing': 'enterprise',
-  'Cross-Device Sharing': 'enterprise'
+  'Cross-Device Sharing': 'enterprise',
+  'Purchase Order Approvals': 'enterprise'
 };
 
 function startSubscriptionPayment(plan) {
@@ -16620,13 +16628,58 @@ function checkOverdueNotifications() {
 var PO_KEY       = 'cm_po';
 var SUPPLIER_KEY = 'cm_suppliers';
 var _poLineCount = 0;
+var _poEditId    = null; // set while the owner is editing an existing PO from the records list
 
-function lpo(){ try{return JSON.parse(safeLS.getItem(PO_KEY)||'[]');}catch(e){return[];} }
-function spo(x){ safeLS.setItem(PO_KEY, JSON.stringify(x)); }
-function lsuppliers(){ try{return JSON.parse(safeLS.getItem(SUPPLIER_KEY)||'[]');}catch(e){return[];} }
-function ssuppliers(x){ safeLS.setItem(SUPPLIER_KEY, JSON.stringify(x)); }
+// NOTE on the migration below: PO_KEY/SUPPLIER_KEY used to be saved raw,
+// unscoped by project — unlike every other cm_ store in this app (see
+// _pk()). That meant they were invisible to both cloudBackupNow()'s payload
+// builder and _applyFullBackup()'s pull-merge, which only ever look at
+// sanj_project_<id>_cm_* keys: POs and suppliers were never actually
+// reaching the cloud, on any device, ever. Fixed by scoping them like
+// everything else; the one-time migration below adopts any existing local
+// data into the current project so nobody's existing POs/suppliers vanish.
+function lpo(){
+  try {
+    var raw = safeLS.getItem(_pk(PO_KEY));
+    if (raw === null) {
+      var legacy = safeLS.getItem(PO_KEY);
+      if (legacy !== null) { safeLS.setItem(_pk(PO_KEY), legacy); safeLS.removeItem(PO_KEY); raw = legacy; }
+    }
+    return JSON.parse(raw||'[]');
+  } catch(e){ return []; }
+}
+function spo(x){ safeLS.setItem(_pk(PO_KEY), JSON.stringify(x)); if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} } }
+function lsuppliers(){
+  try {
+    var raw = safeLS.getItem(_pk(SUPPLIER_KEY));
+    if (raw === null) {
+      var legacy = safeLS.getItem(SUPPLIER_KEY);
+      if (legacy !== null) { safeLS.setItem(_pk(SUPPLIER_KEY), legacy); safeLS.removeItem(SUPPLIER_KEY); raw = legacy; }
+    }
+    return JSON.parse(raw||'[]');
+  } catch(e){ return []; }
+}
+function ssuppliers(x){ safeLS.setItem(_pk(SUPPLIER_KEY), JSON.stringify(x)); if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} } }
+
+// PO approval workflow — every PO carries a live status that both the
+// site that raised it and the owner (in the Owner Overview PO tab) see:
+//   pending  → "Requested"      (just created, awaiting owner decision)
+//   approved → "Approved"       (owner signed off, ready to send/receive)
+//   rejected → "Rejected"       (owner declined — optional reason attached)
+//   changed  → "Changed by Owner" (owner edited the PO — site should review)
+var PO_STATUS_META = {
+  pending:  { label: '🟡 Requested',       bg: '#fef9c3', fg: '#a16207' },
+  approved: { label: '🟢 Approved',        bg: '#d1fae5', fg: '#059669' },
+  rejected: { label: '🔴 Rejected',        bg: '#fee2e2', fg: '#dc2626' },
+  changed:  { label: '🟠 Changed by Owner', bg: '#ffedd5', fg: '#c2410c' }
+};
+function poStatusBadge(status){
+  var s = PO_STATUS_META[status] || PO_STATUS_META.pending;
+  return '<span style="flex-shrink:0;font-size:9px;background:'+s.bg+';color:'+s.fg+';border-radius:99px;padding:1px 7px;font-weight:800;white-space:nowrap">'+s.label+'</span>';
+}
 
 function loadPOTab() {
+  _poEditId = null; // fresh tab load — any in-progress edit is abandoned; editPO() re-sets this itself right after
   var dateEl = document.getElementById('po-date');
   if (dateEl && !dateEl.value) dateEl.value = ist();
   var noEl = document.getElementById('po-no');
@@ -16764,15 +16817,20 @@ function poCustomSupplierCancel() {
   if (sel) sel.value = '';
 }
 
-function addPOLine() {
+function addPOLine(prefill) {
   var tbody = document.getElementById('po-lines-body'); if (!tbody) return;
   var id = ++_poLineCount;
   var tr = document.createElement('tr');
   tr.id = 'po-row-' + id;
-  tr.innerHTML = '<td class="px-1 py-1"><input type="text" id="po-desc-'+id+'" placeholder="Item / Material" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none" oninput="calcPOTotal()"></td>'
-    +'<td class="px-1 py-1"><input type="text" id="po-unit-'+id+'" placeholder="bags" class="w-14 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none"></td>'
-    +'<td class="px-1 py-1"><input type="number" id="po-qty-'+id+'" placeholder="0" step="any" class="w-14 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcPOTotal()"></td>'
-    +'<td class="px-1 py-1"><input type="number" id="po-rate-'+id+'" placeholder="0" step="any" class="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcPOTotal()"></td>'
+  var d = prefill || {};
+  var descV = d.desc ? ' value="'+String(d.desc).replace(/"/g,'&quot;')+'"' : '';
+  var unitV = d.unit ? ' value="'+String(d.unit).replace(/"/g,'&quot;')+'"' : '';
+  var qtyV  = (d.qty || d.qty===0) ? ' value="'+d.qty+'"' : '';
+  var rateV = (d.rate || d.rate===0) ? ' value="'+d.rate+'"' : '';
+  tr.innerHTML = '<td class="px-1 py-1"><input type="text" id="po-desc-'+id+'"'+descV+' placeholder="Item / Material" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none" oninput="calcPOTotal()"></td>'
+    +'<td class="px-1 py-1"><input type="text" id="po-unit-'+id+'"'+unitV+' placeholder="bags" class="w-14 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none"></td>'
+    +'<td class="px-1 py-1"><input type="number" id="po-qty-'+id+'"'+qtyV+' placeholder="0" step="any" class="w-14 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcPOTotal()"></td>'
+    +'<td class="px-1 py-1"><input type="number" id="po-rate-'+id+'"'+rateV+' placeholder="0" step="any" class="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs text-center focus:outline-none" oninput="calcPOTotal()"></td>'
     +'<td class="px-1 py-1 text-right text-xs font-bold text-gray-700" id="po-amt-'+id+'">₹0</td>'
     +'<td class="px-1 py-1"><button onclick="removePOLine('+id+')" class="text-red-400 text-sm font-bold">✕</button></td>';
   tbody.appendChild(tr);
@@ -16830,7 +16888,31 @@ function savePO() {
   var subtotal = lines.reduce(function(s,l){return s+l.amt;},0);
   var total    = subtotal + subtotal * gstPct / 100;
   var records  = lpo();
-  records.unshift({ id:Date.now().toString(36), poNo:poNo, date:date, sup:sup, delivery:delivery, site:site, notes:notes, gstPct:gstPct, lines:lines, total:total });
+
+  if (_poEditId) {
+    // Updating an existing PO from the records list (Owner Overview "Edit"
+    // or the site correcting their own request) — keep the same id/status
+    // history but reset status to 'changed' so whoever didn't make this
+    // edit sees it needs a fresh look, unless it was still just 'pending'.
+    var idx = records.findIndex(function(r){ return r.id === _poEditId; });
+    if (idx > -1) {
+      var prevStatus = records[idx].status || 'pending';
+      records[idx] = Object.assign({}, records[idx], {
+        poNo:poNo, date:date, sup:sup, delivery:delivery, site:site, notes:notes,
+        gstPct:gstPct, lines:lines, total:total,
+        status: prevStatus === 'pending' ? 'pending' : 'changed'
+      });
+      spo(records);
+      toast('✅ Purchase Order updated!','ok');
+      _poEditId = null;
+      renderPORecords();
+      generatePOPDF(false, records[idx]);
+      return;
+    }
+    _poEditId = null; // stale id, fall through to create-new below
+  }
+
+  records.unshift({ id:Date.now().toString(36), poNo:poNo, date:date, sup:sup, delivery:delivery, site:site, notes:notes, gstPct:gstPct, lines:lines, total:total, status:'pending' });
   spo(records);
   toast('✅ Purchase Order saved!','ok');
   renderPORecords();
@@ -16931,25 +17013,103 @@ function renderPORecords() {
   var el = document.getElementById('po-records-list'); if (!el) return;
   var records = lpo();
   if (!records.length) { el.innerHTML='<p class="text-gray-400 text-center py-3 text-xs">No POs saved yet</p>'; return; }
+  // The approval workflow (status badge + Approve/Reject/Edit) is an
+  // Enterprise-only feature. Pro/free accounts keep the plain PO list
+  // exactly as before — no badge, no owner actions.
+  var enterpriseOn = !!window.isEnterpriseUser;
+  var isOwner = enterpriseOn && !window._ENGINEER_MODE; // owner's own device can approve/reject/edit; a joined site can only view status
   el.innerHTML = records.map(function(r){
     var isReceived = r.status === 'received';
+    var status = r.status || 'pending';
     var idSafe = (r.id || '').replace(/'/g, '');
+    var canDecide = isOwner && !isReceived && (status === 'pending' || status === 'changed');
     return '<div style="background:white;border-radius:10px;border:1px solid '+(isReceived?'#bbf7d0':'#e5e7eb')+';padding:7px 10px;margin-bottom:6px;box-shadow:0 2px 6px rgba(0,0,0,0.06)">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;gap:6px;flex-wrap:wrap">'
       +'<div style="display:flex;align-items:center;gap:6px;min-width:0">'
       +'<p style="font-weight:800;color:#1f2937;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.poNo+' — '+(r.sup?r.sup.name:'No Supplier')+'</p>'
-      +(isReceived?'<span style="flex-shrink:0;font-size:9px;background:#d1fae5;color:#059669;border-radius:99px;padding:1px 7px;font-weight:800">✅ Received</span>':'')
+      +(isReceived?'<span style="flex-shrink:0;font-size:9px;background:#d1fae5;color:#059669;border-radius:99px;padding:1px 7px;font-weight:800">✅ Received</span>':(enterpriseOn?poStatusBadge(status):''))
+      +(r.site?'<span style="flex-shrink:0;font-size:9px;background:#eef2ff;color:#4338ca;border-radius:99px;padding:1px 7px;font-weight:700">📍 '+r.site+'</span>':'')
       +'</div>'
       +'<div style="display:flex;gap:5px;flex-shrink:0">'
       +(isReceived?'':'<button onclick="markPOReceived(\''+idSafe+'\')" style="font-size:10px;padding:0 10px;height:22px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:5px;cursor:pointer;font-weight:700">📦 Mark Received</button>')
       +'<button onclick="printPOById(\''+idSafe+'\')" style="font-size:10px;padding:0 10px;height:22px;background:#d1fae5;color:#059669;border:none;border-radius:5px;cursor:pointer;font-weight:700">🖨️ Print</button>'
+      +(isOwner?'<button onclick="editPO(\''+idSafe+'\')" style="font-size:10px;padding:0 10px;height:22px;background:#e0e7ff;color:#4338ca;border:none;border-radius:5px;cursor:pointer;font-weight:700">✏️ Edit</button>':'')
       +'<button onclick="deletePO(\''+idSafe+'\')" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;font-size:11px">×</button>'
       +'</div></div>'
+      +(canDecide?'<div style="display:flex;gap:5px;margin:5px 0 2px">'
+        +'<button onclick="approvePO(\''+idSafe+'\')" style="flex:1;font-size:10.5px;padding:5px 0;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:800">✅ Approve</button>'
+        +'<button onclick="rejectPO(\''+idSafe+'\')" style="flex:1;font-size:10.5px;padding:5px 0;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;cursor:pointer;font-weight:800">✕ Reject</button>'
+        +'</div>':'')
+      +((enterpriseOn && r.ownerNote)?'<p style="font-size:9.5px;color:#9ca3af;margin:3px 0 0;font-style:italic">💬 Owner: '+r.ownerNote+'</p>':'')
+      +(!enterpriseOn && !window._ENGINEER_MODE && status==='pending' && !isReceived?'<button onclick="if(typeof _showUpgradePopup===\'function\')_showUpgradePopup(\'Purchase Order Approvals\')" style="width:100%;margin-top:5px;font-size:9.5px;padding:5px 0;background:#fff7ed;color:#c2410c;border:1px dashed #fdba74;border-radius:6px;cursor:pointer;font-weight:700">🔒 Approve / Reject with Enterprise</button>':'')
       +'<div style="display:flex;justify-content:space-between">'
       +'<p style="font-size:10px;color:#9ca3af">'+fd(r.date)+(r.delivery?' · Delivery: '+fd(r.delivery):'')+(isReceived?' · Received: '+fd(r.receivedDate||r.date):'')+'</p>'
       +'<p style="font-weight:800;font-size:12px;color:#059669">'+fc(r.total)+'</p>'
       +'</div></div>';
   }).join('');
+}
+
+// Owner-only PO decisions — writes straight back into the shared PO list so
+// the badge on the record (visible to whichever site raised it) updates the
+// next time that device syncs/reloads this list. Guarded here (not just in
+// the UI) so status can only ever move from the owner's own device, on an
+// Enterprise plan — a joined site or a Pro account can never flip these
+// regardless of how the call is triggered.
+function _poCanDecide() {
+  if (!window.isEnterpriseUser) { if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Purchase Order Approvals'); return false; }
+  if (window._ENGINEER_MODE) { toast('Only the project owner can approve or reject a PO', 'err'); return false; }
+  return true;
+}
+function approvePO(id) {
+  if (!_poCanDecide()) return;
+  var records = lpo();
+  var idx = records.findIndex(function(r){ return r.id === id; });
+  if (idx === -1) { toast('PO not found','err'); return; }
+  records[idx].status = 'approved';
+  records[idx].ownerNote = '';
+  spo(records);
+  renderPORecords();
+  toast('✅ PO approved','ok');
+}
+function rejectPO(id) {
+  if (!_poCanDecide()) return;
+  var reason = prompt('Reason for rejecting this PO (optional):','') || '';
+  var records = lpo();
+  var idx = records.findIndex(function(r){ return r.id === id; });
+  if (idx === -1) { toast('PO not found','err'); return; }
+  records[idx].status = 'rejected';
+  records[idx].ownerNote = reason.trim();
+  spo(records);
+  renderPORecords();
+  toast('🔴 PO rejected','ok');
+}
+// Load an existing PO back into the New PO form for editing — saving will
+// update it in place (see savePO) instead of creating a duplicate. Editing
+// an existing PO (which flips its status to "Changed by Owner") is part of
+// the same Enterprise, owner-only approval workflow as approve/reject.
+function editPO(id) {
+  if (!_poCanDecide()) return;
+  var rec = lpo().find(function(r){ return r.id === id; });
+  if (!rec) { toast('PO not found','err'); return; }
+  _poEditId = id;
+  var noEl = document.getElementById('po-no'); if (noEl) noEl.value = rec.poNo||'';
+  var dateEl = document.getElementById('po-date'); if (dateEl) dateEl.value = rec.date||ist();
+  var delEl = document.getElementById('po-delivery'); if (delEl) delEl.value = rec.delivery||'';
+  var siteEl = document.getElementById('po-site'); if (siteEl) siteEl.value = rec.site||'';
+  var notesEl = document.getElementById('po-notes'); if (notesEl) notesEl.value = rec.notes||'';
+  var gstEl = document.getElementById('po-gst'); if (gstEl) gstEl.value = rec.gstPct||0;
+  renderPOSupplierDropdown();
+  var supSel = document.getElementById('po-supplier');
+  if (supSel) supSel.value = rec.sup ? (rec.sup.id || ('name:'+rec.sup.name)) : '';
+  var tbody = document.getElementById('po-lines-body');
+  if (tbody) {
+    tbody.innerHTML = ''; _poLineCount = 0;
+    (rec.lines||[]).forEach(function(l){ addPOLine(l); });
+    if (!(rec.lines||[]).length) addPOLine();
+  }
+  calcPOTotal();
+  toast('✏️ Editing '+(rec.poNo||'PO')+' — Save to update it','ok');
+  if (noEl) noEl.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 // Print a saved PO by its ID — avoids embedding JSON objects in onclick attrs
@@ -19924,12 +20084,17 @@ window._ownerSetFilter = function(f) { _ownerFilter = f; _ownerRenderFilters(); 
 var OWNER_TABS = [
   ['reports','📋 Reports'], ['workers','👷 Workers'], ['materials','🧱 Materials'],
   ['machinery','⚙️ Machinery'], ['expenses','💵 Expenses'], ['rentals','📦 Rentals'],
-  ['departmental','🏗️ Dept Work'], ['punchlist','📝 Punchlist'], ['visits','🚶 Visits']
+  ['departmental','🏗️ Dept Work'], ['punchlist','📝 Punchlist'], ['visits','🚶 Visits'],
+  ['po','🧾 Purchase Orders']
 ];
 function _ownerRenderTabs() {
   var wrap = document.getElementById('owner-ov-tabs');
   if (!wrap) return;
-  wrap.innerHTML = OWNER_TABS.map(function(t){
+  // Purchase Order approvals are an Enterprise-only feature — don't even
+  // show the tab to Pro/free owners (they'd hit the upgrade prompt anyway
+  // the moment they tried to approve/reject, but cleaner to just hide it).
+  var tabs = OWNER_TABS.filter(function(t){ return t[0] !== 'po' || window.isEnterpriseUser; });
+  wrap.innerHTML = tabs.map(function(t){
     var active = _ownerTab === t[0];
     return '<button onclick="_ownerSetTab(\'' + t[0] + '\')" style="flex-shrink:0;padding:7px 11px;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;border:1.5px solid ' + (active?'#4f46e5':'#e5e7eb') + ';background:' + (active?'linear-gradient(135deg,#4f46e5,#7c3aed)':'#fff') + ';color:' + (active?'#fff':'#6b7280') + ';">' + t[1] + '</button>';
   }).join('');
@@ -19939,6 +20104,7 @@ window._ownerSetTab = function(t) { _ownerTab = t; _ownerRenderTabs(); _ownerRen
 function _ownerRenderBody() {
   var body = document.getElementById('owner-ov-body');
   if (!body) return;
+  if (_ownerTab === 'po' && !window.isEnterpriseUser) { _ownerTab = 'reports'; _ownerRenderTabs(); }
   var projects = window.projects || [];
   if (!projects.length) { body.innerHTML = _ownerEmpty('No projects yet'); return; }
   var fn = _ownerTabRenderers[_ownerTab];
@@ -20130,6 +20296,108 @@ var _ownerTabRenderers = {
     rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
     return _ownerTotalsBar([['Visits', rows.length]])
       + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No site visits in this period'));
+  },
+
+  // POs are now properly project-scoped (see the lpo()/spo() fix) like
+  // every other store — so unlike a flat shared list, this tab has to
+  // loop every project's own PO data and merge it into one view, the same
+  // way the other Owner Overview tabs already do for reports/materials/etc.
+  po: function(projects) {
+    var rows = [];
+    projects.forEach(function(p) {
+      var records = _ownerLoadProjPO(p.id);
+      records.filter(function(r){ return _ownerInRange(r.date); }).forEach(function(r) {
+        rows.push({ pid: p.id, pname: p.name, rec: r });
+      });
+    });
+    var pending  = rows.filter(function(x){ var s = x.rec.status||'pending'; return s==='pending' || s==='changed'; }).length;
+    var approved = rows.filter(function(x){ return x.rec.status==='approved'; }).length;
+    if (!rows.length) return _ownerTotalsBar([['Awaiting Decision',0],['Approved',0],['Total',0]]) + _ownerEmpty('No purchase orders in this period');
+    rows.sort(function(a,b){ return (b.rec.date||'').localeCompare(a.rec.date||''); });
+    return _ownerTotalsBar([['Awaiting Decision', pending], ['Approved', approved], ['Total', rows.length]])
+      + rows.map(function(x) {
+        var r = x.rec, pid = x.pid;
+        var status = r.status || 'pending';
+        var isReceived = status === 'received';
+        var canDecide = !isReceived && (status === 'pending' || status === 'changed');
+        var idSafe = (r.id||'').replace(/'/g,'');
+        var pidSafe = (pid||'').replace(/'/g,'');
+        return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:9px 11px;margin-bottom:7px;box-shadow:0 1px 4px rgba(0,0,0,.04);">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;flex-wrap:wrap;">'
+          + '<p style="font-size:11.5px;font-weight:700;color:#1e1b4b;margin:0;flex:1;min-width:0;">' + _jhtml(r.poNo) + ' — ' + (r.sup?_jhtml(r.sup.name):'No Supplier') + '</p>'
+          + (isReceived ? '<span style="flex-shrink:0;font-size:8.5px;background:#d1fae5;color:#059669;border-radius:6px;padding:2px 7px;font-weight:800">✅ Received</span>' : poStatusBadge(status))
+          + _siteTag(x.pname)
+          + '</div>'
+          + '<p style="font-size:9.5px;color:#6b7280;margin:3px 0 0;">' + fd(r.date) + ' · ' + fc(r.total) + (r.notes?' · '+_jhtml(r.notes):'') + '</p>'
+          + (r.ownerNote ? '<p style="font-size:9px;color:#9ca3af;margin:2px 0 0;font-style:italic">💬 ' + _jhtml(r.ownerNote) + '</p>' : '')
+          + (canDecide ? '<div style="display:flex;gap:5px;margin-top:6px;">'
+              + '<button onclick="_ownerApprovePO(\'' + pidSafe + '\',\'' + idSafe + '\')" style="flex:1;font-size:10px;padding:5px 0;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:800">✅ Approve</button>'
+              + '<button onclick="_ownerRejectPO(\'' + pidSafe + '\',\'' + idSafe + '\')" style="flex:1;font-size:10px;padding:5px 0;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;cursor:pointer;font-weight:800">✕ Reject</button>'
+              + '<button onclick="_ownerEditPOFromOverview(\'' + pidSafe + '\',\'' + idSafe + '\')" style="flex:1;font-size:10px;padding:5px 0;background:#e0e7ff;color:#4338ca;border:none;border-radius:6px;cursor:pointer;font-weight:800">✏️ Edit</button>'
+              + '</div>' : '')
+          + '</div>';
+      }).join('');
+  }
+};
+
+// Read/write a specific project's PO list directly by id — used by the
+// Owner Overview PO tab, which shows every project's POs at once and
+// needs to act on whichever one the button belongs to, not just the
+// currently active project.
+function _ownerLoadProjPO(pid) {
+  try { return JSON.parse(safeLS.getItem('sanj_project_' + pid + '_' + PO_KEY) || '[]'); } catch(e) { return []; }
+}
+function _ownerSaveProjPO(pid, arr) {
+  try { safeLS.setItem('sanj_project_' + pid + '_' + PO_KEY, JSON.stringify(arr)); } catch(e) {}
+  // If this happens to be the currently active project, keep its own
+  // Purchase tab and cloud sync in sync immediately, same as normal.
+  // For a project that ISN'T currently open, the write is saved correctly
+  // and will sync to the cloud the next time that project becomes active
+  // on this device (same as any other edit made while a project is closed).
+  if (pid === window.currentProjectId) {
+    if (typeof renderPORecords === 'function') { try { renderPORecords(); } catch(e) {} }
+    if (typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch(e) {} }
+  }
+}
+function _ownerApprovePO(pid, id) {
+  if (!_poCanDecide()) return;
+  var records = _ownerLoadProjPO(pid);
+  var idx = records.findIndex(function(r){ return r.id === id; });
+  if (idx === -1) { toast('PO not found','err'); return; }
+  records[idx].status = 'approved';
+  records[idx].ownerNote = '';
+  _ownerSaveProjPO(pid, records);
+  _ownerRenderBody();
+  toast('✅ PO approved','ok');
+}
+function _ownerRejectPO(pid, id) {
+  if (!_poCanDecide()) return;
+  var reason = prompt('Reason for rejecting this PO (optional):','') || '';
+  var records = _ownerLoadProjPO(pid);
+  var idx = records.findIndex(function(r){ return r.id === id; });
+  if (idx === -1) { toast('PO not found','err'); return; }
+  records[idx].status = 'rejected';
+  records[idx].ownerNote = reason.trim();
+  _ownerSaveProjPO(pid, records);
+  _ownerRenderBody();
+  toast('🔴 PO rejected','ok');
+}
+
+// Editing a PO from the Owner Overview: switch into whichever project that
+// PO actually belongs to (POs are per-project, so editPO()/savePO() only
+// ever operate on the currently active project's own list), then jump into
+// the Purchase Order tab with this record pre-loaded via editPO().
+window._ownerEditPOFromOverview = function(pid, id) {
+  var m = document.getElementById('_owner-overview-modal'); if (m) m.remove();
+  function goToForm() {
+    if (typeof showBillType === 'function') showBillType('po');
+    setTimeout(function(){ if (typeof editPO === 'function') editPO(id); }, 250);
+  }
+  if (pid && pid !== window.currentProjectId && typeof switchProject === 'function') {
+    switchProject(pid);
+    setTimeout(goToForm, 400); // let switchProject's own reload cycle (200ms) settle first
+  } else {
+    goToForm();
   }
 };
 
