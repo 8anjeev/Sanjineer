@@ -3336,8 +3336,13 @@ function openSettingsPanel() {
 
   // Sync login state
   try {
-    var cloudIcon = document.getElementById('cloud-hdr-icon-center');
-    var isIn = cloudIcon && cloudIcon.textContent.indexOf('🔒') === -1;
+    // NOTE: this used to check a hidden #cloud-hdr-icon-center span's
+    // textContent for a 🔒, but nothing anywhere else in the app ever
+    // updates that span after login — it always stays "🔒", so this always
+    // evaluated to "logged out" even for a genuinely logged-in account.
+    // ADMIN_ROLE_KEY is the same source of truth updateCloudBtn()/
+    // updateOwnerBtn() already use right after a real login succeeds.
+    var isIn = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
     var t = document.getElementById('sett-login-title');
     var s = document.getElementById('sett-login-sub');
     var ic= document.getElementById('sett-login-icon');
@@ -20041,6 +20046,12 @@ function _ownerLoadProject(pid) {
   };
 }
 
+// Owner Overview has two faces: the original mobile bottom-sheet-turned-
+// fullscreen modal (touch-first, one tab at a time), and a premium desktop
+// dashboard (charts + KPIs + a tab rail) for wider screens. openOwnerOverview()
+// is just the dispatcher — it decides which face to show based on viewport
+// width, and keeps watching the viewport so it can auto-switch faces live if
+// the window is resized past the laptop breakpoint while it's open.
 window.openOwnerOverview = function() {
   if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
     if (typeof toast === 'function') toast('⚠️ Admin only', 'err');
@@ -20048,6 +20059,13 @@ window.openOwnerOverview = function() {
   }
   var existing = document.getElementById('_owner-overview-modal');
   if (existing) existing.remove();
+  var existingDt = document.getElementById('_owner-desktop-modal');
+  if (existingDt) existingDt.remove();
+  _ownerStartViewportWatch();
+  if (_ownerIsDesktopViewport()) { _ownerOpenDesktopDashboard(); } else { _ownerOpenMobileOverview(); }
+};
+
+function _ownerOpenMobileOverview() {
   var modal = document.createElement('div');
   modal.id = '_owner-overview-modal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#F3F4F8;display:flex;flex-direction:column;';
@@ -20064,11 +20082,37 @@ window.openOwnerOverview = function() {
     + '<div id="owner-ov-body"></div>'
     + '</div>';
   document.body.appendChild(modal);
-  document.getElementById('owner-ov-close').onclick = function(){ modal.remove(); };
+  document.getElementById('owner-ov-close').onclick = function(){ modal.remove(); _ownerStopViewportWatch(); };
   _ownerRenderFilters();
   _ownerRenderTabs();
   _ownerRenderBody();
-};
+}
+
+// ── Viewport watcher: "laptop aesthetic" auto-switch ──────────────
+// While the Owner Overview is open (in either face), keep an eye on the
+// window width. Cross the 1024px laptop breakpoint and it swaps the modal
+// for the other face live, no re-opening needed.
+var _ownerViewportWatcher = null;
+function _ownerIsDesktopViewport() {
+  return (window.innerWidth || document.documentElement.clientWidth || 0) >= 1024;
+}
+function _ownerStartViewportWatch() {
+  if (_ownerViewportWatcher) return;
+  var lastIsDesktop = _ownerIsDesktopViewport();
+  _ownerViewportWatcher = function() {
+    var nowDesktop = _ownerIsDesktopViewport();
+    if (nowDesktop === lastIsDesktop) return;
+    lastIsDesktop = nowDesktop;
+    var m1 = document.getElementById('_owner-overview-modal'); if (m1) m1.remove();
+    var m2 = document.getElementById('_owner-desktop-modal'); if (m2) m2.remove();
+    _ownerStopDesktopAutoRefresh();
+    if (nowDesktop) { _ownerOpenDesktopDashboard(); } else { _ownerOpenMobileOverview(); }
+  };
+  window.addEventListener('resize', _ownerViewportWatcher);
+}
+function _ownerStopViewportWatch() {
+  if (_ownerViewportWatcher) { window.removeEventListener('resize', _ownerViewportWatcher); _ownerViewportWatcher = null; }
+}
 
 function _ownerRenderFilters() {
   var wrap = document.getElementById('owner-ov-filters');
@@ -20079,7 +20123,16 @@ function _ownerRenderFilters() {
     return '<button onclick="_ownerSetFilter(\'' + o[0] + '\')" style="flex:1;padding:8px 4px;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;border:1.5px solid ' + (active?'#4f46e5':'#e5e7eb') + ';background:' + (active?'#EEF2FF':'#fff') + ';color:' + (active?'#4338ca':'#6b7280') + ';">' + o[1] + '</button>';
   }).join('');
 }
-window._ownerSetFilter = function(f) { _ownerFilter = f; _ownerRenderFilters(); _ownerRenderBody(); };
+window._ownerSetFilter = function(f) {
+  _ownerFilter = f;
+  if (document.getElementById('_owner-desktop-modal')) {
+    _ownerRenderDesktopFilters();
+    _ownerRenderDesktopAll();
+  } else {
+    _ownerRenderFilters();
+    _ownerRenderBody();
+  }
+};
 
 var OWNER_TABS = [
   ['reports','📋 Reports'], ['workers','👷 Workers'], ['materials','🧱 Materials'],
@@ -20400,6 +20453,305 @@ window._ownerEditPOFromOverview = function(pid, id) {
     goToForm();
   }
 };
+
+// ══════════════════════════════════════════════════════════════
+// OWNER DASHBOARD — DESKTOP/LAPTOP FACE
+// A premium, wide-screen rendition of the same Owner Overview data:
+// KPI cards, pie/donut charts (pure CSS conic-gradient, no chart lib
+// needed), and the same tab-wise content lists as the mobile face
+// (reusing _ownerTabRenderers so the two faces never drift apart),
+// laid out as a tab rail + content pane. Auto-refreshes on an
+// interval so it stays current as cloud sync merges data from other
+// devices in the background.
+// ══════════════════════════════════════════════════════════════
+
+var _ownerDesktopRefreshTimer = null;
+
+function _ownerEnsureDesktopStyles() {
+  if (document.getElementById('_owner-dt-styles')) return;
+  var st = document.createElement('style');
+  st.id = '_owner-dt-styles';
+  st.textContent = '@keyframes _ownerPulse{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}';
+  document.head.appendChild(st);
+}
+
+function _ownerFmt(n) { return Math.round(n||0).toLocaleString('en-IN'); }
+
+// Single pass over every project's local data to build every number the
+// desktop dashboard needs — KPI cards and all the charts read from this
+// one object instead of each re-scanning every project's data separately.
+function _ownerAggregate(projects) {
+  var stats = {
+    reportsCount: 0,
+    workersPresent: 0, workersByCat: {},
+    materialsCost: 0,
+    expensesCost: 0,
+    machineryCost: 0, machineryHours: 0,
+    deptCost: 0, deptWorkers: 0,
+    punchOpen: 0, punchProgress: 0, punchResolved: 0, punchTotal: 0,
+    visits: 0,
+    poByStatus: {}, poTotal: 0
+  };
+  projects.forEach(function(p) {
+    var d = _ownerLoadProject(p.id);
+    d.AD.forEach(function(x) {
+      if (x.type === 'qdpr_entry' && _ownerInRange(x.date)) stats.reportsCount++;
+      if (x.type === 'attendance' && x.status !== 'A' && _ownerInRange(x.date)) {
+        stats.workersPresent++;
+        var c = x.category || 'Other';
+        stats.workersByCat[c] = (stats.workersByCat[c]||0) + 1;
+      }
+      if (x.type === 'material' && _ownerInRange(x.date)) stats.expensesCost += parseFloat(x.cost)||0;
+    });
+    d.mats.forEach(function(m) {
+      (m.transactions||[]).forEach(function(t) {
+        if (t.type === 'purchase' && _ownerInRange(t.date)) stats.materialsCost += parseFloat(t.cost)||0;
+      });
+    });
+    Object.keys(d.mach).forEach(function(date) {
+      if (!_ownerInRange(date)) return;
+      (d.mach[date]||[]).forEach(function(s) {
+        stats.machineryCost += parseFloat(s.cost)||0;
+        stats.machineryHours += parseFloat(s.hours)||0;
+      });
+    });
+    Object.keys(d.dept).forEach(function(date) {
+      if (!_ownerInRange(date)) return;
+      (d.dept[date]||[]).forEach(function(e) {
+        stats.deptCost += parseFloat(e.amount)||0;
+        stats.deptWorkers += parseInt(e.workers)||0;
+      });
+    });
+    (d.pl||[]).forEach(function(x) {
+      if (!_ownerInRange(x.date)) return;
+      stats.punchTotal++;
+      if (x.status === 'resolved') stats.punchResolved++;
+      else if (x.status === 'progress') stats.punchProgress++;
+      else stats.punchOpen++;
+    });
+    if (window.isEnterpriseUser) {
+      _ownerLoadProjPO(p.id).forEach(function(r) {
+        if (!_ownerInRange(r.date)) return;
+        stats.poTotal++;
+        var s = r.status || 'pending';
+        stats.poByStatus[s] = (stats.poByStatus[s]||0) + 1;
+      });
+    }
+  });
+  var visits = (typeof lvisits === 'function') ? lvisits() : [];
+  visits.forEach(function(v) { if (_ownerInRange(v.date)) stats.visits++; });
+  return stats;
+}
+
+function _ownerDesktopKPIHtml(stats) {
+  var cards = [
+    ['📋','Reports Submitted', stats.reportsCount, '#4f46e5'],
+    ['👷','Workers Present', stats.workersPresent, '#059669'],
+    ['🧱','Material Cost', '₹'+_ownerFmt(stats.materialsCost), '#d97706'],
+    ['💵','Expenses', '₹'+_ownerFmt(stats.expensesCost), '#dc2626'],
+    ['⚙️','Machinery Cost', '₹'+_ownerFmt(stats.machineryCost), '#7c3aed'],
+    ['🏗️','Dept. Work Cost', '₹'+_ownerFmt(stats.deptCost), '#0891b2'],
+    ['📝','Open Punchlist', stats.punchOpen, '#e11d48'],
+    ['🚶','Site Visits', stats.visits, '#65a30d']
+  ];
+  if (window.isEnterpriseUser) {
+    var pending = (stats.poByStatus.pending||0) + (stats.poByStatus.changed||0);
+    cards.push(['🧾','Pending POs', pending, '#0d9488']);
+  }
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;">'
+    + cards.map(function(c) {
+      return '<div style="background:#fff;border-radius:14px;padding:16px 14px;box-shadow:0 2px 10px rgba(30,20,90,.06);border:1px solid #eef0f5;position:relative;overflow:hidden;">'
+        + '<div style="position:absolute;top:-8px;right:-6px;font-size:36px;opacity:.08;">' + c[0] + '</div>'
+        + '<div style="font-size:10px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">' + c[1] + '</div>'
+        + '<div style="font-size:20px;font-weight:800;color:' + c[3] + ';">' + c[2] + '</div>'
+        + '</div>';
+    }).join('') + '</div>';
+}
+
+// Pure-CSS conic-gradient donut chart + legend — no charting library
+// needed, scales cleanly, and matches the app's existing purple/premium
+// palette used throughout the Owner Overview.
+function _ownerDonut(segments, size) {
+  size = size || 128;
+  var total = segments.reduce(function(s,x){ return s + (x.value||0); }, 0);
+  var body;
+  if (!total) {
+    body = '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ca3af;font-weight:700;flex-shrink:0;text-align:center;">No data<br>yet</div>';
+  } else {
+    var cum = 0;
+    var stops = segments.filter(function(s){ return s.value > 0; }).map(function(seg) {
+      var pct = seg.value/total*100;
+      var start = cum, end = cum + pct; cum = end;
+      return seg.color + ' ' + start.toFixed(2) + '% ' + end.toFixed(2) + '%';
+    }).join(', ');
+    body = '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:conic-gradient(' + stops + ');position:relative;flex-shrink:0;box-shadow:0 4px 16px rgba(30,20,90,.14);">'
+      + '<div style="position:absolute;inset:' + Math.round(size*0.24) + 'px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;">'
+      + '<div style="font-size:15px;font-weight:800;color:#1e1b4b;">' + _ownerFmt(total) + '</div>'
+      + '</div></div>';
+  }
+  var legend = segments.map(function(seg) {
+    var pct = total ? (seg.value/total*100).toFixed(0) : 0;
+    return '<div style="display:flex;align-items:center;gap:6px;font-size:10.5px;margin-bottom:6px;">'
+      + '<span style="width:9px;height:9px;border-radius:3px;background:' + seg.color + ';flex-shrink:0;"></span>'
+      + '<span style="flex:1;min-width:0;font-weight:600;color:#1e1b4b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _jhtml(seg.label) + '</span>'
+      + '<span style="font-weight:800;color:#6b7280;flex-shrink:0;">' + _ownerFmt(seg.value) + ' · ' + pct + '%</span>'
+      + '</div>';
+  }).join('');
+  return '<div style="display:flex;gap:16px;align-items:center;">' + body + '<div style="flex:1;min-width:0;">' + legend + '</div></div>';
+}
+
+function _ownerChartCard(title, innerHtml) {
+  return '<div style="background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(30,20,90,.06);border:1px solid #eef0f5;">'
+    + '<div style="font-size:11.5px;font-weight:800;color:#1e1b4b;margin-bottom:14px;">' + title + '</div>'
+    + innerHtml + '</div>';
+}
+
+function _ownerDesktopChartsHtml(stats) {
+  var palette = ['#4f46e5','#059669','#d97706','#dc2626','#7c3aed','#0891b2','#e11d48','#65a30d','#0d9488','#9333ea'];
+  var workerSegs = Object.keys(stats.workersByCat)
+    .sort(function(a,b){ return stats.workersByCat[b]-stats.workersByCat[a]; })
+    .map(function(c,i){ return { label:c, value:stats.workersByCat[c], color:palette[i%palette.length] }; });
+  var spendSegs = [
+    { label:'Materials', value:stats.materialsCost, color:'#4f46e5' },
+    { label:'Expenses', value:stats.expensesCost, color:'#dc2626' },
+    { label:'Machinery', value:stats.machineryCost, color:'#7c3aed' },
+    { label:'Dept. Work', value:stats.deptCost, color:'#0891b2' }
+  ];
+  var punchSegs = [
+    { label:'Open', value:stats.punchOpen, color:'#e11d48' },
+    { label:'In Progress', value:stats.punchProgress, color:'#d97706' },
+    { label:'Resolved', value:stats.punchResolved, color:'#059669' }
+  ];
+  var cards = [
+    _ownerChartCard('👷 Workers by Category', _ownerDonut(workerSegs)),
+    _ownerChartCard('💰 Spend Breakdown', _ownerDonut(spendSegs)),
+    _ownerChartCard('📝 Punchlist Status', _ownerDonut(punchSegs))
+  ];
+  if (window.isEnterpriseUser) {
+    var poSegs = [
+      { label:'Pending', value:(stats.poByStatus.pending||0)+(stats.poByStatus.changed||0), color:'#d97706' },
+      { label:'Approved', value:stats.poByStatus.approved||0, color:'#059669' },
+      { label:'Rejected', value:stats.poByStatus.rejected||0, color:'#dc2626' },
+      { label:'Received', value:stats.poByStatus.received||0, color:'#4f46e5' }
+    ];
+    cards.push(_ownerChartCard('🧾 Purchase Orders', _ownerDonut(poSegs)));
+  }
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:20px;">' + cards.join('') + '</div>';
+}
+
+function _ownerDesktopRailHtml() {
+  var tabs = OWNER_TABS.filter(function(t){ return t[0] !== 'po' || window.isEnterpriseUser; });
+  return tabs.map(function(t) {
+    var active = _ownerTab === t[0];
+    return '<button onclick="_ownerDesktopSetTab(\'' + t[0] + '\')" style="display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:none;background:' + (active?'linear-gradient(135deg,#4f46e5,#7c3aed)':'transparent') + ';color:' + (active?'#fff':'#4b5563') + ';font-size:12px;font-weight:700;cursor:pointer;margin-bottom:4px;">' + t[1] + '</button>';
+  }).join('');
+}
+window._ownerDesktopSetTab = function(t) { _ownerTab = t; _ownerRenderDesktopRailAndContent(); };
+
+function _ownerDesktopContentHtml(projects) {
+  if (_ownerTab === 'po' && !window.isEnterpriseUser) _ownerTab = 'reports';
+  if (!projects.length) return _ownerEmpty('No projects yet');
+  var fn = _ownerTabRenderers[_ownerTab];
+  var tabMeta = OWNER_TABS.filter(function(t){ return t[0] === _ownerTab; })[0] || ['', 'Overview'];
+  return '<div style="font-size:14px;font-weight:800;color:#1e1b4b;margin-bottom:14px;">' + tabMeta[1] + '</div>'
+    + (fn ? fn(projects) : '');
+}
+
+function _ownerRenderDesktopRailAndContent() {
+  var projects = window.projects || [];
+  var railEl = document.getElementById('owner-dt-rail-tabs'); if (railEl) railEl.innerHTML = _ownerDesktopRailHtml();
+  var listEl = document.getElementById('owner-dt-list'); if (listEl) listEl.innerHTML = _ownerDesktopContentHtml(projects);
+}
+
+function _ownerUpdateDesktopRefreshedLabel() {
+  var el = document.getElementById('owner-dt-updated');
+  if (!el) return;
+  var d = new Date(), hh = d.getHours(), mm = d.getMinutes();
+  var ampm = hh >= 12 ? 'PM' : 'AM', h12 = hh % 12; if (h12 === 0) h12 = 12;
+  el.textContent = h12 + ':' + (mm < 10 ? '0' : '') + mm + ' ' + ampm;
+}
+
+function _ownerRenderDesktopAll() {
+  var projects = window.projects || [];
+  var stats = _ownerAggregate(projects);
+  var kpiEl = document.getElementById('owner-dt-kpis'); if (kpiEl) kpiEl.innerHTML = _ownerDesktopKPIHtml(stats);
+  var chartsEl = document.getElementById('owner-dt-charts'); if (chartsEl) chartsEl.innerHTML = _ownerDesktopChartsHtml(stats);
+  _ownerRenderDesktopRailAndContent();
+  var headerCountEl = document.getElementById('owner-dt-count');
+  if (headerCountEl) headerCountEl.textContent = 'All ' + projects.length + ' projects · updated ';
+  _ownerUpdateDesktopRefreshedLabel();
+}
+
+function _ownerRenderDesktopFilters() {
+  var wrap = document.getElementById('owner-dt-filters');
+  if (!wrap) return;
+  var opts = [['today','Today'],['month','This Month'],['overall','Overall']];
+  wrap.innerHTML = opts.map(function(o) {
+    var active = _ownerFilter === o[0];
+    return '<button onclick="_ownerSetFilter(\'' + o[0] + '\')" style="padding:7px 16px;border-radius:20px;font-size:11px;font-weight:800;cursor:pointer;border:1.5px solid ' + (active?'rgba(255,255,255,.95)':'rgba(255,255,255,.25)') + ';background:' + (active?'rgba(255,255,255,.95)':'rgba(255,255,255,.08)') + ';color:' + (active?'#4338ca':'rgba(255,255,255,.85)') + ';">' + o[1] + '</button>';
+  }).join('');
+}
+
+// Auto-refresh keeps the dashboard current with what other devices push
+// to the cloud in the background — no manual reopen needed while it's
+// sitting open on an owner's laptop.
+function _ownerStartDesktopAutoRefresh() {
+  _ownerStopDesktopAutoRefresh();
+  _ownerDesktopRefreshTimer = setInterval(function() {
+    if (!document.getElementById('_owner-desktop-modal')) { _ownerStopDesktopAutoRefresh(); return; }
+    _ownerRenderDesktopAll();
+  }, 20000);
+}
+function _ownerStopDesktopAutoRefresh() {
+  if (_ownerDesktopRefreshTimer) { clearInterval(_ownerDesktopRefreshTimer); _ownerDesktopRefreshTimer = null; }
+}
+
+function _ownerOpenDesktopDashboard() {
+  _ownerEnsureDesktopStyles();
+  var modal = document.createElement('div');
+  modal.id = '_owner-desktop-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#F3F4F8;display:flex;flex-direction:column;';
+  modal.innerHTML =
+    '<div style="background:linear-gradient(120deg,#1E1458 0%,#2D1B8E 50%,#4A3AB5 100%);padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;flex-wrap:wrap;">'
+      + '<div>'
+        + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+          + '<div style="color:#fff;font-size:18px;font-weight:800;letter-spacing:.3px;">👑 Owner Dashboard</div>'
+          + '<div style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.12);padding:3px 10px;border-radius:20px;">'
+            + '<span style="width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 0 3px rgba(52,211,153,.25);animation:_ownerPulse 1.6s infinite;display:inline-block;"></span>'
+            + '<span style="color:rgba(255,255,255,.85);font-size:9.5px;font-weight:700;">LIVE · AUTO-REFRESH</span>'
+          + '</div>'
+        + '</div>'
+        + '<div style="color:rgba(255,255,255,.6);font-size:11px;margin-top:4px;"><span id="owner-dt-count">All ' + ((window.projects||[]).length) + ' projects · updated </span><span id="owner-dt-updated">just now</span></div>'
+      + '</div>'
+      + '<div id="owner-dt-filters" style="display:flex;gap:7px;flex-wrap:wrap;"></div>'
+      + '<div style="display:flex;gap:8px;flex-shrink:0;">'
+        + '<button onclick="openEditProfile()" title="Profile & Company Settings" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">⚙️</button>'
+        + '<button id="owner-dt-close" style="width:36px;height:36px;border-radius:10px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:15px;cursor:pointer;">✕</button>'
+      + '</div>'
+    + '</div>'
+    + '<div style="flex:1;overflow:hidden;display:flex;min-height:0;">'
+      + '<div style="width:190px;flex-shrink:0;background:#fff;border-right:1px solid #e5e7eb;overflow-y:auto;padding:16px 10px;">'
+        + '<div style="font-size:9.5px;font-weight:800;color:#9ca3af;text-transform:uppercase;padding:0 6px 8px;letter-spacing:.4px;">Browse by tab</div>'
+        + '<div id="owner-dt-rail-tabs"></div>'
+      + '</div>'
+      + '<div style="flex:1;overflow-y:auto;padding:22px 28px;min-width:0;">'
+        + '<div id="owner-dt-kpis"></div>'
+        + '<div id="owner-dt-charts"></div>'
+        + '<div style="background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 2px 10px rgba(30,20,90,.06);border:1px solid #eef0f5;">'
+          + '<div id="owner-dt-list"></div>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+  document.body.appendChild(modal);
+  document.getElementById('owner-dt-close').onclick = function() {
+    modal.remove();
+    _ownerStopDesktopAutoRefresh();
+    _ownerStopViewportWatch();
+  };
+  _ownerRenderDesktopFilters();
+  _ownerRenderDesktopAll();
+  _ownerStartDesktopAutoRefresh();
+}
 
 // ══════════════════════════════════════════════════════════════
 // ENGINEER SIDE — Join one or more projects via code
