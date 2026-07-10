@@ -1794,7 +1794,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         width: 100% !important;
         margin: 0 !important;
         display: grid !important;
-        grid-template-columns: 220px 1fr !important;
+        grid-template-columns: 174px 1fr !important;
         grid-template-rows: 56px 1fr !important;
         grid-template-areas:
           "sidebar header"
@@ -1867,15 +1867,18 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         flex-shrink: 0 !important;
         width: 100% !important;
         text-align: left !important;
-        padding: 8px 12px !important;
-        border-radius: 10px !important;
-        font-size: 12px !important;
+        justify-content: flex-start !important;
+        padding: 7px 10px !important;
+        border-radius: 9px !important;
+        font-size: 11px !important;
         font-weight: 600 !important;
         color: rgba(255,255,255,0.55) !important;
         white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
         display: flex !important;
         align-items: center !important;
-        gap: 8px !important;
+        gap: 7px !important;
         transition: background .15s, color .15s !important;
         border-left: 3px solid transparent !important;
         box-sizing: border-box !important;
@@ -1928,6 +1931,41 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       /* Wider modals on desktop */
       .fixed > div.max-w-sm { max-width: 400px !important; }
       .fixed > div.max-w-md { max-width: 520px !important; }
+
+      /* ══════════════════════════════════════════
+         DESKTOP TWO-COLUMN TAB LAYOUT
+         .dt-split containers lay their direct children
+         into a narrow left rail (forms/filters/print)
+         and a wider right column (records/tables/lists).
+         Every direct child must carry .dt-l / .dt-r / .dt-full
+         or it will fall back to normal stacking.
+         ══════════════════════════════════════════ */
+      .dt-split {
+        display: grid !important;
+        grid-template-columns: 300px minmax(0,1fr) !important;
+        align-items: start !important;
+        gap: 14px !important;
+      }
+      .dt-split > .dt-l { grid-column: 1 !important; min-width: 0 !important; }
+      .dt-split > .dt-r { grid-column: 2 !important; min-width: 0 !important; }
+      .dt-split > .dt-full { grid-column: 1 / -1 !important; }
+      /* stack multiple items placed in the same column */
+      .dt-split > .dt-l ~ .dt-l,
+      .dt-split > .dt-r ~ .dt-r { margin-top: 0 !important; }
+
+      /* Compact single-column forms inside the left rail */
+      .dt-split > .dt-l .grid-cols-2,
+      .dt-split > .dt-l .grid-cols-3 {
+        grid-template-columns: 1fr !important;
+      }
+      .dt-split > .dt-l .col-span-2 { grid-column: 1 / -1 !important; }
+
+      /* Sticky left rail so forms/filters stay visible while scrolling records */
+      .dt-split > .dt-l { position: sticky !important; top: 8px !important; }
+
+      /* Right column record tables: keep a touch narrower than full bleed
+         (skips Quotation & Site Visits per request — those stay untouched) */
+      .dt-cap { max-width: 1080px !important; }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -4462,9 +4500,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ===== ATTENDANCE ===== -->
 
-<div id="tab-attendance" class="tab-content" style="display:none">
+<div id="tab-attendance" class="tab-content dt-split dt-cap" style="display:none">
   <!-- Worker Attendance Print Panel -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print Worker Attendance <span class="font-normal text-gray-400">— select worker & month</span></p>
     <div class="flex gap-2 items-center flex-wrap">
       <select id="att-print-worker" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
@@ -4474,7 +4512,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="printWorkerAttendance()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">➕ Add Worker</p>
       <button onclick="openManageWorkers()" class="g-tor-violet500-purple500 text-white rounded-xl font-semibold active:scale-95" style="font-size:10px;padding:0 12px">⚙️ Manage Workers</button>
@@ -4507,12 +4545,12 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Master Attendance -->
-  <button onclick="openMasterAtt()" class="w-full mb-3 active:scale-95 g-tor-indigo500-purple500 rounded-2xl shadow-xl" style="padding:12px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;cursor:pointer">
+  <button onclick="openMasterAtt()" class="dt-full w-full mb-3 active:scale-95 g-tor-indigo500-purple500 rounded-2xl shadow-xl" style="padding:12px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;cursor:pointer">
     <span style="font-size:13px;font-weight:800;color:#fff;line-height:1">🗂️ Master Atten.</span>
     <span style="font-size:10px;color:rgba(255,255,255,0.75);font-weight:500;line-height:1">Select to mark attendance</span>
   </button>
 
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">👷 Workers List</p>
     <div id="workers-list"><p class="text-gray-400 text-center py-4">No workers yet</p></div>
   </div>
@@ -4520,8 +4558,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ===== EXPENSES ===== -->
 
-<div id="tab-expenses" class="tab-content" style="display:none">
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+<div id="tab-expenses" class="tab-content dt-split dt-cap" style="display:none">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">💰 Petty Cash <span class="font-normal text-gray-400">— record cash brought to site</span></p>
     <div class="grid grid-cols-3 gap-3" style="align-items:stretch">
       <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400" style="height:44px;box-sizing:border-box">
@@ -4529,7 +4567,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="addPettyCash()" class="g-tor-cyan500-sky500 text-white rounded-xl font-semibold text-sm active:scale-95" style="height:44px;padding:0;box-sizing:border-box">💰 Deposit</button>
     </div>
   </div>
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">📝 Quick Entry <span class="font-normal text-gray-400">— material, tool or other site expense</span></p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="exp-mat-name" placeholder="Item / Description" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
@@ -4577,12 +4615,12 @@ document.addEventListener('DOMContentLoaded', function() {
       <button id="exp-save-btn" onclick="addExpenseMaterial()" class="g-tor-amber500-orange500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:9px 0">💾 Save Entry</button>
     </div>
   </div>
-  <div class="grid grid-cols-3 gap-2.5 mb-3">
+  <div class="dt-full grid grid-cols-3 gap-2.5 mb-3">
     <div class="g-tobr-emerald500-teal500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-emerald-100 leading-none">Material Cost</p><p id="exp-mat-total" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
     <div class="g-tobr-cyan500-sky500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-cyan-100 leading-none">Cash In</p><p id="exp-petty-in" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
     <div class="g-tobr-violet500-purple500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-violet-100 leading-none">Remaining</p><p id="exp-petty-left" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
   </div>
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <div class="flex items-center gap-2 mb-2">
       <p class="text-xs font-semibold text-gray-500 flex-shrink-0">💰 Expense Ledger</p>
       <select id="exp-month-filter" class="flex-1 min-w-0 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400" style="font-size:11px;padding:4px 8px" onchange="viewExpenses()">
@@ -4601,13 +4639,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ===== MATERIALS ===== -->
 
-<div id="tab-materials" class="tab-content" style="display:none">
+<div id="tab-materials" class="tab-content dt-split dt-cap" style="display:none">
   <!-- Low stock reorder -->
-  <div id="mat-reorder-bar" style="display:none;margin-bottom:8px;padding:8px 12px;background:linear-gradient(135deg,#dc2626,#ef4444);border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+  <div id="mat-reorder-bar" class="dt-full" style="display:none;margin-bottom:8px;padding:8px 12px;background:linear-gradient(135deg,#dc2626,#ef4444);border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px">
     <p style="color:white;font-size:11px;font-weight:700;margin:0" id="mat-low-count">⚠️ 0 items low on stock</p>
     <button onclick="reorderWhatsApp()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:800;padding:0 12px;border-radius:8px;cursor:pointer">📱 Reorder via WhatsApp</button>
   </div>
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">🧱 Add Material / Stock Item <span class="font-normal text-gray-400">— set min alert level</span></p>
     <div class="grid grid-cols-2 gap-2.5 mb-3">
       <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -4620,7 +4658,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
   </div>
-  <div class="bg-white rounded-2xl p-2.5 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-2.5 mb-3 shadow-xl">
     <div class="flex gap-2 items-center flex-wrap">
       <select id="mat-print-daterange" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400" style="flex:0 0 auto">
         <option value="all">📅 All Time</option>
@@ -4642,7 +4680,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="printStockList()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print Received</button>
     </div>
   </div>
-  <div id="materials-list" class="space-y-3">
+  <div id="materials-list" class="dt-r space-y-3">
     <p class="text-white/50 text-center py-4">No materials added yet</p>
   </div>
 </div>
@@ -4733,8 +4771,8 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- ADD TOOLS sub-section -->
-  <div id="tool-sec-add">
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div id="tool-sec-add" class="dt-split dt-cap">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">+ Add Tool / Equipment</p>
       <div class="grid grid-cols-2 gap-2.5">
         <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -4744,7 +4782,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button onclick="addTool()" class="g-tor-violet500-purple500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:6px 0">Add Tool</button>
       </div>
     </div>
-    <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-2">🔧 All Tool Records</p>
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
@@ -4762,8 +4800,8 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- ASSIGN TOOLS sub-section -->
-  <div id="tool-sec-assign" style="display:none">
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div id="tool-sec-assign" class="dt-split dt-cap" style="display:none">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">📋 Assign Tool to Worker</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Select Tool</label>
@@ -4777,7 +4815,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button onclick="assignTool()" class="g-tor-indigo500-blue500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:6px 0">Assign Tool</button>
       </div>
     </div>
-    <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-2">📋 Current Assignments</p>
       <div id="tool-assignments"><p class="text-gray-400 text-center py-4 text-sm">No assignments yet</p></div>
     </div>
@@ -4828,8 +4866,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- We Rented Section -->
 
-  <div id="rsec-borrow">
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div id="rsec-borrow" class="dt-split dt-cap">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-xs font-semibold text-gray-500 mb-2">📦 Equipment We Rented</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="rb-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -4864,7 +4902,9 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
       <button onclick="addRental('borrow')" class="g-tor-rose500-pink500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add Rental</button>
-      <div class="mt-4 overflow-x-auto">
+    </div>
+    <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <div class="overflow-x-auto">
         <table class="w-full text-sm"><thead><tr class="g-tor-rose500-pink500 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Item</th><th class="px-2 py-2">Owner</th><th class="px-2 py-2">Qty</th><th class="px-2 py-2">From</th><th class="px-2 py-2">Days</th><th class="px-2 py-2 text-right">Total</th><th class="px-2 py-2 rounded-r-lg">Del</th></tr></thead>
         <tbody id="rtable-borrow"><tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">None yet</td></tr></tbody>
         <tfoot><tr class="bg-rose-50"><td colspan="5" class="px-3 py-2 font-bold text-rose-700">Total Expense</td><td id="rental-exp-total" class="px-3 py-2 text-right font-bold text-rose-700">₹0</td><td></td></tr></tfoot></table>
@@ -4874,8 +4914,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- Given Out Section -->
 
-  <div id="rsec-given" style="display:none">
-    <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div id="rsec-given" class="dt-split dt-cap" style="display:none">
+    <div class="dt-l bg-white rounded-2xl p-3 shadow-xl">
       <p class="text-xs font-semibold text-gray-500 mb-2">💰 Given to Others</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="rg-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -4910,7 +4950,9 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
       <button onclick="addRental('given')" class="g-tor-emerald500-teal500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
-      <div class="mt-4 overflow-x-auto">
+    </div>
+    <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
+      <div class="overflow-x-auto">
         <table class="w-full text-sm"><thead><tr class="g-tor-emerald500-teal500 text-white"><th class="px-2 py-2 text-left rounded-l-lg">Item</th><th>Qty</th><th>Client</th><th>From</th><th>Days</th><th class="text-right">Total</th><th class="rounded-r-lg">Del</th></tr></thead>
         <tbody id="rtable-given"><tr><td colspan="7" class="px-3 py-4 text-center text-gray-400">None yet</td></tr></tbody>
         <tfoot><tr class="bg-emerald-50"><td colspan="5" class="px-3 py-2 font-bold text-emerald-700">Total Income</td><td id="rental-inc-total" class="px-3 py-2 text-right font-bold text-emerald-700">₹0</td><td></td></tr></tfoot></table>
@@ -4921,8 +4963,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ===== TEAMS ===== -->
 
-<div id="tab-contractors" class="tab-content" style="display:none">
-  <div class="bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
+<div id="tab-contractors" class="tab-content dt-split dt-cap" style="display:none">
+  <div class="dt-full bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
     <div class="flex items-center justify-between gap-2">
       <button onclick="changeViewMonth(-1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:0 12px">← Prev</button>
       <div class="text-center"><p class="text-[9px] text-gray-500 leading-none">Period</p><p id="teams-period" class="text-sm font-bold text-gray-800 leading-none mt-0.5"></p></div>
@@ -4930,7 +4972,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Monthly Payment Report Panel -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Monthly Payment Report <span class="font-normal text-gray-400">— select month & team</span></p>
     <div class="flex gap-2 items-center flex-wrap mb-2">
       <select id="print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
@@ -4941,7 +4983,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Subcontractor Bill Tracking -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-bold text-gray-700">🧾 Subcontractor Bill Tracker</p>
       <button onclick="toggleSubconBillPanel()" class="bg-indigo-100 text-indigo-600 text-xs font-bold rounded-lg px-3 py-1">+ Add Bill</button>
@@ -4962,7 +5004,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="subcon-bill-list"><p class="text-gray-400 text-xs text-center py-2">No bills tracked yet</p></div>
   </div>
 
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Contractor / Staff</p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="ct-name" placeholder="Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -4973,14 +5015,14 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="addContractor()" class="g-tor-indigo500-purple500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
     </div>
   </div>
-  <div id="contractors-list" class="space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
+  <div id="contractors-list" class="dt-r space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
 </div>
 
 <!-- ===== BOQ DPR (standalone tab) ===== -->
-<div id="tab-boq" class="tab-content" style="display:none">
+<div id="tab-boq" class="tab-content dt-split dt-cap" style="display:none">
 
   <!-- ══ HERO HEADER ══ -->
-  <div style="background:linear-gradient(135deg,#0f2244 0%,#1a3a6b 50%,#0f2244 100%);border-radius:18px;padding:16px 14px 14px;margin-bottom:12px;box-shadow:0 8px 32px rgba(15,34,68,0.45);position:relative;overflow:hidden">
+  <div class="dt-full" style="background:linear-gradient(135deg,#0f2244 0%,#1a3a6b 50%,#0f2244 100%);border-radius:18px;padding:16px 14px 14px;margin-bottom:12px;box-shadow:0 8px 32px rgba(15,34,68,0.45);position:relative;overflow:hidden">
     <div style="position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;background:rgba(251,191,36,0.08);pointer-events:none"></div>
     <div style="position:absolute;bottom:-20px;left:-20px;width:70px;height:70px;border-radius:50%;background:rgba(99,102,241,0.12);pointer-events:none"></div>
     <div style="text-align:center;margin-bottom:10px">
@@ -5033,7 +5075,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Project Info -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">🏗️ Project Info</p>
       <div style="display:flex;gap:6px">
@@ -5063,7 +5105,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Today's Work Details card -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">🌅 Today's Work Details</p>
       <button onclick="boqOpenTodayModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;display:flex;align-items:center;gap:5px">
@@ -5076,7 +5118,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Import / Add BOQ -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📂 Import / Add BOQ</p>
       <span id="boq-import-status" style="font-size:9px;color:#6b7280"></span>
@@ -5099,7 +5141,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- BOQ Table -->
-  <div id="boq-table-wrap" class="mb-3">
+  <div id="boq-table-wrap" class="dt-r mb-3">
     <div class="text-center py-10 bg-white rounded-2xl shadow-xl">
       <span style="font-size:40px">📋</span>
       <p class="font-semibold text-gray-600 mt-2">No BOQ data yet</p>
@@ -5108,7 +5150,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Gantt -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
     <p class="text-sm font-bold text-gray-700 mb-3">📊 BOQ Gantt Chart</p>
     <div id="boq-gantt-view" style="overflow-x:auto"></div>
   </div>
@@ -5185,9 +5227,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ===== MACHINERY ===== -->
-<div id="tab-machinery" class="tab-content" style="display:none">
+<div id="tab-machinery" class="tab-content dt-split dt-cap" style="display:none">
   <!-- Date selector -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between gap-2 mb-1">
       <p class="text-xs font-bold text-gray-700">📅 Select Date</p>
       <div class="flex items-center gap-2">
@@ -5198,7 +5240,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <p id="mach-date-label" class="text-amber-600 font-semibold" style="font-size:11px"></p>
   </div>
   <!-- Log Form -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">⚙️ Log Machine Hours</p>
       <button onclick="addMachineSession()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Session</button>
@@ -5232,7 +5274,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Sessions List -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📋 Sessions — <span id="mach-sessions-date">—</span></p>
       <button onclick="printMachinery()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">🖨️ Print Day</button>
@@ -5240,7 +5282,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="mach-sessions-list"><div class="text-center py-8"><div style="font-size:40px">🚧</div><p class="font-semibold text-gray-600 mt-2">No sessions on <span id="mach-empty-date">—</span></p></div></div>
   </div>
   <!-- Monthly Summary -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">📊 Monthly Summary</p>
       <button onclick="printMachineryMonth()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">🖨️ Print</button>
@@ -5269,15 +5311,15 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ===== DRAWINGS ===== -->
-<div id="tab-drawings" class="tab-content" style="display:none">
+<div id="tab-drawings" class="tab-content dt-split dt-cap" style="display:none">
   <!-- Room Tabs -->
-  <div class="mb-3 overflow-x-auto" style="scrollbar-width:none;-webkit-overflow-scrolling:touch;">
+  <div class="dt-full mb-3 overflow-x-auto" style="scrollbar-width:none;-webkit-overflow-scrolling:touch;">
     <div class="flex gap-1.5 pb-1" id="drawing-room-tabs">
       <!-- Generated by JS -->
     </div>
   </div>
   <!-- Add Drawing Form -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">+ Add Drawing — <span id="drawing-room-label">R1</span></p>
       <button onclick="saveDrawing()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">💾 Save</button>
@@ -5298,7 +5340,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Drawings List -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📋 <span id="drawing-room-list-label">R1</span> Drawings</p>
       <span id="drawing-count" class="bg-indigo-100 text-indigo-700 font-bold rounded-full px-2.5 py-0.5 text-xs">0</span>
@@ -5308,9 +5350,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ===== BUDGET ===== -->
-<div id="tab-budget" class="tab-content" style="display:none">
+<div id="tab-budget" class="tab-content dt-split dt-cap" style="display:none">
   <!-- Budget Setup -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">⚙️ Project Budget Setup</p>
       <button onclick="saveBudget()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">💾 Save</button>
@@ -5333,7 +5375,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Overview -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-sm font-bold text-gray-700 mb-3">📊 Overall Budget vs Actual</p>
     <div class="grid grid-cols-3 gap-2 mb-3">
       <div class="rounded-xl text-white p-3" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6)"><p class="text-[10px] text-blue-200 font-bold uppercase tracking-wide">Planned</p><p id="bgt-planned-disp" class="text-xl font-black leading-none mt-1">₹0</p></div>
@@ -5345,17 +5387,17 @@ document.addEventListener('DOMContentLoaded', function() {
     <p id="bgt-pct" class="text-right text-xs text-gray-500 font-semibold">0% used</p>
   </div>
   <!-- Category Breakdown -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-sm font-bold text-gray-700 mb-3">📂 Category Breakdown</p>
     <div id="bgt-categories"><p class="text-gray-400 text-sm text-center py-2">Save budget setup to see breakdown</p></div>
   </div>
   <!-- Actuals vs Budget visual bars -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-sm font-bold text-gray-700 mb-3">📊 Budget vs Actual — Visual</p>
     <div id="bgt-visual-bars"><p class="text-gray-400 text-xs text-center py-2">Set budget categories to see comparison</p></div>
   </div>
   <!-- Plinth Area Summary -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <p class="text-sm font-bold text-gray-700 mb-2">📐 Plinth Area Summary</p>
     <div id="bgt-plinth-summary"><p class="text-gray-400 text-sm">No area data set yet</p></div>
   </div>
@@ -5365,9 +5407,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="tab-schedule" class="tab-content" style="display:none">
 
   <!-- Project Schedule (only content) -->
-  <div id="sched-sub-main">
+  <div id="sched-sub-main" class="dt-split dt-cap">
     <!-- Progress -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-full bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">📊 Project Progress</p>
         <span id="sched-pct" class="bg-indigo-100 text-indigo-700 font-black text-sm rounded-full px-2.5 py-0.5">0%</span>
@@ -5376,7 +5418,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="flex justify-between text-xs text-gray-500 mt-1"><span><span id="sched-done">0</span> done</span><span><span id="sched-total">0</span> total</span></div>
     </div>
     <!-- Add Milestone -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">+ Add Milestone</p>
       <input type="text" id="ms-title" placeholder="Milestone Title" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2">
       <div class="grid grid-cols-2 gap-2 mb-2">
@@ -5392,12 +5434,12 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="addMilestone()" class="g-tobr-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">Add Milestone</button>
     </div>
     <!-- Timeline list -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">📅 Project Timeline</p>
       <div id="milestones-list"><div class="text-center py-10"><span style="font-size:40px">📅</span><p class="font-semibold text-gray-600 mt-2">No milestones yet</p><p class="text-gray-400 text-xs mt-1">Add project phases and deadlines</p></div></div>
     </div>
     <!-- Gantt chart -->
-    <div class="bg-white rounded-2xl p-3 shadow-xl" style="margin-top:8px">
+    <div class="dt-r bg-white rounded-2xl p-3 shadow-xl" style="margin-top:8px">
       <p class="text-sm font-bold text-gray-700 mb-3">📊 Gantt Chart</p>
       <div id="gantt-view" style="overflow-x:auto;min-height:40px"><p class="text-gray-400 text-xs text-center py-2">Add milestones with dates to see Gantt chart</p></div>
     </div>
@@ -5405,15 +5447,15 @@ document.addEventListener('DOMContentLoaded', function() {
 </div><!-- end tab-schedule -->
 
 <!-- ===== PUNCH LIST ===== -->
-<div id="tab-punchlist" class="tab-content" style="display:none">
+<div id="tab-punchlist" class="tab-content dt-split dt-cap" style="display:none">
   <!-- Stats -->
-  <div class="grid grid-cols-3 gap-2 mb-3">
+  <div class="dt-full grid grid-cols-3 gap-2 mb-3">
     <div class="bg-white rounded-2xl shadow-xl text-center py-3"><p id="pl-open-ct" class="text-2xl font-black text-rose-600">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Open</p></div>
     <div class="bg-white rounded-2xl shadow-xl text-center py-3"><p id="pl-prog-ct" class="text-2xl font-black text-amber-500">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">In Progress</p></div>
     <div class="bg-white rounded-2xl shadow-xl text-center py-3"><p id="pl-res-ct" class="text-2xl font-black text-green-600">0</p><p class="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Resolved</p></div>
   </div>
   <!-- Form -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-sm font-bold text-gray-700 mb-3">+ Add Punch / Snag Item</p>
     <input type="text" id="pl-title" placeholder="Issue Title / Description" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 mb-2">
     <div class="grid grid-cols-2 gap-2 mb-2">
@@ -5435,13 +5477,13 @@ document.addEventListener('DOMContentLoaded', function() {
     <button onclick="addPunchItem()" class="g-tobr-amber500-orange500 w-full text-white py-2 rounded-xl font-bold text-sm active:scale-95">📋 Add to Punch List</button>
   </div>
   <!-- Filter + List -->
-  <div class="flex gap-2 mb-3 flex-wrap">
+  <div class="dt-l flex gap-2 mb-3 flex-wrap">
     <button onclick="filterPunch('all')" id="pl-f-all" class="px-3 py-1.5 rounded-xl text-xs font-bold text-white active:scale-95" style="background:#f97316">All</button>
     <button onclick="filterPunch('open')" id="pl-f-open" class="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 border-2" style="border-color:#ef4444;color:#ef4444;background:#fff">🔴 Open</button>
     <button onclick="filterPunch('progress')" id="pl-f-prog" class="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 border-2" style="border-color:#f59e0b;color:#f59e0b;background:#fff">🟡 In Progress</button>
     <button onclick="filterPunch('resolved')" id="pl-f-res" class="px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 border-2" style="border-color:#22c55e;color:#22c55e;background:#fff">✅ Resolved</button>
   </div>
-  <div id="punchlist-list"><div class="text-center py-10"><span style="font-size:40px">✅</span><p class="text-gray-400 mt-2">No punch items</p></div></div>
+  <div id="punchlist-list" class="dt-r"><div class="text-center py-10"><span style="font-size:40px">✅</span><p class="text-gray-400 mt-2">No punch items</p></div></div>
 </div>
 
 <!-- ===== BILL ===== -->
@@ -5499,16 +5541,16 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Invoice Section -->
-  <div id="bill-invoice-section" style="display:none">
+  <div id="bill-invoice-section" class="dt-split dt-cap" style="display:none">
     <!-- Saved Invoices -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl" id="inv-records-wrap">
+    <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl" id="inv-records-wrap">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">📋 Invoice Records</p>
         <span id="inv-count" class="bg-indigo-100 text-indigo-700 font-bold rounded-full px-2.5 py-0.5 text-xs">0</span>
       </div>
       <div id="inv-records-list"><p class="text-gray-400 text-sm text-center py-2">No invoices yet</p></div>
     </div>
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">🧾 Create New Invoice</p>
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Invoice No.</label><input type="text" id="inv-no" placeholder="INV-001" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
@@ -5555,9 +5597,9 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Purchase Order Section -->
-  <div id="bill-po-section" style="display:none">
+  <div id="bill-po-section" class="dt-split dt-cap" style="display:none">
     <!-- Suppliers -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">🏭 Suppliers</p>
         <button onclick="togglePoSupplierForm()" class="g-tobr-emerald500-teal500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Supplier</button>
@@ -5574,7 +5616,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div id="po-suppliers-list"><p class="text-gray-400 text-xs text-center py-2">No suppliers yet</p></div>
     </div>
     <!-- New PO -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">📦 New Purchase Order</p>
         <button onclick="generatePOPDF()" class="g-tobr-emerald500-teal500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
@@ -5600,7 +5642,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
     <!-- PO Line Items -->
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">📋 Items Ordered</p>
         <button onclick="addPOLine()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Item</button>
@@ -5625,7 +5667,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="savePO()" class="g-tobr-emerald500-teal500 w-full text-white py-2 rounded-xl font-bold text-sm active:scale-95 mt-2">💾 Save Purchase Order</button>
     </div>
     <!-- Saved POs -->
-    <div class="bg-white rounded-2xl p-3 shadow-xl">
+    <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">📁 Saved Purchase Orders</p>
         <button onclick="loadPOTab()" class="bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold px-3 py-1">🔄</button>
