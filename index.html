@@ -1860,8 +1860,9 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         width: 100% !important;
       }
 
-      /* Sidebar section label */
-      #main-app > nav > div::before {
+      /* Sidebar section label — scoped to exclude #sidebar-profile-chip
+         (also a direct child of nav) so "SECTIONS" prints once, not twice */
+      #main-app > nav > div:not(#sidebar-profile-chip)::before {
         content: "SECTIONS";
         display: block;
         font-size: 9px;
@@ -2226,53 +2227,48 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 @media (min-width: 1024px) {
   /* ══════════════════════════════════════════
      1) SIDEBAR PROFILE CHIP
-     A header-depth/colour band pinned to the very
-     top of the sidebar (top-left corner, beside the
-     header) showing the signed-in user's name and
-     their plan/subscription validity. The tab list
-     ("SECTIONS" + buttons) is pushed down below it.
+     A small rounded pill — same colour as the header,
+     same corner-radius/padding as a selected tab —
+     showing the signed-in user's name and their plan
+     validity. Sized to its content (not a full-width
+     band), so it sits inside the corner instead of
+     covering it edge-to-edge.
      ══════════════════════════════════════════ */
   #sidebar-profile-chip {
     display: flex !important;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
-    height: 56px;
-    min-height: 56px;
-    flex-shrink: 0;
-    padding: 0 14px;
+    gap: 1px;
+    width: auto;
+    margin: 10px 8px 8px 8px;
+    padding: 7px 10px;                     /* same padding as .tab-btn.active */
+    border-radius: 9px;                    /* same corner-radius as .tab-btn.active */
     background-image: linear-gradient(to right, #4f46e5, #9333ea, #ec4899);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
     position: sticky;
-    top: 0;
+    top: 8px;
     z-index: 5;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.15);
   }
   #sidebar-profile-chip .spc-name {
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 800;
     color: #fff;
-    line-height: 1.25;
+    line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   #sidebar-profile-chip .spc-plan {
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: .02em;
-    color: rgba(255,255,255,0.8);
-    line-height: 1.25;
+    color: rgba(255,255,255,0.82);
+    line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   #sidebar-profile-chip .spc-plan.spc-plan-warn { color: #fde68a; }
-
-  /* Nudge "SECTIONS" + the tab list down slightly so it reads as clearly
-     below the profile chip rather than flush against it. */
-  #main-app > nav > div:not(#sidebar-profile-chip) {
-    margin-top: 6px !important;
-  }
 
   /* ══════════════════════════════════════════
      2) INDEPENDENT PER-COLUMN SCROLLING
@@ -4892,18 +4888,32 @@ document.addEventListener('DOMContentLoaded', function() {
     <button onclick="reorderWhatsApp()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:800;padding:0 12px;border-radius:8px;cursor:pointer">📱 Reorder via WhatsApp</button>
   </div>
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-xs font-semibold text-gray-500 mb-2">🧱 Add Material / Stock Item <span class="font-normal text-gray-400">— set min alert level</span></p>
-    <div class="grid grid-cols-2 gap-2.5 mb-3">
-      <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <select id="mat-category" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-      <input type="text" id="mat-remark" placeholder="Remark (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="text" id="mat-supplier" placeholder="Supplier Name (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-      <input type="text" id="mat-supplier-phone" placeholder="Supplier Phone (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-xs font-semibold text-gray-500">🧱 Material Entry</p>
+      <button type="button" id="mat-new-toggle-btn" onclick="toggleNewMaterialForm()" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg active:scale-95" style="border:none;cursor:pointer">+ Add New Material</button>
     </div>
-    <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
+    <!-- Quick pick: choose an already-added material to open its Received/entry form directly -->
+    <div id="mat-quick-pick-wrap">
+      <label class="text-[10px] font-bold text-gray-500 block mb-1">Select Material to Add Entry</label>
+      <select id="mat-name-select" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400" onchange="quickPickMaterial(this.value)">
+        <option value="">— Choose a material —</option>
+      </select>
+    </div>
+    <!-- New material form: hidden until "+ Add New Material" is tapped -->
+    <div id="mat-new-form-wrap" style="display:none">
+      <p class="text-xs font-semibold text-gray-500 mb-2 mt-2">🧱 New Stock Item <span class="font-normal text-gray-400">— set min alert level</span></p>
+      <div class="grid grid-cols-2 gap-2.5 mb-3">
+        <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <select id="mat-category" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
+        <input type="text" id="mat-remark" placeholder="Remark (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="text" id="mat-supplier" placeholder="Supplier Name (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="text" id="mat-supplier-phone" placeholder="Supplier Phone (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      </div>
+      <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
+    </div>
   </div>
   <div class="dt-l bg-white rounded-2xl p-2.5 mb-3 shadow-xl">
     <div class="flex gap-2 items-center flex-wrap">
@@ -6444,6 +6454,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <button onclick="clearBill('mp')" class="text-rose-400 leading-none flex-shrink-0" style="font-size:13px">✕</button>
           </div>
         </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 block mb-1">📝 Remark <span class="font-normal text-gray-400">(Optional)</span></label>
+        <input type="text" id="mp-remark" placeholder="e.g. Delivered late, short by 2 bags..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       </div>
       <button onclick="saveMatPurchase()" class="g-tor-emerald500-teal500 w-full py-2 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save — Adds to Stock</button>
     </div>
@@ -10002,6 +10016,34 @@ function addMaterialItem(){
   smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty','mat-remark','mat-supplier','mat-supplier-phone'].forEach(function(id){ document.getElementById(id).value=''; });
   if (catEl) catEl.value='';
   toast('Material added','ok'); viewMaterials(); updateDash();
+  toggleNewMaterialForm(true); // switch back to the "select material" picker
+}
+// ── Add-Material panel: toggle between the "pick an existing material"
+// dropdown (quick entry) and the "define a brand-new material" form. ──
+function toggleNewMaterialForm(forcePicker){
+  var wrap = document.getElementById('mat-new-form-wrap');
+  var pick = document.getElementById('mat-quick-pick-wrap');
+  var btn  = document.getElementById('mat-new-toggle-btn');
+  if (!wrap || !pick) return;
+  var showPicker = forcePicker === true || wrap.style.display !== 'none';
+  if (showPicker) {
+    wrap.style.display = 'none';
+    pick.style.display = '';
+    if (btn) btn.textContent = '+ Add New Material';
+  } else {
+    wrap.style.display = '';
+    pick.style.display = 'none';
+    if (btn) btn.textContent = '← Back to Existing';
+    var nameEl = document.getElementById('mat-name'); if (nameEl) nameEl.focus();
+  }
+}
+// Selecting an already-added material from the dropdown opens its
+// "Material Received" entry form directly, so the user can log a new
+// delivery without hunting for it in the list below.
+function quickPickMaterial(id){
+  if (!id) return;
+  openMatPurchaseModal(id);
+  var pickEl = document.getElementById('mat-name-select'); if (pickEl) pickEl.value = '';
 }
 function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
 function delMaterialItem(id){ askDel('Delete material?', function(){ if (typeof _addTombstone === 'function') _addTombstone('mat__'+id, Date.now()); smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); updateDash(); }); }
@@ -10069,6 +10111,7 @@ function openMatPurchaseModal(id){
   document.getElementById('mp-date').value=ist(); document.getElementById('mp-qty').value='';
   document.getElementById('mp-unit').value=item.unit||''; document.getElementById('mp-cost').value='';
   document.getElementById('mp-supplier').value='';
+  var mpRemarkEl=document.getElementById('mp-remark'); if (mpRemarkEl) mpRemarkEl.value='';
   var mpCatEl=document.getElementById('mp-category');
   if (mpCatEl) mpCatEl.innerHTML=_matCatOptionsHTML(item.category||'', false);
   clearBill('mp');
@@ -10080,11 +10123,12 @@ function saveMatPurchase(){
   var date=document.getElementById('mp-date').value, qty=parseFloat(document.getElementById('mp-qty').value)||0;
   var unit=document.getElementById('mp-unit').value.trim(), cost=parseFloat(document.getElementById('mp-cost').value)||0;
   var supplier=document.getElementById('mp-supplier').value.trim();
+  var remarkEl=document.getElementById('mp-remark'); var remark=remarkEl?remarkEl.value.trim():'';
   var catEl=document.getElementById('mp-category'), category=catEl?catEl.value:'';
   if(!date||!qty){ toast('Enter date and quantity','err'); return; }
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
   if (category && !item.category) item.category = category;
-  var txn={type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,category:category||item.category||''};
+  var txn={type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,category:category||item.category||'',remark:remark};
   _saveBill('mp', function(key){
     txn.bill_id = key;
     item.transactions.push(txn); smat(mats);
@@ -10170,6 +10214,13 @@ function viewMaterials(){
         .map(function(m){ return '<option value="'+m.id+'">'+m.name+'</option>'; }).join('');
     if (curSel && mats.some(function(m){ return m.id===curSel; })) filterEl.value = curSel;
   }
+  // Populate / refresh the "Select Material to Add Entry" quick-pick dropdown
+  var pickEl = document.getElementById('mat-name-select');
+  if (pickEl) {
+    pickEl.innerHTML = '<option value="">— Choose a material —</option>' +
+      mats.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); })
+        .map(function(m){ return '<option value="'+m.id+'">'+m.name+(m.unit?' ('+m.unit+')':'')+'</option>'; }).join('');
+  }
   // Populate / refresh category filter (distinct categories in use)
   var catFilterEl = document.getElementById('mat-print-category');
   if (catFilterEl) {
@@ -10218,6 +10269,7 @@ function viewMaterials(){
             +'<span style="font-size:10px;font-weight:700;color:'+(isP?'#047857':'#be123c')+'">'+(isP?'+':'-')+t.qty+' '+(t.unit||item.unit)+'</span>'
             +(isP&&t.cost?'<span style="font-size:10px;color:#b45309;font-weight:600">'+fc(t.cost)+'</span>':'')
             +(isP&&t.supplier?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+t.supplier+'</span>':'')
+            +(isP&&t.remark?'<span style="font-size:10px;color:#9333ea;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">📝 '+esc(t.remark)+'</span>':'')
             +(!isP&&t.note?'<span style="font-size:10px;color:#6b7280">'+t.note+'</span>':'')
             +'<div style="margin-left:auto;display:flex;gap:3px;flex-shrink:0">'
             +(isP&&(t.bill_id||t.bill)?'<button onclick="viewBill(\''+( t.bill_id||t.bill)+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:3px;cursor:pointer">Bill</button>':'')
