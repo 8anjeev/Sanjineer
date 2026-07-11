@@ -2050,6 +2050,26 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         white-space: nowrap !important;
         box-sizing: border-box !important;
       }
+
+      /* ── Rentals: sub-tabs pinned to the very top, print-by-client panel
+         sized/aligned to the same left-column width as the We Rented /
+         Given Out forms below it (300px, matching .dt-split's dt-l). ── */
+      #tab-rentals:not(.tab-hidden) { display: grid !important; grid-template-columns: 300px minmax(0,1fr) !important; gap: 14px !important; align-items: start !important; }
+      #tab-rentals > #rental-subtabs-bar { grid-column: 1 / -1 !important; }
+      #tab-rentals > #rental-print-panel { grid-column: 1 !important; margin-bottom: 0 !important; }
+      #tab-rentals > #rsec-borrow,
+      #tab-rentals > #rsec-given { grid-column: 1 / -1 !important; }
+
+      /* ── Invoice / Purchase Order / Quotation / Measurement: these forms
+         are field-heavy, so the left (form) column gets 70% and the right
+         (saved records) column gets 30% — overrides the default 300px/1fr
+         used by every other dt-split tab. ── */
+      #bill-invoice-section.dt-split,
+      #bill-po-section.dt-split,
+      #qtab-sec-quote.dt-split,
+      #qtab-sec-meas.dt-split {
+        grid-template-columns: 7fr 3fr !important;
+      }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -4739,6 +4759,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <select id="mat-category" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
+      <input type="text" id="mat-remark" placeholder="Remark (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="text" id="mat-supplier" placeholder="Supplier Name (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="text" id="mat-supplier-phone" placeholder="Supplier Phone (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
     </div>
@@ -4912,9 +4933,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="tab-rentals" class="tab-content tab-hidden" style="display:none">
 
-  <!-- ── CLIENT FILTER & PRINT PANEL ── -->
+  <!-- Sub-tabs: We Rented / Given Out — moved above the print panel
+       (desktop: sits right under the main tab row, like a table of
+       contents for this tab) so switching view type doesn't need
+       scrolling past the print card first. -->
 
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div id="rental-subtabs-bar" class="bg-white/10 rounded-2xl p-2 mb-3">
+    <div class="flex gap-2">
+      <button id="rtab-borrow" class="rental-tab flex-1 px-4 py-2 text-sm font-semibold rounded-xl">📦 We Rented</button>
+      <button id="rtab-given" class="rental-tab flex-1 px-4 py-2 text-sm font-semibold rounded-xl">💰 Given Out</button>
+    </div>
+  </div>
+
+  <!-- ── CLIENT FILTER & PRINT PANEL ──
+       Desktop: sized + positioned to match the left (form) column width
+       used by the We Rented / Given Out sections below — see
+       #rental-print-panel rule in #desktop-layout-tweaks. -->
+
+  <div id="rental-print-panel" class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">🖨️ Print by Client <span class="font-normal text-gray-400">— filter by month</span></p>
       <button onclick="printRentalByClient()" class="hdr-action-btn" style="padding:0 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 3px 10px rgba(79,70,229,0.35)">🖨️ Print</button>
@@ -4939,15 +4975,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <p id="rental-client-no-data" class="text-xs text-rose-400 hidden mb-2">No rentals found for this client.</p>
 
-  </div>
-
-  <!-- Sub-tabs: We Rented / Given Out -->
-
-  <div class="bg-white/10 rounded-2xl p-2 mb-3">
-    <div class="flex gap-2">
-      <button id="rtab-borrow" class="rental-tab flex-1 px-4 py-2 text-sm font-semibold rounded-xl">📦 We Rented</button>
-      <button id="rtab-given" class="rental-tab flex-1 px-4 py-2 text-sm font-semibold rounded-xl">💰 Given Out</button>
-    </div>
   </div>
 
   <!-- We Rented Section -->
@@ -5050,7 +5077,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ===== TEAMS ===== -->
 
 <div id="tab-contractors" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
-  <div class="dt-full bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
+  <div class="dt-l bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
     <div class="flex items-center justify-between gap-2">
       <button onclick="changeViewMonth(-1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:0 12px">← Prev</button>
       <div class="text-center"><p class="text-[9px] text-gray-500 leading-none">Period</p><p id="teams-period" class="text-sm font-bold text-gray-800 leading-none mt-0.5"></p></div>
@@ -5160,9 +5187,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Today's Work Details card (top of right column, aligned with header) -->
-  <div class="dt-r">
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <!-- Today's Work Details card (right column, aligned with header) -->
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">🌅 Today's Work Details</p>
       <button onclick="boqOpenTodayModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;display:flex;align-items:center;gap:5px">
@@ -5227,8 +5253,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- BOQ Table -->
-  <div id="boq-table-wrap" class="mb-3">
+  <!-- BOQ Table (right column — BOQ Data) -->
+  <div id="boq-table-wrap" class="dt-r mb-3">
     <div class="text-center py-10 bg-white rounded-2xl shadow-xl">
       <span style="font-size:40px">📋</span>
       <p class="font-semibold text-gray-600 mt-2">No BOQ data yet</p>
@@ -5236,11 +5262,10 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Gantt -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
+  <!-- Gantt (right column — BOQ Data) -->
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl mb-3" id="boq-gantt-card" style="display:none">
     <p class="text-sm font-bold text-gray-700 mb-3">📊 BOQ Gantt Chart</p>
     <div id="boq-gantt-view" style="overflow-x:auto"></div>
-  </div>
   </div>
 
 </div><!-- end tab-boq -->
@@ -5586,9 +5611,13 @@ document.addEventListener('DOMContentLoaded', function() {
     <button onclick="openGSTReport()" style="flex:1;min-width:68px;white-space:nowrap;padding:6px 4px;font-size:10px;font-weight:800;border:2px solid #c7d2fe;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;background:#fff;color:#4338ca">📊 GST</button>
   </div>
 
-  <!-- Salary Slip Section -->
-  <div id="bill-salary-section">
-    <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <!-- Salary Slip Section — dt-split/dt-cap + dt-full keeps this the same
+       width/cap as Invoice & Purchase Order (single centered column here
+       since Salary has no separate "saved records" list), so switching
+       bill type doesn't jump between a full-bleed single column and a
+       two-column grid. -->
+  <div id="bill-salary-section" class="dt-split dt-cap">
+    <div class="dt-full bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">💰 Generate Salary Slip</p>
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Select Worker / Engineer</label>
@@ -5630,7 +5659,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Invoice Section -->
-  <div id="bill-invoice-section" class="dt-split dt-cap" style="display:none">
+  <div id="bill-invoice-section" class="dt-split dt-cap tab-hidden" style="display:none">
     <!-- Saved Invoices -->
     <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl" id="inv-records-wrap">
       <div class="flex items-center justify-between mb-2">
@@ -5686,7 +5715,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Purchase Order Section -->
-  <div id="bill-po-section" class="dt-split dt-cap" style="display:none">
+  <div id="bill-po-section" class="dt-split dt-cap tab-hidden" style="display:none">
     <!-- Suppliers -->
     <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
@@ -5774,9 +5803,12 @@ document.addEventListener('DOMContentLoaded', function() {
     <button id="qtab-btn-meas" onclick="switchQtSubTab('meas')" class="flex-1 py-2 rounded-xl text-sm font-bold active:scale-95 border-2 border-indigo-300 text-indigo-700 bg-white">📐 Measurement</button>
   </div>
 
-  <!-- ── Quotation sub-section ── -->
-  <div id="qtab-sec-quote">
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <!-- ── Quotation sub-section ──
+       dt-split/dt-cap: form + BOQ line items in the left column, saved
+       quotations in the right column (70/30 split on desktop — see
+       #qtab-sec-quote rule in #desktop-layout-tweaks). -->
+  <div id="qtab-sec-quote" class="dt-split dt-cap">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">💼 New Quotation / Estimate</p>
       <button onclick="generateQuotePDF()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
@@ -5790,7 +5822,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Validity / Notes</label><textarea id="qt-notes" rows="2" placeholder="Valid for 30 days. Terms apply." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:border-indigo-400"></textarea></div>
   </div>
   <!-- BOQ Line Items -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📋 Bill of Quantities (BOQ)</p>
       <button onclick="addQtLine()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Item</button>
@@ -5814,7 +5846,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Saved Quotations -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📁 Saved Quotations</p>
       <button onclick="loadQuotationTab()" class="bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold px-3 py-1">🔄 Refresh</button>
@@ -5823,10 +5855,13 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   </div><!-- end qtab-sec-quote -->
 
-  <!-- ── Measurement sub-section ── -->
-  <div id="qtab-sec-meas" style="display:none">
+  <!-- ── Measurement sub-section ──
+       dt-split/dt-cap: sheet form in the left column, saved sheets in the
+       right column (70/30 split on desktop — see #qtab-sec-meas rule in
+       #desktop-layout-tweaks). -->
+  <div id="qtab-sec-meas" class="dt-split dt-cap tab-hidden" style="display:none">
   <!-- New Measurement Sheet -->
-  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📐 New Measurement Sheet</p>
       <button onclick="printMeasurementSheet()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
@@ -5866,7 +5901,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button onclick="saveMeasurementSheet()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95 mt-2">💾 Save Sheet</button>
   </div>
   <!-- Saved Measurement Sheets -->
-  <div class="bg-white rounded-2xl p-3 shadow-xl">
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📁 Saved Measurement Sheets</p>
       <button onclick="renderMsRecords()" class="bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold px-3 py-1">🔄 Refresh</button>
@@ -7731,6 +7766,7 @@ function setupRentalTabs() {
       if (sec) { sec.style.display = 'block'; sec.classList.remove('tab-hidden'); }
       if (rt === 'borrow') { btn.style.background='linear-gradient(135deg,#f43f5e,#ec4899)'; btn.style.color='#fff'; }
       else                  { btn.style.background='linear-gradient(135deg,#10b981,#14b8a6)'; btn.style.color='#fff'; }
+      if (typeof window.applyRentalsDesktopLayout === 'function') window.applyRentalsDesktopLayout();
     });
   });
   setTimeout(function() {
@@ -9773,11 +9809,13 @@ function addMaterialItem(){
   var name=document.getElementById('mat-name').value.trim(), unit=document.getElementById('mat-unit').value.trim();
   var initQty=parseFloat(document.getElementById('mat-init-qty').value)||0, minQty=parseFloat(document.getElementById('mat-min-qty').value)||0;
   var catEl=document.getElementById('mat-category'), category=catEl?catEl.value:'';
+  var remark=(document.getElementById('mat-remark')||{}).value||'';
   var supplier=(document.getElementById('mat-supplier')||{}).value||'';
+  var supplierPhone=(document.getElementById('mat-supplier-phone')||{}).value||'';
   if (!name) { toast('Enter material name','err'); return; }
   var mats=lmat();
-  mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
-  smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty'].forEach(function(id){ document.getElementById(id).value=''; });
+  mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,remark:remark,supplierPhone:supplierPhone,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
+  smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty','mat-remark','mat-supplier','mat-supplier-phone'].forEach(function(id){ document.getElementById(id).value=''; });
   if (catEl) catEl.value='';
   toast('Material added','ok'); viewMaterials(); updateDash();
 }
@@ -13347,9 +13385,9 @@ function showBillType(type){
   var bp=document.getElementById('bill-btn-po');
 
   // Hide all sections
-  if(ss)ss.style.display='none';
-  if(is)is.style.display='none';
-  if(ps)ps.style.display='none';
+  if(ss){ss.style.display='none';ss.classList.add('tab-hidden');}
+  if(is){is.style.display='none';is.classList.add('tab-hidden');}
+  if(ps){ps.style.display='none';ps.classList.add('tab-hidden');}
 
   // Reset all buttons to inactive state
   var baseStyle='flex:1;min-width:68px;white-space:nowrap;padding:6px 4px;font-size:10px;font-weight:800;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:all .15s;';
@@ -13359,13 +13397,13 @@ function showBillType(type){
 
   // Activate selected
   if(type==='salary'){
-    if(ss)ss.style.display='block';
+    if(ss){ss.style.display='block';ss.classList.remove('tab-hidden');}
     if(bs)bs.setAttribute('style',baseStyle+'min-width:72px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;box-shadow:0 3px 12px rgba(99,102,241,.45);');
   } else if(type==='invoice'){
-    if(is)is.style.display='block';
+    if(is){is.style.display='block';is.classList.remove('tab-hidden');}
     if(bi)bi.setAttribute('style',baseStyle+'border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;box-shadow:0 3px 12px rgba(99,102,241,.45);');
   } else if(type==='po'){
-    if(ps)ps.style.display='block';
+    if(ps){ps.style.display='block';ps.classList.remove('tab-hidden');}
     if(bp)bp.setAttribute('style',baseStyle+'min-width:72px;border:none;background:linear-gradient(135deg,#10b981,#14b8a6);color:#fff;box-shadow:0 3px 12px rgba(16,185,129,.45);');
     loadPOTab();
   }
@@ -18091,8 +18129,9 @@ function loadQuotationTab() {
   renderMsRecords();
 }
 function switchQtSubTab(tab){
-  document.getElementById('qtab-sec-quote').style.display = tab==='quote'?'':'none';
-  document.getElementById('qtab-sec-meas').style.display  = tab==='meas' ?'':'none';
+  var qs=document.getElementById('qtab-sec-quote'), ms=document.getElementById('qtab-sec-meas');
+  if(qs){qs.style.display = tab==='quote'?'':'none'; qs.classList.toggle('tab-hidden', tab!=='quote');}
+  if(ms){ms.style.display  = tab==='meas' ?'':'none'; ms.classList.toggle('tab-hidden', tab!=='meas');}
   var qb=document.getElementById('qtab-btn-quote'), mb=document.getElementById('qtab-btn-meas');
   if(qb){ if(tab==='quote'){qb.style.background='linear-gradient(135deg,#4f46e5,#7c3aed)';qb.style.color='#fff';qb.style.border='none';}else{qb.style.background='#fff';qb.style.color='#4338ca';qb.style.border='2px solid #a5b4fc';} }
   if(mb){ if(tab==='meas'){mb.style.background='linear-gradient(135deg,#4f46e5,#7c3aed)';mb.style.color='#fff';mb.style.border='none';}else{mb.style.background='#fff';mb.style.color='#4338ca';mb.style.border='2px solid #a5b4fc';} }
@@ -21408,6 +21447,40 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   window.applyToolsDesktopLayout = applyToolsDesktopLayout;
 
+  // ── Rentals: shared "Print by Client" panel -> top of the active
+  //    sub-tab's left column (above its form), instead of its own full
+  //    grid row above rsec-borrow/rsec-given. Previously the panel sat
+  //    in its own row spanning only the 300px left column, leaving the
+  //    entire right-column cell in that row empty — pushing the table
+  //    (in rsec-borrow/rsec-given's right column) down by the panel's
+  //    full height. Moving it inside the active section's left column
+  //    lets it stack above the form there (flex column, same 14px gap
+  //    used everywhere else), so the table now starts flush under the
+  //    We Rented / Given Out buttons, same top as the left column.
+  //    Mobile untouched — element returns to its authored position
+  //    (right after the sub-tab buttons, before rsec-borrow) below 1024px. ──
+  var _rentalsDesktopApplied = false;
+  function applyRentalsDesktopLayout(){
+    var isDesktop = isDesktopViewport();
+    var printPanel = document.getElementById('rental-print-panel');
+    var secBorrow = document.getElementById('rsec-borrow');
+    var secGiven = document.getElementById('rsec-given');
+    if (!printPanel || !secBorrow || !secGiven || !secBorrow.parentNode) return;
+
+    if (isDesktop) {
+      var activeSec = (secBorrow.style.display === 'none') ? secGiven : secBorrow;
+      var lcol = activeSec.querySelector(':scope > .dt-lcol') || activeSec.querySelector(':scope > .dt-l');
+      if (lcol && printPanel.parentNode !== lcol) {
+        lcol.insertBefore(printPanel, lcol.firstChild);
+      }
+      _rentalsDesktopApplied = true;
+    } else if (_rentalsDesktopApplied) {
+      secBorrow.parentNode.insertBefore(printPanel, secBorrow);
+      _rentalsDesktopApplied = false;
+    }
+  }
+  window.applyRentalsDesktopLayout = applyRentalsDesktopLayout;
+
   // ── Group .dt-l / .dt-r children into single column wrappers ──
   // Every .dt-split used to place each .dt-l / .dt-r as its own grid item.
   // With several stacked in one column (Machinery's date/log/print/filters
@@ -21457,6 +21530,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function applyAllDesktopLayouts(){
     wrapAllDtSplits();
     applyToolsDesktopLayout();
+    applyRentalsDesktopLayout();
   }
 
   document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyAllDesktopLayouts, 0); });
