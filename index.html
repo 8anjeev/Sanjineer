@@ -1950,6 +1950,17 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
          and a wider right column (records/tables/lists).
          Every direct child must carry .dt-l / .dt-r / .dt-full
          or it will fall back to normal stacking.
+
+         JS (see bottom of page) groups all .dt-l children into a single
+         .dt-lcol wrapper and all .dt-r children into a single .dt-rcol
+         wrapper, per .dt-split. That guarantees:
+           1) left & right columns ALWAYS start at the same top — each
+              is just one grid item, auto-placed into the same row.
+           2) equal, constant spacing between every stacked chip/panel
+              via a single flex `gap` — instead of each panel's own
+              mb-2/mb-3, which drifted and could overlap as a panel grew.
+         The plain .dt-l / .dt-r rules below are kept only as a graceful
+         fallback for the instant before that JS runs.
          ══════════════════════════════════════════ */
       .dt-split {
         display: grid !important;
@@ -1961,23 +1972,39 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       .dt-split > .dt-l { grid-column: 1 !important; min-width: 0 !important; }
       .dt-split > .dt-r { grid-column: 2 !important; min-width: 0 !important; }
       .dt-split > .dt-full { grid-column: 1 / -1 !important; }
-      /* stack multiple items placed in the same column */
-      .dt-split > .dt-l ~ .dt-l,
-      .dt-split > .dt-r ~ .dt-r { margin-top: 0 !important; }
+
+      /* ── Column wrappers (created by JS) ── */
+      .dt-split > .dt-lcol,
+      .dt-split > .dt-rcol {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 14px !important;
+        min-width: 0 !important;
+        align-self: start !important;
+      }
+      .dt-split > .dt-lcol { grid-column: 1 !important; }
+      .dt-split > .dt-rcol { grid-column: 2 !important; }
+      /* Every stacked chip/panel gives up its own margin — spacing now
+         comes only from the flex gap above, so it reads identically
+         everywhere, even after a panel stretches with more data. */
+      .dt-split > .dt-lcol > *,
+      .dt-split > .dt-rcol > * { margin-top: 0 !important; margin-bottom: 0 !important; }
 
       /* Compact single-column forms inside the left rail */
       .dt-split > .dt-l .grid-cols-2,
-      .dt-split > .dt-l .grid-cols-3 {
+      .dt-split > .dt-l .grid-cols-3,
+      .dt-split > .dt-lcol .grid-cols-2,
+      .dt-split > .dt-lcol .grid-cols-3 {
         grid-template-columns: 1fr !important;
       }
-      .dt-split > .dt-l .col-span-2 { grid-column: 1 / -1 !important; }
+      .dt-split > .dt-l .col-span-2,
+      .dt-split > .dt-lcol .col-span-2 { grid-column: 1 / -1 !important; }
 
-      /* Sticky left rail so forms/filters stay visible while scrolling records.
-         top uses a CSS var (set per-element by JS) so multiple stacked .dt-l
-         panels in the same column each get their OWN offset instead of all
-         competing for the same top:8px — which is what caused panels/chips
-         to overlap each other while scrolling. Falls back to 8px until JS runs. */
-      .dt-split > .dt-l { position: sticky !important; top: var(--dtl-top, 8px) !important; }
+      /* Sticky left rail so forms/filters stay visible while scrolling
+         records — now ONE sticky unit (the whole .dt-lcol), so nothing
+         inside it competes for the sticky offset or overlaps anymore. */
+      .dt-split > .dt-l { position: sticky !important; top: 8px !important; }
+      .dt-split > .dt-lcol { position: sticky !important; top: 8px !important; }
 
       /* Right column record tables: keep a touch narrower than full bleed
          (skips Quotation & Site Visits per request — those stay untouched) */
@@ -1999,14 +2026,10 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       /* ── Attendance: tighter gap between Print panel and Add Worker panel ── */
       #att-print-panel { margin-bottom: 6px !important; }
 
-      /* ── Machinery: Print button sits directly under the date selector ── */
+      /* ── Machinery: tighter gap under the date selector now that Print
+         sits inside it, and above the combined Print Month + Filters panel ── */
       #mach-date-panel { margin-bottom: 0 !important; }
-      #mach-print-day-btn { width: 100% !important; margin-top: 8px !important; }
-      #mach-print-panel { margin-top: 8px !important; }
-      /* ── Machinery: relocated month-print + filters panel ── */
-      #mach-filters-panel { margin-top: 8px !important; }
-      #mach-filters-panel #mach-print-month-btn { width: 100% !important; margin-bottom: 10px !important; }
-      #mach-filters-panel #mach-filters-row { grid-template-columns: 1fr !important; }
+      #mach-filters-panel { margin-top: 0 !important; }
 
       /* ── Tools: stock table relocated below the active form in the left column ── */
       #tools-stock-panel { margin-top: 12px !important; margin-bottom: 0 !important; }
@@ -4606,7 +4629,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Master Attendance -->
-  <button id="att-master-btn" onclick="openMasterAtt()" class="dt-l mb-3 active:scale-95 g-tor-indigo500-purple500 rounded-2xl shadow-xl" style="padding:12px 16px;width:75%;margin-left:auto;margin-right:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;cursor:pointer">
+  <button id="att-master-btn" onclick="openMasterAtt()" class="dt-l mb-3 active:scale-95 g-tor-indigo500-purple500 rounded-2xl shadow-xl" style="padding:12px 16px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;cursor:pointer;box-sizing:border-box">
     <span style="font-size:13px;font-weight:800;color:#fff;line-height:1">🗂️ Master Atten.</span>
     <span style="font-size:10px;color:rgba(255,255,255,0.75);font-weight:500;line-height:1">Select to mark attendance</span>
   </button>
@@ -5295,14 +5318,14 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="tab-machinery" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
   <!-- Date selector -->
   <div class="dt-l bg-white rounded-2xl p-3 mb-2 shadow-xl" id="mach-date-panel">
-    <div class="flex items-center justify-between gap-2 mb-1">
-      <p class="text-xs font-bold text-gray-700">📅 Select Date</p>
-      <div class="flex items-center gap-2">
+    <div class="flex items-center justify-between gap-2 flex-wrap">
+      <p id="mach-date-label" class="text-amber-600 font-semibold" style="font-size:11px"></p>
+      <div class="flex items-center gap-2 flex-wrap">
         <input type="date" id="mach-date" class="border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400" style="padding:4px 8px">
         <button onclick="loadMachinery()" class="hdr-action-btn g-tor-emerald500-teal500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">📂 Load</button>
+        <button id="mach-print-day-btn" onclick="printMachinery()" class="hdr-action-btn g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:0 12px">🖨️ Print</button>
       </div>
     </div>
-    <p id="mach-date-label" class="text-amber-600 font-semibold" style="font-size:11px"></p>
   </div>
   <!-- Log Form -->
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
@@ -5338,30 +5361,10 @@ document.addEventListener('DOMContentLoaded', function() {
       <div><label class="text-[9px] font-bold text-gray-500 uppercase block mb-0.5">Notes <span class="font-normal text-gray-400 normal-case">(opt)</span></label><input type="text" id="mach-notes" placeholder="Work done / fuel…" class="w-full px-2 py-1 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400"></div>
     </div>
   </div>
-  <!-- Print buttons — bottom of left column -->
-  <div class="dt-l bg-white rounded-2xl p-3 shadow-xl" id="mach-print-panel">
-    <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print</p>
-    <div class="grid grid-cols-2 gap-2" id="mach-print-btns-row">
-      <button id="mach-print-day-btn" onclick="printMachinery()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:8px 0">🖨️ Print</button>
-      <button id="mach-print-month-btn" onclick="printMachineryMonth()" class="g-tobr-violet500-purple500 text-white rounded-lg text-xs font-semibold active:scale-95" style="padding:8px 0">🖨️ Print Month</button>
-    </div>
-  </div>
-  <!-- Desktop-only: month print + filters relocate here via JS on wide screens -->
-  <div class="dt-l bg-white rounded-2xl p-3 shadow-xl" id="mach-filters-panel" style="display:none"></div>
-  <!-- Sessions List -->
-  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <div class="flex items-center justify-between mb-2">
-      <p class="text-sm font-bold text-gray-700">📋 Sessions — <span id="mach-sessions-date">—</span></p>
-    </div>
-    <div id="mach-sessions-list"><div class="text-center py-8"><div style="font-size:40px">🚧</div><p class="font-semibold text-gray-600 mt-2">No sessions on <span id="mach-empty-date">—</span></p></div></div>
-  </div>
-  <!-- Monthly Summary -->
-  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
-    <div class="flex items-center justify-between mb-3">
-      <p class="text-sm font-bold text-gray-700">📊 Monthly Summary</p>
-    </div>
-    <!-- Filters row -->
-    <div class="grid grid-cols-3 gap-2 mb-3" id="mach-filters-row">
+  <!-- Print Month + Filters — combined on one chip, same on mobile & desktop -->
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="mach-filters-panel">
+    <button id="mach-print-month-btn" onclick="printMachineryMonth()" class="g-tobr-violet500-purple500 w-full text-white rounded-lg text-xs font-semibold active:scale-95 mb-3" style="padding:8px 0">🖨️ Print Month</button>
+    <div class="grid grid-cols-3 gap-2" id="mach-filters-row">
       <div>
         <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Month</label>
         <select id="mach-month-sel" class="w-full border border-gray-200 rounded-xl text-xs bg-white focus:outline-none" style="padding:5px 8px" onchange="renderMachMonthly()"></select>
@@ -5378,6 +5381,19 @@ document.addEventListener('DOMContentLoaded', function() {
           <option value="">All Operators</option>
         </select>
       </div>
+    </div>
+  </div>
+  <!-- Sessions List -->
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-sm font-bold text-gray-700">📋 Sessions — <span id="mach-sessions-date">—</span></p>
+    </div>
+    <div id="mach-sessions-list"><div class="text-center py-8"><div style="font-size:40px">🚧</div><p class="font-semibold text-gray-600 mt-2">No sessions on <span id="mach-empty-date">—</span></p></div></div>
+  </div>
+  <!-- Monthly Summary -->
+  <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm font-bold text-gray-700">📊 Monthly Summary</p>
     </div>
     <div id="mach-monthly-list"><div class="text-center py-6"><div style="font-size:32px">📊</div><p class="text-gray-400 mt-2 text-sm">No records for this month</p></div></div>
   </div>
@@ -7715,7 +7731,6 @@ function setupRentalTabs() {
       if (sec) { sec.style.display = 'block'; sec.classList.remove('tab-hidden'); }
       if (rt === 'borrow') { btn.style.background='linear-gradient(135deg,#f43f5e,#ec4899)'; btn.style.color='#fff'; }
       else                  { btn.style.background='linear-gradient(135deg,#10b981,#14b8a6)'; btn.style.color='#fff'; }
-      if (typeof window._recalcStickyOffsets === 'function') setTimeout(window._recalcStickyOffsets, 0);
     });
   });
   setTimeout(function() {
@@ -21367,36 +21382,9 @@ document.addEventListener('DOMContentLoaded', function() {
     return (window.innerWidth || document.documentElement.clientWidth || 0) >= 1024;
   }
 
-  // ── Machinery: Print(day) button -> under Select Date;
-  //    Print Month + filters -> relocated left-column panel ──
-  var _machDesktopApplied = false;
-  function applyMachineryDesktopLayout(){
-    var isDesktop = isDesktopViewport();
-    var dayBtn = document.getElementById('mach-print-day-btn');
-    var monthBtn = document.getElementById('mach-print-month-btn');
-    var datePanel = document.getElementById('mach-date-panel');
-    var printPanel = document.getElementById('mach-print-panel');
-    var printRow = document.getElementById('mach-print-btns-row');
-    var filtersPanel = document.getElementById('mach-filters-panel');
-    var filtersRow = document.getElementById('mach-filters-row');
-    var monthlyList = document.getElementById('mach-monthly-list');
-    if (!dayBtn || !monthBtn || !datePanel || !printPanel || !printRow || !filtersPanel || !filtersRow || !monthlyList) return;
-
-    if (isDesktop && !_machDesktopApplied) {
-      datePanel.appendChild(dayBtn);
-      filtersPanel.appendChild(monthBtn);
-      filtersPanel.appendChild(filtersRow);
-      printPanel.style.display = 'none';
-      filtersPanel.style.display = 'block';
-      _machDesktopApplied = true;
-    } else if (!isDesktop && _machDesktopApplied) {
-      printRow.insertBefore(dayBtn, monthBtn);
-      if (monthlyList.parentNode) monthlyList.parentNode.insertBefore(filtersRow, monthlyList);
-      printPanel.style.display = '';
-      filtersPanel.style.display = 'none';
-      _machDesktopApplied = false;
-    }
-  }
+  // Note: Machinery's Print(day)-under-date and Print Month+Filters
+  // panel are now static in the HTML (identical on mobile & desktop),
+  // so the old runtime repositioning for that tab has been removed.
 
   // ── Tools: Tool Stock table -> left column, below the active form ──
   var _toolsDesktopApplied = false;
@@ -21420,56 +21408,60 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   window.applyToolsDesktopLayout = applyToolsDesktopLayout;
 
-  // ── Stack sticky .dt-l panels so they never overlap ──
-  // Every .dt-l panel is position:sticky. When several sit in the same
-  // column (e.g. Machinery: date panel, log form, filters panel — or
-  // Rentals/Attendance/Tools sub-panels) they used to all stick at the
-  // same top:8px and overlap each other on scroll. This walks each
-  // visible .dt-split column and gives each visible .dt-l an
-  // accumulating --dtl-top offset (via CSS var, see desktop-layout-tweaks
-  // style block) so they stack cleanly one below another instead.
-  var BASE_TOP = 8, GAP = 14;
-  function recalcStickyOffsets(){
-    if (!isDesktopViewport()) return;
-    document.querySelectorAll('.dt-split').forEach(function(split){
-      if (split.offsetParent === null) return; // whole tab/section hidden
-      var acc = BASE_TOP;
-      var kids = split.querySelectorAll(':scope > .dt-l');
-      kids.forEach(function(el){
-        if (el.offsetParent === null || getComputedStyle(el).display === 'none') return;
-        el.style.setProperty('--dtl-top', acc + 'px');
-        acc += el.offsetHeight + GAP;
-      });
+  // ── Group .dt-l / .dt-r children into single column wrappers ──
+  // Every .dt-split used to place each .dt-l / .dt-r as its own grid item.
+  // With several stacked in one column (Machinery's date/log/print/filters
+  // panels, Rentals/Attendance/Budget panels, etc.) that (a) let the two
+  // columns drift out of alignment depending on how tall the *other*
+  // column's rows were, and (b) relied on each panel's own margin for
+  // spacing, which wasn't consistent and could overlap on scroll.
+  // This groups all .dt-l children into one .dt-lcol wrapper and all
+  // .dt-r children into one .dt-rcol wrapper (see CSS above), so:
+  //   • left/right columns are always exactly two grid items -> always
+  //     placed in the very same row -> tops always match.
+  //   • spacing between stacked chips comes from one flex `gap`, so it
+  //     stays identical everywhere, even as a chip grows with data.
+  // Purely a DOM regroup — every element keeps its id/handlers/children,
+  // so nothing else in the app (which references panels by id) is affected.
+  // Idempotent (checked via dataset flag) and identical on mobile, since
+  // .dt-lcol/.dt-rcol only receive layout rules inside the >=1024px query;
+  // on mobile they're invisible wrapper divs preserving the exact original
+  // top-to-bottom order.
+  function wrapDtSplitColumns(splitEl){
+    if (splitEl.dataset.dtWrapped === '1') return;
+    var kids = Array.prototype.slice.call(splitEl.children);
+    var leftEls = [], rightEls = [];
+    kids.forEach(function(ch){
+      if (ch.classList.contains('dt-l')) leftEls.push(ch);
+      else if (ch.classList.contains('dt-r')) rightEls.push(ch);
     });
+    if (leftEls.length) {
+      var lcol = document.createElement('div');
+      lcol.className = 'dt-lcol';
+      leftEls[0].parentNode.insertBefore(lcol, leftEls[0]);
+      leftEls.forEach(function(el){ lcol.appendChild(el); });
+    }
+    if (rightEls.length) {
+      var rcol = document.createElement('div');
+      rcol.className = 'dt-rcol';
+      rightEls[0].parentNode.insertBefore(rcol, rightEls[0]);
+      rightEls.forEach(function(el){ rcol.appendChild(el); });
+    }
+    splitEl.dataset.dtWrapped = '1';
   }
-  window._recalcStickyOffsets = recalcStickyOffsets;
-
-  var _stickyRaf = null;
-  function scheduleStickyRecalc(){
-    if (_stickyRaf) cancelAnimationFrame(_stickyRaf);
-    _stickyRaf = requestAnimationFrame(function(){ _stickyRaf = null; recalcStickyOffsets(); });
+  function wrapAllDtSplits(){
+    document.querySelectorAll('.dt-split').forEach(wrapDtSplitColumns);
   }
+  window._wrapAllDtSplits = wrapAllDtSplits;
 
   function applyAllDesktopLayouts(){
-    applyMachineryDesktopLayout();
+    wrapAllDtSplits();
     applyToolsDesktopLayout();
-    scheduleStickyRecalc();
   }
 
   document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyAllDesktopLayouts, 0); });
   window.addEventListener('resize', applyAllDesktopLayouts);
   window.addEventListener('load', applyAllDesktopLayouts);
-
-  // Recalculate after the main tab changes (event already dispatched by switchTab)
-  document.addEventListener('sanjineer-tab-changed', function(){ setTimeout(scheduleStickyRecalc, 0); });
-
-  // Recalculate after any sub-tab toggle (Tools Add/Assign, Rentals We
-  // Rented/Given Out) — delegated so no existing click handlers are touched.
-  document.addEventListener('click', function(e){
-    if (e.target.closest('.rental-tab') || e.target.closest('#tool-subtabs-row')) {
-      setTimeout(scheduleStickyRecalc, 0);
-    }
-  });
 })();
 </script>
 </body>
