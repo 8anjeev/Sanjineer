@@ -2070,6 +2070,35 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       #qtab-sec-meas.dt-split {
         grid-template-columns: 7fr 3fr !important;
       }
+
+      /* ── Invoice / Purchase Order / Quotation / Measurement: with the
+         wide 70% left column above, these "basic details" forms have
+         plenty of room — compact them into 3 columns instead of the
+         single stacked column the general .dt-l rule (further up) forces
+         on every other narrow-rail form. Higher specificity (#id) beats
+         that rule despite both using !important. ── */
+      #inv-basic-grid,
+      #po-basic-grid,
+      #qt-basic-grid,
+      #ms-basic-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+      }
+
+      /* ── Invoice line items: one compact row per item (description,
+         rate, unit, quantity, amount, remove) instead of the 3 stacked
+         mobile rows. The wrapper divs around rate/unit and qty/amount
+         are switched to display:contents so their inputs become direct
+         grid items of .inv-line, without touching the JS that builds
+         these rows (addInvLine() emits the identical markup/classes). ── */
+      #inv-lines-body .inv-line {
+        display: grid !important;
+        grid-template-columns: 1fr 100px 110px 80px 100px 24px !important;
+        gap: 6px !important;
+        align-items: center !important;
+      }
+      #inv-lines-body .inv-line > div { display: contents !important; }
+      #inv-lines-body .inv-line input { width: 100% !important; margin: 0 !important; }
+      #inv-lines-body .inv-line .inv-amt { text-align: right !important; }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -2191,6 +2220,110 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     border-radius: 10px !important;
     width: 100% !important;
   }
+}
+</style>
+<style id="custom-ui-enhancements">
+@media (min-width: 1024px) {
+  /* ══════════════════════════════════════════
+     1) SIDEBAR PROFILE CHIP
+     A header-depth/colour band pinned to the very
+     top of the sidebar (top-left corner, beside the
+     header) showing the signed-in user's name and
+     their plan/subscription validity. The tab list
+     ("SECTIONS" + buttons) is pushed down below it.
+     ══════════════════════════════════════════ */
+  #sidebar-profile-chip {
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    height: 56px;
+    min-height: 56px;
+    flex-shrink: 0;
+    padding: 0 14px;
+    background-image: linear-gradient(to right, #4f46e5, #9333ea, #ec4899);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+  }
+  #sidebar-profile-chip .spc-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #sidebar-profile-chip .spc-plan {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #sidebar-profile-chip .spc-plan.spc-plan-warn { color: #fde68a; }
+
+  /* Nudge "SECTIONS" + the tab list down slightly so it reads as clearly
+     below the profile chip rather than flush against it. */
+  #main-app > nav > div:not(#sidebar-profile-chip) {
+    margin-top: 6px !important;
+  }
+
+  /* ══════════════════════════════════════════
+     2) INDEPENDENT PER-COLUMN SCROLLING
+     Sidebar (nav) already scrolls independently.
+     Give the dt-split "form" column and "records"
+     column their own scrollbox too, capped to the
+     visible viewport height, so scrolling one never
+     moves or affects the other.
+     ══════════════════════════════════════════ */
+  #main-app > main {
+    height: calc(100vh - 56px) !important;
+    max-height: calc(100vh - 56px) !important;
+  }
+
+  .dt-split > .dt-lcol,
+  .dt-split > .dt-l {
+    max-height: calc(100vh - 56px - 32px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: none !important;      /* Firefox: scroll works, bar hidden */
+    -ms-overflow-style: none !important;   /* old Edge/IE */
+  }
+  .dt-split > .dt-lcol::-webkit-scrollbar,
+  .dt-split > .dt-l::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } /* Chrome/Safari */
+
+  .dt-split > .dt-rcol,
+  .dt-split > .dt-r {
+    max-height: calc(100vh - 56px - 32px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: none !important;      /* Firefox: scroll works, bar hidden */
+    -ms-overflow-style: none !important;   /* old Edge/IE */
+  }
+  .dt-split > .dt-rcol::-webkit-scrollbar,
+  .dt-split > .dt-r::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } /* Chrome/Safari */
+
+  /* Same treatment for the Rentals tab, which uses its own custom grid
+     (300px form rail + records) instead of the generic .dt-split. */
+  #tab-rentals > #rental-print-panel {
+    position: sticky !important;
+    top: 8px !important;
+    max-height: calc(100vh - 56px - 32px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: none !important;      /* Firefox: scroll works, bar hidden */
+    -ms-overflow-style: none !important;   /* old Edge/IE */
+  }
+  #tab-rentals > #rental-print-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } /* Chrome/Safari */
 }
 </style>
 </head>
@@ -4316,6 +4449,13 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- NAV -->
 
 <nav class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky top-0 z-30">
+  <!-- Desktop-only: user name + plan validity chip, same visual depth/colour
+       as the header, sitting in the top-left corner beside it. Hidden on
+       mobile (mobile keeps the horizontal tab-scroller as the whole nav). -->
+  <div id="sidebar-profile-chip" style="display:none">
+    <span class="spc-name" id="sidebar-user-name">Guest User</span>
+    <span class="spc-plan" id="sidebar-plan-status">Free Plan</span>
+  </div>
   <div class="flex overflow-x-auto" style="scrollbar-width:none;overflow-y:hidden;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;">
     <button class="tab-btn text-white/70" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab-btn text-white/70" data-tab="daily" onclick="switchTab('daily')">📋 Report</button>
@@ -5670,13 +5810,11 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <p class="text-sm font-bold text-gray-700 mb-3">🧾 Create New Invoice</p>
-      <div class="grid grid-cols-2 gap-2 mb-2">
+      <div class="grid grid-cols-2 gap-2 mb-2" id="inv-basic-grid">
         <div><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Invoice No.</label><input type="text" id="inv-no" placeholder="INV-001" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Date</label><input type="date" id="inv-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      </div>
-      <div class="mb-2"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Client Name</label><input type="text" id="inv-client" placeholder="Client / Owner Name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div class="mb-2"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Client Address</label><input type="text" id="inv-addr" placeholder="Address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      <div class="grid grid-cols-2 gap-2 mb-2">
+        <div style="grid-column:1/-1"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Client Name</label><input type="text" id="inv-client" placeholder="Client / Owner Name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div style="grid-column:1/-1"><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Client Address</label><input type="text" id="inv-addr" placeholder="Address" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Client GST No. <span class="font-normal text-gray-400">(Optional)</span></label><input type="text" id="inv-client-gst" placeholder="Client GST" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Site / Project Name</label><input type="text" id="inv-project" placeholder="Project / Site name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       </div>
@@ -5739,7 +5877,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <p class="text-sm font-bold text-gray-700">📦 New Purchase Order</p>
         <button onclick="generatePOPDF()" class="g-tobr-emerald500-teal500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
       </div>
-      <div class="grid grid-cols-2 gap-2 mb-2">
+      <div class="grid grid-cols-2 gap-2 mb-2" id="po-basic-grid">
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">PO No.</label><input type="text" id="po-no" placeholder="PO-001" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="po-date" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Supplier</label>
@@ -5755,12 +5893,12 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
         </div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Delivery By</label><input type="date" id="po-delivery" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
-        <div class="col-span-2"><label class="text-[10px] font-bold text-gray-500 block mb-1">Site / Delivery Address</label><input type="text" id="po-site" placeholder="Delivery location" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
-        <div class="col-span-2"><label class="text-[10px] font-bold text-gray-500 block mb-1">Terms & Notes</label><textarea id="po-notes" rows="2" placeholder="Payment terms, delivery conditions..." class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs resize-none focus:outline-none focus:border-emerald-400"></textarea></div>
+        <div class="col-span-2" style="grid-column:1/-1"><label class="text-[10px] font-bold text-gray-500 block mb-1">Site / Delivery Address</label><input type="text" id="po-site" placeholder="Delivery location" class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-emerald-400"></div>
+        <div class="col-span-2" style="grid-column:1/-1"><label class="text-[10px] font-bold text-gray-500 block mb-1">Terms & Notes</label><textarea id="po-notes" rows="2" placeholder="Payment terms, delivery conditions..." class="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs resize-none focus:outline-none focus:border-emerald-400"></textarea></div>
       </div>
     </div>
     <!-- PO Line Items -->
-    <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
       <div class="flex items-center justify-between mb-2">
         <p class="text-sm font-bold text-gray-700">📋 Items Ordered</p>
         <button onclick="addPOLine()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Item</button>
@@ -5811,9 +5949,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">💼 New Quotation / Estimate</p>
-      <button onclick="generateQuotePDF()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
+      <div style="display:flex;gap:6px">
+        <button onclick="saveQuotationOnly()" class="g-tobr-emerald500-teal500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">💾 Save</button>
+        <button onclick="generateQuotePDF()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
+      </div>
     </div>
-    <div class="grid grid-cols-2 gap-2 mb-2">
+    <div class="grid grid-cols-2 gap-2 mb-2" id="qt-basic-grid">
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Quote No.</label><input type="text" id="qt-no" placeholder="e.g. QT-001" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="qt-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Client Name</label><input type="text" id="qt-client" placeholder="Client Name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
@@ -5864,9 +6005,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📐 New Measurement Sheet</p>
-      <button onclick="printMeasurementSheet()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
+      <div style="display:flex;gap:6px">
+        <button onclick="saveMeasurementSheet()" class="g-tobr-emerald500-teal500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">💾 Save</button>
+        <button onclick="printMeasurementSheet()" class="g-tobr-indigo500-violet500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">🖨️ Print PDF</button>
+      </div>
     </div>
-    <div class="grid grid-cols-2 gap-2 mb-2">
+    <div class="grid grid-cols-2 gap-2 mb-2" id="ms-basic-grid">
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Sheet No.</label><input type="text" id="ms-no" placeholder="MS-001" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="ms-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
       <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Item / Description</label><input type="text" id="msh-title" placeholder="e.g. Brick Masonry — First Floor" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
@@ -5898,7 +6042,6 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="flex justify-between items-center border-t pt-2 mt-1">
       <p class="text-xs text-gray-500">Total quantity is sum of all rows in their respective units.</p>
     </div>
-    <button onclick="saveMeasurementSheet()" class="g-tobr-indigo500-violet500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95 mt-2">💾 Save Sheet</button>
   </div>
   <!-- Saved Measurement Sheets -->
   <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
@@ -7230,6 +7373,34 @@ function applyProfile() {
   }
   // Apply saved header colour to app header
   setTimeout(applyHeaderColor, 50);
+  updateSidebarProfileChip(p);
+}
+
+// ── Desktop sidebar profile chip: shows the signed-in user's name + their
+// plan/subscription validity in the top-left corner (beside the header),
+// so it's visible at a glance without opening Settings → Edit Profile. ──
+function updateSidebarProfileChip(p) {
+  var nameEl = document.getElementById('sidebar-user-name');
+  var planEl = document.getElementById('sidebar-plan-status');
+  if (!nameEl || !planEl) return;
+  p = p || (typeof lmergedProf === 'function' ? lmergedProf() : null);
+  nameEl.textContent = (p && p.engineer) ? p.engineer : 'Guest User';
+
+  var active = (typeof isCloudActivated === 'function') && isCloudActivated();
+  var subEnd = parseInt((typeof safeLS !== 'undefined' && safeLS.getItem('cm_sub_end')) || '0');
+  planEl.classList.remove('spc-plan-warn');
+  if (active && subEnd) {
+    var daysLeft = Math.ceil((subEnd - Date.now()) / (24 * 60 * 60 * 1000));
+    if (daysLeft > 0) {
+      planEl.textContent = '✅ Pro · ' + daysLeft + 'd left';
+      if (daysLeft <= 5) planEl.classList.add('spc-plan-warn');
+    } else {
+      planEl.textContent = '⚠️ Plan expired';
+      planEl.classList.add('spc-plan-warn');
+    }
+  } else {
+    planEl.textContent = 'Free Plan';
+  }
 }
 // Company Settings are editable by everyone EXCEPT a user who joined this
 // specific project via a project code/link (_ENGINEER_MODE) — the basic
@@ -9619,6 +9790,19 @@ function addExpenseMaterial(){
   if (!date) { toast('Select a date', 'err'); return; }
   if (!cost) { toast('Enter amount', 'err'); return; }
 
+  // Determine BEFORE inserting whether this material is already tracked in
+  // the Materials tab — if so, its cost will also land in mats.transactions
+  // (materialsCost ledger) and must be flagged so dashboard/report totals
+  // don't double-count the same rupee in two places.
+  var _matStockUpdated = false;
+  var _matsForSync = null, _existingMatForSync = null;
+  if (type === 'material') {
+    _matsForSync = lmat();
+    var descLowerPre = name.toLowerCase();
+    _existingMatForSync = _matsForSync.find(function(m){ return m.name.trim().toLowerCase() === descLowerPre; });
+    if (_existingMatForSync) _matStockUpdated = true;
+  }
+
   _saveBill('exp', function(billKey) {
     ins({
       type: 'material',
@@ -9629,7 +9813,11 @@ function addExpenseMaterial(){
       date: date,
       supplier: supplier || undefined,
       is_petty_cash: false,
-      bill_id: billKey || undefined
+      bill_id: billKey || undefined,
+      // true when this cost is also recorded as a mats.transactions purchase
+      // (either here, or previously in the Materials tab) — used to avoid
+      // double-counting the same cost in Owner Dashboard's Material Cost stat.
+      stock_synced: _matStockUpdated || undefined
     });
 
     // ── Cross-post to Tools tab when type = 'tool' ────────────────────────
@@ -9645,19 +9833,12 @@ function addExpenseMaterial(){
     // only — it should NOT silently create a new stock item, since the
     // material list is meant to be curated (units, min-qty alerts, etc.)
     // rather than auto-populated from every expense line.
-    var _matStockUpdated = false;
-    if (type === 'material') {
-      var mats = lmat();
-      var descLower = name.toLowerCase();
-      var existing  = mats.find(function(m){ return m.name.trim().toLowerCase() === descLower; });
-      if (existing) {
-        existing.transactions = existing.transactions || [];
-        existing.transactions.push({ type:'purchase', qty:qty||1, date:date,
-          note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:existing.unit||'' });
-        smat(mats);
-        if (typeof viewMaterials === 'function') viewMaterials();
-        _matStockUpdated = true;
-      }
+    if (type === 'material' && _existingMatForSync) {
+      _existingMatForSync.transactions = _existingMatForSync.transactions || [];
+      _existingMatForSync.transactions.push({ type:'purchase', qty:qty||1, date:date,
+        note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:_existingMatForSync.unit||'' });
+      smat(_matsForSync);
+      if (typeof viewMaterials === 'function') viewMaterials();
       // else: new material not yet in the Materials list — leave it only
       // in Expenses. Add it to the Materials tab first if stock tracking
       // is wanted for it.
@@ -9676,7 +9857,10 @@ function addExpenseMaterial(){
 }
 function viewExpenses(){
   AD=ld();
-  var allRecords=AD.filter(function(d){ return d.type==='material'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  // Materials purchased/received via the Materials tab (from_materials_tab)
+  // are tracked in the Materials stock ledger, not here — the Expenses tab
+  // only lists items entered directly through this tab's Quick Entry.
+  var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
   // Populate month filter dropdown
   var sel=document.getElementById('exp-month-filter');
@@ -9720,7 +9904,7 @@ try{
   var prof = lmergedProf();
   var sel=document.getElementById('exp-month-filter');
   var selMonth=sel?sel.value:'';
-  var allRecords=AD.filter(function(d){ return d.type==='material'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
   var records=selMonth ? allRecords.filter(function(r){ return (r.date||'').startsWith(selMonth); }) : allRecords;
   if(!records.length){ toast('No expense records'+(selMonth?' for this month':''),'err'); return; }
 
@@ -9904,7 +10088,7 @@ function saveMatPurchase(){
   _saveBill('mp', function(key){
     txn.bill_id = key;
     item.transactions.push(txn); smat(mats);
-    if(cost>0){ ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false}); AD=ld(); }
+    if(cost>0){ ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false,exp_type:'material',from_materials_tab:true,stock_synced:true}); AD=ld(); }
     closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); updateDash();
   });
 }
@@ -18435,6 +18619,34 @@ function saveAndPrintQuotation() {
   generateQuotePDF(true);
 }
 
+// Save-only: records the quotation without opening the print/PDF window.
+function saveQuotationOnly() {
+  var qtNo    = (document.getElementById('qt-no')||{}).value||'QT-001';
+  var date    = (document.getElementById('qt-date')||{}).value||ist();
+  var client  = (document.getElementById('qt-client')||{}).value||'';
+  var project = (document.getElementById('qt-project')||{}).value||'';
+  var notes   = (document.getElementById('qt-notes')||{}).value||'';
+  var gstPct  = parseFloat((document.getElementById('qt-gst')||{}).value)||0;
+  var tbody = document.getElementById('qt-lines-body');
+  var lines = [];
+  if (tbody) tbody.querySelectorAll('tr').forEach(function(tr){
+    var id = tr.id.replace('qt-row-','');
+    var desc = (document.getElementById('qt-desc-'+id)||{}).value||'';
+    var unit = (document.getElementById('qt-unit-'+id)||{}).value||'';
+    var qty  = parseFloat((document.getElementById('qt-qty-'+id)||{}).value)||0;
+    var rate = parseFloat((document.getElementById('qt-rate-'+id)||{}).value)||0;
+    if (desc || qty) lines.push({desc:desc, unit:unit, qty:qty, rate:rate, amt:qty*rate});
+  });
+  if (!lines.length) { toast('Add at least one line item', 'err'); return; }
+  var subtotal = lines.reduce(function(s,l){return s+l.amt;},0);
+  var gstAmt   = subtotal * gstPct / 100;
+  var total    = subtotal + gstAmt;
+  var records = lqt();
+  records.unshift({ id:Date.now().toString(36), qtNo:qtNo, date:date, client:client, project:project, total:total, lines:lines, gstPct:gstPct, notes:notes });
+  sqt(records); renderQuotationRecords();
+  toast('Quotation saved ✅', 'ok');
+}
+
 function generateQuotePDF(saveRecord) {
   var qtNo    = (document.getElementById('qt-no')||{}).value||'QT-001';
   var date    = (document.getElementById('qt-date')||{}).value||ist();
@@ -20445,7 +20657,7 @@ var _ownerTabRenderers = {
     var rows = [], total = 0;
     projects.forEach(function(p) {
       var d = _ownerLoadProject(p.id);
-      d.AD.filter(function(x){ return x.type === 'material' && _ownerInRange(x.date); }).forEach(function(x) {
+      d.AD.filter(function(x){ return x.type === 'material' && _ownerInRange(x.date) && !x.is_petty_cash && x.exp_type !== 'material'; }).forEach(function(x) {
         total += parseFloat(x.cost)||0;
         var meta = '₹'+Math.round(x.cost||0).toLocaleString('en-IN') + (x.supplier?' · '+_jhtml(x.supplier):'') + (x.date?' · '+fd(x.date):'');
         rows.push({ date: x.date, html: _ownerRow(_jhtml(x.material_name||'Expense') + (x.exp_type?' <span style="opacity:.5">('+_jhtml(x.exp_type)+')</span>':''), meta, p.name) });
@@ -20674,7 +20886,18 @@ function _ownerAggregate(projects) {
         var c = x.category || 'Other';
         stats.workersByCat[c] = (stats.workersByCat[c]||0) + 1;
       }
-      if (x.type === 'material' && _ownerInRange(x.date)) stats.expensesCost += parseFloat(x.cost)||0;
+      if (x.type === 'material' && _ownerInRange(x.date) && !x.is_petty_cash) {
+        if (x.exp_type === 'material') {
+          // Material cost entered via Expenses Quick Entry (or synced from the
+          // Materials tab) — counts as Material Cost, not Expenses. Skip if
+          // already represented in mats.transactions below (stock_synced) to
+          // avoid counting the same rupee twice.
+          if (!x.stock_synced) stats.materialsCost += parseFloat(x.cost)||0;
+        } else {
+          // Genuine expenses: tool purchases and other misc site expenses.
+          stats.expensesCost += parseFloat(x.cost)||0;
+        }
+      }
     });
     d.mats.forEach(function(m) {
       (m.transactions||[]).forEach(function(t) {
