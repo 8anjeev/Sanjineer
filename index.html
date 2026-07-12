@@ -1536,6 +1536,11 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     .shadow-lg{box-shadow:0 6px 20px rgba(0,0,0,0.18),0 2px 7px rgba(0,0,0,0.10)!important;}
     .stat-card{box-shadow:0 10px 30px rgba(0,0,0,0.32),0 3px 10px rgba(0,0,0,0.18)!important;}
     .tab-btn{transition:all .15s;background:transparent;color:rgba(255,255,255,0.45);border:none;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;touch-action:manipulation;}
+    /* Base (mobile) spacing between icon and label — desktop's flex+gap
+       rule (#main-app > nav .tab-btn) overrides this with a fixed-width
+       icon column instead; this margin is the fallback wherever that
+       desktop rule doesn't apply. */
+    .tab-btn-ico{margin-right:5px;}
     button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
     .tab-btn.active{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#ffffff;box-shadow:0 2px 10px rgba(99,102,241,.35);font-weight:700;}
     .expand-content{max-height:0;overflow:hidden;transition:max-height .35s ease;}
@@ -1914,6 +1919,30 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         font-weight: 700 !important;
         box-shadow: 0 2px 10px rgba(99,102,241,0.35) !important;
         border-left: 3px solid rgba(255,255,255,0.6) !important;
+      }
+
+      /* FIX: desktop sidebar tab labels were drifting out of a straight
+         line because each emoji icon has a different rendered width, so
+         the label text that followed it (as one text node) started at a
+         different x-offset per row. Every .tab-btn label now sits in a
+         fixed-width icon column + a label column, so all label text
+         starts flush at the same left edge regardless of which emoji
+         precedes it. */
+      #main-app > nav .tab-btn .tab-btn-ico {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 18px !important;
+        flex-shrink: 0 !important;
+        font-size: 13px !important;
+        text-align: center !important;
+        margin-right: 0 !important;
+      }
+      #main-app > nav .tab-btn .tab-btn-label {
+        display: inline-block !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
       }
 
       /* Main content area */
@@ -3703,6 +3732,11 @@ function openSettingsPanel() {
 
   panel.style.display = 'flex';
   panel.style.pointerEvents = 'auto';
+  // Restore full stacking priority every time Settings is (re)opened —
+  // closeSettingsPanel() drops this to '1' while it fades out (see below),
+  // so it must be put back here or a second open would render behind
+  // whatever popup was opened the first time.
+  panel.style.zIndex = '500000';
   // Force reflow then animate
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
@@ -3718,6 +3752,18 @@ function closeSettingsPanel() {
   var backdrop= document.getElementById('sett-backdrop');
   var drawer  = document.getElementById('sett-drawer');
   if (!panel) return;
+  // FIX: Settings sits at z-index 500000 — far above the smaller popups it
+  // opens (Calculator, Cloud, Profile, QDPR, Contacts, etc. all sit well
+  // under 10000). Those popups are opened via setTimeout(fn, 220-360ms) so
+  // Settings has time to visually fade out first — but Settings was only
+  // made display:none (removed from the stack) AFTER a 320ms delay. Any
+  // popup opening before that mark (basically all of them) rendered while
+  // Settings — still display:flex, still z-index 500000 — sat directly on
+  // top of it, hiding the new popup behind a fading Settings panel.
+  // Dropping the z-index immediately (while keeping display:flex for the
+  // fade-out animation) means Settings visually sinks behind anything
+  // opened right after it, instead of blocking it for the next ~300ms.
+  panel.style.zIndex = '1';
   if (backdrop) { backdrop.style.background = 'rgba(0,0,0,0)'; backdrop.style.backdropFilter = 'blur(0px)'; backdrop.style.webkitBackdropFilter = 'blur(0px)'; }
   if (drawer)   { drawer.style.transform = 'translateY(-110%) translateX(-110%)'; drawer.style.opacity = '0'; }
   setTimeout(function() { panel.style.display = 'none'; panel.style.pointerEvents = 'none'; }, 320);
@@ -4538,24 +4584,24 @@ document.addEventListener('DOMContentLoaded', function() {
     <span class="spc-plan" id="sidebar-plan-status">Free Plan</span>
   </div>
   <div class="flex overflow-x-auto" style="scrollbar-width:none;overflow-y:hidden;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;">
-    <button class="tab-btn text-white/70" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-    <button class="tab-btn text-white/70" data-tab="daily" onclick="switchTab('daily')">📋 Report</button>
-    <button class="tab-btn text-white/70" data-tab="attendance" onclick="switchTab('attendance')">📅 Attendance</button>
-    <button class="tab-btn text-white/70" data-tab="boq" onclick="switchTab('boq')">📋 BOQ DPR</button>
-    <button class="tab-btn text-white/70" data-tab="machinery" onclick="switchTab('machinery')">⚙️ Machinery</button>
-    <button class="tab-btn text-white/70" data-tab="expenses" onclick="switchTab('expenses')">💰 Expenses</button>
-    <button class="tab-btn text-white/70" data-tab="materials" onclick="switchTab('materials')">🧱 Materials</button>
-    <button class="tab-btn text-white/70" data-tab="tools" onclick="switchTab('tools')">🔧 Tools</button>
-    <button class="tab-btn text-white/70" data-tab="drawings" onclick="switchTab('drawings')">📐 Drawings</button>
-    <button class="tab-btn text-white/70" data-tab="rentals" onclick="switchTab('rentals')">📦 Rentals</button>
-    <button class="tab-btn text-white/70" data-tab="departmental" onclick="switchTab('departmental')">🏗️ Dept Work</button>
-    <button class="tab-btn text-white/70" data-tab="contractors" onclick="switchTab('contractors')">👥 Teams</button>
-    <button class="tab-btn text-white/70" data-tab="budget" onclick="switchTab('budget')">📊 Budget</button>
-    <button class="tab-btn text-white/70" data-tab="schedule" onclick="switchTab('schedule')">📅 Schedule</button>
-    <button class="tab-btn text-white/70" data-tab="punchlist" onclick="switchTab('punchlist')">📋 Punch List</button>
-    <button class="tab-btn text-white/70" data-tab="bill" onclick="switchTab('bill')">🧾 Bill</button>
-    <button class="tab-btn text-white/70" data-tab="quotation" onclick="switchTab('quotation')">💼 Quotation</button>
-    <button class="tab-btn text-white/70" data-tab="visits" onclick="switchTab('visits')">🏛️ Site Visits</button>
+    <button class="tab-btn text-white/70" data-tab="dashboard" onclick="switchTab('dashboard')"><span class="tab-btn-ico">📊</span><span class="tab-btn-label">Dashboard</span></button>
+    <button class="tab-btn text-white/70" data-tab="daily" onclick="switchTab('daily')"><span class="tab-btn-ico">📋</span><span class="tab-btn-label">Report</span></button>
+    <button class="tab-btn text-white/70" data-tab="attendance" onclick="switchTab('attendance')"><span class="tab-btn-ico">📅</span><span class="tab-btn-label">Attendance</span></button>
+    <button class="tab-btn text-white/70" data-tab="boq" onclick="switchTab('boq')"><span class="tab-btn-ico">📋</span><span class="tab-btn-label">BOQ DPR</span></button>
+    <button class="tab-btn text-white/70" data-tab="machinery" onclick="switchTab('machinery')"><span class="tab-btn-ico">⚙️</span><span class="tab-btn-label">Machinery</span></button>
+    <button class="tab-btn text-white/70" data-tab="expenses" onclick="switchTab('expenses')"><span class="tab-btn-ico">💰</span><span class="tab-btn-label">Expenses</span></button>
+    <button class="tab-btn text-white/70" data-tab="materials" onclick="switchTab('materials')"><span class="tab-btn-ico">🧱</span><span class="tab-btn-label">Materials</span></button>
+    <button class="tab-btn text-white/70" data-tab="tools" onclick="switchTab('tools')"><span class="tab-btn-ico">🔧</span><span class="tab-btn-label">Tools</span></button>
+    <button class="tab-btn text-white/70" data-tab="drawings" onclick="switchTab('drawings')"><span class="tab-btn-ico">📐</span><span class="tab-btn-label">Drawings</span></button>
+    <button class="tab-btn text-white/70" data-tab="rentals" onclick="switchTab('rentals')"><span class="tab-btn-ico">📦</span><span class="tab-btn-label">Rentals</span></button>
+    <button class="tab-btn text-white/70" data-tab="departmental" onclick="switchTab('departmental')"><span class="tab-btn-ico">🏗️</span><span class="tab-btn-label">Dept Work</span></button>
+    <button class="tab-btn text-white/70" data-tab="contractors" onclick="switchTab('contractors')"><span class="tab-btn-ico">👥</span><span class="tab-btn-label">Teams</span></button>
+    <button class="tab-btn text-white/70" data-tab="budget" onclick="switchTab('budget')"><span class="tab-btn-ico">📊</span><span class="tab-btn-label">Budget</span></button>
+    <button class="tab-btn text-white/70" data-tab="schedule" onclick="switchTab('schedule')"><span class="tab-btn-ico">📅</span><span class="tab-btn-label">Schedule</span></button>
+    <button class="tab-btn text-white/70" data-tab="punchlist" onclick="switchTab('punchlist')"><span class="tab-btn-ico">📋</span><span class="tab-btn-label">Punch List</span></button>
+    <button class="tab-btn text-white/70" data-tab="bill" onclick="switchTab('bill')"><span class="tab-btn-ico">🧾</span><span class="tab-btn-label">Bill</span></button>
+    <button class="tab-btn text-white/70" data-tab="quotation" onclick="switchTab('quotation')"><span class="tab-btn-ico">💼</span><span class="tab-btn-label">Quotation</span></button>
+    <button class="tab-btn text-white/70" data-tab="visits" onclick="switchTab('visits')"><span class="tab-btn-ico">🏛️</span><span class="tab-btn-label">Site Visits</span></button>
   </div>
 </nav>
 
@@ -7070,7 +7116,14 @@ service cloud.firestore {
 
 <!-- Toast -->
 
-<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-xl shadow-2xl opacity-0 transition-all duration-300 z-[100] text-sm font-medium pointer-events-none"></div>
+<!-- FIX: z-[100] put every toast (including upload-failed / error toasts)
+     BEHIND every full-screen modal in the app — Settings is 500000, Sales
+     Manager is 600000+, so a failed floor-plan upload (or any other error)
+     toasted while one of those was open was rendered but invisible,
+     looking exactly like a silent failure. Raised above the highest modal
+     z-index in use (sales-clients-modal at 620000) so toasts are always
+     visible regardless of what's open. -->
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-xl shadow-2xl opacity-0 transition-all duration-300 text-sm font-medium pointer-events-none" style="z-index:900000;"></div>
 <div id="del-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-rose-600 text-white px-5 py-2.5 rounded-xl shadow-2xl hidden z-[100]">
   <div class="flex items-center gap-3 text-sm"><span id="del-msg">Delete this?</span><button onclick="confirmDel()" class="px-3 py-1 bg-white text-rose-600 rounded-lg font-bold text-xs">Delete</button></div>
 </div>
@@ -22532,6 +22585,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
       <div id="sales-building-list"></div>
 
+      <!-- Other projects' buildings, pulled from cloud — read-only here;
+           tap "Switch" to jump into that project and manage it directly. -->
+      <div id="sales-other-projects-wrap" style="display:none;margin-top:.9rem;">
+        <p style="font-size:9.5px;font-weight:800;letter-spacing:.08em;color:rgba(255,255,255,.4);margin:0 0 6px 2px;text-transform:uppercase;">Other Projects</p>
+        <div id="sales-other-projects-list"></div>
+      </div>
+
       <p id="sales-empty-msg" style="display:none;text-align:center;font-size:11px;color:rgba(255,255,255,.4);padding:2rem 0;">No buildings added yet.<br>Tap "+ Add Building" to get started.</p>
       <p id="sales-search-empty-msg" style="display:none;text-align:center;font-size:11px;color:rgba(255,255,255,.4);padding:2rem 0;">No flats match that area or budget.<br>Try a different number.</p>
     </div>
@@ -22855,6 +22915,83 @@ function _unmountSalesPanelFromTab() {
   if (closeBtn) closeBtn.style.display = '';
 }
 
+// ══════════════════════════════════════════════════════════════
+//  CROSS-PROJECT SALES AGGREGATION — every saved project (pulled
+//  fresh from cloud, not just whatever's already on this device)
+//  shows its own buildings in Sales Manager, not only the buildings
+//  belonging to whichever project happens to be "active" right now.
+//  Mirrors the exact same per-project key pattern Owner Overview
+//  already uses (_ownerLoadProject) so nothing about how projects
+//  or their cloud backups are stored needs to change.
+// ══════════════════════════════════════════════════════════════
+function _salesPkFor(pid, base) { return 'sanj_project_' + pid + '_' + base; }
+
+// Same backup_key formula as getSiteId(), just for an arbitrary
+// (possibly non-active) project id instead of window.currentProjectId.
+function _salesCloudKeyFor(pid) {
+  if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return null;
+  var base = 'user-' + _adminSBUser.id.replace(/-/g, '').slice(0, 12);
+  if (!pid) return base;
+  return base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+}
+
+function _salesReadLocal(pid) {
+  try {
+    var v = JSON.parse(safeLS.getItem(_salesPkFor(pid, SALES_KEY)) || 'null');
+    if (!v || typeof v !== 'object' || !Array.isArray(v.buildings)) return [];
+    return v.buildings;
+  } catch (e) { return []; }
+}
+
+// Pulls every OTHER project's sales data down from cloud_backups (if it
+// isn't already sitting in this device's localStorage) so buildings that
+// only ever existed on another device still show up here. Silent no-op
+// for anyone not signed in as the owner/admin (nothing to pull).
+function _pullAllProjectsSalesFromCloud(cb) {
+  if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser) { if (cb) cb(); return; }
+  var others = (window.projects || []).filter(function (p) { return p && p.id && p.id !== window.currentProjectId; });
+  if (!others.length) { if (cb) cb(); return; }
+  var remaining = others.length;
+  var done = function () { remaining--; if (remaining <= 0 && cb) cb(); };
+  others.forEach(function (p) {
+    var key = _salesCloudKeyFor(p.id);
+    if (!key) { done(); return; }
+    _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function (r) {
+      if (!r || r.error || !r.data || !r.data.data || !r.data.data.sales) { done(); return; }
+      var remoteBuildings = r.data.data.sales.buildings;
+      if (!Array.isArray(remoteBuildings) || !remoteBuildings.length) { done(); return; }
+      // Merge by building id — union of local + remote, remote fills in
+      // anything missing locally rather than overwriting local edits.
+      var localKey = _salesPkFor(p.id, SALES_KEY);
+      var local = { buildings: [] };
+      try { local = JSON.parse(safeLS.getItem(localKey) || 'null') || { buildings: [] }; } catch (e) {}
+      if (!Array.isArray(local.buildings)) local.buildings = [];
+      var byId = {};
+      local.buildings.forEach(function (b) { if (b && b.id) byId[b.id] = true; });
+      var changed = false;
+      remoteBuildings.forEach(function (b) { if (b && b.id && !byId[b.id]) { local.buildings.push(b); byId[b.id] = true; changed = true; } });
+      if (changed) { try { safeLS.setItem(localKey, JSON.stringify(local)); } catch (e) {} }
+      done();
+    }).catch(function () { done(); });
+  });
+}
+
+// Every other saved project's buildings, tagged with which project they
+// belong to, for the read-only "Other Projects" section of Sales Manager.
+function _salesOtherProjectsGroups() {
+  var others = (window.projects || []).filter(function (p) { return p && p.id && p.id !== window.currentProjectId; });
+  return others.map(function (p) {
+    return { pid: p.id, pname: p.name || 'Project', buildings: _salesReadLocal(p.id) };
+  }).filter(function (g) { return g.buildings.length; });
+}
+
+function _switchToProjectForSales(pid) {
+  if (typeof switchProject !== 'function') return;
+  closeSalesManager();
+  switchProject(pid);
+  setTimeout(function () { openSalesManager(); }, 400);
+}
+
 function openSalesManager() {
   _refreshSalesSettRow();
   if (!_ownerHasEnterprise()) {
@@ -22878,6 +23015,10 @@ function openSalesManager() {
     if (addWrap) addWrap.style.display = isSalesFullAdmin() ? 'block' : 'none';
     renderSalesManager();
     _renderSalesMgrActions();
+    // Pull every other saved project's buildings from cloud, then
+    // re-render once they land so they appear as their own group below
+    // the active project's buildings.
+    _pullAllProjectsSalesFromCloud(function () { renderSalesManager(); });
   }, 220);
 }
 function closeSalesManager() {
@@ -23046,6 +23187,39 @@ function renderSalesManager() {
   if (e2) e2.textContent = totBook;
   if (e3) e3.textContent = totSold;
   if (e4) e4.textContent = _inr(totVal);
+
+  // ── Other projects' buildings (pulled from cloud in openSalesManager)
+  // rendered read-only under their own project-name heading, with a
+  // Switch button that jumps into that project to manage it directly. ──
+  var otherWrap = document.getElementById('sales-other-projects-wrap');
+  var otherList = document.getElementById('sales-other-projects-list');
+  if (otherWrap && otherList && typeof _salesOtherProjectsGroups === 'function' && !searching) {
+    var groups = _salesOtherProjectsGroups();
+    if (!groups.length) {
+      otherWrap.style.display = 'none';
+      otherList.innerHTML = '';
+    } else {
+      otherWrap.style.display = 'block';
+      otherList.innerHTML = groups.map(function (g) {
+        var ba = 0, bb = 0, bs = 0;
+        g.buildings.forEach(function (b) {
+          (b.floors || []).forEach(function (fl) {
+            (fl.flats || []).forEach(function (f) {
+              if (f.status === 'book') bb++; else if (f.status === 'sold') bs++; else ba++;
+            });
+          });
+        });
+        var bCount = g.buildings.length;
+        return '<div style="background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:8px;padding:.65rem .8rem;display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+          + '<div style="min-width:0;display:flex;align-items:center;gap:7px;"><span style="font-size:14px;">🏢</span><div style="min-width:0;">'
+          + '<span style="font-size:12px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(g.pname) + '</span>'
+          + '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:1px;">' + bCount + ' building' + (bCount !== 1 ? 's' : '') + ' · <span style="color:#6ee7b7">' + ba + ' avail</span> · <span style="color:#fcd34d">' + bb + ' booked</span> · <span style="color:#fca5a5">' + bs + ' sold</span></div>'
+          + '</div></div>'
+          + '<button onclick="_switchToProjectForSales(\'' + g.pid + '\')" style="flex-shrink:0;padding:6px 11px;background:rgba(99,102,241,.18);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;font-size:10px;font-weight:800;border-radius:8px;cursor:pointer;white-space:nowrap;">Switch →</button>'
+          + '</div>';
+      }).join('');
+    }
+  }
 }
 
 // ── Building CRUD ─────────────────────────────────────────────
@@ -23565,13 +23739,43 @@ function _fpInput() {
       el.value = '';
       if (!file || !targetB || !targetF) return;
       if (!isSalesFullAdmin()) { toast('Only the owner or Sales Manager can upload a floor plan', 'err'); return; }
+      // FIX: image/PDF was silently rejected with no message if the file
+      // was too large, an unsupported type slipped through (some mobile
+      // camera apps mislabel MIME types), or the upload worker never
+      // called back at all (dropped connection with no error event) —
+      // each of those used to look exactly like "nothing happened".
+      var MAX_MB = 20;
+      if (file.size > MAX_MB * 1024 * 1024) {
+        toast('⚠️ File too large (' + (file.size / (1024*1024)).toFixed(1) + 'MB) — max ' + MAX_MB + 'MB', 'err');
+        return;
+      }
+      var isImg = file.type && file.type.indexOf('image') === 0;
+      var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+      if (!isImg && !isPdf) {
+        toast('⚠️ Please choose an image or PDF file', 'err');
+        return;
+      }
       toast('☁️ Uploading floor plan…', 'info');
+      var _fpDone = false;
+      // Watchdog: uploadFileToR2 already retries transient network errors,
+      // but if the request just hangs (no error, no success — e.g. the R2
+      // worker itself is unreachable) the callback may never fire. Without
+      // this, the "Uploading…" toast fades after ~2.6s and nothing else
+      // ever tells the user it failed.
+      var _fpWatchdog = setTimeout(function () {
+        if (_fpDone) return;
+        _fpDone = true;
+        toast('⚠️ Upload timed out — check your connection and try again', 'err');
+      }, 25000);
       uploadFileToR2(file, 'floor-plans', function (url, err) {
-        if (!url) { toast('Upload failed: ' + (err || 'check your connection'), 'err'); return; }
+        if (_fpDone) return; // watchdog already fired for this attempt
+        _fpDone = true;
+        clearTimeout(_fpWatchdog);
+        if (!url) { toast('⚠️ Upload failed: ' + (err || 'check your connection'), 'err'); return; }
         var data = lsales();
         var b = data.buildings.find(function (x) { return x.id === targetB; });
         var fl = b ? (b.floors || []).find(function (x) { return x.id === targetF; }) : null;
-        if (!fl) { toast('Floor not found', 'err'); return; }
+        if (!fl) { toast('⚠️ Floor not found — it may have been deleted', 'err'); return; }
         fl.floorPlan = { url: url, name: file.name, type: file.type || '', uploadedAt: Date.now() };
         ssales(data);
         renderSalesManager();
