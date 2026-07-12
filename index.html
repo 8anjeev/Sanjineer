@@ -2238,31 +2238,35 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     display: flex !important;
     flex-direction: column;
     justify-content: center;
-    gap: 1px;
+    gap: 3px;
     width: auto;
-    margin: 10px 8px 8px 8px;
-    padding: 7px 10px;                     /* same padding as .tab-btn.active */
-    border-radius: 9px;                    /* same corner-radius as .tab-btn.active */
-    background-image: linear-gradient(to right, #4f46e5, #9333ea, #ec4899);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    margin: 10px 8px 10px 8px;
+    padding: 14px 16px;                    /* ~2x the original 7px 10px — more presence */
+    border-radius: 12px;
+    background-image: linear-gradient(135deg, #4f46e5, #9333ea, #ec4899); /* default; synced to header colour by applyHeaderColor() */
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 10px 24px -6px rgba(0,0,0,0.38), 0 2px 6px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.22);
     position: sticky;
     top: 8px;
     z-index: 5;
   }
   #sidebar-profile-chip .spc-name {
-    font-size: 11.5px;
+    font-size: 14px;
     font-weight: 800;
+    letter-spacing: .015em;
     color: #fff;
     line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.25);
   }
   #sidebar-profile-chip .spc-plan {
-    font-size: 9px;
+    font-size: 10.5px;
     font-weight: 700;
-    letter-spacing: .02em;
-    color: rgba(255,255,255,0.82);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.88);
     line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
@@ -2285,6 +2289,11 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 
   .dt-split > .dt-lcol,
   .dt-split > .dt-l {
+    position: static !important;           /* was sticky — conflicted with this
+                                               same element also owning its own
+                                               overflow/scroll, which is what
+                                               caused headers to mis-paint/overlap */
+    top: auto !important;
     max-height: calc(100vh - 56px - 32px) !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -2297,6 +2306,8 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 
   .dt-split > .dt-rcol,
   .dt-split > .dt-r {
+    position: static !important;
+    top: auto !important;
     max-height: calc(100vh - 56px - 32px) !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -2310,8 +2321,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   /* Same treatment for the Rentals tab, which uses its own custom grid
      (300px form rail + records) instead of the generic .dt-split. */
   #tab-rentals > #rental-print-panel {
-    position: sticky !important;
-    top: 8px !important;
+    position: static !important;
     max-height: calc(100vh - 56px - 32px) !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -2321,6 +2331,19 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   }
   #tab-rentals > #rental-print-panel::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } /* Chrome/Safari */
 }
+</style>
+<style id="sanj-hide-tab-fix">
+/* FIX: several earlier rules set `#main-app > nav .tab-btn { display:flex !important; }`
+   (and `inline-flex !important` on mobile / desktop-sidebar breakpoints). Those beat the
+   plain inline `btn.style.display = 'none'` that _applyHiddenTabs() uses, because a
+   stylesheet rule with !important always wins over a non-!important inline style —
+   so "hidden" tabs kept rendering in the nav even though _hiddenTabs said they were hidden.
+   This rule matches the same #main-app > nav .tab-btn specificity plus the extra
+   .tab-btn-hidden class, and is declared after every other nav .tab-btn rule in the
+   document, so it always wins the cascade and actually removes the button from the nav.
+   Nothing else about the tab is touched — its data, calculations, and any direct
+   switchTab() call still work exactly as before; only the nav button disappears. */
+#main-app > nav .tab-btn.tab-btn-hidden{display:none!important;}
 </style>
 </head>
 <body>
@@ -2680,15 +2703,14 @@ function _launchApp(){
 
       <!-- SIGNUP panel — OTP only (same flow, account auto-created) -->
       <div id="ob-panel-signup" style="display:none;">
-        <!-- Plan toggle: Pro vs Enterprise (both launch-priced ₹30/mo) -->
+        <!-- Plan toggle: Pro ₹30/mo vs Enterprise ₹99/mo -->
         <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:10px;margin-bottom:12px;">
           <div id="ob-plan-toggle" style="display:flex;gap:5px;background:rgba(0,0,0,0.25);border-radius:11px;padding:4px;margin-bottom:9px;">
             <button type="button" id="ob-plan-btn-pro" onclick="obSelectSignupPlan('pro')" style="flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">Pro</button>
             <button type="button" id="ob-plan-btn-ent" onclick="obSelectSignupPlan('enterprise')" style="flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;gap:4px;">Enterprise<span style="background:#f59e0b;color:#1e1b4b;font-size:8px;font-weight:800;padding:1px 5px;border-radius:6px;">NEW</span></button>
           </div>
           <div id="ob-plan-price-line" style="display:flex;align-items:baseline;justify-content:center;gap:7px;margin-bottom:2px;">
-            <span id="ob-plan-strike" style="display:none;font-size:12px;font-weight:700;color:rgba(255,255,255,0.35);text-decoration:line-through;">₹99/mo</span>
-            <span style="font-size:22px;font-weight:900;color:#fff;line-height:1;">₹30<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);">/month</span></span>
+            <span id="ob-plan-price-amount" style="font-size:22px;font-weight:900;color:#fff;line-height:1;">₹30<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);">/month</span></span>
           </div>
           <p id="ob-plan-desc" style="text-align:center;font-size:9.5px;color:rgba(255,255,255,0.4);margin:0;">Unlimited projects · logo on PDFs · cloud sync · viewers</p>
         </div>
@@ -2740,12 +2762,11 @@ function obGoSignup(){
   obSelectSignupPlan('pro');
 }
 
-// ── Plan toggle on the Create Account panel: Pro vs Enterprise ──
-// Both are launch-priced at ₹30/month; Enterprise additionally unlocks
-// cross-device project sharing and shows its usual ₹99 struck through.
-// The choice made here is carried through to the post-signup payment
-// screen (see openPayLanding), so whichever tier the person taps is
-// exactly what they're charged for and what gets activated.
+// ── Plan toggle on the Create Account panel: Pro ₹30/mo vs Enterprise ₹99/mo ──
+// Enterprise additionally unlocks cross-device project sharing and the
+// Sales Manager. The choice made here is carried through to the
+// post-signup payment screen (see openPayLanding), so whichever tier the
+// person taps is exactly what they're charged for and what gets activated.
 window._obSelectedPlan = 'pro';
 function obSelectSignupPlan(plan){
   plan = plan === 'enterprise' ? 'enterprise' : 'pro';
@@ -2756,11 +2777,11 @@ function obSelectSignupPlan(plan){
   var offStyle = 'flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);';
   if (proBtn) proBtn.setAttribute('style', plan === 'pro' ? onStyle : offStyle);
   if (entBtn) entBtn.setAttribute('style', (plan === 'enterprise' ? onStyle : offStyle) + 'display:flex;align-items:center;justify-content:center;gap:4px;');
-  var strike = document.getElementById('ob-plan-strike');
+  var amountEl = document.getElementById('ob-plan-price-amount');
   var descEl = document.getElementById('ob-plan-desc');
-  if (strike) strike.style.display = plan === 'enterprise' ? 'inline' : 'none';
+  if (amountEl) amountEl.innerHTML = (plan === 'enterprise' ? '₹99' : '₹30') + '<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);">/month</span>';
   if (descEl) descEl.textContent = plan === 'enterprise'
-    ? 'Everything in Pro + cross-device project sharing via join code'
+    ? 'Everything in Pro + cross-device project sharing via join code + Sales Manager'
     : 'Unlimited projects · logo on PDFs · cloud sync · viewers';
 }
 
@@ -3416,6 +3437,20 @@ function doAdminSignup() { cmSendSignupOtp(); }
       </div>
     </div>
 
+    <!-- Sales (Enterprise feature) -->
+    <div class="sett-row" id="sales-sett-row" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;cursor:pointer;" onclick="openSalesManager()">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:15px">🏢</span>
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <span style="font-size:11px;font-weight:700;color:#fff">Sales <span id="sales-sett-ent-badge" style="display:none;background:#f59e0b;color:#1e1b4b;font-size:8px;font-weight:800;padding:1px 5px;border-radius:6px;margin-left:3px;">ENTERPRISE</span></span>
+            <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sales-sett-sub">Buildings, floors, flats, pricing & bookings</span>
+          </div>
+        </div>
+        <span style="font-size:11px;color:rgba(255,255,255,0.4)" id="sales-sett-arrow">›</span>
+      </div>
+    </div>
+
     <!-- Dashboard View -->
     <!-- Signatures section -->
     <div id="sett-sig-section" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
@@ -3919,8 +3954,9 @@ function toggleGeoTagFromSettings() {
 }
 
 // ── Manage Tabs ───────────────────────────────────────────────
+// NOTE: 'dashboard' is intentionally NOT in this list. It's the app's main
+// landing page, so it must never be hideable from the nav.
 var _TAB_DEFS = [
-  {id:'dashboard',  label:'📊 Dashboard'},
   {id:'daily',      label:'📋 Report'},
   {id:'attendance', label:'📅 Attendance'},
   {id:'boq',        label:'📋 BOQ DPR'},
@@ -3941,6 +3977,13 @@ var _TAB_DEFS = [
 ];
 var _hiddenTabs = [];
 try { _hiddenTabs = JSON.parse(localStorage.getItem('sanj_hidden_tabs') || '[]'); } catch(e) {}
+// Safety cleanup: 'dashboard' must never be in the hidden list (it's the
+// main landing page and can't be hidden). Strip any stale entry from
+// older saved state so a previously-hidden dashboard can't get stuck.
+if (_hiddenTabs.indexOf('dashboard') !== -1) {
+  _hiddenTabs = _hiddenTabs.filter(function(id){ return id !== 'dashboard'; });
+  try { localStorage.setItem('sanj_hidden_tabs', JSON.stringify(_hiddenTabs)); } catch(e) {}
+}
 
 function _saveHiddenTabs() {
   try { localStorage.setItem('sanj_hidden_tabs', JSON.stringify(_hiddenTabs)); } catch(e) {}
@@ -3952,8 +3995,21 @@ function _applyHiddenTabs() {
   _TAB_DEFS.forEach(function(t) {
     var isHidden = _hiddenTabs.indexOf(t.id) !== -1;
     document.querySelectorAll('.tab-btn[data-tab="' + t.id + '"]').forEach(function(btn) {
+      // Toggle a real class (see #sanj-hide-tab-fix) rather than relying only
+      // on the inline style — CSS !important rules elsewhere were beating a
+      // plain inline display:none, so hidden tabs kept showing up. The class
+      // wins the cascade every time. This only ever touches the nav button;
+      // the tab's data, calculations, and any direct switchTab() call keep
+      // working exactly as before — it just isn't in the nav to click.
+      btn.classList.toggle('tab-btn-hidden', isHidden);
       btn.style.display = isHidden ? 'none' : '';
     });
+  });
+  // Dashboard can never be hidden — always force it visible regardless of
+  // any stale/legacy state.
+  document.querySelectorAll('.tab-btn[data-tab="dashboard"]').forEach(function(btn) {
+    btn.classList.remove('tab-btn-hidden');
+    btn.style.display = '';
   });
   // Update sub-label
   var sub = document.getElementById('tabs-mgr-sub');
@@ -3977,6 +4033,12 @@ function _renderTabChips() {
 function _toggleTab(id) {
   var idx = _hiddenTabs.indexOf(id);
   if (idx === -1) {
+    // Dashboard is always visible (it's never in _TAB_DEFS, so it's never
+    // reachable here) and always has a way to reopen Settings, so — unlike
+    // before — it's safe to let every other tab in this list be hidden at
+    // once. Everything about a hidden tab keeps running in the background —
+    // its data, calculations, and any cross-tab links/shortcuts that call
+    // switchTab() directly — this only ever touches the nav button.
     _hiddenTabs.push(id);
   } else {
     _hiddenTabs.splice(idx, 1);
@@ -3984,6 +4046,16 @@ function _toggleTab(id) {
   _saveHiddenTabs();
   _applyHiddenTabs();
   _renderTabChips();
+  // If the tab just hidden was the one currently open, its nav button just
+  // vanished from under the user — jump to the first still-visible tab so
+  // they're never stranded on a tab with no way back to the nav.
+  if (idx === -1) {
+    var activeBtn = document.querySelector('.tab-btn.active');
+    if (activeBtn && activeBtn.dataset.tab === id) {
+      var next = _TAB_DEFS.find(function(t){ return _hiddenTabs.indexOf(t.id) === -1; });
+      if (next && typeof switchTab === 'function') switchTab(next.id);
+    }
+  }
 }
 
 function _resetAllTabs() {
@@ -4482,6 +4554,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 <div id="dash-stats-area">
+
+  <!-- Row 0: Sales summary — only shown once at least one flat exists -->
+  <div id="dash-sales-card" class="rounded-xl text-white cursor-pointer mb-1.5" style="display:none;padding:9px 12px;background:linear-gradient(135deg,#0f766e,#0891b2);" onclick="openSalesManager()">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <p style="font-size:9px;color:#cffafe;font-weight:700;margin:0">🏢 SALES</p>
+      <span style="font-size:9px;color:#a5f3fc;">View all ›</span>
+    </div>
+    <div style="display:flex;gap:14px;margin-top:5px;">
+      <div><p id="dash-sales-avail" style="font-size:14px;font-weight:900;line-height:1;margin:0">0</p><p style="font-size:8px;color:#a5f3fc;margin:2px 0 0">Available</p></div>
+      <div><p id="dash-sales-booked" style="font-size:14px;font-weight:900;line-height:1;margin:0">0</p><p style="font-size:8px;color:#a5f3fc;margin:2px 0 0">Booked</p></div>
+      <div><p id="dash-sales-sold" style="font-size:14px;font-weight:900;line-height:1;margin:0">0</p><p style="font-size:8px;color:#a5f3fc;margin:2px 0 0">Sold</p></div>
+      <div><p id="dash-sales-value" style="font-size:14px;font-weight:900;line-height:1;margin:0">₹0</p><p style="font-size:8px;color:#a5f3fc;margin:2px 0 0">Booked+Sold Value</p></div>
+    </div>
+  </div>
+
   <!-- Row 1: Advances + Remaining (two large equal cards) -->
   <div class="grid grid-cols-2 gap-1.5 mb-1.5">
     <div class="g-tobr-amber500-orange500 stat-card rounded-xl text-white" style="padding:9px 12px">
@@ -6878,7 +6965,9 @@ service cloud.firestore {
           <span class="perm-chip on" data-tab="schedule">📅 Schedule</span>
           <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
           <span class="perm-chip on" data-tab="bill">🧾 Bill</span>
+          <span class="perm-chip" data-tab="sales">🏢 Sales</span>
         </div>
+        <p style="font-size:9px;color:rgba(255,255,255,.35);margin:-4px 0 .5rem;line-height:1.4;">🏢 Sales alone (no other tab ticked) creates a Sales Admin link — the viewer lands directly on the Sales Manager (buildings, floors, flats, pricing, status, remarks) with full edit rights, and sees nothing else. Ticked alongside other tabs, it's a limited link: view inventory totals + add client remarks only, no rate/floor edits. Requires your Enterprise plan.</p>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">
           <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:15px;height:15px;">
           <label for="vw-can-print" style="font-size:11px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>
@@ -7153,6 +7242,58 @@ function idbDel(key, cb) {
     tx.onerror    = function() { if (cb) cb(); };
   });
 }
+
+// ============================================================
+// CLOUDFLARE R2 UPLOADS — bills/receipts, site photos, drawings
+// Replaces per-device-only IndexedDB storage (and, for drawings,
+// heavy base64-in-JSON storage) with real files in R2, synced
+// across every device via the URL saved in the record.
+// ============================================================
+var R2_UPLOAD_URL = 'https://sanjineer-uploads.sanjeev897911s.workers.dev/upload';
+
+function getSupabaseAccessToken(cb) {
+  try {
+    if (typeof _sb === 'undefined' || !_sb || !_sb.auth) { cb(null); return; }
+    _sb.auth.getSession().then(function (res) {
+      var session = res && res.data && res.data.session;
+      cb(session ? session.access_token : null);
+    }).catch(function () { cb(null); });
+  } catch (e) { cb(null); }
+}
+
+// folder groups uploads in the bucket, e.g. 'bills', 'site-photos', 'drawings'
+function uploadFileToR2(fileOrBlob, folder, cb) {
+  getSupabaseAccessToken(function (token) {
+    if (!token) { cb(null, 'Not signed in'); return; }
+    var fd = new FormData();
+    fd.append('file', fileOrBlob, fileOrBlob.name || (folder + '.jpg'));
+    fd.append('folder', folder || 'misc');
+    fetch(R2_UPLOAD_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.url) cb(data.url, null); else cb(null, (data && data.error) || 'Upload failed');
+      })
+      .catch(function (e) { cb(null, String(e)); });
+  });
+}
+
+// A stored reference can be: a legacy IndexedDB key, a legacy inline data:
+// URL, or a new https:// R2 URL. This resolves any of them to a usable src.
+function resolveFileSrc(ref, cb) {
+  if (!ref) { cb(null); return; }
+  if (typeof ref === 'string' && (ref.indexOf('http://') === 0 || ref.indexOf('https://') === 0 || ref.indexOf('data:') === 0)) {
+    cb(ref); return;
+  }
+  idbGet(ref, cb);
+}
+function dataURLtoBlob(dataUrl) {
+  var parts = dataUrl.split(',');
+  var mime = (parts[0].match(/:(.*?);/) || [,'image/jpeg'])[1];
+  var bin = atob(parts[1]);
+  var arr = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
 function idbGetAll(keys, cb) {
   if (!keys.length) { cb([]); return; }
   var results = new Array(keys.length).fill(null);
@@ -7162,6 +7303,20 @@ function idbGetAll(keys, cb) {
       results[i] = val;
       done++;
       if (done === keys.length) cb(results);
+    });
+  });
+}
+// Same as idbGetAll, but each key may be a legacy IndexedDB key OR a real
+// R2 https:// URL — used once photo refs started being R2 URLs.
+function resolveAllFileSrc(refs, cb) {
+  if (!refs.length) { cb([]); return; }
+  var results = new Array(refs.length).fill(null);
+  var done = 0;
+  refs.forEach(function(k, i) {
+    resolveFileSrc(k, function(val) {
+      results[i] = val;
+      done++;
+      if (done === refs.length) cb(results);
     });
   });
 }
@@ -7628,6 +7783,11 @@ function applyHeaderColor() {
     +'  color: #fff !important;'
     +'  font-weight: 700 !important;'
     +'  box-shadow: 0 2px 10px '+glowRgba+' !important;'
+    +'}'
+    +'#sidebar-profile-chip {'
+    +'  background-image: '+(isGrad?bg:'none')+' !important;'
+    +'  background-color: '+(isGrad?'transparent':bg)+' !important;'
+    +'  box-shadow: 0 10px 24px -6px '+glowRgba+', 0 2px 6px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.22) !important;'
     +'}';
 }
 function loadProfileLogo(evt) {
@@ -8000,7 +8160,7 @@ function loadPhotos() {
   var keys = lphkeys()[DD] || [];
   if (!keys.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
   div.innerHTML = '<p class="text-gray-400 text-xs">Loading photos...</p>';
-  idbGetAll(keys, function(imgs) {
+  resolveAllFileSrc(keys, function(imgs) {
     var valid = imgs.filter(Boolean);
     if (!valid.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
     div.innerHTML = valid.map(function(s, i) {
@@ -8213,16 +8373,26 @@ function addPhoto(e) {
   geoStampImageFile(f, 1280, 0.82, window.currentProjectId).then(function(compressed) {
     var curKeys = lphkeys()[DD] || [];
     if (curKeys.length >= 4) { toast('Max 4 photos already saved', 'err'); return; }
-    var idbKey = 'ph_' + DD + '_' + Date.now();
-    idbPut(idbKey, compressed, function(ok) {
-      if (!ok) { toast('Could not save photo — try again', 'err'); return; }
+    function storeRef(ref) {
       var idx = lphkeys();
       var arr = idx[DD] || [];
-      arr.push(idbKey);
+      arr.push(ref);
       idx[DD] = arr;
       sphkeys(idx);
       loadPhotos();
       toast('Photo ' + arr.length + ' of 4 saved ✓', 'ok');
+    }
+    toast('☁️ Uploading photo…', 'info');
+    uploadFileToR2(dataURLtoBlob(compressed), 'site-photos', function(url, err) {
+      if (url) { storeRef(url); return; }
+      // Offline or upload failed — fall back to local-only storage so the
+      // photo isn't lost, but it won't be visible on other devices yet.
+      var idbKey = 'ph_' + DD + '_' + Date.now();
+      idbPut(idbKey, compressed, function(ok) {
+        if (!ok) { toast('Could not save photo — try again', 'err'); return; }
+        toast('⚠️ Saved on this device only (upload failed: ' + (err||'offline') + ')', 'err');
+        storeRef(idbKey);
+      });
     });
   }).catch(function() {
     toast('Error processing photo', 'err');
@@ -8772,9 +8942,15 @@ async function onQdprPhotoChange(input){
   if (room<=0){ toast('Maximum '+QDPR_MAX_PHOTOS+' photos allowed','err'); input.value=''; return; }
   var toProcess = files.slice(0, room);
   if (files.length>room) toast('Only '+room+' more photo(s) added (max '+QDPR_MAX_PHOTOS+')','err');
-  if (toProcess.length && _geoTagEnabled) toast('📍 Tagging location…', 'info');
+  if (toProcess.length) toast('☁️ Uploading photo(s)…', 'info');
   for (var i=0;i<toProcess.length;i++){
-    try{ var dataUrl = await geoStampImageFile(toProcess[i], 1000, 0.78, qdprState.formSiteId); qdprFormState.photos.push({id:uid(), src:dataUrl}); }
+    try{
+      var dataUrl = await geoStampImageFile(toProcess[i], 1000, 0.78, qdprState.formSiteId);
+      var url = await new Promise(function(resolve){
+        uploadFileToR2(dataURLtoBlob(dataUrl), 'site-photos', function(u, err){ resolve(u || dataUrl); if(!u) toast('⚠️ Photo kept locally only (upload failed: '+(err||'offline')+')','err'); });
+      });
+      qdprFormState.photos.push({id:uid(), src:url});
+    }
     catch(e){ console.error('QDPR photo processing failed', e); }
   }
   input.value='';
@@ -10059,27 +10235,31 @@ function billFileSelected(e, ctx){
   var isPdf = f.type==='application/pdf', isImg = f.type.startsWith('image/');
   if(!isPdf && !isImg){ toast('Only image or PDF allowed','err'); return; }
   if(f.size > 10*1024*1024){ toast('File too large — max 10MB','err'); return; }
-  var reader = new FileReader();
-  reader.onload = function(ev){
-    var dataUrl = ev.target.result;
-    if(isImg){
+  function upload(blob, filename){
+    toast('☁️ Uploading bill…', 'info');
+    uploadFileToR2(blob, 'bills', function(url, err){
+      if (!url) { toast('Upload failed: ' + (err || 'check your connection'), 'err'); return; }
+      BILLS[ctx] = { url: url, isPdf: isPdf, name: filename, size: blob.size };
+      _showBillPreview(ctx);
+    });
+  }
+  if (isImg) {
+    var reader = new FileReader();
+    reader.onload = function(ev){
       var img = new Image();
       img.onload = function(){
         var MAX=1600, w=img.width, h=img.height;
         if(w>MAX||h>MAX){ var r=Math.min(MAX/w,MAX/h); w=Math.round(w*r); h=Math.round(h*r); }
         var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
         cv.getContext('2d').drawImage(img,0,0,w,h);
-        var comp = cv.toDataURL('image/jpeg',0.85);
-        BILLS[ctx]={dataUrl:comp, isPdf:false, name:f.name, size:f.size, key:'bill_'+ctx+'_'+Date.now()};
-        _showBillPreview(ctx);
+        cv.toBlob(function(blob){ upload(blob, f.name); }, 'image/jpeg', 0.85);
       };
-      img.src = dataUrl;
-    } else {
-      BILLS[ctx]={dataUrl:dataUrl, isPdf:true, name:f.name, size:f.size, key:'bill_'+ctx+'_'+Date.now()};
-      _showBillPreview(ctx);
-    }
-  };
-  reader.readAsDataURL(f);
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(f);
+  } else {
+    upload(f, f.name);
+  }
 }
 function _showBillPreview(ctx){
   var b=BILLS[ctx]; if(!b) return;
@@ -10100,8 +10280,10 @@ function clearBill(ctx){
 }
 function _saveBill(ctx, cb){
   var b=BILLS[ctx];
-  if(!b||!b.dataUrl){ cb(null); return; }
-  idbPut(b.key, {dataUrl:b.dataUrl, isPdf:b.isPdf, name:b.name}, function(ok){ cb(ok ? b.key : null); });
+  if(!b){ cb(null); return; }
+  if(b.url){ cb(b.url); return; } // already uploaded to R2 at selection time
+  if(b.dataUrl){ idbPut(b.key, {dataUrl:b.dataUrl, isPdf:b.isPdf, name:b.name}, function(ok){ cb(ok ? b.key : null); }); return; }
+  cb(null);
 }
 
 // ── Mat Purchase Modal ─────────────────────────────────────────────────────────
@@ -10159,8 +10341,8 @@ function viewBill(ref){
   function show(stored){
     if(!stored){ toast('Bill not found','err'); return; }
     var dataUrl, isPdf=false, name='bill';
-    if(typeof stored==='string'){ dataUrl=stored; isPdf=stored.startsWith('data:application/pdf'); }
-    else { dataUrl=stored.dataUrl; isPdf=stored.isPdf; name=stored.name||'bill'; }
+    if(typeof stored==='string'){ dataUrl=stored; isPdf = stored.indexOf('data:application/pdf')===0 || /\.pdf($|\?)/i.test(stored); }
+    else { dataUrl=stored.dataUrl||stored.url; isPdf=stored.isPdf; name=stored.name||'bill'; }
     _billViewDataUrl=dataUrl; _billViewFilename=name;
     var badge=document.getElementById('bill-view-type-badge');
     var imgWrap=document.getElementById('bill-view-img-wrap');
@@ -10169,15 +10351,21 @@ function viewBill(ref){
     if(badge) badge.textContent = isPdf ? '📄 PDF' : '🖼️ Image';
     imgWrap.style.display='none'; pdfWrap.style.display='none'; fallback.style.display='none';
     if(isPdf){
-      try{
-        var b64=dataUrl.split(',')[1], bs=atob(b64), ab=new ArrayBuffer(bs.length), ia=new Uint8Array(ab);
-        for(var i=0;i<bs.length;i++) ia[i]=bs.charCodeAt(i);
-        var blob=new Blob([ab],{type:'application/pdf'}), url=URL.createObjectURL(blob);
-        document.getElementById('bill-view-pdf').src=url;
+      if (dataUrl.indexOf('data:') === 0) {
+        try{
+          var b64=dataUrl.split(',')[1], bs=atob(b64), ab=new ArrayBuffer(bs.length), ia=new Uint8Array(ab);
+          for(var i=0;i<bs.length;i++) ia[i]=bs.charCodeAt(i);
+          var blob=new Blob([ab],{type:'application/pdf'}), url=URL.createObjectURL(blob);
+          document.getElementById('bill-view-pdf').src=url;
+          pdfWrap.style.display='block';
+        } catch(err){
+          var fn=document.getElementById('bill-view-fallback-name'); if(fn) fn.textContent=name;
+          fallback.style.display='flex';
+        }
+      } else {
+        // Already a real URL (R2) — no base64 decoding needed, load directly
+        document.getElementById('bill-view-pdf').src=dataUrl;
         pdfWrap.style.display='block';
-      } catch(err){
-        var fn=document.getElementById('bill-view-fallback-name'); if(fn) fn.textContent=name;
-        fallback.style.display='flex';
       }
     } else {
       document.getElementById('bill-view-img').src=dataUrl;
@@ -10185,7 +10373,7 @@ function viewBill(ref){
     }
     document.getElementById('bill-view-modal').classList.add('modal-show');
   }
-  idbGet(ref, function(stored){ show(stored); });
+  resolveFileSrc(ref, show);
 }
 function closeBillViewer(){
   document.getElementById('bill-view-modal').classList.remove('modal-show');
@@ -10943,6 +11131,7 @@ function renderDashboard(){
   try { viewWorkers(); } catch(e){}
   try { viewContractors(); } catch(e){}
   try { viewTools(); } catch(e){}
+  try { _updateSalesDashCard(); } catch(e){}
 }
 function updateDash(){
 AD=ld(); var cums=mkey(new Date()), today=ist();
@@ -11376,7 +11565,7 @@ function printDailyReport(){
 try{
 AD=ld();
 var photoKeys = lphkeys()[DD] || [];
-idbGetAll(photoKeys, function(photos) {
+resolveAllFileSrc(photoKeys, function(photos) {
 try{
 photos = photos.filter(Boolean);
 _printDailyReportInner(photos);
@@ -12252,9 +12441,11 @@ function saveDrawing(){
     buildRoomTabs();renderDrawings();toast('Drawing saved!','ok');
   }
   if(file){
-    var rdr=new FileReader();
-    rdr.onload=function(ev){doSave(ev.target.result,file.name);};
-    rdr.readAsDataURL(file);
+    toast('☁️ Uploading drawing…', 'info');
+    uploadFileToR2(file, 'drawings', function(url, err){
+      if (!url) { toast('Upload failed: ' + (err || 'check your connection'), 'err'); return; }
+      doSave(url, file.name);
+    });
   } else {doSave(null,null);}
 }
 
@@ -14356,6 +14547,9 @@ function _applyFullBackup(d, forceOverwrite) {
       // on another device until a manual reload.
       try {
         _hiddenTabs = JSON.parse(d.settings.hidden_tabs || '[]');
+        // 'dashboard' can never be hidden — strip any stale/legacy entry
+        // that might arrive from an older synced device.
+        _hiddenTabs = _hiddenTabs.filter(function(id){ return id !== 'dashboard'; });
         if (typeof _applyHiddenTabs === 'function') _applyHiddenTabs();
         if (typeof _renderTabChips === 'function') _renderTabChips();
       } catch(e) {}
@@ -15147,6 +15341,14 @@ function _enforceViewerTabs() {
       panel.style.display = 'none';
     }
   });
+
+  // 3. Sales portal — 'sales' isn't a real tab-btn/tab-content, so a viewer
+  // granted only that permission would otherwise land on a blank screen
+  // (every real tab just got hidden above). Drop them straight into a
+  // locked Sales Manager instead — this is their entire experience.
+  if (perms.indexOf('sales') !== -1) {
+    if (typeof _enterSalesViewerMode === 'function') _enterSalesViewerMode();
+  }
 }
 
 function checkViewerMode() {
@@ -15535,9 +15737,14 @@ function _showViewerSyncDot(state) {
 }
 
 function _disableViewerWrites() {
+  // Sales-permission viewers are the one exception: they're meant to update
+  // flat status, pricing, and remarks, so anything inside the Sales module
+  // is left alone even though every other tab stays fully read-only for them.
+  function _inSalesModule(el) { return !!(el.closest && el.closest('#sales-modal-root')); }
   // Disable write-action buttons only (by text content)
   var writeWords = ['Save','Add','Submit','Log','Delete','Remove','Upload','Generate','Backup','Restore','Deposit','Record','Mark','Connect','Pay','Activate','Create','Send','Issue'];
   document.querySelectorAll('button').forEach(function(b) {
+    if (_inSalesModule(b)) return;
     var txt = b.textContent.trim();
     if (writeWords.some(function(w) { return txt.includes(w); })) {
       b.disabled = true;
@@ -15549,6 +15756,7 @@ function _disableViewerWrites() {
   // Strategy: disable inputs that have placeholder suggesting data entry
   // but leave month-selectors, date-pickers, and filter dropdowns functional
   document.querySelectorAll('input[placeholder], textarea').forEach(function(el) {
+    if (_inSalesModule(el)) return;
     var ph = (el.getAttribute('placeholder') || '').toLowerCase();
     // Only disable inputs that are clearly for entering new data
     el.disabled = true;
@@ -16237,8 +16445,8 @@ function loadViewerAccountsInline() {
       listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
       return;
     }
-    var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ'};
-    var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq'];
+    var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ',sales:'🏢 Sales'};
+    var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq','sales'];
     listEl.innerHTML = list.map(function(v,i) {
       var perms = v.permissions||[];
       var chips = perms.map(function(p){
@@ -16346,8 +16554,8 @@ function renderViewerList(list) {
     listEl.innerHTML = '<div style="text-align:center;padding:20px 0;"><div style="font-size:28px;margin-bottom:6px">\u{1F465}</div><p style="font-size:11px;color:rgba(255,255,255,0.35);">No viewers created yet</p></div>';
     return;
   }
-  var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ'};
-  var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq'];
+  var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ',sales:'🏢 Sales'};
+  var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq','sales'];
   listEl.innerHTML = list.map(function(v, i) {
     var perms = v.permissions || [];
     var chips = perms.map(function(p){
@@ -16691,7 +16899,7 @@ function _cancelAndLogout() {
 // can never disagree with each other.
 var PLAN_PRICING = {
   pro:        { amount: 3000, rupees: 30, label: 'Pro',        desc: 'Admin Subscription — ₹30/month' },
-  enterprise: { amount: 3000, rupees: 30, fullRupees: 99, label: 'Enterprise', desc: 'Enterprise Subscription — ₹30/month (launch price, usually ₹99)' }
+  enterprise: { amount: 9900, rupees: 99, label: 'Enterprise', desc: 'Enterprise Subscription — ₹99/month' }
 };
 
 var _selectedPlanTier = 'pro';
@@ -16714,9 +16922,8 @@ function _selectPlanTier(plan) {
   if (priceBlock) {
     if (plan === 'enterprise') {
       priceBlock.innerHTML =
-        '<p style="color:rgba(255,255,255,.4);font-size:14px;font-weight:700;text-decoration:line-through;line-height:1;margin-bottom:2px;">₹99/month</p>'
-        + '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
-        + '<p style="font-size:10px;color:#34d399;margin-top:3px;font-weight:700;">🎉 Launch discount — locked in for as long as you stay subscribed</p>';
+        '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹99<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
+        + '<p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>';
     } else {
       priceBlock.innerHTML =
         '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
@@ -16750,7 +16957,8 @@ var _UPGRADE_FEATURE_PLAN = {
   'Multiple Projects': 'pro',
   'Project Sharing': 'enterprise',
   'Cross-Device Sharing': 'enterprise',
-  'Purchase Order Approvals': 'enterprise'
+  'Purchase Order Approvals': 'enterprise',
+  'Sales Manager': 'enterprise'
 };
 
 function startSubscriptionPayment(plan) {
@@ -20197,19 +20405,33 @@ window.openShareProjectModal = function(projectId) {
 function _renderShareProjBody(projectId) {
   var body = document.getElementById('share-proj-body');
   if (!body) return;
+  if (!window.isEnterpriseUser) {
+    body.innerHTML = '<div style="text-align:center;padding:18px 4px;">'
+      + '<p style="font-size:28px;margin-bottom:6px;">🔒</p>'
+      + '<p style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px;">Enterprise feature</p>'
+      + '<p style="font-size:10.5px;color:rgba(255,255,255,0.55);line-height:1.5;margin-bottom:12px;">Sharing a project with engineers or a Sales Admin across devices needs the Enterprise plan.</p>'
+      + '<button onclick="document.getElementById(\'_share-proj-modal\').remove();if(typeof _showUpgradePopup===\'function\')_showUpgradePopup(\'Cross-Device Sharing\');" style="padding:9px 18px;background:linear-gradient(135deg,#d97706,#f59e0b);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">Upgrade to Enterprise</button>'
+      + '</div>';
+    return;
+  }
+  // Engineer code (role read/write) and Sales Admin code (role sales) are
+  // two independent rows for the same project, distinguished purely by
+  // their `role` value — fetched together, rendered as two sections.
   Promise.all([
-    _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).order('created_at', {ascending:false}).limit(1),
+    _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write']).order('created_at', {ascending:false}).limit(1),
+    _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).eq('role', 'sales').order('created_at', {ascending:false}).limit(1),
     _sb.from('project_members').select('id,member_name,role,created_at,last_seen').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).order('created_at', {ascending:false})
   ]).then(function(results) {
     var codeRow = (results[0].data && results[0].data[0]) || null;
-    var members = results[1].data || [];
-    _paintShareProjBody(projectId, codeRow, members);
+    var salesCodeRow = (results[1].data && results[1].data[0]) || null;
+    var members = results[2].data || [];
+    _paintShareProjBody(projectId, codeRow, members, salesCodeRow);
   }).catch(function(e) {
     body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
   });
 }
 
-function _paintShareProjBody(projectId, codeRow, members) {
+function _paintShareProjBody(projectId, codeRow, members, salesCodeRow) {
   var body = document.getElementById('share-proj-body');
   if (!body) return;
   var role = codeRow ? codeRow.role : 'write';
@@ -20227,15 +20449,33 @@ function _paintShareProjBody(projectId, codeRow, members) {
         + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px;">🔄 Regenerate Code (old code stops working)</button>'
       )
     : (
-        '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;">➕ Generate Join Code</button>'
+        '<p style="font-size:10.5px;color:rgba(255,255,255,.45);margin:0 0 8px;">👷 Engineer code — read or read/write access to the whole project.</p>'
+        + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;">➕ Generate Engineer Join Code</button>'
+      );
+
+  // ── Sales Admin join code — a SEPARATE code from the engineer one above.
+  // Whoever joins with THIS code lands directly on a locked, full-CRUD
+  // Sales Manager screen; the rest of the app stays hidden to them.
+  var salesCodeBlock = salesCodeRow
+    ? (
+        '<div style="background:rgba(8,145,178,.12);border:1px solid rgba(45,212,191,.3);border-radius:12px;padding:14px;text-align:center;margin-bottom:10px;">'
+        + '<p style="font-size:28px;font-weight:900;letter-spacing:.2em;color:#67e8f9;margin:0 0 8px;">' + _jhtml(salesCodeRow.code) + '</p>'
+        + '<button onclick="_copyShareCode(\'' + salesCodeRow.code + '\')" style="padding:7px 16px;background:linear-gradient(135deg,#0891b2,#0f766e);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📋 Copy Code</button>'
+        + '</div>'
+        + '<button onclick="_regenerateSalesJoinCode(\'' + projectId + '\')" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:14px;">🔄 Regenerate Code (old code stops working)</button>'
+      )
+    : (
+        '<button onclick="_regenerateSalesJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#0891b2,#0f766e);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:14px;">🏢 Generate Sales Admin Code</button>'
       );
 
   var memberRows = members.length
     ? members.map(function(m) {
         var seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : 'never synced';
+        var roleLabel = m.role === 'sales' ? '🏢 sales admin' : (m.role==='write' ? '✏️ write' : '👁️ read');
+        var roleColor = m.role === 'sales' ? '#67e8f9' : (m.role==='write' ? '#6ee7b7' : '#fde68a');
         return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
           + '<div style="flex:1;min-width:0;">'
-          + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(m.member_name || 'Unnamed') + ' <span style="font-size:9px;color:' + (m.role==='write'?'#6ee7b7':'#fde68a') + ';font-weight:700;">' + (m.role==='write'?'✏️ write':'👁️ read') + '</span></p>'
+          + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(m.member_name || 'Unnamed') + ' <span style="font-size:9px;color:' + roleColor + ';font-weight:700;">' + roleLabel + '</span></p>'
           + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Last sync: ' + _jhtml(seen) + '</p>'
           + '</div>'
           + '<button onclick="_revokeMember(\'' + m.id + '\',\'' + projectId + '\')" title="Revoke access" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:#fca5a5;font-size:10px;font-weight:700;cursor:pointer;">Revoke</button>'
@@ -20243,7 +20483,11 @@ function _paintShareProjBody(projectId, codeRow, members) {
       }).join('')
     : '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">No one has joined with this code yet</p>';
 
-  body.innerHTML = codeBlock
+  body.innerHTML = '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👷 Engineer Join Code</p>'
+    + codeBlock
+    + '<p style="font-size:10px;font-weight:800;color:#67e8f9;margin-bottom:6px;">🏢 Sales Admin Join Code</p>'
+    + '<p style="font-size:10.5px;color:rgba(255,255,255,.45);margin:0 0 8px;">Whoever enters this different code lands straight in a full-access Sales Manager — the rest of the app stays hidden to them. Requires Enterprise.</p>'
+    + salesCodeBlock
     + '<div style="margin-top:6px;">'
     + '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👥 People with access (' + members.length + ')</p>'
     + memberRows
@@ -20257,11 +20501,13 @@ window._copyShareCode = function(code) {
 
 window._regenerateJoinCode = function(projectId) {
   if (!_sb || !_adminSBUser) return;
+  if (!window.isEnterpriseUser) { if (typeof _showUpgradePopup==='function') _showUpgradePopup('Cross-Device Sharing'); return; }
   var proj = (window.projects || []).find(function(p){ return p.id === projectId; });
   var body = document.getElementById('share-proj-body');
   if (body) body.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Generating…</p>';
-  // Deactivate any previous active codes for this project first
-  _sb.from('project_join_codes').update({active:false}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true)
+  // Deactivate any previous active ENGINEER codes for this project first —
+  // the Sales Admin code (role 'sales') is a separate row and untouched.
+  _sb.from('project_join_codes').update({active:false}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write'])
     .then(function() {
       return _sb.from('project_join_codes').insert({
         admin_id: _adminSBUser.id,
@@ -20282,11 +20528,40 @@ window._regenerateJoinCode = function(projectId) {
 
 window._setJoinCodeRole = function(projectId, role) {
   if (!_sb || !_adminSBUser) return;
-  _sb.from('project_join_codes').update({role: role}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true)
+  _sb.from('project_join_codes').update({role: role}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write'])
     .then(function(r) {
       if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
       toast(role === 'write' ? '✏️ New joiners get Read & Write' : '👁️ New joiners get Read-only', 'ok');
       _renderShareProjBody(projectId);
+    });
+};
+
+// Sales Admin join code — a distinct code/row (role:'sales') that coexists
+// with the engineer code above. Anyone who redeems THIS code is routed
+// straight into a locked, full-CRUD Sales Manager with the rest of the
+// app hidden (see window._enterSalesEngineerMode).
+window._regenerateSalesJoinCode = function(projectId) {
+  if (!_sb || !_adminSBUser) return;
+  if (!window.isEnterpriseUser) { if (typeof _showUpgradePopup==='function') _showUpgradePopup('Sales Manager'); return; }
+  var proj = (window.projects || []).find(function(p){ return p.id === projectId; });
+  var body = document.getElementById('share-proj-body');
+  if (body) body.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Generating…</p>';
+  _sb.from('project_join_codes').update({active:false}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).eq('role', 'sales')
+    .then(function() {
+      return _sb.from('project_join_codes').insert({
+        admin_id: _adminSBUser.id,
+        project_id: projectId,
+        project_name: proj ? proj.name : null,
+        code: _genJoinCode(),
+        role: 'sales',
+        active: true
+      });
+    }).then(function(r) {
+      if (r.error) throw r.error;
+      toast('✅ New Sales Admin code generated', 'ok');
+      _renderShareProjBody(projectId);
+    }).catch(function(e) {
+      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
     });
 };
 
@@ -21275,6 +21550,10 @@ function _engActiveMembership() {
   var pid = _engGetActivePid();
   return pid ? _engFindMembership(pid) : null;
 }
+// Exported so modules outside this IIFE (e.g. the Sales Manager, which
+// needs to know if the joined membership is a Sales-Admin-only join) can
+// read the active membership without duplicating the storage logic.
+window._engActiveMembership = _engActiveMembership;
 
 window.doJoinProject = function() {
   var nameEl = document.getElementById('join-member-name');
@@ -21301,7 +21580,11 @@ window.doJoinProject = function() {
       var membership = {
         pid: row.project_id,
         pname: row.project_name || 'Project',
-        role: row.role || 'write',
+        // A 'sales' role code is a dedicated Sales Admin join — full CRUD on
+        // Sales only, rest of the app hidden. Everyone else gets normal
+        // read/write engineer access (with limited/view-only Sales rights).
+        role: (row.role === 'sales') ? 'write' : (row.role || 'write'),
+        salesOnly: row.role === 'sales',
         token: deviceToken,
         admin_id: row.admin_id,
         name: memberName
@@ -21372,6 +21655,10 @@ window._engineerSwitchTo = function(pid) {
   _prefillEngineerProfile();
   window._engineerPull(false);
   if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
+  if (m.salesOnly && typeof window._enterSalesEngineerMode === 'function') {
+    setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
+    return;
+  }
   setTimeout(function() {
     try {
       AD = ld();
@@ -21480,7 +21767,7 @@ function _applyEngineerUIMode() {
     var sub = document.getElementById('sett-login-sub');
     if (icon) icon.textContent = '🤝';
     if (title) title.textContent = 'Leave Project';
-    if (sub) sub.textContent = (active && active.role === 'write' ? 'Read & Write' : 'Read-only') + ' — ' + pname + (list.length > 1 ? ' (' + list.length + ' projects joined)' : '');
+    if (sub) sub.textContent = (active && active.salesOnly ? '🏢 Sales Admin' : (active && active.role === 'write' ? 'Read & Write' : 'Read-only')) + ' — ' + pname + (list.length > 1 ? ' (' + list.length + ' projects joined)' : '');
   }
 }
 
@@ -21672,6 +21959,11 @@ function _engineerStart(pid) {
   window._engineerPull(false);
   _startEngineerSync();
   if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
+  // A Sales-Admin join code locks this whole session into the Sales
+  // Manager — nothing else in the app should be reachable.
+  if (m.salesOnly && typeof window._enterSalesEngineerMode === 'function') {
+    setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
+  }
 }
 
 // Resume an existing engineer session (with all its joined projects) on page load
@@ -21813,5 +22105,720 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('load', applyAllDesktopLayouts);
 })();
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SALES MANAGER — floors, flats, pricing, bookings & remarks
+════════════════════════════════════════════════════════════════ -->
+<style>
+  .fd-input{width:100%;padding:8px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:12px;outline:none;box-sizing:border-box;font-family:inherit;}
+  .fd-input:disabled{opacity:.55;cursor:not-allowed;}
+  .fd-status-btn.active{box-shadow:0 0 0 2px rgba(255,255,255,.55) inset;transform:scale(1.03);}
+  .flat-pill{padding:7px 6px;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid;text-align:left;transition:transform .12s;}
+  .flat-pill:active{transform:scale(.94);}
+</style>
+
+<!-- ====== SALES MANAGER MODAL ====== -->
+<div id="sales-manager-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-3" style="display:none;z-index:600000;" onclick="if(event.target===this&&_modalGuardOk('sales-manager-modal'))closeSalesManager()">
+  <div style="background:linear-gradient(160deg,#0f0c29,#0f766e 65%,#0891b2);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:0;width:100%;max-width:480px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+        <div style="width:34px;height:34px;background:linear-gradient(135deg,#0891b2,#0f766e);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">🏢</div>
+        <div style="min-width:0;">
+          <p style="font-size:13px;font-weight:900;color:#fff;line-height:1.1;margin:0;">Sales Manager</p>
+          <p id="sales-mgr-sub" style="font-size:9px;color:#a5f3fc;line-height:1.3;margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Floors · Flats · Pricing · Bookings</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+        <button id="sales-exit-btn" onclick="_salesViewerExit()" style="display:none;padding:0 10px;height:28px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#fca5a5;font-size:10px;font-weight:800;cursor:pointer;">Sign out</button>
+        <button id="sales-close-btn" onclick="closeSalesManager()" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+
+    <!-- Summary strip -->
+    <div style="display:flex;gap:8px;padding:.7rem 1rem;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0;overflow-x:auto;">
+      <div style="flex:1;min-width:60px;background:rgba(16,185,129,.12);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:6px 8px;text-align:center;">
+        <p id="sm-sum-avail" style="font-size:15px;font-weight:900;color:#6ee7b7;margin:0;">0</p>
+        <p style="font-size:8px;color:#a7f3d0;margin:1px 0 0;font-weight:700;">AVAILABLE</p>
+      </div>
+      <div style="flex:1;min-width:60px;background:rgba(245,158,11,.12);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:6px 8px;text-align:center;">
+        <p id="sm-sum-book" style="font-size:15px;font-weight:900;color:#fcd34d;margin:0;">0</p>
+        <p style="font-size:8px;color:#fde68a;margin:1px 0 0;font-weight:700;">BOOKED</p>
+      </div>
+      <div style="flex:1;min-width:60px;background:rgba(239,68,68,.12);border:1px solid rgba(248,113,113,.25);border-radius:10px;padding:6px 8px;text-align:center;">
+        <p id="sm-sum-sold" style="font-size:15px;font-weight:900;color:#fca5a5;margin:0;">0</p>
+        <p style="font-size:8px;color:#fecaca;margin:1px 0 0;font-weight:700;">SOLD</p>
+      </div>
+      <div style="flex:1.5;min-width:92px;background:rgba(99,102,241,.12);border:1px solid rgba(129,140,248,.25);border-radius:10px;padding:6px 8px;text-align:center;">
+        <p id="sm-sum-value" style="font-size:13px;font-weight:900;color:#c7d2fe;margin:0;">₹0</p>
+        <p style="font-size:8px;color:#ddd6fe;margin:1px 0 0;font-weight:700;">BOOKED+SOLD VALUE</p>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
+
+      <div id="sales-add-building-wrap" style="margin-bottom:.7rem;display:none;">
+        <button onclick="_toggleAddBuildingForm()" style="width:100%;padding:.55rem;background:rgba(255,255,255,.06);border:1.5px dashed rgba(255,255,255,.25);border-radius:10px;color:#a5f3fc;font-size:11px;font-weight:800;cursor:pointer;">+ Add Building</button>
+        <div id="add-building-form" style="display:none;margin-top:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:.6rem;">
+          <input id="new-building-name" type="text" placeholder="e.g. Building A, Tower 1" class="fd-input" style="margin-bottom:6px;">
+          <button onclick="addSalesBuilding()" style="width:100%;padding:.5rem;background:linear-gradient(135deg,#0891b2,#0f766e);color:#fff;border:none;border-radius:8px;font-weight:800;font-size:11px;cursor:pointer;">Add Building</button>
+        </div>
+      </div>
+
+      <div id="sales-building-list"></div>
+
+      <p id="sales-empty-msg" style="display:none;text-align:center;font-size:11px;color:rgba(255,255,255,.4);padding:2rem 0;">No buildings added yet.<br>Tap "+ Add Building" to get started.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ====== FLAT DETAIL MODAL ====== -->
+<div id="flat-detail-modal" class="fixed inset-0 bg-black/85 backdrop-blur-sm items-center justify-center p-3" style="display:none;z-index:610000;" onclick="if(event.target===this&&_modalGuardOk('flat-detail-modal'))closeFlatDetail()">
+  <div style="background:linear-gradient(160deg,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:0;width:100%;max-width:420px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;">
+      <p id="fd-title" style="font-size:14px;font-weight:900;color:#fff;margin:0;">Flat</p>
+      <div style="display:flex;gap:6px;">
+        <button id="fd-del-btn" onclick="deleteSalesFlat()" style="display:none;padding:0 10px;height:28px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#fca5a5;font-size:10px;font-weight:800;cursor:pointer;">🗑 Delete</button>
+        <button onclick="closeFlatDetail()" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;">✕</button>
+      </div>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
+
+      <!-- Status buttons -->
+      <div style="display:flex;gap:6px;margin-bottom:.8rem;">
+        <button class="fd-status-btn" data-status="avail" onclick="setFlatStatus('avail')" style="flex:1;padding:.5rem 0;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid rgba(52,211,153,.4);background:rgba(16,185,129,.12);color:#6ee7b7;">✅ Available</button>
+        <button class="fd-status-btn" data-status="book" onclick="setFlatStatus('book')" style="flex:1;padding:.5rem 0;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid rgba(251,191,36,.4);background:rgba(245,158,11,.12);color:#fcd34d;">🔖 Booked</button>
+        <button class="fd-status-btn" data-status="sold" onclick="setFlatStatus('sold')" style="flex:1;padding:.5rem 0;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid rgba(248,113,113,.4);background:rgba(239,68,68,.12);color:#fca5a5;">🏁 Sold</button>
+      </div>
+
+      <!-- Editable fields -->
+      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.7rem;margin-bottom:.7rem;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Flat No.</label>
+            <input id="fd-flatno" type="text" class="fd-input">
+          </div>
+          <div>
+            <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Area (sqft)</label>
+            <input id="fd-area" type="number" class="fd-input" oninput="_fdRecalc()">
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft)</label>
+          <input id="fd-rate" type="number" class="fd-input" oninput="_fdRecalc()">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Society Charges (₹)</label>
+            <input id="fd-society" type="number" class="fd-input" oninput="_fdRecalc()">
+          </div>
+          <div>
+            <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Development Charges (₹)</label>
+            <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()">
+          </div>
+        </div>
+
+        <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Misc. Charges (IOU / Legal / Other)</label>
+        <div id="fd-misc-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px;"></div>
+        <button id="fd-misc-add-btn" onclick="_fdAddMiscRow()" style="width:100%;padding:5px 0;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.2);border-radius:7px;color:#a5f3fc;font-size:9px;font-weight:700;cursor:pointer;">+ Add Charge Line</button>
+
+        <div style="margin-top:10px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.15);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:11px;font-weight:800;color:#fff;">Final Price</span>
+          <span id="fd-final-price" style="font-size:16px;font-weight:900;color:#6ee7b7;">₹0</span>
+        </div>
+
+        <button id="fd-save-btn" onclick="saveFlatFields()" style="display:none;width:100%;margin-top:10px;padding:.55rem;background:linear-gradient(135deg,#0891b2,#0f766e);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:11px;cursor:pointer;">💾 Save Changes</button>
+      </div>
+
+      <!-- Remarks / Interested Clients -->
+      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.7rem;">
+        <p style="font-size:11px;font-weight:800;color:#fbbf24;margin-bottom:.5rem;">📝 Interested Clients / Remarks</p>
+        <div id="fd-remarks-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:.6rem;"></div>
+        <input id="fd-remark-name" type="text" placeholder="Client name" class="fd-input" style="margin-bottom:5px;">
+        <input id="fd-remark-phone" type="text" inputmode="tel" placeholder="Phone number" class="fd-input" style="margin-bottom:5px;">
+        <textarea id="fd-remark-note" placeholder="Note (optional)" rows="2" class="fd-input" style="margin-bottom:6px;resize:vertical;"></textarea>
+        <button onclick="addFlatRemark()" style="width:100%;padding:.5rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:11px;cursor:pointer;">+ Add Remark</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  SALES MANAGER — data layer, permissions, rendering
+//  Hierarchy: Building → Floor → Flat (all expandable per project).
+//  This is an ENTERPRISE-only feature by default.
+// ══════════════════════════════════════════════════════════════
+var SALES_KEY = 'cm_sales';
+
+function lsales() {
+  try {
+    var v = JSON.parse(safeLS.getItem(_pk(SALES_KEY)) || 'null');
+    if (!v || typeof v !== 'object') v = {};
+    if (!Array.isArray(v.buildings)) v.buildings = [];
+    // One-time migration from the pre-Building version, which stored
+    // floors directly at the top level. Fold them into a default building
+    // so nothing already entered is lost.
+    if (Array.isArray(v.floors) && v.floors.length) {
+      v.buildings.push({ id: gid(), name: 'Building A', floors: v.floors });
+    }
+    if (v.floors) delete v.floors;
+    return v;
+  } catch (e) { return { buildings: [] }; }
+}
+function ssales(x) {
+  safeLS.setItem(_pk(SALES_KEY), JSON.stringify(x));
+  if (typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch (e) {} }
+  try { _updateSalesDashCard(); } catch (e) {}
+}
+
+// ── Permissions ──────────────────────────────────────────────
+// Three ways someone can reach the Sales Manager:
+//  1. The real project owner/admin, on their own device — full CRUD,
+//     gated behind the Enterprise plan.
+//  2. A Viewer Link whose ONLY granted permission is 'sales' — a Sales
+//     Admin portal link, full CRUD, nothing else visible. A viewer with
+//     'sales' alongside other tabs gets limited rights (view + remarks).
+//  3. An engineer who joined via the separate Sales Admin join code
+//     (window._engActiveMembership().salesOnly) — same full-CRUD, locked,
+//     rest-of-app-hidden treatment as (2). A normal engineer join code
+//     (read/write) only ever gets the limited rights from (2)'s second case.
+function _salesViewerPerms() {
+  try { return JSON.parse(safeLS.getItem('sj_viewer_perms') || '[]'); } catch (e) { return []; }
+}
+function _engActiveSalesInfo() {
+  try { if (typeof window._engActiveMembership === 'function') return window._engActiveMembership(); } catch (e) {}
+  return null;
+}
+function isEngineerSalesOnly() {
+  var m = _engActiveSalesInfo();
+  return !!(typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE && m && m.salesOnly);
+}
+// Whether Sales is even unlocked at all for this session. For the owner's
+// own device this is a straight Enterprise-plan check; a viewer link or an
+// engineer join code could only ever have been generated by an Enterprise
+// admin in the first place, so no separate check is needed there.
+function _ownerHasEnterprise() {
+  if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) return true;
+  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) return true;
+  return !!window.isEnterpriseUser;
+}
+function canAccessSales() {
+  if (!_ownerHasEnterprise()) return false;
+  if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) {
+    return _salesViewerPerms().indexOf('sales') !== -1;
+  }
+  // Every joined engineer — sales-admin or a regular teammate — can at
+  // least reach Sales in some form (full for sales-admin, limited for
+  // everyone else). The real owner always can too.
+  return true;
+}
+function isSalesFullAdmin() {
+  if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) {
+    var p = _salesViewerPerms();
+    return p.indexOf('sales') !== -1 && p.length === 1;
+  }
+  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
+    return isEngineerSalesOnly();
+  }
+  return true; // the real project owner, on their own device
+}
+
+// ── Pricing helpers ──────────────────────────────────────────
+function _flatFinalPrice(f) {
+  var area = parseFloat(f.area) || 0, rate = parseFloat(f.rate) || 0;
+  var soc = parseFloat(f.society) || 0, dev = parseFloat(f.dev) || 0;
+  var misc = 0;
+  (f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
+  return area * rate + soc + dev + misc;
+}
+function _inr(n) {
+  n = Math.round(n || 0);
+  try { return '₹' + n.toLocaleString('en-IN'); } catch (e) { return '₹' + n; }
+}
+
+// ── Dashboard summary card ───────────────────────────────────
+function _updateSalesDashCard() {
+  var card = document.getElementById('dash-sales-card');
+  if (!card) return;
+  if (!_ownerHasEnterprise()) { card.style.display = 'none'; return; }
+  var data = lsales();
+  var avail = 0, book = 0, sold = 0, val = 0, total = 0;
+  (data.buildings || []).forEach(function (b) {
+    (b.floors || []).forEach(function (fl) {
+      (fl.flats || []).forEach(function (f) {
+        total++;
+        if (f.status === 'book') { book++; val += _flatFinalPrice(f); }
+        else if (f.status === 'sold') { sold++; val += _flatFinalPrice(f); }
+        else avail++;
+      });
+    });
+  });
+  var a1 = document.getElementById('dash-sales-avail');
+  var a2 = document.getElementById('dash-sales-booked');
+  var a3 = document.getElementById('dash-sales-sold');
+  var a4 = document.getElementById('dash-sales-value');
+  if (a1) a1.textContent = avail;
+  if (a2) a2.textContent = book;
+  if (a3) a3.textContent = sold;
+  if (a4) a4.textContent = _inr(val);
+  card.style.display = (total > 0 && canAccessSales()) ? 'block' : 'none';
+}
+
+// Keep the Settings row honest about whether Sales is unlocked, every
+// time the settings panel or app data refreshes.
+function _refreshSalesSettRow() {
+  var badge = document.getElementById('sales-sett-ent-badge');
+  var sub = document.getElementById('sales-sett-sub');
+  var arrow = document.getElementById('sales-sett-arrow');
+  var unlocked = _ownerHasEnterprise();
+  if (badge) badge.style.display = unlocked ? 'none' : 'inline-block';
+  if (arrow) arrow.textContent = unlocked ? '›' : '🔒';
+  if (sub && !unlocked) sub.textContent = 'Enterprise feature — tap to upgrade';
+  else if (sub && unlocked) sub.textContent = 'Buildings, floors, flats, pricing & bookings';
+}
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(_refreshSalesSettRow, 800);
+});
+
+// ── Open / Close main manager ────────────────────────────────
+var _salesExpandedBuildings = {};
+var _salesExpandedFloors = {};
+function openSalesManager() {
+  _refreshSalesSettRow();
+  if (!_ownerHasEnterprise()) {
+    if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Sales Manager');
+    else toast('Sales Manager is an Enterprise feature', 'err');
+    return;
+  }
+  if (!canAccessSales()) { toast('No access to Sales', 'err'); return; }
+  if (typeof closeAllAndSettings === 'function') closeAllAndSettings();
+  setTimeout(function () {
+    var m = document.getElementById('sales-manager-modal');
+    if (!m) return;
+    _armModalGuard('sales-manager-modal');
+    m.style.display = 'flex';
+    var addWrap = document.getElementById('sales-add-building-wrap');
+    if (addWrap) addWrap.style.display = isSalesFullAdmin() ? 'block' : 'none';
+    renderSalesManager();
+  }, 220);
+}
+function closeSalesManager() {
+  var m = document.getElementById('sales-manager-modal');
+  if (m) m.style.display = 'none';
+}
+
+// ── Render building → floor → flat list ──────────────────────
+function renderSalesManager() {
+  var data = lsales();
+  var wrap = document.getElementById('sales-building-list');
+  var emptyMsg = document.getElementById('sales-empty-msg');
+  if (!wrap) return;
+  var admin = isSalesFullAdmin();
+  var totAvail = 0, totBook = 0, totSold = 0, totVal = 0;
+
+  if (!data.buildings.length) {
+    wrap.innerHTML = '';
+    if (emptyMsg) emptyMsg.style.display = 'block';
+  } else {
+    if (emptyMsg) emptyMsg.style.display = 'none';
+    wrap.innerHTML = data.buildings.map(function (b) {
+      var floors = b.floors || [];
+      var ba = 0, bb = 0, bs = 0;
+
+      var floorsHtml = floors.map(function (fl) {
+        var flats = fl.flats || [];
+        var fa = 0, fb = 0, fs = 0;
+        flats.forEach(function (f) {
+          if (f.status === 'book') fb++;
+          else if (f.status === 'sold') fs++;
+          else fa++;
+          if (f.status === 'book' || f.status === 'sold') totVal += _flatFinalPrice(f);
+        });
+        ba += fa; bb += fb; bs += fs;
+        totAvail += fa; totBook += fb; totSold += fs;
+        var fkey = b.id + '|' + fl.id;
+        var open = !!_salesExpandedFloors[fkey];
+
+        var flatsHtml = flats.map(function (f) {
+          var bg, bd, fg;
+          if (f.status === 'sold') { bg = 'rgba(239,68,68,.18)'; bd = 'rgba(248,113,113,.5)'; fg = '#fca5a5'; }
+          else if (f.status === 'book') { bg = 'rgba(245,158,11,.18)'; bd = 'rgba(251,191,36,.5)'; fg = '#fcd34d'; }
+          else { bg = 'rgba(16,185,129,.18)'; bd = 'rgba(52,211,153,.5)'; fg = '#6ee7b7'; }
+          return '<button class="flat-pill" onclick="openFlatDetail(\'' + b.id + '\',\'' + fl.id + '\',\'' + f.id + '\')" style="background:' + bg + ';border-color:' + bd + ';color:' + fg + ';">'
+            + '<div style="font-weight:900;">' + esc(f.flatNo || '—') + '</div>'
+            + '<div style="font-size:8px;opacity:.85;margin-top:1px;">' + (parseFloat(f.area) || 0) + ' sqft</div>'
+            + '</button>';
+        }).join('');
+
+        var addFlatBtn = admin
+          ? '<button onclick="_toggleAddFlatForm(\'' + b.id + '\',\'' + fl.id + '\')" style="padding:7px 6px;border-radius:9px;font-size:16px;font-weight:900;cursor:pointer;border:1.5px dashed rgba(255,255,255,.3);background:rgba(255,255,255,.04);color:rgba(255,255,255,.5);text-align:center;">+</button>'
+          : '';
+        var delFloorBtn = admin
+          ? '<button onclick="event.stopPropagation();deleteSalesFloor(\'' + b.id + '\',\'' + fl.id + '\')" style="background:none;border:none;color:rgba(248,113,113,.7);font-size:11px;cursor:pointer;padding:2px 6px;">🗑</button>'
+          : '';
+
+        return '<div style="background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:8px;overflow:hidden;">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;cursor:pointer;" onclick="_toggleFloorOpen(\'' + b.id + '\',\'' + fl.id + '\')">'
+          + '<div style="min-width:0;"><span style="font-size:12px;font-weight:800;color:#fff;">' + esc(fl.label || 'Floor') + '</span>'
+          + '<span style="font-size:9px;color:rgba(255,255,255,.4);margin-left:8px;">' + flats.length + ' flat' + (flats.length !== 1 ? 's' : '')
+          + ' · <span style="color:#6ee7b7">' + fa + ' avail</span> · <span style="color:#fcd34d">' + fb + ' booked</span> · <span style="color:#fca5a5">' + fs + ' sold</span></span></div>'
+          + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">' + delFloorBtn + '<span style="font-size:11px;color:rgba(255,255,255,.4);display:inline-block;transform:rotate(' + (open ? '180' : '0') + 'deg);transition:transform .2s;">▾</span></div>'
+          + '</div>'
+          + '<div style="display:' + (open ? 'block' : 'none') + ';padding:0 .75rem .75rem;">'
+          + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">' + flatsHtml + addFlatBtn + '</div>'
+          + '<div id="add-flat-form-' + b.id + '-' + fl.id + '" style="display:none;margin-top:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.55rem;">'
+          + '<input id="new-flat-no-' + b.id + '-' + fl.id + '" type="text" placeholder="Flat No. e.g. 101" class="fd-input" style="padding:7px 9px;font-size:11px;margin-bottom:5px;">'
+          + '<input id="new-flat-area-' + b.id + '-' + fl.id + '" type="number" placeholder="Area (sqft)" class="fd-input" style="padding:7px 9px;font-size:11px;margin-bottom:6px;">'
+          + '<button onclick="addSalesFlat(\'' + b.id + '\',\'' + fl.id + '\')" style="width:100%;padding:.45rem;background:linear-gradient(135deg,#0891b2,#0f766e);color:#fff;border:none;border-radius:7px;font-weight:800;font-size:10px;cursor:pointer;">Add Flat</button>'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+
+      var open = !!_salesExpandedBuildings[b.id];
+      var addFloorBtn = admin
+        ? '<button onclick="_toggleAddFloorForm(\'' + b.id + '\')" style="width:100%;padding:.5rem;margin-top:6px;background:rgba(255,255,255,.05);border:1.5px dashed rgba(255,255,255,.2);border-radius:9px;color:#a5f3fc;font-size:10.5px;font-weight:800;cursor:pointer;">+ Add Floor</button>'
+          + '<div id="add-floor-form-' + b.id + '" style="display:none;margin-top:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.55rem;">'
+          + '<input id="new-floor-label-' + b.id + '" type="text" placeholder="e.g. Ground Floor, 1st Floor" class="fd-input" style="margin-bottom:6px;">'
+          + '<button onclick="addSalesFloor(\'' + b.id + '\')" style="width:100%;padding:.45rem;background:linear-gradient(135deg,#0891b2,#0f766e);color:#fff;border:none;border-radius:7px;font-weight:800;font-size:10px;cursor:pointer;">Add Floor</button>'
+          + '</div>'
+        : '';
+      var delBuildingBtn = admin
+        ? '<button onclick="event.stopPropagation();deleteSalesBuilding(\'' + b.id + '\')" style="background:none;border:none;color:rgba(248,113,113,.7);font-size:12px;cursor:pointer;padding:2px 6px;">🗑</button>'
+        : '';
+
+      return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;margin-bottom:10px;overflow:hidden;">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem .85rem;cursor:pointer;background:rgba(8,145,178,.1);" onclick="_toggleBuildingOpen(\'' + b.id + '\')">'
+        + '<div style="min-width:0;display:flex;align-items:center;gap:7px;"><span style="font-size:15px;">🏢</span><div><span style="font-size:13px;font-weight:900;color:#fff;">' + esc(b.name || 'Building') + '</span>'
+        + '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:1px;">' + floors.length + ' floor' + (floors.length !== 1 ? 's' : '') + ' · <span style="color:#6ee7b7">' + ba + ' avail</span> · <span style="color:#fcd34d">' + bb + ' booked</span> · <span style="color:#fca5a5">' + bs + ' sold</span></div></div></div>'
+        + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">' + delBuildingBtn + '<span style="font-size:12px;color:rgba(255,255,255,.5);display:inline-block;transform:rotate(' + (open ? '180' : '0') + 'deg);transition:transform .2s;">▾</span></div>'
+        + '</div>'
+        + '<div style="display:' + (open ? 'block' : 'none') + ';padding:.7rem .85rem .85rem;">'
+        + (floors.length ? floorsHtml : '<p style="font-size:10px;color:rgba(255,255,255,.35);text-align:center;padding:.5rem 0;">No floors in this building yet.</p>')
+        + addFloorBtn
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  var e1 = document.getElementById('sm-sum-avail');
+  var e2 = document.getElementById('sm-sum-book');
+  var e3 = document.getElementById('sm-sum-sold');
+  var e4 = document.getElementById('sm-sum-value');
+  if (e1) e1.textContent = totAvail;
+  if (e2) e2.textContent = totBook;
+  if (e3) e3.textContent = totSold;
+  if (e4) e4.textContent = _inr(totVal);
+}
+
+// ── Building CRUD ─────────────────────────────────────────────
+function _toggleBuildingOpen(id) { _salesExpandedBuildings[id] = !_salesExpandedBuildings[id]; renderSalesManager(); }
+function _toggleAddBuildingForm() {
+  var el = document.getElementById('add-building-form');
+  if (el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
+}
+function addSalesBuilding() {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can add buildings', 'err'); return; }
+  var input = document.getElementById('new-building-name');
+  var name = (input.value || '').trim();
+  if (!name) { toast('Enter a building name', 'err'); return; }
+  var data = lsales();
+  var b = { id: gid(), name: name, floors: [] };
+  data.buildings.push(b);
+  ssales(data);
+  input.value = '';
+  var formEl = document.getElementById('add-building-form');
+  if (formEl) formEl.style.display = 'none';
+  _salesExpandedBuildings[b.id] = true;
+  renderSalesManager();
+  toast('Building added', 'ok');
+}
+function deleteSalesBuilding(buildingId) {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can delete buildings', 'err'); return; }
+  if (!confirm('Delete this building and all its floors & flats?')) return;
+  var data = lsales();
+  data.buildings = data.buildings.filter(function (b) { return b.id !== buildingId; });
+  ssales(data);
+  renderSalesManager();
+  toast('Building deleted', 'ok');
+}
+
+// ── Floor CRUD (scoped to a building) ─────────────────────────
+function _toggleFloorOpen(buildingId, floorId) {
+  var key = buildingId + '|' + floorId;
+  _salesExpandedFloors[key] = !_salesExpandedFloors[key];
+  renderSalesManager();
+}
+function _toggleAddFloorForm(buildingId) {
+  var el = document.getElementById('add-floor-form-' + buildingId);
+  if (el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
+}
+function addSalesFloor(buildingId) {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can add floors', 'err'); return; }
+  var input = document.getElementById('new-floor-label-' + buildingId);
+  var label = input ? (input.value || '').trim() : '';
+  if (!label) { toast('Enter a floor name', 'err'); return; }
+  var data = lsales();
+  var b = data.buildings.find(function (x) { return x.id === buildingId; });
+  if (!b) return;
+  b.floors = b.floors || [];
+  b.floors.push({ id: gid(), label: label, flats: [] });
+  ssales(data);
+  if (input) input.value = '';
+  var formEl = document.getElementById('add-floor-form-' + buildingId);
+  if (formEl) formEl.style.display = 'none';
+  renderSalesManager();
+  toast('Floor added', 'ok');
+}
+function deleteSalesFloor(buildingId, floorId) {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can delete floors', 'err'); return; }
+  if (!confirm('Delete this floor and all its flats?')) return;
+  var data = lsales();
+  var b = data.buildings.find(function (x) { return x.id === buildingId; });
+  if (!b) return;
+  b.floors = (b.floors || []).filter(function (fl) { return fl.id !== floorId; });
+  ssales(data);
+  renderSalesManager();
+  toast('Floor deleted', 'ok');
+}
+function _toggleAddFlatForm(buildingId, floorId) {
+  var el = document.getElementById('add-flat-form-' + buildingId + '-' + floorId);
+  if (el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
+}
+function addSalesFlat(buildingId, floorId) {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can add flats', 'err'); return; }
+  var noInput = document.getElementById('new-flat-no-' + buildingId + '-' + floorId);
+  var areaInput = document.getElementById('new-flat-area-' + buildingId + '-' + floorId);
+  var flatNo = noInput ? (noInput.value || '').trim() : '';
+  var area = areaInput ? (parseFloat(areaInput.value) || 0) : 0;
+  if (!flatNo) { toast('Enter flat number', 'err'); return; }
+  var data = lsales();
+  var b = data.buildings.find(function (x) { return x.id === buildingId; });
+  if (!b) return;
+  var fl = (b.floors || []).find(function (x) { return x.id === floorId; });
+  if (!fl) return;
+  fl.flats = fl.flats || [];
+  fl.flats.push({
+    id: gid(), flatNo: flatNo, area: area, rate: 0, society: 0, dev: 0,
+    misc: [], status: 'avail', remarks: [], updatedAt: Date.now()
+  });
+  ssales(data);
+  if (noInput) noInput.value = '';
+  if (areaInput) areaInput.value = '';
+  _salesExpandedFloors[buildingId + '|' + floorId] = true;
+  renderSalesManager();
+  toast('Flat added', 'ok');
+}
+
+// ── Flat detail modal ────────────────────────────────────────
+var _fdCtx = { buildingId: null, floorId: null, flatId: null };
+function _fdCurrentFlat() {
+  var data = lsales();
+  var b = data.buildings.find(function (x) { return x.id === _fdCtx.buildingId; });
+  if (!b) return null;
+  var fl = (b.floors || []).find(function (x) { return x.id === _fdCtx.floorId; });
+  if (!fl) return null;
+  var f = (fl.flats || []).find(function (x) { return x.id === _fdCtx.flatId; });
+  return { data: data, b: b, fl: fl, f: f };
+}
+function openFlatDetail(buildingId, floorId, flatId) {
+  _fdCtx = { buildingId: buildingId, floorId: floorId, flatId: flatId };
+  var data = lsales();
+  var b = data.buildings.find(function (x) { return x.id === buildingId; });
+  var fl = b ? (b.floors || []).find(function (x) { return x.id === floorId; }) : null;
+  var f = fl ? (fl.flats || []).find(function (x) { return x.id === flatId; }) : null;
+  if (!f) { toast('Flat not found', 'err'); return; }
+  var admin = isSalesFullAdmin();
+
+  document.getElementById('fd-title').textContent = (b.name ? b.name + ' — ' : '') + (fl.label || 'Floor') + ' — ' + (f.flatNo || 'Flat');
+  document.getElementById('fd-flatno').value = f.flatNo || '';
+  document.getElementById('fd-area').value = f.area || '';
+  document.getElementById('fd-rate').value = f.rate || '';
+  document.getElementById('fd-society').value = f.society || '';
+  document.getElementById('fd-dev').value = f.dev || '';
+  ['fd-flatno', 'fd-area', 'fd-rate', 'fd-society', 'fd-dev'].forEach(function (id) {
+    document.getElementById(id).disabled = !admin;
+  });
+  document.getElementById('fd-save-btn').style.display = admin ? 'block' : 'none';
+  document.getElementById('fd-misc-add-btn').style.display = admin ? 'block' : 'none';
+  document.getElementById('fd-del-btn').style.display = admin ? 'inline-block' : 'none';
+
+  _fdRenderMisc(f.misc || [], admin);
+  _fdRecalc();
+  _fdRenderRemarks(f.remarks || []);
+  document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-status') === f.status);
+    btn.disabled = !canAccessSales();
+  });
+
+  _armModalGuard('flat-detail-modal');
+  document.getElementById('flat-detail-modal').style.display = 'flex';
+}
+function closeFlatDetail() {
+  document.getElementById('flat-detail-modal').style.display = 'none';
+  renderSalesManager();
+}
+function _fdRenderMisc(misc, admin) {
+  var wrap = document.getElementById('fd-misc-list');
+  if (!misc.length) { wrap.innerHTML = admin ? '' : '<p style="font-size:9px;color:rgba(255,255,255,.3);margin:0;">None</p>'; return; }
+  wrap.innerHTML = misc.map(function (m, i) {
+    return '<div style="display:flex;gap:5px;align-items:center;">'
+      + '<input type="text" value="' + esc(m.label || '') + '" placeholder="Label" ' + (admin ? '' : 'disabled') + ' oninput="_fdMiscEdit(' + i + ',\'label\',this.value)" class="fd-input" style="flex:1.4;padding:6px 8px;font-size:10px;">'
+      + '<input type="number" value="' + (parseFloat(m.amount) || 0) + '" placeholder="₹" ' + (admin ? '' : 'disabled') + ' oninput="_fdMiscEdit(' + i + ',\'amount\',this.value)" class="fd-input" style="flex:1;padding:6px 8px;font-size:10px;">'
+      + (admin ? '<button onclick="_fdMiscRemove(' + i + ')" style="background:none;border:none;color:#fca5a5;font-size:13px;cursor:pointer;padding:0 4px;">✕</button>' : '')
+      + '</div>';
+  }).join('');
+}
+function _fdAddMiscRow() {
+  if (!isSalesFullAdmin()) return;
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
+  ctx.f.misc = ctx.f.misc || [];
+  ctx.f.misc.push({ label: '', amount: 0 });
+  ssales(ctx.data);
+  _fdRenderMisc(ctx.f.misc, true);
+  _fdRecalc();
+}
+function _fdMiscEdit(i, key, val) {
+  if (!isSalesFullAdmin()) return;
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f || !ctx.f.misc || !ctx.f.misc[i]) return;
+  ctx.f.misc[i][key] = (key === 'amount') ? (parseFloat(val) || 0) : val;
+  ssales(ctx.data);
+  _fdRecalc();
+}
+function _fdMiscRemove(i) {
+  if (!isSalesFullAdmin()) return;
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f || !ctx.f.misc) return;
+  ctx.f.misc.splice(i, 1);
+  ssales(ctx.data);
+  _fdRenderMisc(ctx.f.misc, true);
+  _fdRecalc();
+}
+function _fdRecalc() {
+  var area = parseFloat(document.getElementById('fd-area').value) || 0;
+  var rate = parseFloat(document.getElementById('fd-rate').value) || 0;
+  var soc = parseFloat(document.getElementById('fd-society').value) || 0;
+  var dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+  var misc = 0;
+  var ctx = _fdCurrentFlat();
+  if (ctx && ctx.f) (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
+  var total = area * rate + soc + dev + misc;
+  document.getElementById('fd-final-price').textContent = _inr(total);
+}
+function saveFlatFields() {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can edit flat details', 'err'); return; }
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
+  ctx.f.flatNo = document.getElementById('fd-flatno').value.trim();
+  ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
+  ctx.f.rate = parseFloat(document.getElementById('fd-rate').value) || 0;
+  ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
+  ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+  ctx.f.updatedAt = Date.now();
+  ssales(ctx.data);
+  document.getElementById('fd-title').textContent = (ctx.b.name ? ctx.b.name + ' — ' : '') + (ctx.fl.label || 'Floor') + ' — ' + (ctx.f.flatNo || 'Flat');
+  toast('Saved', 'ok');
+}
+function setFlatStatus(status) {
+  if (!canAccessSales()) return;
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
+  ctx.f.status = status;
+  ctx.f.updatedAt = Date.now();
+  ssales(ctx.data);
+  document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-status') === status);
+  });
+  var lbl = status === 'avail' ? 'Available' : status === 'book' ? 'Booked' : 'Sold';
+  toast('Status updated: ' + lbl, 'ok');
+}
+function deleteSalesFlat() {
+  if (!isSalesFullAdmin()) { toast('Only Sales Admin can delete flats', 'err'); return; }
+  if (!confirm('Delete this flat?')) return;
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.fl) return;
+  ctx.fl.flats = ctx.fl.flats.filter(function (x) { return x.id !== _fdCtx.flatId; });
+  ssales(ctx.data);
+  closeFlatDetail();
+  toast('Flat deleted', 'ok');
+}
+function _fdRenderRemarks(remarks) {
+  var wrap = document.getElementById('fd-remarks-list');
+  if (!remarks.length) { wrap.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,.3);margin:0;">No remarks yet.</p>'; return; }
+  wrap.innerHTML = remarks.slice().reverse().map(function (r) {
+    var d = r.ts ? new Date(r.ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
+    return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:.45rem .55rem;">'
+      + '<div style="display:flex;justify-content:space-between;gap:6px;"><span style="font-size:10px;font-weight:800;color:#fbbf24;">' + esc(r.name || '—') + '</span><span style="font-size:8px;color:rgba(255,255,255,.35);flex-shrink:0;">' + d + '</span></div>'
+      + (r.phone ? '<div style="font-size:9px;color:#a5f3fc;">📞 ' + esc(r.phone) + '</div>' : '')
+      + (r.note ? '<div style="font-size:9px;color:rgba(255,255,255,.6);margin-top:2px;">' + esc(r.note) + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+function addFlatRemark() {
+  if (!canAccessSales()) return;
+  var name = document.getElementById('fd-remark-name').value.trim();
+  var phone = document.getElementById('fd-remark-phone').value.trim();
+  var note = document.getElementById('fd-remark-note').value.trim();
+  if (!name && !phone && !note) { toast('Add a name, phone or note', 'err'); return; }
+  var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
+  ctx.f.remarks = ctx.f.remarks || [];
+  ctx.f.remarks.push({ id: gid(), name: name, phone: phone, note: note, ts: Date.now() });
+  ssales(ctx.data);
+  document.getElementById('fd-remark-name').value = '';
+  document.getElementById('fd-remark-phone').value = '';
+  document.getElementById('fd-remark-note').value = '';
+  _fdRenderRemarks(ctx.f.remarks);
+  toast('Remark added', 'ok');
+}
+
+// ── Dedicated Sales-Admin locked portal (shared by Viewer Link and
+// Engineer Sales Admin join code — same locked, full-CRUD experience,
+// only the "how did I get here / how do I sign out" bits differ) ──────
+function _enterSalesLockedMode(subtitle, exitLabel) {
+  var m = document.getElementById('sales-manager-modal');
+  if (!m) { setTimeout(function(){ _enterSalesLockedMode(subtitle, exitLabel); }, 300); return; }
+  try { document.body.style.overflow = 'hidden'; } catch (e) {}
+  m.onclick = null; // disable backdrop-click close — this IS the whole app now
+  m.style.display = 'flex';
+  var closeBtn = document.getElementById('sales-close-btn');
+  var exitBtn = document.getElementById('sales-exit-btn');
+  if (closeBtn) closeBtn.style.display = 'none';
+  if (exitBtn) { exitBtn.style.display = 'inline-block'; exitBtn.textContent = exitLabel || 'Sign out'; }
+  var sub = document.getElementById('sales-mgr-sub');
+  if (sub) sub.textContent = subtitle;
+  var addWrap = document.getElementById('sales-add-building-wrap');
+  if (addWrap) addWrap.style.display = isSalesFullAdmin() ? 'block' : 'none';
+  renderSalesManager();
+}
+// Viewer Link whose only permission is 'sales'.
+function _enterSalesViewerMode() {
+  _enterSalesLockedMode(isSalesFullAdmin() ? 'Sales Admin Portal' : 'Sales Portal', 'Sign out');
+  var exitBtn = document.getElementById('sales-exit-btn');
+  if (exitBtn) exitBtn.onclick = _salesViewerExit;
+}
+// Engineer who joined via the separate Sales Admin join code.
+window._enterSalesEngineerMode = function () {
+  _enterSalesLockedMode('Sales Admin Portal', 'Leave Project');
+  var exitBtn = document.getElementById('sales-exit-btn');
+  if (exitBtn) exitBtn.onclick = _salesEngineerExit;
+};
+function _salesViewerExit() {
+  if (!confirm('Sign out of the Sales portal?')) return;
+  try { window.location.href = window.location.href.split('?')[0]; }
+  catch (e) { window.location.reload(); }
+}
+function _salesEngineerExit() {
+  if (!confirm('Leave this Sales Admin session?')) return;
+  var m = _engActiveSalesInfo();
+  if (m && typeof window._engineerLeaveProject === 'function') { window._engineerLeaveProject(m.pid); }
+  else { try { window.location.reload(); } catch (e) {} }
+}
+
+// Initial paint of the dashboard sales card once app data has loaded.
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(function () { try { _updateSalesDashCard(); } catch (e) {} }, 1200);
+});
+</script>
+
 </body>
 </html>
