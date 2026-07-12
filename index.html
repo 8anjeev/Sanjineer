@@ -1991,6 +1991,18 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
          everywhere, even after a panel stretches with more data. */
       .dt-split > .dt-lcol > *,
       .dt-split > .dt-rcol > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+      /* A flex item's default minimum size is its content size — UNLESS
+         the item itself sets overflow other than visible (e.g. the BOQ
+         hero header uses overflow:hidden just to contain its decorative
+         background circles), in which case the spec drops that automatic
+         minimum to 0. That let the flex column crush a tall chip like the
+         BOQ hero down to almost nothing to make room for its neighbours,
+         instead of giving it its real (~355px) height — showing only a
+         sliver of it, overlapped by the card stacked below. flex-shrink:0
+         stops any stacked chip from being compressed below its natural
+         content height, regardless of its own overflow setting. */
+      .dt-split > .dt-lcol > *,
+      .dt-split > .dt-rcol > * { flex-shrink: 0 !important; }
 
       /* Compact single-column forms inside the left rail */
       .dt-split > .dt-l .grid-cols-2,
@@ -10113,16 +10125,22 @@ function addExpenseMaterial(){
   if (!cost) { toast('Enter amount', 'err'); return; }
 
   // Determine BEFORE inserting whether this material is already tracked in
-  // the Materials tab — if so, its cost will also land in mats.transactions
-  // (materialsCost ledger) and must be flagged so dashboard/report totals
-  // don't double-count the same rupee in two places.
+  // the Materials tab. Either way — existing or brand-new name — a
+  // type='material' entry must always end up as a Materials-stock purchase
+  // transaction (auto-creating the stock item if it's new), never just as
+  // a floating Expenses line. This keeps Materials and Expenses from being
+  // mixed: Expenses only ever holds 'tool' and 'others' entries.
   var _matStockUpdated = false;
   var _matsForSync = null, _existingMatForSync = null;
   if (type === 'material') {
     _matsForSync = lmat();
     var descLowerPre = name.toLowerCase();
     _existingMatForSync = _matsForSync.find(function(m){ return m.name.trim().toLowerCase() === descLowerPre; });
-    if (_existingMatForSync) _matStockUpdated = true;
+    if (!_existingMatForSync) {
+      _existingMatForSync = { id:'mat'+Date.now()+Math.random().toString(36).slice(2,6), name:name, unit:'', category:'', minQty:0, transactions:[], created:Date.now() };
+      _matsForSync.push(_existingMatForSync);
+    }
+    _matStockUpdated = true;
   }
 
   _saveBill('exp', function(billKey) {
@@ -10150,20 +10168,15 @@ function addExpenseMaterial(){
     }
 
     // ── Cross-post to Materials Stock when type = 'material' ─────────────
-    // Only update stock if this material is ALREADY tracked in the Materials
-    // tab. A brand-new material name entered here should stay in Expenses
-    // only — it should NOT silently create a new stock item, since the
-    // material list is meant to be curated (units, min-qty alerts, etc.)
-    // rather than auto-populated from every expense line.
+    // Always lands as a purchase transaction on the Materials stock item
+    // (created above if it didn't already exist) — a material entry never
+    // stays only in Expenses, so Materials and Expenses can't get mixed up.
     if (type === 'material' && _existingMatForSync) {
       _existingMatForSync.transactions = _existingMatForSync.transactions || [];
       _existingMatForSync.transactions.push({ type:'purchase', qty:qty||1, date:date,
         note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:_existingMatForSync.unit||'' });
       smat(_matsForSync);
       if (typeof viewMaterials === 'function') viewMaterials();
-      // else: new material not yet in the Materials list — leave it only
-      // in Expenses. Add it to the Materials tab first if stock tracking
-      // is wanted for it.
     }
 
     ['exp-mat-name','exp-mat-qty','exp-mat-cost','exp-mat-supplier'].forEach(function(id){
@@ -10180,9 +10193,12 @@ function addExpenseMaterial(){
 function viewExpenses(){
   AD=ld();
   // Materials purchased/received via the Materials tab (from_materials_tab)
-  // are tracked in the Materials stock ledger, not here — the Expenses tab
-  // only lists items entered directly through this tab's Quick Entry.
-  var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  // are tracked in the Materials stock ledger, not here — and material-type
+  // Quick Entries (exp_type==='material') are now always cross-posted into
+  // Materials stock too (see addExpenseMaterial), so they belong there, not
+  // in this list. The Expenses tab only lists Tool/Other entries and Petty
+  // Cash (which has no exp_type set).
+  var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab && d.exp_type !== 'material'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
   // Populate month filter dropdown
   var sel=document.getElementById('exp-month-filter');
@@ -10226,9 +10242,7 @@ try{
   var prof = lmergedProf();
   var sel=document.getElementById('exp-month-filter');
   var selMonth=sel?sel.value:'';
-  var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
-  var records=selMonth ? allRecords.filter(function(r){ return (r.date||'').startsWith(selMonth); }) : allRecords;
-  if(!records.length){ toast('No expense records'+(selMonth?' for this month':''),'err'); return; }
+  var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab && d.exp_type !== 'material'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
   var monthLabel=selMonth ? mlabel(new Date(selMonth+'-01')) : (function(){
     var mk={};records.forEach(function(r){ if(r.date) mk[r.date.substring(0,7)]=1; });
@@ -20576,24 +20590,23 @@ function _renderShareProjBody(projectId) {
       + '</div>';
     return;
   }
-  // Engineer code (role read/write) and Sales Admin code (role sales) are
-  // two independent rows for the same project, distinguished purely by
-  // their `role` value — fetched together, rendered as two sections.
+  // Only the Engineer join code (role read/write) lives here — the Sales
+  // Admin join code is generated/shown exclusively from the 🔑 button
+  // inside the Sales section itself (see _salesMgrCodeClick), not from
+  // this general Share Project dropdown modal.
   Promise.all([
     _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write']).order('created_at', {ascending:false}).limit(1),
-    _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).eq('role', 'sales').order('created_at', {ascending:false}).limit(1),
     _sb.from('project_members').select('id,member_name,role,created_at,last_seen').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).order('created_at', {ascending:false})
   ]).then(function(results) {
     var codeRow = (results[0].data && results[0].data[0]) || null;
-    var salesCodeRow = (results[1].data && results[1].data[0]) || null;
-    var members = results[2].data || [];
-    _paintShareProjBody(projectId, codeRow, members, salesCodeRow);
+    var members = results[1].data || [];
+    _paintShareProjBody(projectId, codeRow, members);
   }).catch(function(e) {
     body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
   });
 }
 
-function _paintShareProjBody(projectId, codeRow, members, salesCodeRow) {
+function _paintShareProjBody(projectId, codeRow, members) {
   var body = document.getElementById('share-proj-body');
   if (!body) return;
   var role = codeRow ? codeRow.role : 'write';
@@ -20615,21 +20628,6 @@ function _paintShareProjBody(projectId, codeRow, members, salesCodeRow) {
         + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;">➕ Generate Engineer Join Code</button>'
       );
 
-  // ── Sales Admin join code — a SEPARATE code from the engineer one above.
-  // Whoever joins with THIS code lands directly on a locked, full-CRUD
-  // Sales Manager screen; the rest of the app stays hidden to them.
-  var salesCodeBlock = salesCodeRow
-    ? (
-        '<div style="background:rgba(8,145,178,.12);border:1px solid rgba(45,212,191,.3);border-radius:12px;padding:14px;text-align:center;margin-bottom:10px;">'
-        + '<p style="font-size:28px;font-weight:900;letter-spacing:.2em;color:#67e8f9;margin:0 0 8px;">' + _jhtml(salesCodeRow.code) + '</p>'
-        + '<button onclick="_copyShareCode(\'' + salesCodeRow.code + '\')" style="padding:7px 16px;background:linear-gradient(135deg,#0891b2,#0f766e);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📋 Copy Code</button>'
-        + '</div>'
-        + '<button onclick="_regenerateSalesJoinCode(\'' + projectId + '\')" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:14px;">🔄 Regenerate Code (old code stops working)</button>'
-      )
-    : (
-        '<button onclick="_regenerateSalesJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#0891b2,#0f766e);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:14px;">🏢 Generate Sales Admin Code</button>'
-      );
-
   var memberRows = members.length
     ? members.map(function(m) {
         var seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : 'never synced';
@@ -20647,10 +20645,7 @@ function _paintShareProjBody(projectId, codeRow, members, salesCodeRow) {
 
   body.innerHTML = '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👷 Engineer Join Code</p>'
     + codeBlock
-    + '<p style="font-size:10px;font-weight:800;color:#67e8f9;margin-bottom:6px;">🏢 Sales Admin Join Code</p>'
-    + '<p style="font-size:10.5px;color:rgba(255,255,255,.45);margin:0 0 8px;">Whoever enters this different code lands straight in a full-access Sales Manager — the rest of the app stays hidden to them. Requires Enterprise.</p>'
-    + salesCodeBlock
-    + '<div style="margin-top:6px;">'
+    + '<div style="margin-top:14px;">'
     + '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👥 People with access (' + members.length + ')</p>'
     + memberRows
     + '</div>';
@@ -21013,15 +21008,16 @@ var OWNER_TABS = [
   ['reports','📋 Reports'], ['workers','👷 Workers'], ['materials','🧱 Materials'],
   ['machinery','⚙️ Machinery'], ['expenses','💵 Expenses'], ['rentals','📦 Rentals'],
   ['departmental','🏗️ Dept Work'], ['punchlist','📝 Punchlist'], ['visits','🚶 Visits'],
-  ['po','🧾 Purchase Orders']
+  ['sales','🏢 Sales'], ['po','🧾 Purchase Orders']
 ];
+// Tabs that only make sense for Enterprise owners (Purchase Orders and the
+// Sales summary both depend on Enterprise-only features) — hidden entirely
+// for Pro/free owners rather than showing an upgrade prompt on tap.
+var _OWNER_ENTERPRISE_TABS = { po: true, sales: true };
 function _ownerRenderTabs() {
   var wrap = document.getElementById('owner-ov-tabs');
   if (!wrap) return;
-  // Purchase Order approvals are an Enterprise-only feature — don't even
-  // show the tab to Pro/free owners (they'd hit the upgrade prompt anyway
-  // the moment they tried to approve/reject, but cleaner to just hide it).
-  var tabs = OWNER_TABS.filter(function(t){ return t[0] !== 'po' || window.isEnterpriseUser; });
+  var tabs = OWNER_TABS.filter(function(t){ return !_OWNER_ENTERPRISE_TABS[t[0]] || window.isEnterpriseUser; });
   wrap.innerHTML = tabs.map(function(t){
     var active = _ownerTab === t[0];
     return '<button onclick="_ownerSetTab(\'' + t[0] + '\')" style="flex-shrink:0;padding:7px 11px;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;border:1.5px solid ' + (active?'#4f46e5':'#e5e7eb') + ';background:' + (active?'linear-gradient(135deg,#4f46e5,#7c3aed)':'#fff') + ';color:' + (active?'#fff':'#6b7280') + ';">' + t[1] + '</button>';
@@ -21032,7 +21028,7 @@ window._ownerSetTab = function(t) { _ownerTab = t; _ownerRenderTabs(); _ownerRen
 function _ownerRenderBody() {
   var body = document.getElementById('owner-ov-body');
   if (!body) return;
-  if (_ownerTab === 'po' && !window.isEnterpriseUser) { _ownerTab = 'reports'; _ownerRenderTabs(); }
+  if (_OWNER_ENTERPRISE_TABS[_ownerTab] && !window.isEnterpriseUser) { _ownerTab = 'reports'; _ownerRenderTabs(); }
   var projects = window.projects || [];
   if (!projects.length) { body.innerHTML = _ownerEmpty('No projects yet'); return; }
   var fn = _ownerTabRenderers[_ownerTab];
@@ -21224,6 +21220,42 @@ var _ownerTabRenderers = {
     rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
     return _ownerTotalsBar([['Visits', rows.length]])
       + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No site visits in this period'));
+  },
+
+  // Sales — a read-only summary only: cumulative Sold/Booked/Remaining
+  // totals across every project, plus a recent-activity list of flats
+  // that were booked/sold. Deliberately does NOT embed the full Sales
+  // Manager (buildings/floors/flat editor, remarks, floor plans) here —
+  // that stays a dedicated Enterprise surface reached via the Sales tab
+  // itself; the Owner Dashboard only ever shows a summary.
+  sales: function(projects) {
+    if (!window.isEnterpriseUser) return _ownerEmpty('Sales Manager is an Enterprise feature');
+    var rows = [], totAvail = 0, totBook = 0, totSold = 0;
+    projects.forEach(function(p) {
+      var d = _ownerLoadProject(p.id);
+      if (!d.sales || !d.sales.buildings) return;
+      d.sales.buildings.forEach(function(b) {
+        (b.floors || []).forEach(function(fl) {
+          (fl.flats || []).forEach(function(f) {
+            if (f.status === 'book') totBook++;
+            else if (f.status === 'sold') totSold++;
+            else { totAvail++; return; }
+            var dateStr = f.updatedAt ? new Date(f.updatedAt).toISOString().slice(0,10) : '';
+            if (!_ownerInRange(dateStr)) return;
+            var val = (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f) : (parseFloat(f.price)||0);
+            var statusLbl = f.status === 'sold' ? 'Sold' : 'Booked';
+            var statusClr = f.status === 'sold' ? '#dc2626' : '#d97706';
+            var title = _jhtml(f.flatNo || 'Flat') + (b.name ? ' — ' + _jhtml(b.name) : '') + (fl.label ? ' · ' + _jhtml(fl.label) : '')
+              + ' <span style="color:' + statusClr + '">· ' + statusLbl + '</span>';
+            var meta = (val ? '₹' + _ownerFmt(val) + ' · ' : '') + (dateStr ? fd(dateStr) : '');
+            rows.push({ date: dateStr, html: _ownerRow(title, meta, p.name) });
+          });
+        });
+      });
+    });
+    rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    return _ownerTotalsBar([['Sold', totSold], ['Booked', totBook], ['Remaining', totAvail]])
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No recent booking/sale activity in this period'));
   },
 
   // POs are now properly project-scoped (see the lpo()/spo() fix) like
@@ -21598,7 +21630,7 @@ function _ownerDesktopChartsHtml(stats) {
 }
 
 function _ownerDesktopRailHtml() {
-  var tabs = OWNER_TABS.filter(function(t){ return t[0] !== 'po' || window.isEnterpriseUser; });
+  var tabs = OWNER_TABS.filter(function(t){ return !_OWNER_ENTERPRISE_TABS[t[0]] || window.isEnterpriseUser; });
   return tabs.map(function(t) {
     var active = _ownerTab === t[0];
     return '<button onclick="_ownerDesktopSetTab(\'' + t[0] + '\')" style="display:block;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:none;background:' + (active?'linear-gradient(135deg,#4f46e5,#7c3aed)':'transparent') + ';color:' + (active?'#fff':'#4b5563') + ';font-size:12px;font-weight:700;cursor:pointer;margin-bottom:4px;">' + t[1] + '</button>';
@@ -21607,7 +21639,7 @@ function _ownerDesktopRailHtml() {
 window._ownerDesktopSetTab = function(t) { _ownerTab = t; _ownerRenderDesktopRailAndContent(); };
 
 function _ownerDesktopContentHtml(projects) {
-  if (_ownerTab === 'po' && !window.isEnterpriseUser) _ownerTab = 'reports';
+  if (_OWNER_ENTERPRISE_TABS[_ownerTab] && !window.isEnterpriseUser) _ownerTab = 'reports';
   if (!projects.length) return _ownerEmpty('No projects yet');
   var fn = _ownerTabRenderers[_ownerTab];
   var tabMeta = OWNER_TABS.filter(function(t){ return t[0] === _ownerTab; })[0] || ['', 'Overview'];
