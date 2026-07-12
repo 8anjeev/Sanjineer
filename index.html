@@ -3178,7 +3178,7 @@ function doAdminSignup() { cmSendSignupOtp(); }
 
 <!-- HEADER -->
 
-<header class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
+<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
     <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
@@ -4715,6 +4715,10 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="setWeather('🌧️ Rainy')" id="wbtn-rainy" class="wbtn flex-1 rounded-lg text-xs font-bold border-2 border-gray-200 bg-blue-50 text-blue-700" style="padding:3px 0">🌧️ Rainy</button>
     </div>
     <textarea id="daily-status" rows="2" placeholder="Site status / observations / instructions..." class="w-full border border-gray-200 rounded-lg text-xs resize-none focus:outline-none focus:border-indigo-400" style="padding:4px 8px"></textarea>
+    <div id="daily-qdpr-note" style="display:none;margin-top:6px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:6px 8px">
+      <p style="font-size:9px;font-weight:800;color:#4f46e5;text-transform:uppercase;letter-spacing:.4px;margin:0">📆 Synced from QDPR</p>
+      <p id="daily-qdpr-note-text" style="font-size:11px;color:#374151;margin:2px 0 0"></p>
+    </div>
   </div>
 
   <div class="grid grid-cols-3 gap-2 mb-2">
@@ -7262,9 +7266,18 @@ function getSupabaseAccessToken(cb) {
 }
 
 // folder groups uploads in the bucket, e.g. 'bills', 'site-photos', 'drawings'
-function uploadFileToR2(fileOrBlob, folder, cb) {
+// Retries transient network failures (the generic "TypeError: Load failed" /
+// "NetworkError" / "Failed to fetch" that browsers throw on a dropped
+// connection, flaky site wifi, etc.) instead of surfacing a dead-end error
+// on the first blip — the file itself never changes between attempts.
+function _isRetryableUploadErr(msg) {
+  return /load failed|networkerror|failed to fetch|timeout|network request failed/i.test(String(msg || ''));
+}
+function uploadFileToR2(fileOrBlob, folder, cb, _retriesLeft) {
+  if (_retriesLeft === undefined) _retriesLeft = 2;
   getSupabaseAccessToken(function (token) {
     if (!token) { cb(null, 'Not signed in'); return; }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { cb(null, 'You are offline — check your connection'); return; }
     var fd = new FormData();
     fd.append('file', fileOrBlob, fileOrBlob.name || (folder + '.jpg'));
     fd.append('folder', folder || 'misc');
@@ -7273,7 +7286,14 @@ function uploadFileToR2(fileOrBlob, folder, cb) {
       .then(function (data) {
         if (data && data.url) cb(data.url, null); else cb(null, (data && data.error) || 'Upload failed');
       })
-      .catch(function (e) { cb(null, String(e)); });
+      .catch(function (e) {
+        var msg = (e && e.message) || String(e);
+        if (_retriesLeft > 0 && _isRetryableUploadErr(msg)) {
+          setTimeout(function () { uploadFileToR2(fileOrBlob, folder, cb, _retriesLeft - 1); }, 1500);
+          return;
+        }
+        cb(null, msg);
+      });
   });
 }
 
@@ -7952,6 +7972,32 @@ function switchTab(name) {
   if (_darkMode && typeof _deepDarkWalk === 'function') {
     setTimeout(function(){ _deepDarkWalk(true); }, 60);
   }
+
+  // ── Desktop two-column tabs (BOQ DPR, Attendance, Budget, etc.) ──
+  // Re-run the .dt-l/.dt-r -> .dt-lcol/.dt-rcol column grouping every time
+  // a tab is switched to, not just once on page load/resize. Some tabs
+  // (BOQ DPR in particular) can have their hero/header panel end up
+  // un-wrapped — a direct grid child of .dt-split instead of inside the
+  // scrollable .dt-lcol — if this tab's markup was touched by any earlier
+  // re-render before the wrap ran, which on desktop pushed the header
+  // out of view behind the sticky top bar. Re-applying on every switch,
+  // plus resetting both columns' internal scroll back to the top, makes
+  // sure the header/date/print controls are always visible immediately
+  // when the tab opens, instead of requiring a manual scroll or resize.
+  if (typeof window._wrapAllDtSplits === 'function') {
+    try {
+      window._wrapAllDtSplits();
+      if (typeof window.applyToolsDesktopLayout === 'function') window.applyToolsDesktopLayout();
+      if (typeof window.applyRentalsDesktopLayout === 'function') window.applyRentalsDesktopLayout();
+    } catch(e) {}
+    var _activeSplit = document.getElementById('tab-' + name);
+    if (_activeSplit && _activeSplit.classList.contains('dt-split')) {
+      var _lcol = _activeSplit.querySelector(':scope > .dt-lcol') || _activeSplit.querySelector(':scope > .dt-l');
+      var _rcol = _activeSplit.querySelector(':scope > .dt-rcol') || _activeSplit.querySelector(':scope > .dt-r');
+      if (_lcol) _lcol.scrollTop = 0;
+      if (_rcol) _rcol.scrollTop = 0;
+    }
+  }
 }
 
 // ============================================================
@@ -8140,6 +8186,13 @@ function loadMeta() {
     var e = document.getElementById('wbtn-' + k); if (e) e.classList.add('selected');
   }
   var ds = document.getElementById('daily-status'); if (ds) ds.value = dy.status || '';
+  // QDPR-synced site note (kept separate from the user's own status so
+  // re-syncing a QDPR report never overwrites anything typed here).
+  var qn = document.getElementById('daily-qdpr-note'), qnt = document.getElementById('daily-qdpr-note-text');
+  if (qn && qnt) {
+    if (dy.qdprNote) { qnt.textContent = (dy.qdprWeather ? dy.qdprWeather + ' — ' : '') + dy.qdprNote; qn.style.display = ''; }
+    else { qn.style.display = 'none'; qnt.textContent = ''; }
+  }
 }
 function setWeather(w) {
   ['sunny','cloudy','rainy'].forEach(function(k) { var e=document.getElementById('wbtn-'+k); if(e) e.classList.remove('selected'); });
@@ -8158,18 +8211,41 @@ function loadPhotos() {
   var div = document.getElementById('photo-previews');
   if (!div) return;
   var keys = lphkeys()[DD] || [];
-  if (!keys.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
+  var qdprPhotos = (lm()[DD] || {}).qdprPhotos || []; // already data URLs — synced from QDPR, no resolve needed
+  if (!keys.length && !qdprPhotos.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
   div.innerHTML = '<p class="text-gray-400 text-xs">Loading photos...</p>';
   resolveAllFileSrc(keys, function(imgs) {
     var valid = imgs.filter(Boolean);
-    if (!valid.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
-    div.innerHTML = valid.map(function(s, i) {
+    var localHTML = valid.map(function(s, i) {
       return '<div style="position:relative;display:inline-block">'
         + '<img src="' + s + '" class="photo-thumb">'
         + '<button onclick="removePhoto(' + i + ')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;background:#ef4444;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;line-height:18px;text-align:center;">x</button>'
         + '</div>';
     }).join('');
+    // QDPR-synced photos render in the same gallery with a small badge so
+    // it's clear where they came from; they also flow into the printed PDF.
+    var qdprHTML = qdprPhotos.map(function(s, i) {
+      return '<div style="position:relative;display:inline-block">'
+        + '<img src="' + s + '" class="photo-thumb" style="border-color:#4f46e5">'
+        + '<span style="position:absolute;bottom:2px;left:2px;background:rgba(79,70,229,0.85);color:#fff;font-size:7px;font-weight:800;padding:1px 4px;border-radius:4px;letter-spacing:.3px">QDPR</span>'
+        + '<button onclick="removeQdprPhoto(' + i + ')" title="Remove from Report tab (kept in QDPR)" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;background:#ef4444;color:#fff;border:none;border-radius:50%;font-size:10px;cursor:pointer;line-height:18px;text-align:center;">x</button>'
+        + '</div>';
+    }).join('');
+    var combined = localHTML + qdprHTML;
+    div.innerHTML = combined || '<p class="text-gray-400 text-xs">No photos yet</p>';
   });
+}
+// Removes a QDPR-synced photo from just this Report tab view (local copy
+// only) — the original photo stays attached to the QDPR report itself and
+// will reappear here if that report is re-saved from QDPR.
+function removeQdprPhoto(i) {
+  var m = lm(); var dy = m[DD] || {};
+  var arr = (dy.qdprPhotos || []).slice();
+  arr.splice(i, 1);
+  dy.qdprPhotos = arr;
+  m[DD] = dy;
+  sm(m);
+  loadPhotos();
 }
 // ============================================================
 // GEO-TAG STAMPING — burns a "GPS Map Camera"-style overlay (place
@@ -9033,6 +9109,16 @@ function qdprSaveProjMats(pid, mats){
   try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mats)); } catch(e){}
   if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
 }
+// Project-scoped Daily Report meta (same storage the Report tab's lm()/sm()
+// read and write for the currently-active project — see _pk(META) above).
+// Used to sync QDPR's Site Note + Photos into that project's Report tab.
+function qdprLoadProjMeta(pid){
+  try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, META)) || '{}'); } catch(e){ return {}; }
+}
+function qdprSaveProjMeta(pid, m){
+  try { safeLS.setItem(_qdprProjKey(pid, META), JSON.stringify(m)); } catch(e){}
+  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+}
 
 // Push "Materials Received" rows from a saved QDPR report straight into
 // that project's own Materials stock (as a "purchase" transaction), so it
@@ -9095,12 +9181,47 @@ function _qdprRemoveMaterialsForReport(pid, reportId){
   var pAD = qdprLoadProjAD(pid).filter(function(d){ return !(d.type==='material' && d.qdpr_report_id===reportId); });
   qdprSaveProjAD(pid, pAD);
 }
+
+// Push a saved QDPR report's Site Note and Photos into that project's own
+// Daily Report (the "Report" tab) for the same date — mirrors
+// _qdprSyncMaterials above, keyed to the report id so re-saving/editing
+// never duplicates anything and never touches what the user typed by hand
+// in the Report tab's own status box. The note is kept in its own field
+// (m[date].qdprNote) rather than overwriting m[date].status, so it's shown
+// alongside — not instead of — the user's manual entry; loadMeta()/
+// printDailyReport() both read it from there. Photos are already
+// geo-stamped base64 data URLs (see saveQdprReport), so they can be shown
+// and printed directly — no IndexedDB round-trip needed.
+function _qdprSyncDailyReport(pid, report){
+  if (!report) return;
+  var m = qdprLoadProjMeta(pid);
+  var d = report.date; if (!d) return;
+  m[d] = m[d] || {};
+  m[d].qdprNote = (report.siteNote || '').trim();
+  m[d].qdprWeather = report.weather || '';
+  m[d].qdprNoteFrom = report.__id || null;
+  m[d].qdprPhotos = (report.photos || []).slice(0, QDPR_MAX_PHOTOS);
+  qdprSaveProjMeta(pid, m);
+}
+function _qdprRemoveDailyReportSync(pid, reportId, date){
+  if (!date) return;
+  var m = qdprLoadProjMeta(pid);
+  if (m[date] && m[date].qdprNoteFrom === reportId) {
+    delete m[date].qdprNote; delete m[date].qdprWeather; delete m[date].qdprNoteFrom; delete m[date].qdprPhotos;
+    qdprSaveProjMeta(pid, m);
+  }
+}
 function _qdprRefreshLiveTabsIfActive(pid){
   if (pid !== window.currentProjectId) return;
   AD = ld();
   if (typeof viewMaterials === 'function') { try{ viewMaterials(); }catch(e){} }
   if (typeof viewExpenses === 'function') { try{ viewExpenses(); }catch(e){} }
   if (typeof updateDash === 'function') { try{ updateDash(); }catch(e){} }
+  // Report tab: re-pull status/photos so a QDPR entry for the currently
+  // loaded date shows up immediately without needing a manual "Load".
+  if (typeof loadMeta === 'function')  { try{ loadMeta(); }catch(e){} }
+  if (typeof loadPhotos === 'function'){ try{ loadPhotos(); }catch(e){} }
+  if (typeof viewDaily === 'function') { try{ viewDaily(); }catch(e){} }
 }
 
 // Every project the user can see in QDPR: their own local projects PLUS
@@ -9290,8 +9411,10 @@ function saveQdprSite(){
 }
 function delQdprReport(pid, reportId){
   askDel('Delete this daily progress report?', function(){
+    var _rpt = qdprLoadProjAD(pid).find(function(d){ return d.__id===reportId; });
     qdprDeleteFromProj(pid, reportId);
     _qdprRemoveMaterialsForReport(pid, reportId);
+    if (_rpt) _qdprRemoveDailyReportSync(pid, reportId, _rpt.date);
     toast('Report deleted','ok');
     renderQdprSites();
     _qdprRefreshLiveTabsIfActive(pid);
@@ -9473,8 +9596,11 @@ function saveQdprReport(){
   // "Materials Received" rows entered here flow straight into this
   // project's own Materials tab automatically — date-wise, no duplicates.
   _qdprSyncMaterials(pid, saved);
+  // Site Note + Photos flow into this project's own Report tab (status
+  // box + photo gallery + PDF print) the same way.
+  _qdprSyncDailyReport(pid, saved);
   closeQdprForm();
-  toast('Daily report saved ✓ — materials synced to project','ok');
+  toast('Daily report saved ✓ — materials & report synced to project','ok');
   renderQdprSites();
   _qdprRefreshLiveTabsIfActive(pid);
 }
@@ -11565,9 +11691,10 @@ function printDailyReport(){
 try{
 AD=ld();
 var photoKeys = lphkeys()[DD] || [];
+var qdprPhotos = (lm()[DD] || {}).qdprPhotos || []; // already data URLs, no resolve needed
 resolveAllFileSrc(photoKeys, function(photos) {
 try{
-photos = photos.filter(Boolean);
+photos = photos.filter(Boolean).concat(qdprPhotos);
 _printDailyReportInner(photos);
 }catch(err){toast('Print error: '+err.message,'err');console.error('printDailyReport inner',err);}
 });
@@ -11595,7 +11722,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
   +'<p style="font-size:11px;font-weight:900;color:white;margin-top:3px">'+new Date(d+'T00:00:00').toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',weekday:'long'})+'</p>',
   true
 )
-+(meta.weather||meta.status ? '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">'+(meta.weather?'<strong>'+meta.weather+'</strong> — ':'')+meta.status+'</div></div>' : '')
++(meta.weather||meta.status||meta.qdprNote ? '<div style="background:#f0f4ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:8px 14px;margin-bottom:14px"><div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase">Site Status</div><div style="font-size:11px;margin-top:3px">'+(meta.weather?'<strong>'+meta.weather+'</strong> — ':'')+(meta.status||'')+'</div>'+(meta.qdprNote?'<div style="font-size:10.5px;margin-top:5px;padding-top:5px;border-top:1px dashed #c7d2fe;color:#3730a3"><strong>📆 QDPR:</strong> '+(meta.qdprWeather?meta.qdprWeather+' — ':'')+meta.qdprNote+'</div>':'')+'</div>' : '')
 +'<div class="sumrow"><div class="sc" style="border-color:#fca5a5"><div class="scl">Advances</div><div class="scv" style="color:#dc2626">'+fc(adv)+'</div></div><div class="sc" style="border-color:#fcd34d"><div class="scl">Material</div><div class="scv" style="color:#d97706">'+fc(mc)+'</div></div><div class="sc" style="border-color:#a5b4fc"><div class="scl">Worker Cost</div><div class="scv" style="color:#4f46e5">'+fc(wc)+'</div></div></div>'
 +(low.length ? '<div style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:14px"><strong>⚠ Low Stock:</strong> '+low.map(function(i){ return i.name+' ('+getbal(i)+' left)'; }).join(', ')+'</div>' : '')
 +'<div class="sec"><div class="st" style="border-left-color:#4f46e5;background:#eef2ff;color:#3730a3">👷 Labour Summary</div>'
@@ -20364,6 +20491,9 @@ function _genDeviceToken() {
 function _jhtml(s) { return (typeof _escHtml === 'function') ? _escHtml(s) : String(s); }
 function _ownerMissingTableMsg(e) {
   var msg = (e && e.message) || '';
+  if (/role_check|check constraint/i.test(msg)) {
+    return "⚠️ Database isn't set up for Sales Admin codes yet — the project_join_codes table's check constraint needs 'sales' added to its allowed roles. Run the role_check fix in Supabase → SQL Editor, then try again.";
+  }
   if (/could not find the table|schema cache/i.test(msg)) {
     return "⚠️ Database not set up yet — run join_code_system.sql in Supabase → SQL Editor (Settings → API → wait ~30s for the schema cache to refresh, or restart your Supabase API), then reload this page.";
   }
@@ -22117,12 +22247,13 @@ document.addEventListener('DOMContentLoaded', function() {
   .flat-pill:active{transform:scale(.94);}
 </style>
 
-<!-- ====== SALES MANAGER MODAL ====== -->
-<div id="sales-manager-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm items-center justify-center p-3" style="display:none;z-index:600000;" onclick="if(event.target===this&&_modalGuardOk('sales-manager-modal'))closeSalesManager()">
-  <div style="background:linear-gradient(160deg,#0f0c29,#0f766e 65%,#0891b2);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:0;width:80vw;max-width:900px;min-width:280px;height:80vh;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+<!-- ====== SALES MANAGER — FULL-SCREEN PANEL (covers 100% of the app
+     screen below the header only) ====== -->
+<div id="sales-manager-modal" class="fixed" style="display:none;z-index:600000;inset:0;background:transparent;" onclick="if(event.target===this&&_modalGuardOk('sales-manager-modal'))closeSalesManager()">
+  <div id="sales-manager-panel" style="background:linear-gradient(160deg,#0f0c29,#0f766e 65%,#0891b2);border:none;border-radius:0;padding:0;position:fixed;left:0;right:0;bottom:0;top:0;width:100%;height:auto;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
 
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;">
+    <!-- Header: title + icon-only actions (search, manager token, clients) -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;gap:6px;">
       <div style="display:flex;align-items:center;gap:9px;min-width:0;">
         <div style="width:34px;height:34px;background:linear-gradient(135deg,#0891b2,#0f766e);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">🏢</div>
         <div style="min-width:0;">
@@ -22131,9 +22262,30 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-        <button id="sales-exit-btn" onclick="_salesViewerExit()" style="display:none;padding:0 10px;height:28px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#fca5a5;font-size:10px;font-weight:800;cursor:pointer;">Sign out</button>
-        <button id="sales-close-btn" onclick="closeSalesManager()" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;">✕</button>
+        <button id="sales-search-toggle-btn" onclick="_toggleSalesSearchBar()" title="Search by area or budget" style="width:30px;height:30px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.85);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔍</button>
+        <button id="sales-mgr-code-btn" onclick="_salesMgrCodeClick()" title="Manager join-code" style="display:none;width:30px;height:30px;background:rgba(147,51,234,.15);border:1px solid rgba(196,181,253,.35);border-radius:8px;color:#ddd6fe;font-size:14px;cursor:pointer;align-items:center;justify-content:center;">🔑</button>
+        <button id="sales-clients-btn" onclick="openSalesClients()" title="Clients list" style="display:none;width:30px;height:30px;background:rgba(245,158,11,.15);border:1px solid rgba(251,191,36,.35);border-radius:8px;color:#fde68a;font-size:14px;cursor:pointer;align-items:center;justify-content:center;position:relative;">👥<span id="sales-clients-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;background:#e11d48;border-radius:7px;font-size:8px;font-weight:900;color:#fff;line-height:14px;text-align:center;"></span></button>
+        <button id="sales-exit-btn" onclick="_salesViewerExit()" style="display:none;padding:0 10px;height:30px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#fca5a5;font-size:10px;font-weight:800;cursor:pointer;">Sign out</button>
+        <button id="sales-close-btn" onclick="closeSalesManager()" style="width:30px;height:30px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;">✕</button>
       </div>
+    </div>
+
+    <!-- Manager-code reveal strip (shown only right after generating/copying) -->
+    <div id="sales-code-strip" style="display:none;align-items:center;gap:8px;padding:.5rem 1rem;background:rgba(147,51,234,.12);border-bottom:1px solid rgba(196,181,253,.2);flex-shrink:0;">
+      <span style="font-size:10px;color:#ddd6fe;font-weight:700;flex-shrink:0;">👤 Manager Code:</span>
+      <span id="sales-code-strip-text" style="font-size:15px;font-weight:900;letter-spacing:.14em;color:#fff;flex:1;"></span>
+      <button onclick="_salesMgrCodeClick()" style="padding:5px 10px;background:rgba(255,255,255,.12);border:none;border-radius:7px;color:#fff;font-size:10px;font-weight:800;cursor:pointer;">📋 Copy</button>
+      <button onclick="document.getElementById('sales-code-strip').style.display='none';" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;padding:0 2px;">✕</button>
+    </div>
+
+    <!-- Search bar (unified area OR budget search — toggled by the 🔍 icon) -->
+    <div id="sales-search-bar" style="display:none;padding:.6rem 1rem 0;flex-shrink:0;">
+      <div style="position:relative;">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;color:rgba(255,255,255,.4);">🔍</span>
+        <input id="sales-search-input" type="text" inputmode="search" placeholder="Search by area (sqft) or budget (₹)…" class="fd-input" style="padding-left:30px;padding-right:30px;" oninput="_salesApplySearch(this.value)">
+        <button id="sales-search-clear-btn" onclick="_clearSalesSearch()" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.5);font-size:14px;cursor:pointer;padding:2px 4px;">✕</button>
+      </div>
+      <p id="sales-search-hint" style="font-size:9px;color:rgba(255,255,255,.4);margin:4px 2px 0;">Type an area (e.g. 1200) or a budget (e.g. 5000000) — matching flats are highlighted, everything else stays hidden.</p>
     </div>
 
     <!-- Summary strip -->
@@ -22156,8 +22308,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <!-- Owner / Sales-Admin action row: manager join-code + clients list -->
-    <div id="sales-mgr-actions" style="display:none;gap:8px;padding:.6rem 1rem 0;flex-shrink:0;"></div>
+    <!-- Legacy hook kept for backward JS compat (no longer rendered as text pills) -->
+    <div id="sales-mgr-actions" style="display:none;"></div>
 
     <!-- Body -->
     <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
@@ -22173,6 +22325,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div id="sales-building-list"></div>
 
       <p id="sales-empty-msg" style="display:none;text-align:center;font-size:11px;color:rgba(255,255,255,.4);padding:2rem 0;">No buildings added yet.<br>Tap "+ Add Building" to get started.</p>
+      <p id="sales-search-empty-msg" style="display:none;text-align:center;font-size:11px;color:rgba(255,255,255,.4);padding:2rem 0;">No flats match that area or budget.<br>Try a different number.</p>
     </div>
   </div>
 </div>
@@ -22415,6 +22568,26 @@ document.addEventListener('DOMContentLoaded', function () {
 // ── Open / Close main manager ────────────────────────────────
 var _salesExpandedBuildings = {};
 var _salesExpandedFloors = {};
+
+// Sales covers 100% of the app screen, leaving only the app header
+// visible above it — measured live so it stays correct across devices,
+// safe-area insets, and orientation changes.
+function _positionSalesPanel() {
+  var panel = document.getElementById('sales-manager-panel');
+  if (!panel) return;
+  var header = document.getElementById('app-header');
+  var h = header ? header.getBoundingClientRect().height : 0;
+  panel.style.top = h + 'px';
+}
+if (!window._salesPanelResizeBound) {
+  window._salesPanelResizeBound = true;
+  window.addEventListener('resize', function () {
+    var m = document.getElementById('sales-manager-modal');
+    if (m && m.style.display !== 'none') _positionSalesPanel();
+  });
+  window.addEventListener('orientationchange', function () { setTimeout(_positionSalesPanel, 200); });
+}
+
 function openSalesManager() {
   _refreshSalesSettRow();
   if (!_ownerHasEnterprise()) {
@@ -22429,6 +22602,7 @@ function openSalesManager() {
     if (!m) return;
     _armModalGuard('sales-manager-modal');
     m.style.display = 'flex';
+    _positionSalesPanel();
     var addWrap = document.getElementById('sales-add-building-wrap');
     if (addWrap) addWrap.style.display = isSalesFullAdmin() ? 'block' : 'none';
     renderSalesManager();
@@ -22440,6 +22614,48 @@ function closeSalesManager() {
   if (m) m.style.display = 'none';
 }
 
+// ── Unified search: one box, matches EITHER area (sqft) OR budget/price (₹) ──
+var _salesSearchQuery = '';
+function _toggleSalesSearchBar() {
+  var bar = document.getElementById('sales-search-bar');
+  if (!bar) return;
+  var showing = bar.style.display !== 'none';
+  bar.style.display = showing ? 'none' : 'block';
+  if (showing) { _clearSalesSearch(); }
+  else { setTimeout(function () { var i = document.getElementById('sales-search-input'); if (i) i.focus(); }, 50); }
+}
+function _salesApplySearch(val) {
+  _salesSearchQuery = (val || '').trim();
+  var clearBtn = document.getElementById('sales-search-clear-btn');
+  if (clearBtn) clearBtn.style.display = _salesSearchQuery ? 'block' : 'none';
+  renderSalesManager();
+}
+function _clearSalesSearch() {
+  _salesSearchQuery = '';
+  var input = document.getElementById('sales-search-input');
+  if (input) input.value = '';
+  var clearBtn = document.getElementById('sales-search-clear-btn');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderSalesManager();
+}
+// A flat matches if the query (as digits) is found in its area OR its
+// final price/budget, or as plain text in the flat no. / building /
+// floor name — so one box searches "area-wise or budget-wise" at once.
+function _salesFlatMatches(f, b, fl) {
+  if (!_salesSearchQuery) return true;
+  var q = _salesSearchQuery.toLowerCase();
+  var qDigits = _salesSearchQuery.replace(/[^\d.]/g, '');
+  var area = parseFloat(f.area) || 0;
+  var price = _flatFinalPrice(f);
+  var text = [f.flatNo || '', b.name || '', fl.label || ''].join(' ').toLowerCase();
+  if (text.indexOf(q) !== -1) return true;
+  if (qDigits) {
+    if (String(Math.round(area)).indexOf(qDigits) !== -1) return true;
+    if (String(Math.round(price)).indexOf(qDigits) !== -1) return true;
+  }
+  return false;
+}
+
 // ── Render building → floor → flat list ──────────────────────
 function renderSalesManager() {
   var data = lsales();
@@ -22448,10 +22664,13 @@ function renderSalesManager() {
   if (!wrap) return;
   var admin = isSalesFullAdmin();
   var totAvail = 0, totBook = 0, totSold = 0, totVal = 0;
+  var searching = !!_salesSearchQuery;
+  var searchEmptyMsg = document.getElementById('sales-search-empty-msg');
 
   if (!data.buildings.length) {
     wrap.innerHTML = '';
     if (emptyMsg) emptyMsg.style.display = 'block';
+    if (searchEmptyMsg) searchEmptyMsg.style.display = 'none';
   } else {
     if (emptyMsg) emptyMsg.style.display = 'none';
     wrap.innerHTML = data.buildings.map(function (b) {
@@ -22470,9 +22689,13 @@ function renderSalesManager() {
         ba += fa; bb += fb; bs += fs;
         totAvail += fa; totBook += fb; totSold += fs;
         var fkey = b.id + '|' + fl.id;
-        var open = !!_salesExpandedFloors[fkey];
+        // While actively searching, auto-expand so matches are visible
+        // without the user having to tap through every floor manually.
+        var open = searching ? true : !!_salesExpandedFloors[fkey];
+        var visibleFlats = searching ? flats.filter(function (f) { return _salesFlatMatches(f, b, fl); }) : flats;
+        if (searching && !visibleFlats.length) return ''; // no match on this floor — hide it entirely
 
-        var flatsHtml = flats.map(function (f) {
+        var flatsHtml = visibleFlats.map(function (f) {
           var bg, bd, fg;
           if (f.status === 'sold') { bg = 'rgba(239,68,68,.18)'; bd = 'rgba(248,113,113,.5)'; fg = '#fca5a5'; }
           else if (f.status === 'book') { bg = 'rgba(245,158,11,.18)'; bd = 'rgba(251,191,36,.5)'; fg = '#fcd34d'; }
@@ -22510,9 +22733,11 @@ function renderSalesManager() {
           + '</div>'
           + '</div>'
           + '</div>';
-      }).join('');
+      }).filter(function (h) { return h; }).join('');
 
-      var open = !!_salesExpandedBuildings[b.id];
+      if (searching && !floorsHtml) return ''; // no floor in this building matched — hide the building
+
+      var open = searching ? true : !!_salesExpandedBuildings[b.id];
       var addFloorBtn = admin
         ? '<button onclick="_toggleAddFloorForm(\'' + b.id + '\')" style="width:100%;padding:.5rem;margin-top:6px;background:rgba(255,255,255,.05);border:1.5px dashed rgba(255,255,255,.2);border-radius:9px;color:#a5f3fc;font-size:10.5px;font-weight:800;cursor:pointer;">+ Add Floor</button>'
           + '<div id="add-floor-form-' + b.id + '" style="display:none;margin-top:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.55rem;">'
@@ -22535,7 +22760,9 @@ function renderSalesManager() {
         + addFloorBtn
         + '</div>'
         + '</div>';
-    }).join('');
+    }).filter(function (h) { return h; }).join('');
+
+    if (searchEmptyMsg) searchEmptyMsg.style.display = (searching && !wrap.innerHTML) ? 'block' : 'none';
   }
 
   var e1 = document.getElementById('sm-sum-avail');
@@ -22804,6 +23031,7 @@ function addFlatRemark() {
   document.getElementById('fd-remark-budget').value = '';
   document.getElementById('fd-remark-note').value = '';
   _fdRenderRemarks(ctx.f.remarks);
+  if (typeof _updateSalesClientsBadge === 'function') _updateSalesClientsBadge();
   toast('Remark added', 'ok');
 }
 
@@ -22833,12 +23061,14 @@ function _allSalesRemarks() {
 function openSalesClients() {
   if (!isSalesFullAdmin()) { toast('No access', 'err'); return; }
   renderSalesClients();
+  _updateSalesClientsBadge();
   _armModalGuard('sales-clients-modal');
   document.getElementById('sales-clients-modal').style.display = 'flex';
 }
 function closeSalesClients() {
   var m = document.getElementById('sales-clients-modal');
   if (m) m.style.display = 'none';
+  _updateSalesClientsBadge();
 }
 function renderSalesClients() {
   var list = _allSalesRemarks();
@@ -22871,6 +23101,7 @@ function _enterSalesLockedMode(subtitle, exitLabel) {
   try { document.body.style.overflow = 'hidden'; } catch (e) {}
   m.onclick = null; // disable backdrop-click close — this IS the whole app now
   m.style.display = 'flex';
+  _positionSalesPanel();
   var closeBtn = document.getElementById('sales-close-btn');
   var exitBtn = document.getElementById('sales-exit-btn');
   if (closeBtn) closeBtn.style.display = 'none';
@@ -22929,31 +23160,58 @@ function _salesCodeGenChars() {
   return out;
 }
 function _renderSalesMgrActions() {
-  var wrap = document.getElementById('sales-mgr-actions');
-  if (!wrap) return;
-  var html = '';
-  if (_isSalesRealOwner() && window.isEnterpriseUser && window.currentProjectId && typeof _sb !== 'undefined' && _sb && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
-    html += '<button id="sales-mgr-code-btn" onclick="_salesMgrCodeClick()" style="flex:1;min-width:0;padding:8px 6px;background:rgba(147,51,234,.15);border:1px solid rgba(196,181,253,.35);border-radius:9px;color:#ddd6fe;font-size:10.5px;font-weight:800;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👤 Manager Code</button>';
-  }
-  if (isSalesFullAdmin()) {
-    html += '<button onclick="openSalesClients()" style="flex:1;min-width:0;padding:8px 6px;background:rgba(245,158,11,.15);border:1px solid rgba(251,191,36,.35);border-radius:9px;color:#fde68a;font-size:10.5px;font-weight:800;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">👥 Clients</button>';
-  }
-  wrap.innerHTML = html;
-  wrap.style.display = html ? 'flex' : 'none';
+  // Header is now icon-only (🔍 search, 🔑 manager token, 👥 clients) —
+  // this just toggles which icon buttons are visible for this user.
+  var codeBtn = document.getElementById('sales-mgr-code-btn');
+  var clientsBtn = document.getElementById('sales-clients-btn');
+  var canGenCode = _isSalesRealOwner() && window.isEnterpriseUser && window.currentProjectId && typeof _sb !== 'undefined' && _sb && typeof _adminSBUser !== 'undefined' && _adminSBUser;
+  if (codeBtn) codeBtn.style.display = canGenCode ? 'flex' : 'none';
+  if (clientsBtn) clientsBtn.style.display = isSalesFullAdmin() ? 'flex' : 'none';
+  _updateSalesClientsBadge();
+}
+function _updateSalesClientsBadge() {
+  var badge = document.getElementById('sales-clients-badge');
+  if (!badge) return;
+  if (!isSalesFullAdmin()) { badge.style.display = 'none'; return; }
+  var n = _allSalesRemarks().length;
+  if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.style.display = 'block'; }
+  else { badge.style.display = 'none'; }
 }
 // First click: fetches the existing active Sales Manager code for this
 // project, or generates one if none exists yet, then shows it in place
 // of the button (with a copy icon) and copies it to the clipboard.
 // Any further click on the (now code-shaped) button copies it again.
+// Friendlier text for the one concrete, reproducible failure mode here:
+// the project_join_codes table's CHECK constraint doesn't yet allow the
+// 'sales' role value (only 'read'/'write' were set up originally), so the
+// insert bounces off the database with `project_join_codes_role_check`.
+// That's a schema issue, not a code bug — surface it clearly so whoever
+// owns the Supabase project knows exactly what to run.
+function _salesCodeErrMsg(e) {
+  var msg = (e && e.message) || '';
+  if (/role_check|check constraint/i.test(msg)) {
+    return "⚠️ Database isn't set up for Sales Manager codes yet — run the project_join_codes_role_check fix (add 'sales' to the allowed roles) in Supabase → SQL Editor, then try again.";
+  }
+  if (/could not find the table|schema cache/i.test(msg)) {
+    return "⚠️ Database not set up yet — run join_code_system.sql in Supabase → SQL Editor, then reload.";
+  }
+  return '⚠️ ' + (msg || 'Could not generate code');
+}
 function _salesMgrCodeClick() {
   var btn = document.getElementById('sales-mgr-code-btn');
+  var strip = document.getElementById('sales-code-strip');
+  var stripText = document.getElementById('sales-code-strip-text');
   if (!btn) return;
-  if (btn.dataset.code) { if (typeof _copyShareCode === 'function') _copyShareCode(btn.dataset.code); return; }
+  if (btn.dataset.code) {
+    if (typeof _copyShareCode === 'function') _copyShareCode(btn.dataset.code);
+    if (strip && stripText) { stripText.textContent = btn.dataset.code; strip.style.display = 'flex'; }
+    return;
+  }
   if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser) { toast('Login as admin first', 'err'); return; }
   var projectId = window.currentProjectId;
   if (!projectId) { toast('No active project', 'err'); return; }
   btn.disabled = true;
-  btn.textContent = 'Generating…';
+  btn.style.opacity = '.5';
   _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).eq('role', 'sales').order('created_at', { ascending: false }).limit(1)
     .then(function (r) {
       if (r.error) throw r.error;
@@ -22971,16 +23229,16 @@ function _salesMgrCodeClick() {
       }).then(function (ir) { if (ir.error) throw ir.error; return code; });
     }).then(function (code) {
       btn.disabled = false;
+      btn.style.opacity = '1';
       btn.dataset.code = code;
-      btn.innerHTML = '📋 ' + code;
-      btn.style.letterSpacing = '.12em';
       btn.title = 'Tap to copy again';
       if (navigator.clipboard) { navigator.clipboard.writeText(code).catch(function () {}); }
+      if (strip && stripText) { stripText.textContent = code; strip.style.display = 'flex'; }
       toast('✅ Manager code copied: ' + code, 'ok');
     }).catch(function (e) {
       btn.disabled = false;
-      btn.textContent = '👤 Manager Code';
-      toast('⚠️ ' + ((e && e.message) || 'Could not generate code'), 'err');
+      btn.style.opacity = '1';
+      toast(_salesCodeErrMsg(e), 'err');
     });
 }
 
