@@ -16172,6 +16172,45 @@ function showAuthErr(tab, msg) {
   if (el) { el.textContent = '⚠️ ' + msg; el.style.display = 'block'; }
 }
 
+// Shared cloud-restore routine — pulls the newest backup for this admin
+// and hydrates the app state from it. Used both on fresh login
+// (onAdminLoginSuccess) and on session restore for returning Pro/
+// Enterprise users (restoreAdminSession), so existing users see their
+// data instantly instead of an empty/local state until they manually
+// reopen the Cloud modal.
+window._pullLatestCloudBackup = function(user, opts) {
+  opts = opts || {};
+  if (!_sb || !user) return;
+  var siteId = getSiteId ? (getSiteId() || ('user-' + user.id.replace(/-/g,'').slice(0,12))) : ('user-' + user.id.replace(/-/g,'').slice(0,12));
+  if (!safeLS.getItem(CLOUD_SITE_ID)) safeLS.setItem(CLOUD_SITE_ID, siteId);
+  function _apply(d, foundKey) {
+    if (foundKey) safeLS.setItem(CLOUD_SITE_ID, foundKey);
+    if (d.db) { sd(d.db); AD = ld(); }
+    if (d.meta) sm(d.meta);
+    if (d.mats) smat(d.mats);
+    if (d.dept) sdept(d.dept);
+    if (d.prof) sprof(d.prof);
+    if (d.machinery) smach(d.machinery);
+    if (d.drawings) sdrw(d.drawings);
+    if (d.budget) sbgt(d.budget);
+    if (d.milestones) sms(d.milestones);
+    if (d.punchlist) spl(d.punchlist);
+    applyProfile(); updateDash();
+    if (!opts.silent) toast('☁️ Cloud data restored!', 'ok');
+  }
+  _sb.from('cloud_backups').select('data').eq('admin_id', user.id).eq('backup_key', siteId).maybeSingle().then(function(r) {
+    if (r && !r.error && r.data && r.data.data) {
+      _apply(r.data.data, null);
+    } else {
+      _sb.from('cloud_backups').select('data,backup_key').eq('admin_id', user.id).order('created_at', {ascending: false}).limit(1).then(function(r2) {
+        if (r2 && !r2.error && r2.data && r2.data.length > 0) {
+          _apply(r2.data[0].data, r2.data[0].backup_key);
+        }
+      }).catch(function(){});
+    }
+  }).catch(function(){});
+};
+
 function onAdminLoginSuccess(email, user, app) {
   _adminUser = user;
   _adminApp  = null;
@@ -16218,44 +16257,7 @@ function onAdminLoginSuccess(email, user, app) {
   // Always scope backup key to this admin's user ID — unique per user
   var siteId = 'user-' + user.id.replace(/-/g,'').slice(0,12);
   safeLS.setItem(CLOUD_SITE_ID, siteId);
-  _sb.from('cloud_backups').select('data').eq('admin_id', user.id).eq('backup_key', siteId).maybeSingle().then(function(r) {
-    if (r && !r.error && r.data && r.data.data) {
-      var d = r.data.data;
-      if (d.db) { sd(d.db); AD = ld(); }
-      if (d.meta) sm(d.meta);
-      if (d.mats) smat(d.mats);
-      if (d.dept) sdept(d.dept);
-      if (d.prof) sprof(d.prof);
-      if (d.machinery) smach(d.machinery);
-      if (d.drawings) sdrw(d.drawings);
-      if (d.budget) sbgt(d.budget);
-      if (d.milestones) sms(d.milestones);
-      if (d.punchlist) spl(d.punchlist);
-      applyProfile(); updateDash();
-      toast('☁️ Cloud data restored!', 'ok');
-    } else {
-      // No backup with that key — try getting the most recent backup for this admin
-      _sb.from('cloud_backups').select('data,backup_key').eq('admin_id', user.id).order('created_at', {ascending: false}).limit(1).then(function(r2) {
-        if (r2 && !r2.error && r2.data && r2.data.length > 0) {
-          var d = r2.data[0].data;
-          var foundKey = r2.data[0].backup_key;
-          if (foundKey) safeLS.setItem(CLOUD_SITE_ID, foundKey);
-          if (d.db) { sd(d.db); AD = ld(); }
-          if (d.meta) sm(d.meta);
-          if (d.mats) smat(d.mats);
-          if (d.dept) sdept(d.dept);
-          if (d.prof) sprof(d.prof);
-          if (d.machinery) smach(d.machinery);
-          if (d.drawings) sdrw(d.drawings);
-          if (d.budget) sbgt(d.budget);
-          if (d.milestones) sms(d.milestones);
-          if (d.punchlist) spl(d.punchlist);
-          applyProfile(); updateDash();
-          toast('☁️ Cloud data restored!', 'ok');
-        }
-      }).catch(function(){});
-    }
-  }).catch(function(){});
+  window._pullLatestCloudBackup(user, { silent: false });
   setTimeout(function() { cloudBackupNow(); }, 3000);
   openCloudModal();
   updateCloudBtn();
@@ -16402,6 +16404,10 @@ function restoreAdminSession() {
               window._applyPlanFromAdminRow(d);
               if (isActive) {
                 safeLS.setItem('cm_sub_end', String(endDate)); // for display only
+                // Returning Pro/Enterprise user — pull their latest cloud
+                // backup right away instead of leaving them on whatever
+                // (possibly stale/empty) data is already in localStorage.
+                window._pullLatestCloudBackup(user, { silent: true });
               } else {
                 window._sbSubActive = false;
               }
@@ -17150,11 +17156,10 @@ function onSubscriptionPaymentSuccess(response, plan) {
   plan = plan === 'enterprise' ? 'enterprise' : 'pro';
   var p = PLAN_PRICING[plan];
   var payId = response.razorpay_payment_id || ('LIVE_' + Date.now());
-  var subEnd = Date.now() + (30 * 24 * 60 * 60 * 1000);
+  var THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
   // Store payment ID locally for display/reference only (NOT for auth decisions)
   safeLS.setItem(CLOUD_KEY, '1');
   safeLS.setItem('cm_rzp_payment_id', payId); // display only
-  safeLS.setItem('cm_sub_end', String(subEnd)); // display only — real auth is from DB
   safeLS.setItem('cm_plan', plan); // display only — real auth/plan is from DB
   window.userPlan = plan;
   window.isProUser = true;
@@ -17181,35 +17186,56 @@ function onSubscriptionPaymentSuccess(response, plan) {
     return;
   }
 
-  if (_sb) {
-    // Write to DB — retried 3 times to ensure it lands
-    var _writeSubscription = function(tries, includePlan) {
-      var payload = {
-        id: user.id,
-        email: user.email || safeLS.getItem(ADMIN_EMAIL_KEY) || '',
-        subscribed: true,
-        subscribed_at: Date.now(),
-        subscription_end_date: subEnd,
-        last_payment_id: payId
+  // Carry over unused time: if the user still has an active subscription
+  // (e.g. 15 days left on Pro) and buys/upgrades a plan, the new 30 days
+  // are added on TOP of the remaining time rather than overwriting it.
+  // Someone with 15 days left who upgrades to Enterprise ends up with
+  // 15 + 30 = 45 days of Enterprise, not just a flat 30.
+  var _finish = function(subEnd) {
+    safeLS.setItem('cm_sub_end', String(subEnd)); // display only — real auth is from DB
+    if (_sb) {
+      // Write to DB — retried 3 times to ensure it lands
+      var _writeSubscription = function(tries, includePlan) {
+        var payload = {
+          id: user.id,
+          email: user.email || safeLS.getItem(ADMIN_EMAIL_KEY) || '',
+          subscribed: true,
+          subscribed_at: Date.now(),
+          subscription_end_date: subEnd,
+          last_payment_id: payId
+        };
+        if (includePlan) payload.plan = plan;
+        _sb.from('admins').upsert(payload, { onConflict: 'id' }).then(function(r) {
+          if (r.error) {
+            // If the DB doesn't have a `plan` column yet (older schema), retry
+            // WITHOUT it so the core subscription (subscribed/dates/payment id)
+            // still lands — a missing optional column must never drop the
+            // whole payment confirmation and leave someone who paid locked out.
+            if (includePlan) { _writeSubscription(tries, false); return; }
+            if (tries > 0) setTimeout(function(){ _writeSubscription(tries-1, false); }, 2000);
+          }
+        });
+        _sb.from('payments').insert({
+          admin_id: user.id, razorpay_id: payId, amount: p.amount, purpose: 'sanjineer_cloud_subscription_' + plan
+        }).catch(function(){});
       };
-      if (includePlan) payload.plan = plan;
-      _sb.from('admins').upsert(payload, { onConflict: 'id' }).then(function(r) {
-        if (r.error) {
-          // If the DB doesn't have a `plan` column yet (older schema), retry
-          // WITHOUT it so the core subscription (subscribed/dates/payment id)
-          // still lands — a missing optional column must never drop the
-          // whole payment confirmation and leave someone who paid locked out.
-          if (includePlan) { _writeSubscription(tries, false); return; }
-          if (tries > 0) setTimeout(function(){ _writeSubscription(tries-1, false); }, 2000);
-        }
-      });
-      _sb.from('payments').insert({
-        admin_id: user.id, razorpay_id: payId, amount: p.amount, purpose: 'sanjineer_cloud_subscription_' + plan
-      }).catch(function(){});
-    };
-    _writeSubscription(3, true);
-  }
+      _writeSubscription(3, true);
+    }
+    _finishSubscriptionSuccess(user, plan);
+  };
 
+  if (_sb) {
+    _sb.from('admins').select('subscription_end_date,subscribed').eq('id', user.id).maybeSingle().then(function(r) {
+      var existingEnd = (r && !r.error && r.data && r.data.subscribed) ? (r.data.subscription_end_date || 0) : 0;
+      var base = existingEnd > Date.now() ? existingEnd : Date.now();
+      _finish(base + THIRTY_DAYS);
+    }).catch(function() { _finish(Date.now() + THIRTY_DAYS); });
+  } else {
+    _finish(Date.now() + THIRTY_DAYS);
+  }
+}
+
+function _finishSubscriptionSuccess(user, plan) {
   var _email = _pendingAuthEmail || (user && user.email) || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
   _pendingAuthApp = null; _pendingAuthUser = null; _pendingAuthEmail = null;
   closePayLanding();
