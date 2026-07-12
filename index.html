@@ -56,6 +56,13 @@ html{line-height:1.5;-webkit-text-size-adjust:100%}
 body{margin:0}
 /* DISPLAY */
 .block{display:block}.inline-flex{display:inline-flex}.flex{display:flex}.grid{display:grid}.hidden{display:none!important}
+/* ANTI-FLICKER: smooth cross-fade instead of an instant hard swap whenever
+   a background cloud sync (initial pull, realtime update, or project
+   switch) rewrites the currently visible tab's content. Opacity only —
+   never touches layout/display — so it can't break any existing show/hide
+   logic. See _fadeRefresh() in the sync scripts below. */
+.tab-content{transition:opacity .16s ease-out}
+.tab-content.sanj-sync-dip{opacity:.35}
 /* FLEX */
 .flex-1{flex:1 1 0%}.flex-col{flex-direction:column}.flex-shrink-0{flex-shrink:0}.flex-wrap{flex-wrap:wrap}
 .items-center{align-items:center}.items-start{align-items:flex-start}.self-end{align-self:flex-end}
@@ -657,6 +664,33 @@ self.addEventListener('fetch', function(e) {
   // cloud row). This is the root cause behind records "disappearing"
   // or projects' data mixing after a fast project switch.
   window._projectEpoch = 0;
+
+  // ── Anti-flicker helper ─────────────────────────────────────────
+  // Background cloud pulls / realtime updates / project switches all end
+  // by calling renderDashboard()/switchTab(), which rewrite the visible
+  // tab's innerHTML in one instant hard swap — old numbers/rows vanish and
+  // new ones appear on the very next frame with no transition, which reads
+  // as a "blink" or, when values change a lot (e.g. switching project),
+  // as content "teleporting". This wraps any such re-render in a very
+  // short opacity dip so the change reads as a soft cross-fade instead of
+  // a snap. It never delays or alters WHAT gets rendered — only smooths
+  // how it appears — so it can't introduce any data bugs.
+  function _fadeRefresh(renderFn) {
+    var active = document.querySelector('.tab-content:not(.tab-hidden)') || document.querySelector('.tab-content[style*="display: block"], .tab-content[style*="display:block"]');
+    if (!active) { try { renderFn(); } catch(e) {} return; }
+    active.classList.add('sanj-sync-dip');
+    setTimeout(function() {
+      try { renderFn(); } catch(e) {}
+      // Next frame so the browser paints the new content before fading
+      // back in — otherwise the fade would happen instantly with nothing
+      // visually distinguishing old vs new state.
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { active.classList.remove('sanj-sync-dip'); });
+      });
+    }, 90);
+  }
+  window._fadeRefresh = _fadeRefresh;
+
   function _sanjLog() {
     if (!window._SANJ_SYNC_DEBUG) return;
     try {
@@ -827,13 +861,18 @@ self.addEventListener('fetch', function(e) {
     _switchProjectReloadTimer = setTimeout(function() {
       _switchProjectReloadTimer = null;
       if (window._projectEpoch !== _epoch) return; // superseded by another switch
-      try {
-        AD = ld();
-        applyProfile();
-        var activeBtn = document.querySelector('.tab-btn.active');
-        var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
-        if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
-      } catch(e) {}
+      var _doSwitchRerender = function() {
+        try {
+          AD = ld();
+          applyProfile();
+          var activeBtn = document.querySelector('.tab-btn.active');
+          var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
+          if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
+        } catch(e) {}
+      };
+      // Cross-fade the swap so the new project's data doesn't "teleport"
+      // in on top of the old project's numbers.
+      if (typeof window._fadeRefresh === 'function') window._fadeRefresh(_doSwitchRerender); else _doSwitchRerender();
     }, 200);
   }
 
@@ -7326,7 +7365,24 @@ function getSupabaseAccessToken(cb) {
     if (typeof _sb === 'undefined' || !_sb || !_sb.auth) { cb(null); return; }
     _sb.auth.getSession().then(function (res) {
       var session = res && res.data && res.data.session;
-      cb(session ? session.access_token : null);
+      if (session) { cb(session.access_token); return; }
+      // Joined engineers / Sales Admins (via a project join code) never
+      // sign in with a real Supabase account — they only carry a local
+      // join token — so there was never a session here, even for people
+      // with write permission. That silently failed every image/bill/
+      // drawing upload with "Not signed in" and quietly fell back to a
+      // device-only copy that never reached the cloud. Sign in
+      // anonymously so the upload worker has a valid Supabase JWT to
+      // check, restoring real cloud backup for write-permission joiners.
+      // Read-only joiners are still blocked before this is ever called.
+      if (typeof window !== 'undefined' && window._ENGINEER_MODE && !window._ENGINEER_READONLY && typeof _sb.auth.signInAnonymously === 'function') {
+        _sb.auth.signInAnonymously().then(function (res2) {
+          var s2 = res2 && res2.data && res2.data.session;
+          cb(s2 ? s2.access_token : null);
+        }).catch(function () { cb(null); });
+        return;
+      }
+      cb(null);
     }).catch(function () { cb(null); });
   } catch (e) { cb(null); }
 }
@@ -8507,6 +8563,11 @@ function geoStampImageFile(file, maxWidth, quality, pid) {
 function addPhoto(e) {
   var files = e.target.files;
   if (!files || !files.length) return;
+  if (typeof window !== 'undefined' && window._ENGINEER_MODE && window._ENGINEER_READONLY) {
+    toast('👁️ Read-only access — ask the project owner for write permission to upload photos', 'err');
+    e.target.value = '';
+    return;
+  }
   var keys = lphkeys()[DD] || [];
   if (keys.length >= 4) { toast('Max 4 photos allowed', 'err'); e.target.value = ''; return; }
   var f = files[0];
@@ -9079,6 +9140,11 @@ function qdprPhotoSectionHTML(){
 async function onQdprPhotoChange(input){
   var files = Array.from(input.files||[]);
   if (!files.length) return;
+  if (typeof window !== 'undefined' && window._ENGINEER_MODE && window._ENGINEER_READONLY) {
+    toast('👁️ Read-only access — ask the project owner for write permission to upload photos', 'err');
+    input.value = '';
+    return;
+  }
   if (!qdprFormState.photos) qdprFormState.photos = [];
   var room = QDPR_MAX_PHOTOS - qdprFormState.photos.length;
   if (room<=0){ toast('Maximum '+QDPR_MAX_PHOTOS+' photos allowed','err'); input.value=''; return; }
@@ -15282,15 +15348,20 @@ function _applyCloudData(d, silent, scopeKey) {
   if (mergedBgt) dMerged.budget = mergedBgt;
   _applyFullBackup(dMerged);
   applyProfile();
-  try { renderDashboard(); } catch(e) {}
-  // FIX: re-render the currently visible tab so changes appear instantly without tab-switch
-  try {
-    var curTab = document.querySelector('.tab-btn.active');
-    if (curTab) {
-      var tabName = curTab.getAttribute('data-tab');
-      if (tabName && typeof switchTab === 'function') switchTab(tabName);
-    }
-  } catch(e) {}
+  var _doRerender = function() {
+    try { renderDashboard(); } catch(e) {}
+    // FIX: re-render the currently visible tab so changes appear instantly without tab-switch
+    try {
+      var curTab = document.querySelector('.tab-btn.active');
+      if (curTab) {
+        var tabName = curTab.getAttribute('data-tab');
+        if (tabName && typeof switchTab === 'function') switchTab(tabName);
+      }
+    } catch(e) {}
+  };
+  // Smooth cross-fade instead of an instant hard swap (fixes the
+  // "blink"/"data teleports" complaint when cloud data lands mid-view).
+  if (typeof window._fadeRefresh === 'function') window._fadeRefresh(_doRerender); else _doRerender();
   var el = document.getElementById('cloud-sync-time');
   var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
   if (el) el.textContent = 'Pulled: ' + now;
@@ -21351,24 +21422,37 @@ var _ownerTabRenderers = {
     var clientsHtml = '<div style="margin:14px 0 6px;"><p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0 0 6px;">👥 Interested Clients</p>'
       + (clients.length ? clients.slice(0, 40).map(function(c) {
           var d = c.ts ? new Date(c.ts).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : '';
-          var title = _jhtml(c.name || 'Client') + (c.isToday ? ' <span style="color:#059669">· Today</span>' : '');
+          // Call button on the client's name chip — lets the owner ring an
+          // interested lead straight from this summary without drilling
+          // into the project's Sales Manager first.
+          var callBtn = c.phone ? ('<a href="tel:' + _jhtml(c.phone) + '" onclick="event.stopPropagation()" title="Call ' + _jhtml(c.name || 'client') + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#10b981;color:#fff;font-size:9.5px;text-decoration:none;flex-shrink:0;margin-left:5px;">📞</a>') : '';
+          var title = '<span style="display:inline-flex;align-items:center;">' + _jhtml(c.name || 'Client') + callBtn + '</span>' + (c.isToday ? ' <span style="color:#059669">· Today</span>' : '');
           var meta = (c.phone ? '📞 ' + _jhtml(c.phone) + ' · ' : '') + (c.budget ? '💰 ₹' + _ownerFmt(c.budget) + ' · ' : '')
             + _jhtml(c.building || '') + (c.flat ? ' — ' + _jhtml(c.flat) : '') + (d ? ' · ' + d : '')
             + (c.note ? '<br>' + _jhtml(c.note) : '');
           return _ownerRow(title, meta, c.site);
         }).join('') : _ownerEmpty('No interested clients / remarks yet')) + '</div>';
 
+    // Grand total across every project — the "complete list" the owner
+    // needs at a glance, computed from the very same per-project loads
+    // already looped above, without any extra data fetch.
+    var _bldTotalB = 0, _bldTotalF = 0;
+    var _bldPerProj = projects.map(function(p) {
+      var d = _ownerLoadProject(p.id);
+      var bCount = 0, flCount = 0;
+      if (d.sales && d.sales.buildings) {
+        bCount = d.sales.buildings.length;
+        d.sales.buildings.forEach(function(b){ (b.floors||[]).forEach(function(fl){ flCount += (fl.flats||[]).length; }); });
+      }
+      _bldTotalB += bCount; _bldTotalF += flCount;
+      return { p: p, bCount: bCount, flCount: flCount };
+    });
     var buildingsHtml = '<div style="margin:14px 0 6px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      + '<p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0;">🏢 Buildings</p>'
+      + '<p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0;">🏢 Buildings <span style="font-weight:600;color:#6b7280;">(' + _bldTotalB + ' building' + (_bldTotalB!==1?'s':'') + ' · ' + _bldTotalF + ' flat' + (_bldTotalF!==1?'s':'') + ' across all projects)</span></p>'
       + '<button onclick="_ownerAddNewSalesProject()" style="font-size:9.5px;font-weight:800;color:#4f46e5;background:#EEF2FF;border:1px solid #c7d2fe;border-radius:7px;padding:3px 8px;cursor:pointer;">+ Add New</button>'
       + '</div>'
-      + (projects.length ? projects.map(function(p) {
-          var d = _ownerLoadProject(p.id);
-          var bCount = 0, flCount = 0;
-          if (d.sales && d.sales.buildings) {
-            bCount = d.sales.buildings.length;
-            d.sales.buildings.forEach(function(b){ (b.floors||[]).forEach(function(fl){ flCount += (fl.flats||[]).length; }); });
-          }
+      + (_bldPerProj.length ? _bldPerProj.map(function(x) {
+          var p = x.p, bCount = x.bCount, flCount = x.flCount;
           return '<div onclick="_ownerOpenProjectSales(\'' + p.id + '\')" style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:9px 11px;margin-bottom:7px;box-shadow:0 1px 4px rgba(0,0,0,.04);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;">'
             + '<div style="min-width:0;"><p style="font-size:11.5px;font-weight:700;color:#1e1b4b;margin:0;">🏢 ' + _jhtml(p.name) + '</p>'
             + '<p style="font-size:9.5px;color:#6b7280;margin:2px 0 0;">' + bCount + ' building' + (bCount!==1?'s':'') + ' · ' + flCount + ' flat' + (flCount!==1?'s':'') + '</p></div>'
@@ -22524,6 +22608,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
         <button id="sales-search-toggle-btn" onclick="_toggleSalesSearchBar()" title="Search by area or budget" style="width:30px;height:30px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.85);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">🔍</button>
+        <button id="sales-activity-btn" onclick="openSalesActivityLog()" title="Recent activity" style="display:none;width:30px;height:30px;background:rgba(56,189,248,.15);border:1px solid rgba(125,211,252,.35);border-radius:8px;color:#bae6fd;font-size:14px;cursor:pointer;align-items:center;justify-content:center;">🕐</button>
         <button id="sales-mgr-code-btn" onclick="_salesMgrCodeClick()" title="Manager join-code" style="display:none;width:30px;height:30px;background:rgba(147,51,234,.15);border:1px solid rgba(196,181,253,.35);border-radius:8px;color:#ddd6fe;font-size:14px;cursor:pointer;align-items:center;justify-content:center;">🔑</button>
         <button id="sales-clients-btn" onclick="openSalesClients()" title="Clients list" style="display:none;width:30px;height:30px;background:rgba(245,158,11,.15);border:1px solid rgba(251,191,36,.35);border-radius:8px;color:#fde68a;font-size:14px;cursor:pointer;align-items:center;justify-content:center;position:relative;">👥<span id="sales-clients-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;background:#e11d48;border-radius:7px;font-size:8px;font-weight:900;color:#fff;line-height:14px;text-align:center;"></span></button>
         <button id="sales-exit-btn" onclick="_salesViewerExit()" style="display:none;padding:0 10px;height:30px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.35);border-radius:8px;color:#fca5a5;font-size:10px;font-weight:800;cursor:pointer;">Sign out</button>
@@ -22691,6 +22776,24 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<!-- Recent Activity (🕐) — owner + full Sales Admin only. Building/floor/
+     flat added or removed, price edits, status/booking changes, most
+     recent first. -->
+<div id="sales-activity-modal" class="fixed inset-0 bg-black/85 backdrop-blur-sm items-center justify-center p-3" style="display:none;z-index:620000;" onclick="if(event.target===this&&_modalGuardOk('sales-activity-modal'))closeSalesActivityLog()">
+  <div style="background:linear-gradient(160deg,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:0;width:90vw;max-width:460px;height:80vh;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem;border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;">
+      <div>
+        <p style="font-size:13px;font-weight:900;color:#fff;line-height:1.1;margin:0;">🕐 Recent Activity</p>
+        <p style="font-size:9px;color:#bae6fd;line-height:1.3;margin:1px 0 0;">Flat status, price &amp; booking changes in this project</p>
+      </div>
+      <button onclick="closeSalesActivityLog()" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
+      <div id="sales-activity-list"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════════════════════
 //  SALES MANAGER — data layer, permissions, rendering
@@ -22718,6 +22821,42 @@ function ssales(x) {
   safeLS.setItem(_pk(SALES_KEY), JSON.stringify(x));
   if (typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch (e) {} }
   try { _updateSalesDashCard(); } catch (e) {}
+}
+
+// ── Recent activity log (clock 🕐 button) ──────────────────────
+// A lightweight, append-only feed of who changed what in this project's
+// Sales Manager (buildings/floors/flats added or removed, status/price
+// changes) — visible to the owner and to a full Sales Admin only, same
+// audience as isSalesFullAdmin(). Stored under a plain cm_-prefixed,
+// project-scoped key, so it rides the exact same automatic cross-device
+// sync every other generic Sales Manager store already gets (see cm_all
+// handling in cloudBackupNow / _applyFullBackup) — no extra wiring needed.
+var SM_ACTIVITY_KEY = 'cm_sm_activity';
+function _smActivityLoad() {
+  try {
+    var v = JSON.parse(safeLS.getItem(_pk(SM_ACTIVITY_KEY)) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch (e) { return []; }
+}
+function _smActorName() {
+  try {
+    if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
+      var m = (typeof _engActiveMembership === 'function') ? _engActiveMembership() : null;
+      if (m && m.name) return m.name;
+      return 'Sales Admin';
+    }
+    if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) return 'Sales Admin';
+    if (typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.email) return _adminSBUser.email.split('@')[0];
+  } catch (e) {}
+  return 'Owner';
+}
+function _smLogActivity(action, detail) {
+  try {
+    var list = _smActivityLoad();
+    list.push({ ts: Date.now(), action: action, detail: detail || '', by: _smActorName() });
+    if (list.length > 200) list = list.slice(list.length - 200); // keep it bounded — "recent" activity only
+    safeLS.setItem(_pk(SM_ACTIVITY_KEY), JSON.stringify(list));
+  } catch (e) {}
 }
 
 // ── Permissions ──────────────────────────────────────────────
@@ -23237,6 +23376,7 @@ function addSalesBuilding() {
   var b = { id: gid(), name: name, floors: [] };
   data.buildings.push(b);
   ssales(data);
+  _smLogActivity('building_add', name);
   input.value = '';
   var formEl = document.getElementById('add-building-form');
   if (formEl) formEl.style.display = 'none';
@@ -23248,8 +23388,10 @@ function deleteSalesBuilding(buildingId) {
   if (!isSalesFullAdmin()) { toast('Only Sales Admin can delete buildings', 'err'); return; }
   if (!confirm('Delete this building and all its floors & flats?')) return;
   var data = lsales();
+  var _bDel = data.buildings.find(function (b) { return b.id === buildingId; });
   data.buildings = data.buildings.filter(function (b) { return b.id !== buildingId; });
   ssales(data);
+  _smLogActivity('building_delete', _bDel ? _bDel.name : '');
   renderSalesManager();
   toast('Building deleted', 'ok');
 }
@@ -23275,6 +23417,7 @@ function addSalesFloor(buildingId) {
   b.floors = b.floors || [];
   b.floors.push({ id: gid(), label: label, flats: [] });
   ssales(data);
+  _smLogActivity('floor_add', (b.name || 'Building') + ' — ' + label);
   if (input) input.value = '';
   var formEl = document.getElementById('add-floor-form-' + buildingId);
   if (formEl) formEl.style.display = 'none';
@@ -23287,8 +23430,10 @@ function deleteSalesFloor(buildingId, floorId) {
   var data = lsales();
   var b = data.buildings.find(function (x) { return x.id === buildingId; });
   if (!b) return;
+  var _flDel = (b.floors || []).find(function (fl) { return fl.id === floorId; });
   b.floors = (b.floors || []).filter(function (fl) { return fl.id !== floorId; });
   ssales(data);
+  _smLogActivity('floor_delete', (b.name || 'Building') + ' — ' + (_flDel ? _flDel.label : ''));
   renderSalesManager();
   toast('Floor deleted', 'ok');
 }
@@ -23326,6 +23471,7 @@ function addSalesFlat(buildingId, floorId) {
     misc: [], status: 'avail', remarks: [], updatedAt: Date.now()
   });
   ssales(data);
+  _smLogActivity('flat_add', (b.name || 'Building') + ' ' + (fl.label || 'Floor') + ' — Flat ' + flatNo);
   if (noInput) noInput.value = '';
   if (typeInput) typeInput.value = '';
   if (areaInput) areaInput.value = '';
@@ -23432,6 +23578,7 @@ function _fdRecalc() {
 function saveFlatFields() {
   if (!isSalesFullAdmin()) { toast('Only Sales Admin can edit flat details', 'err'); return; }
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
+  var _priceBefore = _flatFinalPrice(ctx.f);
   ctx.f.flatNo = document.getElementById('fd-flatno').value.trim();
   ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
@@ -23440,15 +23587,28 @@ function saveFlatFields() {
   ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
+  var _priceAfter = _flatFinalPrice(ctx.f);
+  var _flatLabel = (ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '');
+  if (_priceAfter !== _priceBefore) {
+    _smLogActivity('price_change', _flatLabel + ': ' + _inr(_priceBefore) + ' → ' + _inr(_priceAfter));
+  } else {
+    _smLogActivity('flat_edit', _flatLabel);
+  }
   document.getElementById('fd-title').textContent = (ctx.b.name ? ctx.b.name + ' — ' : '') + (ctx.fl.label || 'Floor') + ' — ' + (ctx.f.flatNo || 'Flat');
   toast('Saved', 'ok');
 }
 function setFlatStatus(status) {
   if (!canAccessSales()) return;
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
+  var _statusBefore = ctx.f.status;
   ctx.f.status = status;
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
+  if (_statusBefore !== status) {
+    var _flatLabel2 = (ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '');
+    var _lblOf = function (s) { return s === 'avail' ? 'Available' : s === 'book' ? 'Booked' : s === 'sold' ? 'Sold' : (s || '—'); };
+    _smLogActivity('status_change', _flatLabel2 + ': ' + _lblOf(_statusBefore) + ' → ' + _lblOf(status));
+  }
   document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-status') === status);
   });
@@ -23459,8 +23619,10 @@ function deleteSalesFlat() {
   if (!isSalesFullAdmin()) { toast('Only Sales Admin can delete flats', 'err'); return; }
   if (!confirm('Delete this flat?')) return;
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.fl) return;
+  var _flatLabel3 = ctx.f ? ((ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '')) : '';
   ctx.fl.flats = ctx.fl.flats.filter(function (x) { return x.id !== _fdCtx.flatId; });
   ssales(ctx.data);
+  _smLogActivity('flat_delete', _flatLabel3);
   closeFlatDetail();
   toast('Flat deleted', 'ok');
 }
@@ -23532,6 +23694,48 @@ function closeSalesClients() {
   if (m) m.style.display = 'none';
   _updateSalesClientsBadge();
 }
+
+// ── Recent Activity (🕐) modal ──────────────────────────────────
+function openSalesActivityLog() {
+  if (!isSalesFullAdmin()) { toast('Only the owner or Sales Admin can view this', 'err'); return; }
+  renderSalesActivityLog();
+  _armModalGuard('sales-activity-modal');
+  document.getElementById('sales-activity-modal').style.display = 'flex';
+}
+function closeSalesActivityLog() {
+  var m = document.getElementById('sales-activity-modal');
+  if (m) m.style.display = 'none';
+}
+var _SM_ACTIVITY_ICON = {
+  building_add: '🏢', building_delete: '🗑️', floor_add: '➕', floor_delete: '🗑️',
+  flat_add: '🏠', flat_delete: '🗑️', flat_edit: '✏️', price_change: '💰', status_change: '🔖'
+};
+var _SM_ACTIVITY_LABEL = {
+  building_add: 'Building added', building_delete: 'Building deleted', floor_add: 'Floor added',
+  floor_delete: 'Floor deleted', flat_add: 'Flat added', flat_delete: 'Flat deleted',
+  flat_edit: 'Details edited', price_change: 'Price changed', status_change: 'Status changed'
+};
+function renderSalesActivityLog() {
+  var wrap = document.getElementById('sales-activity-list');
+  if (!wrap) return;
+  var list = (typeof _smActivityLoad === 'function') ? _smActivityLoad() : [];
+  if (!list.length) {
+    wrap.innerHTML = '<p style="text-align:center;font-size:11px;color:rgba(255,255,255,.4);padding:2rem 0;">No activity yet.<br>Building/floor/flat changes, price edits and status/booking changes will show up here.</p>';
+    return;
+  }
+  wrap.innerHTML = list.slice().reverse().map(function (a) {
+    var d = a.ts ? new Date(a.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '';
+    var icon = _SM_ACTIVITY_ICON[a.action] || '•';
+    var label = _SM_ACTIVITY_LABEL[a.action] || a.action || 'Activity';
+    return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.5rem .6rem;margin-bottom:6px;display:flex;gap:8px;align-items:flex-start;">'
+      + '<span style="font-size:14px;flex-shrink:0;line-height:1.4;">' + icon + '</span>'
+      + '<div style="min-width:0;flex:1;">'
+      + '<div style="display:flex;justify-content:space-between;gap:6px;"><span style="font-size:10.5px;font-weight:800;color:#fff;">' + esc(label) + '</span><span style="font-size:8px;color:rgba(255,255,255,.35);flex-shrink:0;white-space:nowrap;">' + d + '</span></div>'
+      + (a.detail ? '<div style="font-size:9.5px;color:#bae6fd;margin-top:1px;overflow-wrap:anywhere;">' + esc(a.detail) + '</div>' : '')
+      + '<div style="font-size:8.5px;color:rgba(255,255,255,.4);margin-top:2px;">by ' + esc(a.by || 'Unknown') + '</div>'
+      + '</div></div>';
+  }).join('');
+}
 function renderSalesClients() {
   var list = _allSalesRemarks();
   var cnt = document.getElementById('sales-clients-count');
@@ -23544,8 +23748,12 @@ function renderSalesClients() {
   }
   wrap.innerHTML = list.map(function (r) {
     var d = r.ts ? new Date(r.ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }) : '';
+    // Call button sits directly on the client's name chip — a tap should
+    // dial them immediately without first opening the flat detail screen,
+    // so it stops the row's own onclick from firing.
+    var callBtn = r.phone ? ('<a href="tel:' + esc(r.phone) + '" onclick="event.stopPropagation()" title="Call ' + esc(r.name || 'client') + '" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#10b981;color:#fff;font-size:10.5px;text-decoration:none;flex-shrink:0;">📞</a>') : '';
     return '<div style="background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:.6rem .7rem;margin-bottom:8px;cursor:pointer;" onclick="closeSalesClients();openFlatDetail(\'' + r.bId + '\',\'' + r.flId + '\',\'' + r.fId + '\')">'
-      + '<div style="display:flex;justify-content:space-between;gap:6px;"><span style="font-size:12px;font-weight:900;color:#fbbf24;">' + esc(r.name || '—') + '</span><span style="font-size:8.5px;color:rgba(255,255,255,.35);flex-shrink:0;">' + d + '</span></div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:900;color:#fbbf24;">' + esc(r.name || '—') + callBtn + '</span><span style="font-size:8.5px;color:rgba(255,255,255,.35);flex-shrink:0;">' + d + '</span></div>'
       + (r.phone ? '<div style="font-size:10px;color:#a5f3fc;">📞 ' + esc(r.phone) + '</div>' : '')
       + (r.budget ? '<div style="font-size:10px;color:#6ee7b7;">💰 Budget: ' + _inr(r.budget) + '</div>' : '')
       + '<div style="font-size:9.5px;color:rgba(255,255,255,.5);margin-top:2px;">🏢 Interested in: ' + esc(r.building || '') + ' — ' + esc(r.floor || '') + ' — ' + esc(r.flat || '') + '</div>'
@@ -23638,9 +23846,14 @@ function _renderSalesMgrActions() {
   // this just toggles which icon buttons are visible for this user.
   var codeBtn = document.getElementById('sales-mgr-code-btn');
   var clientsBtn = document.getElementById('sales-clients-btn');
+  var activityBtn = document.getElementById('sales-activity-btn');
   var canGenCode = _isSalesRealOwner() && window.isEnterpriseUser && window.currentProjectId && typeof _sb !== 'undefined' && _sb && typeof _adminSBUser !== 'undefined' && _adminSBUser;
   if (codeBtn) codeBtn.style.display = canGenCode ? 'flex' : 'none';
   if (clientsBtn) clientsBtn.style.display = isSalesFullAdmin() ? 'flex' : 'none';
+  // Recent-activity clock — same audience as the owner: the real owner AND
+  // a full Sales Admin (join-code or admin-only viewer link), never a
+  // limited viewer or a regular teammate engineer.
+  if (activityBtn) activityBtn.style.display = isSalesFullAdmin() ? 'flex' : 'none';
   _updateSalesClientsBadge();
 }
 function _updateSalesClientsBadge() {
