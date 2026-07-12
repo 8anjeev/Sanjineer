@@ -4556,14 +4556,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="tab-btn text-white/70" data-tab="bill" onclick="switchTab('bill')">🧾 Bill</button>
     <button class="tab-btn text-white/70" data-tab="quotation" onclick="switchTab('quotation')">💼 Quotation</button>
     <button class="tab-btn text-white/70" data-tab="visits" onclick="switchTab('visits')">🏛️ Site Visits</button>
-    <button class="tab-btn text-white/70" id="nav-sales-tab-btn" data-tab="sales" onclick="switchTab('sales')" style="display:none;">🏢 Sales</button>
   </div>
 </nav>
 
 <main class="flex-1 overflow-y-auto pb-6" style="padding:6px 6px 24px 6px;">
-
-<!-- ===== SALES (owner dashboard tab — hosts the Sales Manager panel inline) ===== -->
-<div id="tab-sales" class="tab-content tab-hidden" style="display:none;margin:-6px;min-height:calc(100vh - 130px);"></div>
 
 <!-- ===== DASHBOARD ===== -->
 
@@ -7896,7 +7892,7 @@ function dismissPWA(){
 // ============================================================
 // TABS
 // ============================================================
-var TABS = ['dashboard','daily','attendance','boq','machinery','expenses','materials','tools','drawings','rentals','departmental','contractors','budget','schedule','punchlist','bill','quotation','visits','sales'];
+var TABS = ['dashboard','daily','attendance','boq','machinery','expenses','materials','tools','drawings','rentals','departmental','contractors','budget','schedule','punchlist','bill','quotation','visits'];
 
 var _plFilter='all';
 
@@ -7944,7 +7940,6 @@ function switchTab(name) {
     else if (name === 'bill')         initBillTab();
     else if (name === 'quotation')    loadQuotationTab();
     else if (name === 'visits')       loadVisitsTab();
-    else if (name === 'sales')        { if (typeof _mountSalesPanelInTab === 'function') _mountSalesPanelInTab(); }
     updateDropdowns();
     if (typeof _postSwitchTab === 'function') _postSwitchTab(name);
     document.dispatchEvent(new CustomEvent('sanjineer-tab-changed', {detail: name}));
@@ -21064,6 +21059,35 @@ window._ownerOpenReport = function(pid, reportId) {
   var m = document.getElementById('_owner-overview-modal'); if (m) m.remove();
   if (typeof openQdprForm === 'function') openQdprForm(pid, reportId);
 };
+// Buildings list in the Sales tab is one entry per project — tapping one
+// switches into that project (if not already active) and opens its own
+// full Sales Manager (buildings → floors → flats) so details can be added.
+function _ownerCloseOverviewModals() {
+  var m1 = document.getElementById('_owner-overview-modal'); if (m1) m1.remove();
+  var m2 = document.getElementById('_owner-desktop-modal'); if (m2) m2.remove();
+  try { if (typeof _ownerStopViewportWatch === 'function') _ownerStopViewportWatch(); } catch (e) {}
+}
+window._ownerOpenProjectSales = function(pid) {
+  if (!pid) return;
+  _ownerCloseOverviewModals();
+  if (pid !== window.currentProjectId && typeof switchProject === 'function') {
+    switchProject(pid);
+    setTimeout(function () { if (typeof openSalesManager === 'function') openSalesManager(); }, 350);
+  } else if (typeof openSalesManager === 'function') {
+    openSalesManager();
+  }
+};
+// "+ Add New" in the Buildings list — a building IS a project here, so
+// adding a new building just creates a new project and jumps straight
+// into its Sales Manager to start adding floors/flats.
+window._ownerAddNewSalesProject = function () {
+  var name = (typeof prompt === 'function') ? prompt('Building / Project name:') : '';
+  if (!name || !name.trim()) return;
+  if (typeof createProject !== 'function') { if (typeof toast === 'function') toast('Could not create project', 'err'); return; }
+  var proj = createProject(name.trim());
+  if (!proj) return; // project limit hit — upgrade popup already shown by createProject
+  window._ownerOpenProjectSales(proj.id);
+};
 
 var _ownerTabRenderers = {
 
@@ -21222,15 +21246,17 @@ var _ownerTabRenderers = {
       + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No site visits in this period'));
   },
 
-  // Sales — a read-only summary only: cumulative Sold/Booked/Remaining
-  // totals across every project, plus a recent-activity list of flats
-  // that were booked/sold. Deliberately does NOT embed the full Sales
-  // Manager (buildings/floors/flat editor, remarks, floor plans) here —
-  // that stays a dedicated Enterprise surface reached via the Sales tab
-  // itself; the Owner Dashboard only ever shows a summary.
+  // Sales — cumulative Sold/Booked/Remaining totals across every project,
+  // today's bookings, an aggregated interested-clients (leads) list, and
+  // a Buildings list — one entry per added project (named after the
+  // project/company) plus manually-added building names — that drills
+  // into that project's own full Sales Manager (buildings → floors →
+  // flats) to add/edit details.
   sales: function(projects) {
     if (!window.isEnterpriseUser) return _ownerEmpty('Sales Manager is an Enterprise feature');
-    var rows = [], totAvail = 0, totBook = 0, totSold = 0;
+    var todayStr = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
+    var rows = [], todayRows = [], clients = [];
+    var totAvail = 0, totBook = 0, totSold = 0;
     projects.forEach(function(p) {
       var d = _ownerLoadProject(p.id);
       if (!d.sales || !d.sales.buildings) return;
@@ -21239,23 +21265,68 @@ var _ownerTabRenderers = {
           (fl.flats || []).forEach(function(f) {
             if (f.status === 'book') totBook++;
             else if (f.status === 'sold') totSold++;
-            else { totAvail++; return; }
+            else totAvail++;
             var dateStr = f.updatedAt ? new Date(f.updatedAt).toISOString().slice(0,10) : '';
-            if (!_ownerInRange(dateStr)) return;
             var val = (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f) : (parseFloat(f.price)||0);
-            var statusLbl = f.status === 'sold' ? 'Sold' : 'Booked';
-            var statusClr = f.status === 'sold' ? '#dc2626' : '#d97706';
-            var title = _jhtml(f.flatNo || 'Flat') + (b.name ? ' — ' + _jhtml(b.name) : '') + (fl.label ? ' · ' + _jhtml(fl.label) : '')
-              + ' <span style="color:' + statusClr + '">· ' + statusLbl + '</span>';
-            var meta = (val ? '₹' + _ownerFmt(val) + ' · ' : '') + (dateStr ? fd(dateStr) : '');
-            rows.push({ date: dateStr, html: _ownerRow(title, meta, p.name) });
+            if ((f.status === 'book' || f.status === 'sold')) {
+              var statusLbl = f.status === 'sold' ? 'Sold' : 'Booked';
+              var statusClr = f.status === 'sold' ? '#dc2626' : '#d97706';
+              var title = _jhtml(f.flatNo || 'Flat') + (f.type ? ' <span style="opacity:.55">(' + _jhtml(f.type) + ')</span>' : '') + (b.name ? ' — ' + _jhtml(b.name) : '') + (fl.label ? ' · ' + _jhtml(fl.label) : '')
+                + ' <span style="color:' + statusClr + '">· ' + statusLbl + '</span>';
+              var meta = (val ? '₹' + _ownerFmt(val) + ' · ' : '') + (dateStr ? fd(dateStr) : '');
+              if (dateStr === todayStr) todayRows.push(_ownerRow(title, meta, p.name));
+              if (_ownerInRange(dateStr)) rows.push({ date: dateStr, html: _ownerRow(title, meta, p.name) });
+            }
+            (f.remarks || []).forEach(function(r) {
+              var rDate = r.ts ? new Date(r.ts).toISOString().slice(0,10) : '';
+              clients.push({
+                ts: r.ts || 0, isToday: rDate === todayStr,
+                name: r.name, phone: r.phone, budget: r.budget, note: r.note,
+                flat: f.flatNo, building: b.name, floor: fl.label, site: p.name
+              });
+            });
           });
         });
       });
     });
     rows.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    clients.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+
+    var todayBookingsHtml = '<div style="margin:14px 0 6px;"><p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0 0 6px;">📅 Today\'s Bookings</p>'
+      + (todayRows.length ? todayRows.join('') : _ownerEmpty('No bookings or sales today')) + '</div>';
+
+    var clientsHtml = '<div style="margin:14px 0 6px;"><p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0 0 6px;">👥 Interested Clients</p>'
+      + (clients.length ? clients.slice(0, 40).map(function(c) {
+          var d = c.ts ? new Date(c.ts).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : '';
+          var title = _jhtml(c.name || 'Client') + (c.isToday ? ' <span style="color:#059669">· Today</span>' : '');
+          var meta = (c.phone ? '📞 ' + _jhtml(c.phone) + ' · ' : '') + (c.budget ? '💰 ₹' + _ownerFmt(c.budget) + ' · ' : '')
+            + _jhtml(c.building || '') + (c.flat ? ' — ' + _jhtml(c.flat) : '') + (d ? ' · ' + d : '')
+            + (c.note ? '<br>' + _jhtml(c.note) : '');
+          return _ownerRow(title, meta, c.site);
+        }).join('') : _ownerEmpty('No interested clients / remarks yet')) + '</div>';
+
+    var buildingsHtml = '<div style="margin:14px 0 6px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+      + '<p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0;">🏢 Buildings</p>'
+      + '<button onclick="_ownerAddNewSalesProject()" style="font-size:9.5px;font-weight:800;color:#4f46e5;background:#EEF2FF;border:1px solid #c7d2fe;border-radius:7px;padding:3px 8px;cursor:pointer;">+ Add New</button>'
+      + '</div>'
+      + (projects.length ? projects.map(function(p) {
+          var d = _ownerLoadProject(p.id);
+          var bCount = 0, flCount = 0;
+          if (d.sales && d.sales.buildings) {
+            bCount = d.sales.buildings.length;
+            d.sales.buildings.forEach(function(b){ (b.floors||[]).forEach(function(fl){ flCount += (fl.flats||[]).length; }); });
+          }
+          return '<div onclick="_ownerOpenProjectSales(\'' + p.id + '\')" style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:9px 11px;margin-bottom:7px;box-shadow:0 1px 4px rgba(0,0,0,.04);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+            + '<div style="min-width:0;"><p style="font-size:11.5px;font-weight:700;color:#1e1b4b;margin:0;">🏢 ' + _jhtml(p.name) + '</p>'
+            + '<p style="font-size:9.5px;color:#6b7280;margin:2px 0 0;">' + bCount + ' building' + (bCount!==1?'s':'') + ' · ' + flCount + ' flat' + (flCount!==1?'s':'') + '</p></div>'
+            + '<span style="font-size:13px;color:#9ca3af;flex-shrink:0;">›</span></div>';
+        }).join('') : _ownerEmpty('No projects yet — tap + Add New to create one'))
+      + '</div>';
+
     return _ownerTotalsBar([['Sold', totSold], ['Booked', totBook], ['Remaining', totAvail]])
-      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No recent booking/sale activity in this period'));
+      + todayBookingsHtml + clientsHtml + buildingsHtml
+      + '<div style="margin:14px 0 6px;"><p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0 0 6px;">Recent Booking / Sale Activity</p>'
+      + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No recent booking/sale activity in this period')) + '</div>';
   },
 
   // POs are now properly project-scoped (see the lpo()/spo() fix) like
@@ -22494,9 +22565,13 @@ document.addEventListener('DOMContentLoaded', function() {
             <input id="fd-flatno" type="text" class="fd-input">
           </div>
           <div>
-            <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Area (sqft)</label>
-            <input id="fd-area" type="number" class="fd-input" oninput="_fdRecalc()">
+            <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Type (BHK / Shop)</label>
+            <select id="fd-type" class="fd-input"></select>
           </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Area (sqft)</label>
+          <input id="fd-area" type="number" class="fd-input" oninput="_fdRecalc()">
         </div>
         <div style="margin-bottom:8px;">
           <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft)</label>
@@ -22788,13 +22863,9 @@ function openSalesManager() {
     return;
   }
   if (!canAccessSales()) { toast('No access to Sales', 'err'); return; }
-  // The real project owner gets Sales as an inline dashboard tab instead
-  // of a fullscreen modal — everyone else (engineers, viewers, Sales
-  // Admin join-code sessions) keeps the existing locked fullscreen panel.
-  if (_isSalesRealOwner() && typeof switchTab === 'function') {
-    switchTab('sales');
-    return;
-  }
+  // Sales Manager is reached only through Settings (and the dashboard
+  // summary card) now — there is no separate "Sales" tab in the main nav
+  // any more, so everyone (owner included) gets the same fullscreen panel.
   if (typeof closeAllAndSettings === 'function') closeAllAndSettings();
   setTimeout(function () {
     _unmountSalesPanelFromTab();
@@ -22902,6 +22973,7 @@ function renderSalesManager() {
           else { bg = 'rgba(16,185,129,.18)'; bd = 'rgba(52,211,153,.5)'; fg = '#6ee7b7'; }
           return '<button class="flat-pill" onclick="openFlatDetail(\'' + b.id + '\',\'' + fl.id + '\',\'' + f.id + '\')" style="background:' + bg + ';border-color:' + bd + ';color:' + fg + ';">'
             + '<div style="font-weight:900;">' + esc(f.flatNo || '—') + '</div>'
+            + (f.type ? '<div style="font-size:7.5px;font-weight:800;opacity:.9;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(f.type) + '</div>' : '')
             + '<div style="font-size:8px;opacity:.85;margin-top:1px;">' + (parseFloat(f.area) || 0) + ' sqft</div>'
             + '</button>';
         }).join('');
@@ -22928,6 +23000,7 @@ function renderSalesManager() {
           + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">' + flatsHtml + addFlatBtn + '</div>'
           + '<div id="add-flat-form-' + b.id + '-' + fl.id + '" style="display:none;margin-top:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.55rem;">'
           + '<input id="new-flat-no-' + b.id + '-' + fl.id + '" type="text" placeholder="Flat No. e.g. 101" class="fd-input" style="padding:7px 9px;font-size:11px;margin-bottom:5px;">'
+          + '<select id="new-flat-type-' + b.id + '-' + fl.id + '" class="fd-input" style="padding:7px 9px;font-size:11px;margin-bottom:5px;">' + _flatTypeOptionsHtml('') + '</select>'
           + '<input id="new-flat-area-' + b.id + '-' + fl.id + '" type="number" placeholder="Area (sqft)" class="fd-input" style="padding:7px 9px;font-size:11px;margin-bottom:6px;">'
           + '<button onclick="addSalesFlat(\'' + b.id + '\',\'' + fl.id + '\')" style="width:100%;padding:.45rem;background:linear-gradient(135deg,#0891b2,#0f766e);color:#fff;border:none;border-radius:7px;font-weight:800;font-size:10px;cursor:pointer;">Add Flat</button>'
           + '</div>'
@@ -23045,6 +23118,16 @@ function deleteSalesFloor(buildingId, floorId) {
   renderSalesManager();
   toast('Floor deleted', 'ok');
 }
+// Flat "type" — BHK or Shop/commercial — shared list used by both the
+// add-flat form and the flat detail modal so the two stay in sync.
+var SALES_FLAT_TYPES = ['1 RK', '1 BHK', '1.5 BHK', '2 BHK', '2.5 BHK', '3 BHK', '3.5 BHK', '4 BHK', '4+ BHK', 'Duplex', 'Penthouse', 'Shop', 'Office', 'Other'];
+function _flatTypeOptionsHtml(selected) {
+  var opts = '<option value="">Type (BHK / Shop)…</option>';
+  opts += SALES_FLAT_TYPES.map(function (t) {
+    return '<option value="' + esc(t) + '"' + (t === selected ? ' selected' : '') + '>' + esc(t) + '</option>';
+  }).join('');
+  return opts;
+}
 function _toggleAddFlatForm(buildingId, floorId) {
   var el = document.getElementById('add-flat-form-' + buildingId + '-' + floorId);
   if (el) el.style.display = (el.style.display === 'none' ? 'block' : 'none');
@@ -23052,8 +23135,10 @@ function _toggleAddFlatForm(buildingId, floorId) {
 function addSalesFlat(buildingId, floorId) {
   if (!isSalesFullAdmin()) { toast('Only Sales Admin can add flats', 'err'); return; }
   var noInput = document.getElementById('new-flat-no-' + buildingId + '-' + floorId);
+  var typeInput = document.getElementById('new-flat-type-' + buildingId + '-' + floorId);
   var areaInput = document.getElementById('new-flat-area-' + buildingId + '-' + floorId);
   var flatNo = noInput ? (noInput.value || '').trim() : '';
+  var type = typeInput ? (typeInput.value || '').trim() : '';
   var area = areaInput ? (parseFloat(areaInput.value) || 0) : 0;
   if (!flatNo) { toast('Enter flat number', 'err'); return; }
   var data = lsales();
@@ -23063,11 +23148,12 @@ function addSalesFlat(buildingId, floorId) {
   if (!fl) return;
   fl.flats = fl.flats || [];
   fl.flats.push({
-    id: gid(), flatNo: flatNo, area: area, rate: 0, society: 0, dev: 0,
+    id: gid(), flatNo: flatNo, type: type, area: area, rate: 0, society: 0, dev: 0,
     misc: [], status: 'avail', remarks: [], updatedAt: Date.now()
   });
   ssales(data);
   if (noInput) noInput.value = '';
+  if (typeInput) typeInput.value = '';
   if (areaInput) areaInput.value = '';
   _salesExpandedFloors[buildingId + '|' + floorId] = true;
   renderSalesManager();
@@ -23096,11 +23182,12 @@ function openFlatDetail(buildingId, floorId, flatId) {
 
   document.getElementById('fd-title').textContent = (b.name ? b.name + ' — ' : '') + (fl.label || 'Floor') + ' — ' + (f.flatNo || 'Flat');
   document.getElementById('fd-flatno').value = f.flatNo || '';
+  document.getElementById('fd-type').innerHTML = _flatTypeOptionsHtml(f.type || '');
   document.getElementById('fd-area').value = f.area || '';
   document.getElementById('fd-rate').value = f.rate || '';
   document.getElementById('fd-society').value = f.society || '';
   document.getElementById('fd-dev').value = f.dev || '';
-  ['fd-flatno', 'fd-area', 'fd-rate', 'fd-society', 'fd-dev'].forEach(function (id) {
+  ['fd-flatno', 'fd-type', 'fd-area', 'fd-rate', 'fd-society', 'fd-dev'].forEach(function (id) {
     document.getElementById(id).disabled = !admin;
   });
   document.getElementById('fd-save-btn').style.display = admin ? 'block' : 'none';
@@ -23172,6 +23259,7 @@ function saveFlatFields() {
   if (!isSalesFullAdmin()) { toast('Only Sales Admin can edit flat details', 'err'); return; }
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
   ctx.f.flatNo = document.getElementById('fd-flatno').value.trim();
+  ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
   ctx.f.rate = parseFloat(document.getElementById('fd-rate').value) || 0;
   ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
@@ -23295,18 +23383,29 @@ function renderSalesClients() {
 // ── Dedicated Sales-Admin locked portal (shared by Viewer Link and
 // Engineer Sales Admin join code — same locked, full-CRUD experience,
 // only the "how did I get here / how do I sign out" bits differ) ──────
-function _enterSalesLockedMode(subtitle, exitLabel) {
+// buttonMode: 'close' -> show only the icon-only ✕ button, wired to the
+//             exit action (no separate text "Sign out" button).
+//             'none'  -> show NO exit affordance at all (dedicated join-code
+//             kiosk: 100% Sales Manager, nothing else, no way out from here).
+function _enterSalesLockedMode(subtitle, exitLabel, buttonMode) {
   var m = document.getElementById('sales-manager-modal');
-  if (!m) { setTimeout(function(){ _enterSalesLockedMode(subtitle, exitLabel); }, 300); return; }
+  if (!m) { setTimeout(function(){ _enterSalesLockedMode(subtitle, exitLabel, buttonMode); }, 300); return; }
   if (typeof _unmountSalesPanelFromTab === 'function') _unmountSalesPanelFromTab();
   try { document.body.style.overflow = 'hidden'; } catch (e) {}
   m.onclick = null; // disable backdrop-click close — this IS the whole app now
   m.style.display = 'flex';
   _positionSalesPanel();
+  var panel = document.getElementById('sales-manager-panel');
+  if (panel) panel.style.top = '0'; // locked mode = 100% of the screen, header included
   var closeBtn = document.getElementById('sales-close-btn');
   var exitBtn = document.getElementById('sales-exit-btn');
-  if (closeBtn) closeBtn.style.display = 'none';
-  if (exitBtn) { exitBtn.style.display = 'inline-block'; exitBtn.textContent = exitLabel || 'Sign out'; }
+  // The text "Sign out" button is never used any more in locked mode —
+  // either the icon-only ✕ handles it, or there's no exit control at all.
+  if (exitBtn) { exitBtn.style.display = 'none'; exitBtn.onclick = null; }
+  if (closeBtn) {
+    if (buttonMode === 'none') { closeBtn.style.display = 'none'; closeBtn.onclick = null; }
+    else { closeBtn.style.display = ''; }
+  }
   var sub = document.getElementById('sales-mgr-sub');
   if (sub) sub.textContent = subtitle;
   var addWrap = document.getElementById('sales-add-building-wrap');
@@ -23314,17 +23413,17 @@ function _enterSalesLockedMode(subtitle, exitLabel) {
   renderSalesManager();
   _renderSalesMgrActions();
 }
-// Viewer Link whose only permission is 'sales'.
+// Viewer Link whose only permission is 'sales' — this is the "admin sales
+// section": full screen, icon-only ✕ button only, no "Sign out" text button.
 function _enterSalesViewerMode() {
-  _enterSalesLockedMode(isSalesFullAdmin() ? 'Sales Admin Portal' : 'Sales Portal', 'Sign out');
-  var exitBtn = document.getElementById('sales-exit-btn');
-  if (exitBtn) exitBtn.onclick = _salesViewerExit;
+  _enterSalesLockedMode(isSalesFullAdmin() ? 'Sales Admin Portal' : 'Sales Portal', 'Sign out', 'close');
+  var closeBtn = document.getElementById('sales-close-btn');
+  if (closeBtn) closeBtn.onclick = _salesViewerExit;
 }
-// Engineer who joined via the separate Sales Admin join code.
+// Engineer who joined via the separate Sales Admin join code — 100% Sales
+// Manager, no close (✕) button, no sign-out button, nothing else at all.
 window._enterSalesEngineerMode = function () {
-  _enterSalesLockedMode('Sales Admin Portal', 'Leave Project');
-  var exitBtn = document.getElementById('sales-exit-btn');
-  if (exitBtn) exitBtn.onclick = _salesEngineerExit;
+  _enterSalesLockedMode('Sales Admin Portal', 'Leave Project', 'none');
 };
 function _salesViewerExit() {
   if (!confirm('Sign out of the Sales portal?')) return;
