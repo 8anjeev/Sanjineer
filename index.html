@@ -691,6 +691,38 @@ self.addEventListener('fetch', function(e) {
   }
   window._fadeRefresh = _fadeRefresh;
 
+  // ── Full-screen loading overlay (see #sanj-loading-overlay in <body>) ──
+  // Kept deliberately SHORT: real pulls are usually 150-500ms, so the cap
+  // below is just a safety net, not an expected wait — it guarantees the
+  // app always becomes usable even if a network call never resolves
+  // (offline, dropped connection, etc.), without making people stare at
+  // a spinner for long.
+  var _sanjLoaderVisible = true; // starts visible in the static HTML
+  var _sanjLoaderSafetyTimer = null;
+  function _sanjShowLoader(msg) {
+    var el = document.getElementById('sanj-loading-overlay');
+    if (!el) return;
+    var txt = document.getElementById('sanj-loading-text');
+    if (txt) txt.textContent = msg || 'Loading your project…';
+    el.style.display = 'flex';
+    el.style.pointerEvents = 'auto';
+    requestAnimationFrame(function() { el.style.opacity = '1'; });
+    _sanjLoaderVisible = true;
+    if (_sanjLoaderSafetyTimer) clearTimeout(_sanjLoaderSafetyTimer);
+    _sanjLoaderSafetyTimer = setTimeout(function() { _sanjHideLoader(); }, 1800);
+  }
+  function _sanjHideLoader() {
+    if (_sanjLoaderSafetyTimer) { clearTimeout(_sanjLoaderSafetyTimer); _sanjLoaderSafetyTimer = null; }
+    var el = document.getElementById('sanj-loading-overlay');
+    if (!el || !_sanjLoaderVisible) return;
+    _sanjLoaderVisible = false;
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    setTimeout(function() { if (!_sanjLoaderVisible) el.style.display = 'none'; }, 260);
+  }
+  window._sanjShowLoader = _sanjShowLoader;
+  window._sanjHideLoader = _sanjHideLoader;
+
   function _sanjLog() {
     if (!window._SANJ_SYNC_DEBUG) return;
     try {
@@ -846,11 +878,25 @@ self.addEventListener('fetch', function(e) {
     try { localStorage.setItem('sanj_current_project', projectId); } catch(e) {}
     _renderProjectDropdown();
 
+    // Show one clean loading screen for the switch instead of letting the
+    // old project's content sit on screen while it's silently overwritten
+    // (that silent overwrite is what read as "fluctuating"/"teleporting").
+    // It's hidden only once BOTH the local reload and the cloud pull for
+    // THIS project have settled, so whatever appears when it fades out is
+    // already final — capped short by _sanjShowLoader's own safety timer.
+    if (typeof window._sanjShowLoader === 'function') window._sanjShowLoader('Switching project…');
+    var _swPullDone = false, _swLocalDone = false;
+    function _swMaybeHideLoader() {
+      if (_swPullDone && _swLocalDone && typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
+    }
+
     // Pull this project's cloud backup first (getSiteId now returns project-specific key).
     // _adminCloudPull captures this epoch internally and will no-op if the
     // user switches again before the response arrives.
     if (typeof _adminCloudPull === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
-      _adminCloudPull(true);
+      _adminCloudPull(true, function() { _swPullDone = true; _swMaybeHideLoader(); });
+    } else {
+      _swPullDone = true; // no cloud session for this project — nothing to wait for
     }
     // Re-scope the realtime subscription to the new project (tears down
     // the old project's channel and opens one filtered to this project only).
@@ -861,18 +907,15 @@ self.addEventListener('fetch', function(e) {
     _switchProjectReloadTimer = setTimeout(function() {
       _switchProjectReloadTimer = null;
       if (window._projectEpoch !== _epoch) return; // superseded by another switch
-      var _doSwitchRerender = function() {
-        try {
-          AD = ld();
-          applyProfile();
-          var activeBtn = document.querySelector('.tab-btn.active');
-          var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
-          if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
-        } catch(e) {}
-      };
-      // Cross-fade the swap so the new project's data doesn't "teleport"
-      // in on top of the old project's numbers.
-      if (typeof window._fadeRefresh === 'function') window._fadeRefresh(_doSwitchRerender); else _doSwitchRerender();
+      try {
+        AD = ld();
+        applyProfile();
+        var activeBtn = document.querySelector('.tab-btn.active');
+        var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
+        if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
+      } catch(e) {}
+      _swLocalDone = true;
+      _swMaybeHideLoader();
     }, 200);
   }
 
@@ -2428,6 +2471,19 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 </style>
 </head>
 <body>
+
+<!-- ========== SYNC LOADING OVERLAY ==========
+     Covers the whole app on first open and on every project switch while
+     data is being pulled/merged. Visible by default (before any JS runs)
+     so the very first paint is never the "wrong"/stale content — it's
+     hidden in exactly ONE clean fade-out once the data is final. This is
+     deliberately the ONLY visual transition allowed here: no partial
+     reveal, no re-hide, no dip — see _sanjShowLoader()/_sanjHideLoader(). -->
+<div id="sanj-loading-overlay" style="position:fixed;inset:0;z-index:999999;background:linear-gradient(160deg,#0f0c29,#1e1b4b 60%,#0f172a);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:1;transition:opacity .28s ease;">
+  <div style="width:44px;height:44px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:#818cf8;animation:sanjLoaderSpin .8s linear infinite;"></div>
+  <p id="sanj-loading-text" style="font-size:12px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:.02em;margin:0;">Loading your project…</p>
+</div>
+<style>@keyframes sanjLoaderSpin{to{transform:rotate(360deg)}}</style>
 
 <!-- ========== WELCOME OVERLAY (first-time only, before any data) ========== -->
 <div id="welcome-overlay" style="display:none;position:fixed;inset:0;z-index:99999;overflow:hidden;background:#07050f;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;">
@@ -7360,7 +7416,7 @@ function idbDel(key, cb) {
 // ============================================================
 var R2_UPLOAD_URL = 'https://sanjineer-uploads.sanjeev897911s.workers.dev/upload';
 
-function getSupabaseAccessToken(cb) {
+function getSupabaseAccessToken(cb, _retried) {
   try {
     if (typeof _sb === 'undefined' || !_sb || !_sb.auth) { cb(null); return; }
     _sb.auth.getSession().then(function (res) {
@@ -7382,8 +7438,17 @@ function getSupabaseAccessToken(cb) {
         }).catch(function () { cb(null); });
         return;
       }
+      // No session yet on a real owner/admin login — this is very often
+      // just the Supabase client still restoring its session right after
+      // the app opens (a photo can get taken within a second or two of
+      // launch), not an actual "not signed in" state. Give it one short
+      // beat to finish and check again before reporting failure.
+      if (!_retried) { setTimeout(function () { getSupabaseAccessToken(cb, true); }, 900); return; }
       cb(null);
-    }).catch(function () { cb(null); });
+    }).catch(function () {
+      if (!_retried) { setTimeout(function () { getSupabaseAccessToken(cb, true); }, 900); return; }
+      cb(null);
+    });
   } catch (e) { cb(null); }
 }
 
@@ -7398,13 +7463,26 @@ function _isRetryableUploadErr(msg) {
 function uploadFileToR2(fileOrBlob, folder, cb, _retriesLeft) {
   if (_retriesLeft === undefined) _retriesLeft = 2;
   getSupabaseAccessToken(function (token) {
-    if (!token) { cb(null, 'Not signed in'); return; }
+    if (!token) {
+      // Could still be a transient "auth not ready yet" case even after
+      // getSupabaseAccessToken's own retry — give the whole upload one
+      // more shot before falling back to local-only storage.
+      if (_retriesLeft > 0) { setTimeout(function () { uploadFileToR2(fileOrBlob, folder, cb, _retriesLeft - 1); }, 1200); return; }
+      cb(null, 'Not signed in'); return;
+    }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) { cb(null, 'You are offline — check your connection'); return; }
     var fd = new FormData();
     fd.append('file', fileOrBlob, fileOrBlob.name || (folder + '.jpg'));
     fd.append('folder', folder || 'misc');
     fetch(R2_UPLOAD_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().catch(function () {
+          // Non-JSON response (e.g. a transient 502/504 from the worker
+          // under load) — treat like a dropped connection, not a hard
+          // failure, so it gets retried instead of giving up immediately.
+          throw new Error('Load failed');
+        });
+      })
       .then(function (data) {
         if (data && data.url) cb(data.url, null); else cb(null, (data && data.error) || 'Upload failed');
       })
@@ -8161,6 +8239,7 @@ function _migrateProfileToGlobal() {
 }
 
 function boot() {
+  if (typeof window._sanjShowLoader === 'function') window._sanjShowLoader('Loading your project…');
   document.body.classList.add('js-ready');
   AD = ld();
 
@@ -8261,6 +8340,10 @@ function boot() {
   }
   if (!viewerEmail) {
     switchTab('dashboard');
+    // Guest/offline (no admin cloud session) — there's no pull coming to
+    // wait for, so reveal immediately. The admin-signed-in case is left
+    // alone here; its loader is hidden once autoInitCloud()'s pull settles.
+    if (!_adminLoggedIn && typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
   }
 }
 
@@ -9178,14 +9261,33 @@ function openQdprPanel(){
   var sheet = document.getElementById('qdpr-panel-sheet');
   if (!panel) return;
   panel.style.display = 'block';
-  loadQdprTab();
-  // Refresh any token-joined projects in the background so they show
-  // up-to-date data in the merged QDPR list, not just the last-active one.
-  if (typeof window._engineerPullAll === 'function') {
-    window._engineerPullAll(true).then(function(){
-      if (panel.style.display !== 'none') renderQdprSites();
-    });
+  if (typeof _loadProjects === 'function') _loadProjects();
+  if (!qdprState.date) qdprState.date = ist();
+  var dEl = document.getElementById('qdpr-date-input'); if (dEl) dEl.value = qdprState.date;
+  var dayEl = document.getElementById('qdpr-date-day'); if (dayEl) dayEl.textContent = _qdprDayName(qdprState.date);
+
+  // One clean render, not a stale-cache render followed by a flip to
+  // fresh data — that flip is exactly the "fluctuating" behaviour to
+  // avoid. Every project (owned + joined) gets pulled first; capped
+  // short (1.5s) so this never makes anyone wait long.
+  var listEl = document.getElementById('qdpr-sites-list');
+  if (listEl) listEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:2rem 0;color:#9ca3af;font-size:12px;font-weight:600;"><span style="width:16px;height:16px;border-radius:50%;border:2px solid #e5e7eb;border-top-color:#6366f1;display:inline-block;animation:sanjLoaderSpin .8s linear infinite;"></span> Loading latest reports…</div>';
+  var _qdprOpenRendered = false;
+  function _qdprRenderOnce() {
+    if (_qdprOpenRendered) return;
+    _qdprOpenRendered = true;
+    if (panel.style.display !== 'none') renderQdprSites();
   }
+  var _qdprPulls = [];
+  if (typeof window._qdprPullAllOwnedProjects === 'function') _qdprPulls.push(window._qdprPullAllOwnedProjects());
+  if (typeof window._engineerPullAll === 'function') _qdprPulls.push(window._engineerPullAll(true));
+  if (_qdprPulls.length) {
+    Promise.all(_qdprPulls).then(_qdprRenderOnce).catch(_qdprRenderOnce);
+    setTimeout(_qdprRenderOnce, 1500); // safety cap — never a long wait
+  } else {
+    _qdprRenderOnce();
+  }
+
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       if (backdrop) backdrop.style.background = 'rgba(10,6,35,.55)';
@@ -9241,6 +9343,59 @@ function qdprSaveProjMats(pid, mats){
   try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mats)); } catch(e){}
   if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
 }
+
+// ── Owner's OWN multi-project cloud refresh (for QDPR) ─────────────
+// _adminCloudPull() only ever refreshes whichever ONE project is
+// currently active. QDPR shows every project the owner has at once, so
+// without this, any project that isn't the active one keeps showing
+// whatever was last cached on THIS device — which can be hours/days old,
+// or completely empty if this device never opened that project before —
+// even though a teammate already pushed today's report to the cloud from
+// their own device. This pulls each owned project's cloud row directly
+// and writes the merged result straight into that project's OWN storage
+// keys via the existing qdprSaveProjAD/qdprSaveProjMats helpers, which
+// already guard against touching the live AD/dashboard unless that
+// project happens to be the active one — so it can never cause the
+// active tab to flicker or show the wrong project's data mid-pull.
+function _qdprSiteIdFor(pid) {
+  if (!_adminSBUser || !_adminSBUser.id) return '';
+  var base = 'user-' + _adminSBUser.id.replace(/-/g, '').slice(0, 12);
+  return base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+}
+function _qdprMergeCloudIntoProject(pid, d) {
+  if (!d) return;
+  var tombs = d.tombstones || {};
+  var localDb = qdprLoadProjAD(pid);
+  var mergedDb = (typeof _mergeRecordArrays === 'function')
+    ? _mergeRecordArrays(localDb, d.db || [], tombs)
+    : (d.db && d.db.length ? d.db : localDb);
+  qdprSaveProjAD(pid, mergedDb);
+
+  var localMats = qdprLoadProjMats(pid);
+  var mergedMats = (typeof _mergeArrayStore === 'function')
+    ? _mergeArrayStore(localMats, d.mats || [], tombs, 'id', '__ts', 'mat__')
+    : (d.mats && d.mats.length ? d.mats : localMats);
+  qdprSaveProjMats(pid, mergedMats);
+}
+function _qdprPullAllOwnedProjects() {
+  if (!_sb || !_adminSBUser || !_adminSBUser.id) return Promise.resolve();
+  var list = (window.projects || []).filter(function(p) { return p && p.id; });
+  if (!list.length) return Promise.resolve();
+  return Promise.all(list.map(function(p) {
+    var siteId = _qdprSiteIdFor(p.id);
+    if (!siteId) return Promise.resolve();
+    return _sb.from('cloud_backups')
+      .select('data,updated_at')
+      .eq('admin_id', _adminSBUser.id)
+      .eq('backup_key', siteId)
+      .single()
+      .then(function(r) {
+        if (r.error || !r.data || !r.data.data) return;
+        _qdprMergeCloudIntoProject(p.id, r.data.data);
+      }).catch(function() {});
+  }));
+}
+window._qdprPullAllOwnedProjects = _qdprPullAllOwnedProjects;
 // Project-scoped Daily Report meta (same storage the Report tab's lm()/sm()
 // read and write for the currently-active project — see _pk(META) above).
 // Used to sync QDPR's Site Note + Photos into that project's Report tab.
@@ -14709,7 +14864,7 @@ function autoInitCloud() {
   if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') {
     // Pull from cloud FIRST on every app open — apply if cloud is newer than local
     // This ensures a device always starts with the latest data from any other device
-    _adminCloudPull(true);
+    _adminCloudPull(true, function() { if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader(); });
     // Also pull the project LIST itself (names/ids/addresses), so any
     // project already saved/backed up shows up automatically in the
     // header dropdown and QDPR list on this device/login too.
@@ -14772,6 +14927,25 @@ function _applyFullBackup(d, forceOverwrite) {
       if (_dedicatedKeys[k]) return;
       var v = d.cm_all[k];
       if (v === null || v === undefined) return;
+      // Sales Manager data (buildings → floors → flats) gets a real
+      // nested merge instead of "whole blob, one timestamp wins" — see
+      // _mergeSalesData for why that matters here specifically.
+      // forceOverwrite (explicit "restore from cloud") intentionally
+      // skips this and falls through to the plain overwrite below, same
+      // as every other key, since that action's whole point is to
+      // discard local state.
+      if (k === 'cm_sales' && !forceOverwrite) {
+        try {
+          var _localSales = JSON.parse(safeLS.getItem(_pk(k)) || 'null') || { buildings: [] };
+          var _remoteSales = (typeof v === 'string') ? JSON.parse(v) : v;
+          var _salesTombs = _mergeTombstones(_loadTombstones(), d.tombstones || {});
+          var _mergedSales = _mergeSalesData(_localSales, _remoteSales, _salesTombs);
+          safeLS.setItem(_pk(k), JSON.stringify(_mergedSales));
+          var _rt = _remoteTs[k] || 0;
+          if (_rt) _newTsMap[k] = _rt;
+        } catch (e) {}
+        return;
+      }
       var lt = _localTs[k] || 0;
       var rt = _remoteTs[k] || 0;
       // No timestamp on either side (legacy/never-tracked data): fall back
@@ -14924,6 +15098,59 @@ function _mergeRecordArrays(localArr, remoteArr, tombstones) {
 
 function _mergeMachinery(local, remote, tombstones) {
   return _mergeKeyedStore(local, remote, tombstones, 'id', '__ts', 'mach__');
+}
+
+// ── Sales Manager (Buildings → Floors → Flats) nested merge ────────
+// cm_sales otherwise travels through the generic cm_all bucket, which
+// only compares ONE timestamp for the entire blob — so if the owner adds
+// a building on their phone while a Sales Admin adds a different one on
+// theirs around the same time, whichever push happens to land a moment
+// later completely REPLACES the other device's buildings list, silently
+// discarding a just-added building or resurrecting one that had just been
+// deleted. This merges by id at every level instead, exactly like every
+// other list-shaped store (materials, milestones, punchlist) already
+// does, using the same tombstone store for deletes (bld__/flr__/flt__
+// prefixes) so a genuine delete always wins over a stale copy.
+function _mergeFloors(localFloors, remoteFloors, tombstones) {
+  var byId = {};
+  (localFloors || []).forEach(function(f) { byId[f.id] = { local: f }; });
+  (remoteFloors || []).forEach(function(f) { byId[f.id] = byId[f.id] || {}; byId[f.id].remote = f; });
+  var out = [];
+  Object.keys(byId).forEach(function(id) {
+    var entry = byId[id];
+    var lf = entry.local, rf = entry.remote;
+    var lts = (lf && lf.__ts) || 0, rts = (rf && rf.__ts) || 0;
+    var tomb = tombstones['flr__' + id] || 0;
+    if (tomb && tomb >= Math.max(lts, rts)) return; // deleted, and the delete is the newest thing that happened to it
+    var base = (!lf) ? rf : (!rf) ? lf : (rts > lts ? rf : lf);
+    if (!base) return;
+    var merged = Object.assign({}, base);
+    merged.flats = _mergeArrayStore(lf ? lf.flats : [], rf ? rf.flats : [], tombstones, 'id', 'updatedAt', 'flt__');
+    out.push(merged);
+  });
+  return out;
+}
+function _mergeSalesData(local, remote, tombstones) {
+  local = local || {}; remote = remote || {};
+  var localBuildings = local.buildings || [];
+  var remoteBuildings = remote.buildings || [];
+  var byId = {};
+  localBuildings.forEach(function(b) { byId[b.id] = { local: b }; });
+  remoteBuildings.forEach(function(b) { byId[b.id] = byId[b.id] || {}; byId[b.id].remote = b; });
+  var mergedBuildings = [];
+  Object.keys(byId).forEach(function(id) {
+    var entry = byId[id];
+    var lb = entry.local, rb = entry.remote;
+    var lts = (lb && lb.__ts) || 0, rts = (rb && rb.__ts) || 0;
+    var tomb = tombstones['bld__' + id] || 0;
+    if (tomb && tomb >= Math.max(lts, rts)) return;
+    var base = (!lb) ? rb : (!rb) ? lb : (rts > lts ? rb : lb);
+    if (!base) return;
+    var merged = Object.assign({}, base);
+    merged.floors = _mergeFloors(lb ? lb.floors : [], rb ? rb.floors : [], tombstones);
+    mergedBuildings.push(merged);
+  });
+  return { buildings: mergedBuildings };
 }
 
 // Per-field merge for single-object stores. `localFts`/`remoteFts` are
@@ -15375,12 +15602,13 @@ function _applyCloudData(d, silent, scopeKey) {
 }
 
 var _adminCloudPullInFlight = false;
-function _adminCloudPull(silent) {
-  if (!_sb || !_adminSBUser) return;
+function _adminCloudPull(silent, doneCb) {
+  var _done = function() { if (typeof doneCb === 'function') { try { doneCb(); } catch(e) {} } };
+  if (!_sb || !_adminSBUser) { _done(); return; }
   var siteId = getSiteId();
-  if (!siteId) return;
+  if (!siteId) { _done(); return; }
   // Loading lock — don't stack overlapping pulls for the same project.
-  if (_adminCloudPullInFlight) { _sanjLog('pull skipped (already in flight)'); return; }
+  if (_adminCloudPullInFlight) { _sanjLog('pull skipped (already in flight)'); _done(); return; }
   _adminCloudPullInFlight = true;
   var _epoch = window._projectEpoch;
   var _reqStart = Date.now();
@@ -15398,9 +15626,10 @@ function _adminCloudPull(silent) {
       // write project A's cloud data into project B's local storage.
       if (window._projectEpoch !== _epoch || getSiteId() !== siteId) {
         _sanjLog('pull DISCARDED (stale)', 'reqSite=' + siteId, 'nowSite=' + getSiteId(), 'tookMs=' + (Date.now() - _reqStart));
+        _done();
         return;
       }
-      if (r.error || !r.data || !r.data.data) return;
+      if (r.error || !r.data || !r.data.data) { _done(); return; }
       var remoteTs = r.data.data.lastSync || 0;
       // Apply cloud data if it's strictly newer than what we last applied.
       // On first open _lastCloudTimestamp is 0 so this always pulls on startup.
@@ -15408,7 +15637,8 @@ function _adminCloudPull(silent) {
         _sanjLog('pull applied', 'remoteTs=' + remoteTs, 'tookMs=' + (Date.now() - _reqStart));
         _applyCloudData(r.data.data, !!silent);
       }
-    }).catch(function(e) { _adminCloudPullInFlight = false; });
+      _done();
+    }).catch(function(e) { _adminCloudPullInFlight = false; _done(); });
 }
 
 var _adminRealtimeSiteId = null; // which project's siteId the current channel is scoped to
@@ -15796,8 +16026,9 @@ function _viewerLogout() {
 var _viewerRealtimeChannel = null;  // singleton channel reference
 
 function _viewerLoadData(adminId, projId) {
+  if (typeof window._sanjShowLoader === 'function') window._sanjShowLoader('Loading shared project…');
   if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
-  if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); return; }
+  if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader(); return; }
 
   // sj_viewer_site = the getSiteId() value at the moment viewer was created
   // This matches exactly the backup_key in cloud_backups for that project
@@ -15908,20 +16139,24 @@ function _viewerLoadData(adminId, projId) {
             toast('⚠️ Load error: ' + (r.error.message || r.error.code || 'Check RLS'), 'err');
           }
           _showViewerSyncDot('red');
+          if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
           return;
         }
         if (!r.data || r.data.length === 0) {
           if (!silent) toast('No backup found. Admin needs to click Backup Now first.', 'err');
+          if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
           return;
         }
         applyViewerData(r.data[0].data, !!silent);
         _showViewerSyncDot('green');
+        if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
       }).catch(function(e) {
         if (!silent) {
           console.error('Viewer load catch:', e);
           toast('Data load error: ' + (e.message || 'unknown'), 'err');
         }
         _showViewerSyncDot('red');
+        if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
       });
   }
 
@@ -21428,9 +21663,12 @@ var _ownerTabRenderers = {
           var callBtn = c.phone ? ('<a href="tel:' + _jhtml(c.phone) + '" onclick="event.stopPropagation()" title="Call ' + _jhtml(c.name || 'client') + '" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#10b981;color:#fff;font-size:9.5px;text-decoration:none;flex-shrink:0;margin-left:5px;">📞</a>') : '';
           var title = '<span style="display:inline-flex;align-items:center;">' + _jhtml(c.name || 'Client') + callBtn + '</span>' + (c.isToday ? ' <span style="color:#059669">· Today</span>' : '');
           var meta = (c.phone ? '📞 ' + _jhtml(c.phone) + ' · ' : '') + (c.budget ? '💰 ₹' + _ownerFmt(c.budget) + ' · ' : '')
-            + _jhtml(c.building || '') + (c.flat ? ' — ' + _jhtml(c.flat) : '') + (d ? ' · ' + d : '')
+            + (c.flat ? 'Flat ' + _jhtml(c.flat) : '') + (d ? ' · ' + d : '')
             + (c.note ? '<br>' + _jhtml(c.note) : '');
-          return _ownerRow(title, meta, c.site);
+          // Badge shows the BUILDING (not the project) — a project can
+          // contain several buildings, so a project-name badge didn't
+          // actually tell the owner which building this lead belongs to.
+          return _ownerRow(title, meta, c.building || c.site);
         }).join('') : _ownerEmpty('No interested clients / remarks yet')) + '</div>';
 
     // Grand total across every project — the "complete list" the owner
@@ -22631,7 +22869,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <input id="sales-search-input" type="text" inputmode="search" placeholder="Search by area (sqft) or budget (₹)…" class="fd-input" style="padding-left:30px;padding-right:30px;" oninput="_salesApplySearch(this.value)">
         <button id="sales-search-clear-btn" onclick="_clearSalesSearch()" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.5);font-size:14px;cursor:pointer;padding:2px 4px;">✕</button>
       </div>
-      <p id="sales-search-hint" style="font-size:9px;color:rgba(255,255,255,.4);margin:4px 2px 0;">Type an area (e.g. 1200) or a budget (e.g. 5000000) — matching flats are highlighted, everything else stays hidden.</p>
+      <p id="sales-search-hint" style="font-size:9px;color:rgba(255,255,255,.4);margin:4px 2px 0;">Type an area (e.g. 1200 → matches 1175–1225 sqft) or a budget (e.g. 5000000 → matches ₹47.5L–₹52.5L) — or a name. Matching flats are highlighted, everything else stays hidden.</p>
     </div>
 
     <!-- Summary strip -->
@@ -23189,20 +23427,27 @@ function _clearSalesSearch() {
   if (clearBtn) clearBtn.style.display = 'none';
   renderSalesManager();
 }
-// A flat matches if the query (as digits) is found in its area OR its
-// final price/budget, or as plain text in the flat no. / building /
-// floor name — so one box searches "area-wise or budget-wise" at once.
+// A flat matches if the typed number falls within a tolerance band of its
+// area OR its final price/budget — ±25 sqft for area, ±₹2,50,000 for
+// price — instead of the old "digits appear somewhere in the number"
+// substring check, which gave odd/inaccurate matches (e.g. "500" used to
+// match a price of "45000" just because "500" appears inside it). Plain
+// text still matches the flat no. / building / floor name, case-
+// insensitively, so one box searches by name, area, or budget at once.
+var SALES_SEARCH_AREA_TOLERANCE = 25;
+var SALES_SEARCH_PRICE_TOLERANCE = 250000;
 function _salesFlatMatches(f, b, fl) {
   if (!_salesSearchQuery) return true;
-  var q = _salesSearchQuery.toLowerCase();
-  var qDigits = _salesSearchQuery.replace(/[^\d.]/g, '');
+  var q = _salesSearchQuery.trim();
+  var qLower = q.toLowerCase();
   var area = parseFloat(f.area) || 0;
   var price = _flatFinalPrice(f);
   var text = [f.flatNo || '', b.name || '', fl.label || ''].join(' ').toLowerCase();
-  if (text.indexOf(q) !== -1) return true;
-  if (qDigits) {
-    if (String(Math.round(area)).indexOf(qDigits) !== -1) return true;
-    if (String(Math.round(price)).indexOf(qDigits) !== -1) return true;
+  if (text.indexOf(qLower) !== -1) return true;
+  var qNum = parseFloat(q.replace(/[^\d.]/g, ''));
+  if (!isNaN(qNum) && qNum > 0) {
+    if (area > 0 && Math.abs(area - qNum) <= SALES_SEARCH_AREA_TOLERANCE) return true;
+    if (price > 0 && Math.abs(price - qNum) <= SALES_SEARCH_PRICE_TOLERANCE) return true;
   }
   return false;
 }
@@ -23373,7 +23618,7 @@ function addSalesBuilding() {
   var name = (input.value || '').trim();
   if (!name) { toast('Enter a building name', 'err'); return; }
   var data = lsales();
-  var b = { id: gid(), name: name, floors: [] };
+  var b = { id: gid(), name: name, floors: [], __ts: Date.now() };
   data.buildings.push(b);
   ssales(data);
   _smLogActivity('building_add', name);
@@ -23391,6 +23636,7 @@ function deleteSalesBuilding(buildingId) {
   var _bDel = data.buildings.find(function (b) { return b.id === buildingId; });
   data.buildings = data.buildings.filter(function (b) { return b.id !== buildingId; });
   ssales(data);
+  if (typeof _addTombstone === 'function') _addTombstone('bld__' + buildingId, Date.now());
   _smLogActivity('building_delete', _bDel ? _bDel.name : '');
   renderSalesManager();
   toast('Building deleted', 'ok');
@@ -23415,7 +23661,7 @@ function addSalesFloor(buildingId) {
   var b = data.buildings.find(function (x) { return x.id === buildingId; });
   if (!b) return;
   b.floors = b.floors || [];
-  b.floors.push({ id: gid(), label: label, flats: [] });
+  b.floors.push({ id: gid(), label: label, flats: [], __ts: Date.now() });
   ssales(data);
   _smLogActivity('floor_add', (b.name || 'Building') + ' — ' + label);
   if (input) input.value = '';
@@ -23433,6 +23679,7 @@ function deleteSalesFloor(buildingId, floorId) {
   var _flDel = (b.floors || []).find(function (fl) { return fl.id === floorId; });
   b.floors = (b.floors || []).filter(function (fl) { return fl.id !== floorId; });
   ssales(data);
+  if (typeof _addTombstone === 'function') _addTombstone('flr__' + floorId, Date.now());
   _smLogActivity('floor_delete', (b.name || 'Building') + ' — ' + (_flDel ? _flDel.label : ''));
   renderSalesManager();
   toast('Floor deleted', 'ok');
@@ -23622,6 +23869,7 @@ function deleteSalesFlat() {
   var _flatLabel3 = ctx.f ? ((ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '')) : '';
   ctx.fl.flats = ctx.fl.flats.filter(function (x) { return x.id !== _fdCtx.flatId; });
   ssales(ctx.data);
+  if (typeof _addTombstone === 'function') _addTombstone('flt__' + _fdCtx.flatId, Date.now());
   _smLogActivity('flat_delete', _flatLabel3);
   closeFlatDetail();
   toast('Flat deleted', 'ok');
