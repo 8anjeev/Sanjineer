@@ -7417,8 +7417,12 @@ function idbDel(key, cb) {
 var R2_UPLOAD_URL = 'https://sanjineer-uploads.sanjeev897911s.workers.dev/upload';
 
 function getSupabaseAccessToken(cb, _retried) {
+  // cb is called as cb(token, errMsg). errMsg is only meaningful when
+  // token is null/falsy — it carries the REAL reason auth failed so
+  // callers (and the upload-failure toast) can show something more
+  // useful than a generic "Not signed in".
   try {
-    if (typeof _sb === 'undefined' || !_sb || !_sb.auth) { cb(null); return; }
+    if (typeof _sb === 'undefined' || !_sb || !_sb.auth) { cb(null, 'App not fully loaded yet'); return; }
     _sb.auth.getSession().then(function (res) {
       var session = res && res.data && res.data.session;
       if (session) { cb(session.access_token); return; }
@@ -7441,20 +7445,27 @@ function getSupabaseAccessToken(cb, _retried) {
       // joiners, so uploads succeed regardless of whether the person has
       // gone through the Login/Cloud flow. Read-only joiners are still
       // blocked before this function is ever called.
-      if (typeof window !== 'undefined' && window._ENGINEER_MODE && window._ENGINEER_READONLY) { cb(null); return; }
+      if (typeof window !== 'undefined' && window._ENGINEER_MODE && window._ENGINEER_READONLY) { cb(null, 'Read-only access — uploads are disabled for this role'); return; }
       if (typeof _sb.auth.signInAnonymously === 'function') {
         _sb.auth.signInAnonymously().then(function (res2) {
           var s2 = res2 && res2.data && res2.data.session;
-          cb(s2 ? s2.access_token : null);
-        }).catch(function () { cb(null); });
+          if (s2) { cb(s2.access_token); return; }
+          // This is the important part: surface WHY anonymous sign-in
+          // failed (commonly "Anonymous sign-ins are disabled" if that
+          // provider isn't turned on in Supabase → Authentication →
+          // Sign In / Providers) instead of collapsing every possible
+          // cause into the same generic "Not signed in" message.
+          var errMsg = (res2 && res2.error && res2.error.message) || 'Anonymous sign-in failed';
+          cb(null, errMsg);
+        }).catch(function (e) { cb(null, (e && e.message) || 'Anonymous sign-in failed'); });
         return;
       }
-      cb(null);
-    }).catch(function () {
+      cb(null, 'Not signed in');
+    }).catch(function (e) {
       if (!_retried) { setTimeout(function () { getSupabaseAccessToken(cb, true); }, 900); return; }
-      cb(null);
+      cb(null, (e && e.message) || 'Session check failed');
     });
-  } catch (e) { cb(null); }
+  } catch (e) { cb(null, (e && e.message) || 'Unexpected auth error'); }
 }
 
 // folder groups uploads in the bucket, e.g. 'bills', 'site-photos', 'drawings'
@@ -7467,24 +7478,34 @@ function _isRetryableUploadErr(msg) {
 }
 function uploadFileToR2(fileOrBlob, folder, cb, _retriesLeft) {
   if (_retriesLeft === undefined) _retriesLeft = 2;
-  getSupabaseAccessToken(function (token) {
+  getSupabaseAccessToken(function (token, authErr) {
     if (!token) {
       // Could still be a transient "auth not ready yet" case even after
       // getSupabaseAccessToken's own retry — give the whole upload one
       // more shot before falling back to local-only storage.
       if (_retriesLeft > 0) { setTimeout(function () { uploadFileToR2(fileOrBlob, folder, cb, _retriesLeft - 1); }, 1200); return; }
-      cb(null, 'Not signed in'); return;
+      // Surface the REAL reason (e.g. "Anonymous sign-ins are disabled")
+      // instead of a generic "Not signed in" so the failure is actually
+      // diagnosable from the toast the user sees.
+      cb(null, authErr || 'Not signed in'); return;
     }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) { cb(null, 'You are offline — check your connection'); return; }
     var fd = new FormData();
     fd.append('file', fileOrBlob, fileOrBlob.name || (folder + '.jpg'));
     fd.append('folder', folder || 'misc');
-    fetch(R2_UPLOAD_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd })
+    fetch(R2_UPLOAD_URL, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'apikey': (typeof _SB_ANON !== 'undefined' ? _SB_ANON : '') }, body: fd })
       .then(function (r) {
         return r.json().catch(function () {
-          // Non-JSON response (e.g. a transient 502/504 from the worker
-          // under load) — treat like a dropped connection, not a hard
-          // failure, so it gets retried instead of giving up immediately.
+          // Non-JSON response. If the Worker gave us a definite 4xx (it
+          // rejected the request outright — e.g. bad/unrecognized token),
+          // that's a real answer, not a dropped connection — retrying
+          // won't fix it, so surface the status instead of masking it as
+          // a network blip. Only truly ambiguous responses (5xx / no
+          // status info) get treated like a dropped connection so those
+          // still retry.
+          if (r.status >= 400 && r.status < 500) {
+            throw new Error('Server rejected the upload (HTTP ' + r.status + ') — the login/token was not accepted');
+          }
           throw new Error('Load failed');
         });
       })
@@ -22437,6 +22458,20 @@ function _engLoadMemberships() {
     safeLS.setItem(K.active, list[0].pid);
     [K.token, K.admin, K.pid, K.pname, K.role, K.name].forEach(function(k){ safeLS.removeItem(k); });
   }
+  // Self-heal: Sales Admin join codes are meant to be full read/write on
+  // Sales (see window._enterSalesEngineerMode — "full CRUD on Sales only").
+  // A session joined before the role-normalization fix (or restored from
+  // an older cached copy) can still be sitting on the raw role:'sales'
+  // value instead of 'write', which silently forced it into read-only
+  // mode everywhere role is checked — including file uploads, which then
+  // failed with "Not signed in" (getSupabaseAccessToken refuses to sign
+  // in anonymously for a read-only session). Normalize it here, once,
+  // for every load, so old bad data never has to be manually fixed.
+  var healed = false;
+  list.forEach(function(m) {
+    if (m && m.role === 'sales') { m.role = 'write'; m.salesOnly = true; healed = true; }
+  });
+  if (healed) _engSaveMemberships(list);
   return list;
 }
 // This whole engineer/joined-project module runs inside an IIFE, so plain
@@ -22561,11 +22596,7 @@ window._engineerSwitchTo = function(pid) {
   if (!m) return;
   _engSetActivePid(pid);
   window._ENGINEER_MODE = true;
-  window._ENGINEER_READONLY = (m.role !== 'write');
-  window.currentProjectId = 'eng_' + pid;
-  _applyEngineerUIMode();
-  _prefillEngineerProfile();
-  window._engineerPull(false);
+  window._ENGINEER_READONLY = (m.role !== 'write' && !m.salesOnly);
   if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
   if (m.salesOnly && typeof window._enterSalesEngineerMode === 'function') {
     setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
