@@ -3211,38 +3211,24 @@ function _waitSb(cb) {
   }, 200);
 }
 
-// ── Shared: handle successful OTP verify → check subscription ─
+// ── Shared: handle successful OTP verify → workspace/project selection ─
+// PHASE 2: replaced the old admins-table subscription lookup with the
+// new auth.uid()-based workspace flow (see _wsStart above). The old
+// admins/subscribed/subscription_end_date columns are no longer read
+// here — plan tier now lives on companies.is_personal_workspace /
+// subscriptions.plan_tier via get_my_companies().
 function _handleOtpSuccess(user, email, onDismiss) {
   _adminSBUser = user;
+  window._wsLastUser = user; window._wsLastEmail = email;
   try { localStorage.setItem('sanj_cloud_choice','cloud'); } catch(e) {}
   safeLS.setItem(ADMIN_ROLE_KEY || 'cm_admin_role', 'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY || 'cm_admin_email', email);
   if (!_sb) { onDismiss(); return; }
-  _sb.from('admins').select('*').eq('id', user.id).single().then(function(aRes) {
-    var data = aRes.data || {};
-    var now = Date.now();
-    var endDate = data.subscription_end_date || 0;
-    var isActive = data.subscribed && endDate > now;
-    window._applyPlanFromAdminRow(data);
-    if (isActive) {
-      window._sbSubActive = true;
-      safeLS.setItem('cm_sub_end', String(endDate));
-      onAdminLoginSuccess(email, user, null);
-      onDismiss();
-    } else {
-      window._sbSubActive = false;
-      _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null;
-      onDismiss();
-      setTimeout(function() {
-        if (data.subscribed && endDate <= now) toast('⚠️ Subscription expired — renew to continue', 'err');
-        openPayLanding(true);
-      }, 400);
-    }
-  }).catch(function() {
-    // New user — no admins row yet — send to pay
-    _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null;
+  window._sbSubActive = true;
+  window._sbSubChecked = true;
+  _wsStart(user, email, function() {
     onDismiss();
-    setTimeout(function() { openPayLanding(true); }, 400);
+    if (typeof onAdminLoginSuccess === 'function') onAdminLoginSuccess(email, user, null);
   });
 }
 
@@ -3450,6 +3436,202 @@ function obDoLogin()  { obSendOtp(); }
 function obDoSignup() { obSendOtp(); }
 function doSmartLogin() { cmSendOtp(); }
 function doAdminSignup() { cmSendSignupOtp(); }
+
+// ══════════════════════════════════════════════════════════════
+// PHASE 2 — WORKSPACE / COMPANY / PROJECT SELECTION
+// New schema, auth.uid()-based. Replaces the legacy admins-table
+// subscription check that used to live inside _handleOtpSuccess.
+//
+// Flow: OTP success → get_my_companies() →
+//   0 companies  → Workspace Selection (Free / Pro / Enterprise)
+//   1 company    → auto-select → get_my_projects()
+//   2+ companies → Company Selection list
+// Then: get_my_projects(company_id) →
+//   0 projects   → Create Project (owner only)
+//   1 project    → auto-select → dashboard
+//   2+ projects  → Project Selection list
+//
+// NOTE: this only handles identity/company/project selection.
+// Actually loading business data for the selected company/project
+// into the dashboard is still handled by the legacy sync layer
+// (cloud_backups / _pullLatestCloudBackup etc.) until Phase 4
+// rebuilds sync around company_id/project_id. Persisted here so
+// Phase 4+ can read window._wsCompanyId / window._wsProjectId.
+// ══════════════════════════════════════════════════════════════
+
+var WS_COMPANY_KEY  = 'sanj_company_id';
+var WS_CNAME_KEY     = 'sanj_company_name';
+var WS_CROLE_KEY     = 'sanj_company_role';
+var WS_CPLAN_KEY     = 'sanj_company_plan';
+var WS_PROJECT_KEY  = 'sanj_project_id';
+var WS_PNAME_KEY     = 'sanj_project_name';
+var WS_PROLE_KEY     = 'sanj_project_role';
+
+window._wsCompanyId = null;
+window._wsProjectId = null;
+
+function _wsOverlay() {
+  var el = document.getElementById('ws-overlay');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'ws-overlay';
+  el.style.cssText = 'position:fixed;inset:0;z-index:800000;display:none;align-items:center;justify-content:center;background:rgba(8,8,20,.72);backdrop-filter:blur(6px);padding:16px;box-sizing:border-box;';
+  el.innerHTML =
+    '<div id="ws-panel" style="width:100%;max-width:420px;max-height:86vh;overflow-y:auto;background:linear-gradient(160deg,#1e1b3a,#151330);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5);">' +
+      '<div id="ws-body"></div>' +
+    '</div>';
+  document.body.appendChild(el);
+  return el;
+}
+function _wsShow() { _wsOverlay().style.display = 'flex'; }
+function _wsHide() { var el = document.getElementById('ws-overlay'); if (el) el.style.display = 'none'; }
+function _wsBody(html) { document.getElementById('ws-body').innerHTML = html; }
+
+var _wsBtnStyle   = 'width:100%;padding:13px;margin-bottom:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.4);text-align:left;';
+var _wsCardStyle  = 'width:100%;padding:14px;margin-bottom:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;color:#fff;text-align:left;cursor:pointer;';
+var _wsInputStyle = 'width:100%;padding:11px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:11px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px;';
+var _wsTitleStyle = 'margin:0 0 14px;font-size:16px;font-weight:800;color:#fff;';
+var _wsErrStyle   = 'font-size:12px;color:#fca5a5;margin:8px 0 0;';
+
+function _wsLoading(msg) {
+  _wsBody('<p style="' + _wsTitleStyle + '">' + (msg || 'Loading…') + '</p><div style="height:3px;width:100%;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;"><div style="height:100%;width:40%;background:linear-gradient(90deg,#4f46e5,#7c3aed);animation:_wsBar 1s ease-in-out infinite;"></div></div><style>@keyframes _wsBar{0%{margin-left:-40%}100%{margin-left:100%}}</style>');
+}
+
+// ── Entry point — called from _handleOtpSuccess after a verified OTP ──
+function _wsStart(user, email, onDone) {
+  window._wsOnDone = onDone || function(){};
+  _wsShow();
+  _wsLoading('Setting up your workspace…');
+  _sb.rpc('get_my_companies').then(function(r) {
+    if (r.error) { _wsShowError('Could not load your workspaces', r.error.message); return; }
+    var rows = r.data || [];
+    if (rows.length === 0) { _wsShowCreateWorkspace(); return; }
+    if (rows.length === 1) { _wsSelectCompany(rows[0]); return; }
+    _wsShowCompanyList(rows);
+  }).catch(function(e) { _wsShowError('Could not load your workspaces', e.message); });
+}
+
+function _wsShowError(title, detail) {
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">⚠️ ' + title + '</p>' +
+    '<p style="font-size:12px;color:rgba(255,255,255,.55);margin:0 0 14px;">' + (detail || '') + '</p>' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsRetry()">Retry</button>'
+  );
+}
+function _wsRetry() { if (window._wsLastUser) _wsStart(window._wsLastUser, window._wsLastEmail, window._wsOnDone); }
+
+// ── No workspace yet — offer Free/Pro personal or Enterprise company ──
+function _wsShowCreateWorkspace() {
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">Welcome! Set up your workspace</p>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsCreatePersonal(\'free\')"><b>🆓 Free — Personal</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Single user, one project</span></button>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsCreatePersonal(\'pro\')"><b>⭐ Pro — Personal</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Single user, multiple projects · ₹30/mo</span></button>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsShowEnterpriseForm()"><b>🏢 Enterprise — Company</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Team collaboration, roles & permissions · ₹99/mo</span></button>' +
+    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
+  );
+}
+function _wsShowEnterpriseForm() {
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">Company name</p>' +
+    '<input id="ws-company-name" type="text" placeholder="e.g. Sanjineer Constructions" style="' + _wsInputStyle + '">' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateEnterprise()">Create Company</button>' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Back</button>' +
+    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
+  );
+}
+function _wsCreatePersonal(tier) {
+  _wsLoading('Creating your workspace…');
+  _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: tier }).then(function(r) {
+    if (r.error) { _wsShowCreateWorkspace(); _wsSetErr(r.error.message); return; }
+    _wsSelectCompany({ company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier });
+  }).catch(function(e) { _wsShowCreateWorkspace(); _wsSetErr(e.message); });
+}
+function _wsCreateEnterprise() {
+  var name = ((document.getElementById('ws-company-name') || {}).value || '').trim();
+  if (!name) { _wsSetErr('⚠️ Enter a company name'); return; }
+  _wsLoading('Creating your company…');
+  _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
+    if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
+    _wsSelectCompany({ company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
+  }).catch(function(e) { _wsShowEnterpriseForm(); _wsSetErr(e.message); });
+}
+function _wsSetErr(msg) { var e = document.getElementById('ws-err'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
+
+// ── Multiple workspaces — let the user pick ──
+function _wsShowCompanyList(rows) {
+  var html = '<p style="' + _wsTitleStyle + '">Choose a workspace</p>';
+  rows.forEach(function(c, i) {
+    var tag = c.is_personal_workspace ? '👤 Personal' : '🏢 ' + (c.plan_tier || '');
+    html += '<button style="' + _wsCardStyle + '" onclick="_wsSelectCompanyByIdx(' + i + ')"><b>' + _wsEsc(c.company_name) + '</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">' + tag + ' · ' + (c.role_name || '') + '</span></button>';
+  });
+  html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">+ Create another workspace</button>';
+  window._wsCompanyRows = rows;
+  _wsBody(html);
+}
+function _wsSelectCompanyByIdx(i) { _wsSelectCompany(window._wsCompanyRows[i]); }
+
+function _wsEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+// ── Company chosen — persist + load its projects ──
+function _wsSelectCompany(c) {
+  window._wsCompanyId = c.company_id;
+  safeLS.setItem(WS_COMPANY_KEY, c.company_id);
+  safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
+  safeLS.setItem(WS_CROLE_KEY, c.role_name || 'owner');
+  safeLS.setItem(WS_CPLAN_KEY, c.plan_tier || '');
+  _wsLoading('Loading projects…');
+  _sb.rpc('get_my_projects', { p_company_id: c.company_id }).then(function(r) {
+    if (r.error) { _wsShowError('Could not load projects', r.error.message); return; }
+    var rows = r.data || [];
+    if (rows.length === 0) { _wsShowCreateProject(); return; }
+    if (rows.length === 1) { _wsSelectProject(rows[0]); return; }
+    _wsShowProjectList(rows);
+  }).catch(function(e) { _wsShowError('Could not load projects', e.message); });
+}
+
+// ── No projects yet — create the first one ──
+function _wsShowCreateProject() {
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">Create your first project</p>' +
+    '<input id="ws-proj-name" type="text" placeholder="Project name" style="' + _wsInputStyle + '">' +
+    '<input id="ws-proj-address" type="text" placeholder="Site address (optional)" style="' + _wsInputStyle + '">' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateProject()">Create Project</button>' +
+    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
+  );
+}
+function _wsCreateProject() {
+  var name = ((document.getElementById('ws-proj-name') || {}).value || '').trim();
+  var addr = ((document.getElementById('ws-proj-address') || {}).value || '').trim();
+  if (!name) { _wsSetErr('⚠️ Enter a project name'); return; }
+  _wsLoading('Creating project…');
+  _sb.rpc('create_project', { p_company_id: window._wsCompanyId, p_name: name, p_code: null, p_address: addr || null, p_start_date: null, p_end_date: null }).then(function(r) {
+    if (r.error) { _wsShowCreateProject(); _wsSetErr(r.error.message); return; }
+    _wsSelectProject({ project_id: r.data, project_name: name, role_name: safeLS.getItem(WS_CROLE_KEY) || 'owner' });
+  }).catch(function(e) { _wsShowCreateProject(); _wsSetErr(e.message); });
+}
+
+// ── Multiple projects — let the user pick ──
+function _wsShowProjectList(rows) {
+  var html = '<p style="' + _wsTitleStyle + '">Choose a project</p>';
+  rows.forEach(function(p, i) {
+    html += '<button style="' + _wsCardStyle + '" onclick="_wsSelectProjectByIdx(' + i + ')"><b>' + _wsEsc(p.project_name) + '</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">' + (p.role_name || '') + '</span></button>';
+  });
+  html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateProject()">+ New project</button>';
+  window._wsProjectRows = rows;
+  _wsBody(html);
+}
+function _wsSelectProjectByIdx(i) { _wsSelectProject(window._wsProjectRows[i]); }
+
+// ── Project chosen — persist, dismiss overlay, hand back to caller ──
+function _wsSelectProject(p) {
+  window._wsProjectId = p.project_id;
+  safeLS.setItem(WS_PROJECT_KEY, p.project_id);
+  safeLS.setItem(WS_PNAME_KEY, p.project_name || '');
+  safeLS.setItem(WS_PROLE_KEY, p.role_name || '');
+  _wsHide();
+  toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
+  if (typeof window._wsOnDone === 'function') window._wsOnDone();
+}
 
 </script>
 
@@ -22789,45 +22971,53 @@ window.doJoinProject = function() {
       if (errEl) { errEl.textContent = '📧 Verify your email below to finish joining — this is required so your uploads actually reach the cloud.'; errEl.style.display = 'block'; }
       return;
     }
-    var deviceToken = _genDeviceToken();
-    _sb.rpc('redeem_join_code', { p_code: code, p_member_name: memberName, p_device_token: deviceToken })
+    // PHASE 2: single-arg redeem_join_code — auth.uid()-based, writes to
+    // join_codes/memberships/project_team_members (not the legacy
+    // device-token project_members table). Returns the project_id the
+    // code was scoped to, or null for a company-level (no-project) code.
+    _sb.rpc('redeem_join_code', { p_code: code })
       .then(function(r) {
         if (r.error) throw r.error;
-        var row = (r.data && r.data[0]) ? r.data[0] : null;
-        if (!row) throw new Error('Invalid or inactive code');
-
-        var list = _engLoadMemberships();
-        var idx = list.findIndex(function(m){ return m.pid === row.project_id; });
-        var membership = {
-          pid: row.project_id,
-          pname: row.project_name || 'Project',
-          // A 'sales' role code is a dedicated Sales Admin join — full CRUD on
-          // Sales only, rest of the app hidden. Everyone else gets normal
-          // read/write engineer access (with limited/view-only Sales rights).
-          role: (row.role === 'sales') ? 'write' : (row.role || 'write'),
-          salesOnly: row.role === 'sales',
-          token: deviceToken,
-          admin_id: row.admin_id,
-          name: memberName,
-          // The authenticated Supabase user id behind this membership — used
-          // server-side (RLS) to confirm uploads/writes come from someone
-          // who actually holds this membership, never from an anonymous or
-          // purely local identity.
-          user_id: session.user.id
-        };
-        var alreadyJoined = idx >= 0;
-        if (alreadyJoined) list[idx] = membership; else list.push(membership);
-        _engSaveMemberships(list);
-        _engSetActivePid(row.project_id);
+        var projectId = r.data || null;
         try { localStorage.setItem('sanj_cloud_choice', 'joined'); } catch(e) {}
 
         if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
         if (codeEl) codeEl.value = '';
         var gate = document.getElementById('join-otp-gate'); if (gate) gate.style.display = 'none';
         if (typeof closeAuthModal === 'function') closeAuthModal();
-        if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
-        toast((alreadyJoined ? '✅ Re-joined "' : '✅ Joined "') + (row.project_name||'Project') + '"', 'ok');
-        _engineerStart(row.project_id);
+
+        if (!projectId) {
+          // Company-level join — route through workspace/project selection
+          // so they can pick or create a project within the company.
+          toast('✅ Joined company — choose a project', 'ok');
+          _wsStart(session.user, session.user.email || '', function() {
+            if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+          });
+          return;
+        }
+
+        // Project-level join — go straight in. Company id isn't returned by
+        // this RPC, so fetch it via get_my_companies so window._wsCompanyId
+        // stays correct for Phase 4 sync.
+        _sb.rpc('get_my_companies').then(function(cr) {
+          var companies = (cr && cr.data) || [];
+          if (companies.length) {
+            var c = companies[0];
+            window._wsCompanyId = c.company_id;
+            safeLS.setItem(WS_COMPANY_KEY, c.company_id);
+            safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
+            safeLS.setItem(WS_CROLE_KEY, c.role_name || '');
+          }
+          window._wsProjectId = projectId;
+          safeLS.setItem(WS_PROJECT_KEY, projectId);
+          if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+          toast('✅ Joined project', 'ok');
+        }).catch(function() {
+          window._wsProjectId = projectId;
+          safeLS.setItem(WS_PROJECT_KEY, projectId);
+          if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+          toast('✅ Joined project', 'ok');
+        });
       }).catch(function(e) {
         if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
         if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
