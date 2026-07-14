@@ -1252,6 +1252,186 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     safeLS && safeLS.removeItem('cm_admin_email');
   }
 
+  // ── SanjCloud: dual-write bridge from local ins()/upd()/del() to the
+  // new normalized Supabase schema ─────────────────────────────────────
+  // Scope of this pass: mirrors admin-owned writes only. Viewers don't
+  // have a real Supabase Auth session yet (see the Phase 2 notes — that
+  // needs the OTP login rewrite), so mirror calls silently no-op for them
+  // until that's wired up; nothing breaks, they just don't sync yet.
+  // Reads are UNCHANGED — the UI still renders from local AD/localStorage
+  // exactly as before. This only gets data flowing INTO the new schema so
+  // it can be verified before anything switches to reading from it.
+  window.SanjCloud = (function() {
+    var TYPE_MAP = {
+      worker: { table: 'labour_entries', map: function(o) {
+        return { worker_name: o.name, category: o.category, team_name: o.team_name,
+          hourly_wage: o.hourly_wage, ot_rate: o.ot_rate, is_staff: !!o.is_staff,
+          monthly_salary: o.monthly_salary };
+      }},
+      attendance: { table: 'attendance_entries', map: function(o) {
+        // worker_id intentionally left unresolved here — matching by name
+        // reliably needs a lookup against labour_entries, and this bridge
+        // is meant to be a thin, low-risk mirror. name/category travel in
+        // `details` so nothing is lost; linking worker_id is a follow-up.
+        return { work_date: o.date, hours: o.hours, ot_hours: o.ot_hours, ot_rate: o.ot_rate,
+          hourly_wage: o.hourly_wage, advance: o.advance || 0, payment: o.payment || 0,
+          status: o.status || 'P', work_done: o.work_done,
+          details: { name: o.name, category: o.category } };
+      }},
+      material: { table: 'expenses_entries', map: function(o) {
+        return { description: o.material_name, quantity: o.quantity, cost: o.cost,
+          work_date: o.date, supplier: o.supplier, is_petty_cash: !!o.is_petty_cash,
+          source_module: 'material', details: o };
+      }},
+      rental: { table: 'rentals_entries', map: function(o) {
+        return { rental_name: o.rental_name, client_name: o.client_name, quantity: o.qty,
+          rate: o.rate, transaction_date: o.borrowed_date, is_given: !!o.is_given,
+          bill_id: o.bill_id || null };
+      }},
+      purchase: { table: 'materials_entries', map: function(o) {
+        return { material_name: o.material || o.item_name || null, category: o.category,
+          unit: o.unit, quantity: o.qty, cost: o.cost, supplier: o.supplier,
+          work_date: o.date, details: o };
+      }}
+      // Everything else (tool, tool_assign, contractor, contractor_payment,
+      // qdpr_entry, use, ...) falls through to the unmapped_entries safety
+      // net below — flagged for a follow-up pass once field shapes are
+      // confirmed against the client. Nothing is silently dropped.
+    };
+
+    var ctx = { companyId: null, projectId: null, legacyProjectId: null, ready: false, inFlight: false };
+
+    function log() {
+      if (window._SANJ_SYNC_DEBUG) { try { console.log.apply(console, ['[SanjCloud]'].concat(Array.prototype.slice.call(arguments))); } catch(e) {} }
+    }
+
+    function isSignedIn() {
+      return typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id
+        && typeof _sb !== 'undefined' && _sb;
+    }
+
+    // Resolve (and lazily create) the company_id/project_id this browser's
+    // current local project maps to. Cached in localStorage per legacy
+    // project id so this only runs once per project per device.
+    function ensureContext(cb) {
+      if (!isSignedIn() || !window.currentProjectId) { cb(null); return; }
+      if (ctx.ready && ctx.legacyProjectId === window.currentProjectId) { cb(ctx); return; }
+      if (ctx.inFlight) { setTimeout(function(){ ensureContext(cb); }, 300); return; }
+      ctx.inFlight = true;
+
+      var mapKey = 'sanj_sb_project_map';
+      var map = {};
+      try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+      var legacyPid = window.currentProjectId;
+      var cached = map[legacyPid];
+
+      if (cached && cached.companyId && cached.projectId) {
+        ctx = { companyId: cached.companyId, projectId: cached.projectId, legacyProjectId: legacyPid, ready: true, inFlight: false };
+        cb(ctx);
+        return;
+      }
+
+      // No mapping yet for this legacy project — resolve/create a company,
+      // then create a matching cloud project, then cache the mapping.
+      _sb.rpc('get_my_companies').then(function(r) {
+        var companyId = null;
+        if (!r.error && r.data && r.data.length) {
+          var enterprise = r.data.find(function(c){ return !c.is_personal_workspace; });
+          companyId = (window.isEnterpriseUser && enterprise) ? enterprise.company_id : r.data[0].company_id;
+        }
+        var afterCompany = function(companyId) {
+          if (!companyId) { ctx.inFlight = false; cb(null); return; }
+          var projName = 'Project';
+          try {
+            var p = (window.projects || []).find(function(pp){ return pp.id === legacyPid; });
+            if (p && p.name) projName = p.name;
+          } catch(e) {}
+          _sb.rpc('create_project', { p_company_id: companyId, p_name: projName }).then(function(pr) {
+            ctx.inFlight = false;
+            if (pr.error || !pr.data) { log('create_project failed', pr.error); cb(null); return; }
+            var newMap = {}; try { newMap = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+            newMap[legacyPid] = { companyId: companyId, projectId: pr.data };
+            try { localStorage.setItem(mapKey, JSON.stringify(newMap)); } catch(e) {}
+            ctx = { companyId: companyId, projectId: pr.data, legacyProjectId: legacyPid, ready: true, inFlight: false };
+            cb(ctx);
+          }).catch(function(e){ ctx.inFlight = false; log('create_project error', e); cb(null); });
+        };
+        if (companyId) { afterCompany(companyId); return; }
+        var bootstrapPlan = window.isEnterpriseUser ? null : (window.isProUser ? 'pro' : 'free');
+        var bootstrapCall = bootstrapPlan
+          ? _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: bootstrapPlan })
+          : _sb.rpc('create_enterprise_company', { p_company_name: (window._companyName || 'My Company') });
+        bootstrapCall.then(function(br) {
+          if (br.error || !br.data) { ctx.inFlight = false; log('company bootstrap failed', br.error); cb(null); return; }
+          afterCompany(br.data);
+        }).catch(function(e){ ctx.inFlight = false; log('company bootstrap error', e); cb(null); });
+      }).catch(function(e){ ctx.inFlight = false; log('get_my_companies error', e); cb(null); });
+    }
+
+    // Simple localStorage-backed retry queue for failed pushes (offline, or
+    // transient network errors). Flushed on reconnect and on a timer.
+    var QUEUE_KEY = 'sanj_cloud_mirror_queue';
+    function queuePush(op) {
+      var q = []; try { q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e) {}
+      q.push(op);
+      if (q.length > 500) q = q.slice(q.length - 500); // hard cap, don't grow unbounded
+      try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch(e) {}
+    }
+    function flushQueue() {
+      if (!isSignedIn()) return;
+      var q = []; try { q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e) {}
+      if (!q.length) return;
+      try { localStorage.setItem(QUEUE_KEY, '[]'); } catch(e) {}
+      q.forEach(function(op) {
+        if (op.kind === 'upsert') doUpsert(op.record, true);
+        else if (op.kind === 'delete') doDelete(op.record, op.id, true);
+      });
+    }
+    window.addEventListener('online', flushQueue);
+    setInterval(flushQueue, 60000);
+
+    function resolveMapping(record) {
+      var entry = TYPE_MAP[record && record.type];
+      if (entry) return entry;
+      return { table: 'unmapped_entries', map: function(o) { return { record_type: (o && o.type) || 'unknown', payload: o }; } };
+    }
+
+    function doUpsert(record, isRetry) {
+      ensureContext(function(c) {
+        if (!c) { if (!isRetry) queuePush({ kind: 'upsert', record: record }); return; }
+        var entry = resolveMapping(record);
+        var row = entry.map(record);
+        row.company_id = c.companyId;
+        row.project_id = c.projectId;
+        row.local_id = record.__id;
+        row.created_by = row.created_by || _adminSBUser.id;
+        row.updated_by = _adminSBUser.id;
+        _sb.from(entry.table).upsert(row, { onConflict: 'project_id,local_id' }).then(function(res) {
+          if (res.error) { log('upsert failed', entry.table, res.error); if (!isRetry) queuePush({ kind: 'upsert', record: record }); }
+          else { log('upserted', entry.table, record.__id); }
+        }).catch(function(e) { log('upsert error', e); if (!isRetry) queuePush({ kind: 'upsert', record: record }); });
+      });
+    }
+
+    function doDelete(record, id, isRetry) {
+      ensureContext(function(c) {
+        if (!c) { if (!isRetry) queuePush({ kind: 'delete', record: record, id: id }); return; }
+        var entry = resolveMapping(record || { type: null });
+        _sb.from(entry.table).delete().eq('project_id', c.projectId).eq('local_id', id).then(function(res) {
+          if (res.error) { log('delete failed', entry.table, res.error); if (!isRetry) queuePush({ kind: 'delete', record: record, id: id }); }
+          else { log('deleted', entry.table, id); }
+        }).catch(function(e) { log('delete error', e); if (!isRetry) queuePush({ kind: 'delete', record: record, id: id }); });
+      });
+    }
+
+    return {
+      mirrorUpsert: function(record) { if (isSignedIn()) doUpsert(record, false); },
+      mirrorDelete: function(record, id) { if (isSignedIn()) doDelete(record, id, false); },
+      flushQueue: flushQueue,
+      _ctx: function() { return ctx; } // debugging helper — call window.SanjCloud._ctx() in console
+    };
+  })();
+
   // ── SHA-256 password hash (for viewer passwords) ────────────────
   async function _hashPwd(pwd) {
     var enc = new TextEncoder().encode(pwd);
@@ -7032,6 +7212,25 @@ service cloud.firestore {
           <input id="join-code-input" type="text" inputmode="text" maxlength="8" placeholder="e.g. 7K4QXP" autocomplete="off" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1.5px solid rgba(110,231,183,.4);border-radius:11px;color:#fff;font-size:20px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8)">
           <button onclick="doJoinProject()" id="join-code-btn" style="width:100%;padding:.55rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:10px;font-weight:800;font-size:.95rem;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.35);">&#129309; Join Project</button>
           <p id="join-code-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.35rem;display:none;"></p>
+          <!-- Shown only if the person doesn't already have a verified Supabase
+               session. Joining a project must never proceed on a purely local
+               name+device-token identity — without a real signed-in session,
+               photo/bill/drawing uploads have nothing valid to authenticate
+               with and silently stay device-only forever. -->
+          <div id="join-otp-gate" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(110,231,183,.2);">
+            <p style="font-size:10px;color:#a7f3d0;margin:0 0 6px;font-weight:700;">🔒 Verify your email to finish joining</p>
+            <p style="font-size:9px;color:#6ee7b7;margin:0 0 8px;opacity:.85;">Required so your photos, bills, and reports actually reach the cloud instead of staying stuck on this device.</p>
+            <div id="join-otp-step1">
+              <input id="join-otp-email" type="email" class="auth-input" placeholder="your@email.com" autocomplete="email" style="margin-bottom:6px;">
+              <button onclick="joinSendOtp()" id="join-otp-send-btn" style="width:100%;padding:.55rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:.9rem;cursor:pointer;">📧 Send OTP</button>
+            </div>
+            <div id="join-otp-step2" style="display:none;">
+              <p id="join-otp-sent-msg" style="font-size:10px;color:#6ee7b7;margin:0 0 8px;text-align:center;font-weight:600;"></p>
+              <input id="join-otp-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="6-digit OTP" autocomplete="one-time-code" class="auth-input" style="text-align:center;letter-spacing:.2em;font-size:18px;margin-bottom:6px;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);">
+              <button onclick="joinVerifyOtp()" id="join-otp-verify-btn" style="width:100%;padding:.55rem;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:10px;font-weight:800;font-size:.9rem;cursor:pointer;">✅ Verify &amp; Join</button>
+            </div>
+            <p id="join-otp-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.35rem;display:none;"></p>
+          </div>
         </div>
         <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.55rem .75rem;">
           <p style="font-size:9px;font-weight:700;color:#34d399;margin-bottom:.4rem;">&#8505;&#65039; About Joining</p>
@@ -7432,35 +7631,19 @@ function getSupabaseAccessToken(cb, _retried) {
       // signed in" state. Give it one short beat to finish and check
       // again before falling back to anonymous auth.
       if (!_retried) { setTimeout(function () { getSupabaseAccessToken(cb, true); }, 900); return; }
-      // Still no session on the retry. Previously this only signed in
-      // anonymously for joined engineers/Sales Admins (who carry a local
-      // join token instead of a real account), so every owner/admin who
-      // simply hadn't gone through Login/Cloud got "Not signed in" on
-      // every photo/bill/drawing upload and silently fell back to a
-      // device-only copy that never reached the cloud — which is exactly
-      // what showed up as "upload failing, asking to log in". Cloud
-      // backup of files shouldn't require an explicit account: sign in
-      // anonymously here for anyone (owner or joined engineer) who isn't
-      // already signed in, same as we already did for write-permission
-      // joiners, so uploads succeed regardless of whether the person has
-      // gone through the Login/Cloud flow. Read-only joiners are still
-      // blocked before this function is ever called.
+      // Still no session on the retry. This app never uses anonymous
+      // auth for uploads — every user (owner, admin, or joined engineer)
+      // must hold a real, verified Supabase session before a file reaches
+      // the cloud, so RLS can actually confirm who is writing what.
+      // Joined engineers get their session during Join Project (see
+      // joinSendOtp/joinVerifyOtp); owners/admins get theirs via
+      // Login/Cloud. If we land here there simply isn't one yet — surface
+      // a clear, actionable message instead of silently minting an
+      // anonymous identity or showing a generic "Not signed in".
       if (typeof window !== 'undefined' && window._ENGINEER_MODE && window._ENGINEER_READONLY) { cb(null, 'Read-only access — uploads are disabled for this role'); return; }
-      if (typeof _sb.auth.signInAnonymously === 'function') {
-        _sb.auth.signInAnonymously().then(function (res2) {
-          var s2 = res2 && res2.data && res2.data.session;
-          if (s2) { cb(s2.access_token); return; }
-          // This is the important part: surface WHY anonymous sign-in
-          // failed (commonly "Anonymous sign-ins are disabled" if that
-          // provider isn't turned on in Supabase → Authentication →
-          // Sign In / Providers) instead of collapsing every possible
-          // cause into the same generic "Not signed in" message.
-          var errMsg = (res2 && res2.error && res2.error.message) || 'Anonymous sign-in failed';
-          cb(null, errMsg);
-        }).catch(function (e) { cb(null, (e && e.message) || 'Anonymous sign-in failed'); });
-        return;
-      }
-      cb(null, 'Not signed in');
+      cb(null, typeof window !== 'undefined' && window._ENGINEER_MODE
+        ? 'Verify your email under Join Project to enable cloud uploads'
+        : 'Sign in under Login / Cloud to enable cloud uploads');
     }).catch(function (e) {
       if (!_retried) { setTimeout(function () { getSupabaseAccessToken(cb, true); }, 900); return; }
       cb(null, (e && e.message) || 'Session check failed');
@@ -7704,17 +7887,24 @@ function gid() {
 function ins(o) {
   var r = JSON.parse(JSON.stringify(o));
   r.__id = gid(); r.__ts = Date.now();
-  AD.push(r); sd(AD); return r;
+  AD.push(r); sd(AD);
+  try { window.SanjCloud && window.SanjCloud.mirrorUpsert(r); } catch(e) {}
+  return r;
 }
 function upd(id, o) {
   var i = AD.findIndex(function(d){ return d.__id === id; });
-  if (i >= 0) { Object.keys(o).forEach(function(k){ AD[i][k] = o[k]; }); AD[i].__ts = Date.now(); sd(AD); }
+  if (i >= 0) {
+    Object.keys(o).forEach(function(k){ AD[i][k] = o[k]; }); AD[i].__ts = Date.now(); sd(AD);
+    try { window.SanjCloud && window.SanjCloud.mirrorUpsert(AD[i]); } catch(e) {}
+  }
   return AD[i];
 }
 function del(id) {
   // Record tombstone BEFORE removing — so other devices know this was intentionally deleted
   _addTombstone(id, Date.now());
+  var rec = AD.find(function(d){ return d.__id === id; }); // capture before filtering — mirrorDelete needs .type to know which table
   AD = AD.filter(function(d){ return d.__id !== id; }); sd(AD);
+  try { window.SanjCloud && window.SanjCloud.mirrorDelete(rec, id); } catch(e) {}
 }
 
 // ============================================================
@@ -16119,9 +16309,10 @@ function _fetchViewerByToken(token, silent) {
   }
   function doFetch() {
     if (!_sb) { setTimeout(doFetch, 300); return; }
-    _sb.from('viewers').select('*').eq('password_hash', token).single().then(function(r) {
+    _sb.rpc('check_viewer_token', { p_token: token }).then(function(r) {
       var bar = document.getElementById('viewer-loading-bar');
       if (bar) bar.remove();
+      if (!r.error && r.data) { r.data = r.data[0] || null; }
       if (r.error || !r.data) {
         if (!silent) {
           document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a;font-family:sans-serif;flex-direction:column;gap:12px"><p style="font-size:24px">🔒</p><p style="color:#fca5a5;font-weight:700;font-size:16px">Link expired or revoked</p><p style="color:#64748b;font-size:13px">Contact the admin for a new link</p></div>';
@@ -16654,10 +16845,9 @@ function doSmartLogin() {
 
   btn.textContent = '⏳ Logging in…'; btn.disabled = true;
 
-  // First try viewer login (hashed password lookup in viewers table)
-  _hashPwd(pass).then(function(hash) {
-    return _sb.from('viewers').select('*').eq('email', email.toLowerCase()).eq('password_hash', hash).single();
-  }).then(function(vRes) {
+  // First try viewer login (server-side credential check via RPC)
+  _sb.rpc('check_viewer_credentials', { p_email: email.toLowerCase(), p_password: pass }).then(function(vRes) {
+    if (!vRes.error && vRes.data) { vRes.data = vRes.data[0] || null; }
     if (!vRes.error && vRes.data) {
       // ── VIEWER LOGIN ──
       var vData = vRes.data;
@@ -17113,15 +17303,14 @@ function generateViewerLink() {
     id: _adminSBUser.id,
     email: _adminSBUser.email || safeLS.getItem(ADMIN_EMAIL_KEY) || ''
   }, { onConflict: 'id' })).then(function() {
-    return _sb.from('viewers').insert({
-      admin_id:      _adminSBUser.id,
-      email:         slug,
-      password_hash: token,
-      permissions:   perms,
-      can_print:     canPrint,
-      site_id:       siteId,
-      project_id:    _activePid,
-      project_name:  _activePname || null
+    return _sb.rpc('create_viewer', {
+      p_email:         slug,
+      p_password_hash: token,
+      p_permissions:   perms,
+      p_can_print:     canPrint,
+      p_site_id:       siteId,
+      p_project_id:    _activePid,
+      p_project_name:  _activePname || null
     });
   }).then(function(r) {
     if (r.error) throw r.error;
@@ -17165,7 +17354,7 @@ function loadViewerAccountsInline() {
   if (!listEl) return;
   if (!_sb || !_adminSBUser) { setTimeout(loadViewerAccountsInline, 600); return; }
   listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
-  _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+  _sb.rpc('list_my_viewers').then(function(r) {
     var list = r.data || [];
     if (!list.length) {
       listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
@@ -17241,11 +17430,10 @@ function saveInlineViewerPerms(idx, rowId) {
   if(!_sb||!_adminSBUser){toast('Not logged in','err');return;}
   if(!_adminSBUser.id){toast('Session expired — please login again','err');return;}
   if(!rowId){toast('Cannot identify viewer row','err');return;}
-  // Always update by email + admin_id (safest — avoids UUID issues)
-  _sb.from('viewers')
-    .update({permissions: newPerms, can_print: canPrint})
-    .eq('admin_id', _adminSBUser.id)
-    .eq('email', rowId)
+  // Always update by email (safest — avoids UUID issues); server scopes to auth.uid()
+  _sb.rpc('update_viewer_permissions', {
+    p_viewer_id: null, p_email: rowId, p_permissions: newPerms, p_can_print: canPrint
+  })
     .then(function(r){
       if(r.error){toast('Save failed: '+r.error.message,'err');return;}
       toast('✅ Permissions saved!','ok');
@@ -17261,7 +17449,7 @@ function loadViewerAccounts() {
     listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Please login as admin first</p>';
     return;
   }
-  _sb.from('viewers').select('*').eq('admin_id', _adminSBUser.id).then(function(r) {
+  _sb.rpc('list_my_viewers').then(function(r) {
     if (r.error) { listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Load failed: '+r.error.message+'</p>'; return; }
     if (!r.data || !r.data.length) {
       listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
@@ -17352,8 +17540,9 @@ function saveViewerPerms(idx, rowId) {
   });
   var canPrint = document.getElementById('vedit-print-'+idx) ? document.getElementById('vedit-print-'+idx).checked : false;
   if (!_sb || !_adminSBUser) { toast('Not logged in','err'); return; }
-  _sb.from('viewers').update({ permissions: newPerms, can_print: canPrint })
-    .eq('id', rowId).eq('admin_id', _adminSBUser.id)
+  _sb.rpc('update_viewer_permissions', {
+    p_viewer_id: rowId, p_email: null, p_permissions: newPerms, p_can_print: canPrint
+  })
     .then(function(r) {
       if (r.error) { toast('Save failed: ' + r.error.message, 'err'); return; }
       toast('✅ Permissions updated!', 'ok');
@@ -17377,14 +17566,12 @@ function _copyViewerToken(token) {
 function deleteViewerAccount(rowId, idx) {
   if (!confirm('Delete this viewer account?')) return;
   if (!_sb || !_adminSBUser) { toast('Not logged in', 'err'); return; }
-  var delQuery = _sb.from('viewers').delete();
-  // If rowId is a UUID (36 chars with dashes), use id; otherwise use email
-  if (rowId && rowId.length === 36 && rowId.split('-').length === 5) {
-    delQuery = delQuery.eq('id', rowId);
-  } else {
-    delQuery = delQuery.eq('email', rowId);
-  }
-  delQuery.eq('admin_id', _adminSBUser.id)
+  // If rowId is a UUID (36 chars with dashes), delete by id; otherwise by email
+  var isUuid = rowId && rowId.length === 36 && rowId.split('-').length === 5;
+  var delPromise = isUuid
+    ? _sb.rpc('revoke_viewer', { p_viewer_id: rowId })
+    : _sb.rpc('revoke_viewer_by_email', { p_email: rowId });
+  delPromise
     .then(function(r) {
       if (r.error) { toast('Delete failed: ' + r.error.message, 'err'); return; }
       toast('Viewer account deleted', 'ok');
@@ -17436,9 +17623,8 @@ function doViewerLoginInline() {
   }
   if (!_sb) { if (errEl) { errEl.textContent='⚠️ App load ho raha hai, reload karo'; errEl.style.display='block'; } return; }
   btn.textContent='⏳ Logging in…'; btn.disabled=true;
-  _hashPwd(pass).then(function(hash) {
-    return _sb.from('viewers').select('*').eq('email', email.toLowerCase()).eq('password_hash', hash).single();
-  }).then(function(r) {
+  _sb.rpc('check_viewer_credentials', { p_email: email.toLowerCase(), p_password: pass }).then(function(r) {
+    if (!r.error && r.data) { r.data = r.data[0] || null; }
     if (r.error || !r.data) { throw new Error('Galat email ya password'); }
     var data = r.data;
     var adminId = data.admin_id || data.site_id || '';
@@ -17473,9 +17659,8 @@ function doViewerLogin() {
   if (!email || !pass) { errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; return; }
   if (!_sb) { errEl.textContent='⚠️ App load ho raha hai, reload karo'; errEl.style.display='block'; return; }
   btn.textContent='⏳ Logging in…'; btn.disabled=true;
-  _hashPwd(pass).then(function(hash) {
-    return _sb.from('viewers').select('*').eq('email', email.toLowerCase()).eq('password_hash', hash).single();
-  }).then(function(r) {
+  _sb.rpc('check_viewer_credentials', { p_email: email.toLowerCase(), p_password: pass }).then(function(r) {
+    if (!r.error && r.data) { r.data = r.data[0] || null; }
     if (r.error || !r.data) { throw new Error('Galat email ya password'); }
     var data = r.data;
     var adminId = data.admin_id || data.site_id || '';
@@ -22502,6 +22687,15 @@ function _engActiveMembership() {
 // read the active membership without duplicating the storage logic.
 window._engActiveMembership = _engActiveMembership;
 
+// Redeeming a join code must never create a device-only identity. Without a
+// real Supabase session behind it, this person has no valid JWT — every
+// upload they make later (site photos, bills, drawings) has nothing to
+// authenticate with, so it silently stays local-only forever. So: check for
+// a verified session first: if there is none, park the join request and show
+// the OTP gate; joinVerifyOtp() re-calls this function once a real session
+// exists.
+var _joinOtpEmail = '';
+
 window.doJoinProject = function() {
   var nameEl = document.getElementById('join-member-name');
   var codeEl = document.getElementById('join-code-input');
@@ -22515,44 +22709,123 @@ window.doJoinProject = function() {
   if (!_sb) { if (errEl) { errEl.textContent = '⚠️ App load ho raha hai, thodi der me try karo'; errEl.style.display = 'block'; } return; }
   if (btn) { btn.textContent = '⏳ Joining…'; btn.disabled = true; }
 
-  var deviceToken = _genDeviceToken();
-  _sb.rpc('redeem_join_code', { p_code: code, p_member_name: memberName, p_device_token: deviceToken })
-    .then(function(r) {
-      if (r.error) throw r.error;
-      var row = (r.data && r.data[0]) ? r.data[0] : null;
-      if (!row) throw new Error('Invalid or inactive code');
-
-      var list = _engLoadMemberships();
-      var idx = list.findIndex(function(m){ return m.pid === row.project_id; });
-      var membership = {
-        pid: row.project_id,
-        pname: row.project_name || 'Project',
-        // A 'sales' role code is a dedicated Sales Admin join — full CRUD on
-        // Sales only, rest of the app hidden. Everyone else gets normal
-        // read/write engineer access (with limited/view-only Sales rights).
-        role: (row.role === 'sales') ? 'write' : (row.role || 'write'),
-        salesOnly: row.role === 'sales',
-        token: deviceToken,
-        admin_id: row.admin_id,
-        name: memberName
-      };
-      var alreadyJoined = idx >= 0;
-      if (alreadyJoined) list[idx] = membership; else list.push(membership);
-      _engSaveMemberships(list);
-      _engSetActivePid(row.project_id);
-      try { localStorage.setItem('sanj_cloud_choice', 'joined'); } catch(e) {}
-
+  _sb.auth.getSession().then(function(sres) {
+    var session = sres && sres.data && sres.data.session;
+    if (!session) {
+      // No verified account yet. Never fall back to a local-only or
+      // anonymous identity here — surface the OTP gate instead so the
+      // person ends up with a real, authenticated Supabase session.
       if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
-      if (codeEl) codeEl.value = '';
-      if (typeof closeAuthModal === 'function') closeAuthModal();
-      if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
-      toast((alreadyJoined ? '✅ Re-joined "' : '✅ Joined "') + (row.project_name||'Project') + '"', 'ok');
-      _engineerStart(row.project_id);
-    }).catch(function(e) {
-      if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
-      if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
-    });
+      var gate = document.getElementById('join-otp-gate');
+      if (gate) gate.style.display = 'block';
+      var emailEl = document.getElementById('join-otp-email');
+      if (emailEl) emailEl.focus();
+      if (errEl) { errEl.textContent = '📧 Verify your email below to finish joining — this is required so your uploads actually reach the cloud.'; errEl.style.display = 'block'; }
+      return;
+    }
+    var deviceToken = _genDeviceToken();
+    _sb.rpc('redeem_join_code', { p_code: code, p_member_name: memberName, p_device_token: deviceToken })
+      .then(function(r) {
+        if (r.error) throw r.error;
+        var row = (r.data && r.data[0]) ? r.data[0] : null;
+        if (!row) throw new Error('Invalid or inactive code');
+
+        var list = _engLoadMemberships();
+        var idx = list.findIndex(function(m){ return m.pid === row.project_id; });
+        var membership = {
+          pid: row.project_id,
+          pname: row.project_name || 'Project',
+          // A 'sales' role code is a dedicated Sales Admin join — full CRUD on
+          // Sales only, rest of the app hidden. Everyone else gets normal
+          // read/write engineer access (with limited/view-only Sales rights).
+          role: (row.role === 'sales') ? 'write' : (row.role || 'write'),
+          salesOnly: row.role === 'sales',
+          token: deviceToken,
+          admin_id: row.admin_id,
+          name: memberName,
+          // The authenticated Supabase user id behind this membership — used
+          // server-side (RLS) to confirm uploads/writes come from someone
+          // who actually holds this membership, never from an anonymous or
+          // purely local identity.
+          user_id: session.user.id
+        };
+        var alreadyJoined = idx >= 0;
+        if (alreadyJoined) list[idx] = membership; else list.push(membership);
+        _engSaveMemberships(list);
+        _engSetActivePid(row.project_id);
+        try { localStorage.setItem('sanj_cloud_choice', 'joined'); } catch(e) {}
+
+        if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+        if (codeEl) codeEl.value = '';
+        var gate = document.getElementById('join-otp-gate'); if (gate) gate.style.display = 'none';
+        if (typeof closeAuthModal === 'function') closeAuthModal();
+        if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+        toast((alreadyJoined ? '✅ Re-joined "' : '✅ Joined "') + (row.project_name||'Project') + '"', 'ok');
+        _engineerStart(row.project_id);
+      }).catch(function(e) {
+        if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+        if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
+      });
+  }).catch(function() {
+    if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+    if (errEl) { errEl.textContent = '⚠️ Could not check sign-in status — try again'; errEl.style.display = 'block'; }
+  });
 };
+
+function joinSendOtp() {
+  var email = ((document.getElementById('join-otp-email') || {}).value || '').trim().toLowerCase();
+  var errEl = document.getElementById('join-otp-err');
+  var btn   = document.getElementById('join-otp-send-btn');
+  if (errEl) errEl.style.display = 'none';
+  if (!email || email.indexOf('@') === -1) {
+    if (errEl) { errEl.textContent = '⚠️ Enter a valid email'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (!_sb) return;
+  if (btn) { btn.textContent = '⏳ Sending…'; btn.disabled = true; }
+  _sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } }).then(function(r) {
+    if (btn) { btn.textContent = '📧 Send OTP'; btn.disabled = false; }
+    if (r.error) {
+      if (errEl) { errEl.textContent = '⚠️ ' + (r.error.message || 'Failed to send OTP'); errEl.style.display = 'block'; }
+      return;
+    }
+    _joinOtpEmail = email;
+    var msgEl = document.getElementById('join-otp-sent-msg');
+    if (msgEl) msgEl.textContent = '✅ OTP sent to ' + email + ' — check your inbox';
+    var s1 = document.getElementById('join-otp-step1'); if (s1) s1.style.display = 'none';
+    var s2 = document.getElementById('join-otp-step2'); if (s2) s2.style.display = 'block';
+    setTimeout(function() { var i = document.getElementById('join-otp-input'); if (i) i.focus(); }, 80);
+  }).catch(function(e) {
+    if (btn) { btn.textContent = '📧 Send OTP'; btn.disabled = false; }
+    if (errEl) { errEl.textContent = '⚠️ ' + (e.message || 'Failed to send OTP'); errEl.style.display = 'block'; }
+  });
+}
+
+function joinVerifyOtp() {
+  var otp   = ((document.getElementById('join-otp-input') || {}).value || '').trim();
+  var errEl = document.getElementById('join-otp-err');
+  var btn   = document.getElementById('join-otp-verify-btn');
+  if (errEl) errEl.style.display = 'none';
+  if (!otp || otp.length !== 6 || /^[0-9]{6}$/.test(otp) === false) {
+    if (errEl) { errEl.textContent = '⚠️ Enter the 6-digit OTP from your email'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (!_sb) return;
+  if (btn) { btn.textContent = '⏳ Verifying…'; btn.disabled = true; }
+  _sb.auth.verifyOtp({ email: _joinOtpEmail, token: otp, type: 'email' }).then(function(r) {
+    if (btn) { btn.textContent = '✅ Verify & Join'; btn.disabled = false; }
+    if (r.error || !r.data || !r.data.user) {
+      if (errEl) { errEl.textContent = '⚠️ ' + (r.error ? r.error.message : 'Verification failed — check OTP'); errEl.style.display = 'block'; }
+      return;
+    }
+    // A real, non-anonymous Supabase session now exists — safe to complete
+    // the join that was parked earlier.
+    window.doJoinProject();
+  }).catch(function(e) {
+    if (btn) { btn.textContent = '✅ Verify & Join'; btn.disabled = false; }
+    if (errEl) { errEl.textContent = '⚠️ ' + (e.message || 'Verification failed'); errEl.style.display = 'block'; }
+  });
+}
 
 window._refreshJoinTabUI = function() {
   var list = _engLoadMemberships();
