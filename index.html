@@ -2129,7 +2129,14 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       #main-app > nav::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.4); border-radius: 4px; }
 
       /* Make the flex row into a vertical column */
-      #main-app > nav > div {
+      /* :not(#sidebar-profile-chip) — the chip is also a direct child div of
+         nav, but it must keep its own row layout (avatar left, text right)
+         set below. Without this exclusion this rule's !important column
+         direction wins (higher specificity than #sidebar-profile-chip's
+         own rule) and forces the avatar to stack above the text instead
+         of sitting beside it, making the chip much taller than it needs
+         to be. */
+      #main-app > nav > div:not(#sidebar-profile-chip) {
         display: flex !important;
         flex-direction: column !important;
         overflow: visible !important;
@@ -2550,12 +2557,12 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
      ══════════════════════════════════════════ */
   #sidebar-profile-chip {
     display: flex !important;
-    flex-direction: row;
+    flex-direction: row !important;        /* avatar left, text right — !important guards against the generic nav>div column rule above */
     align-items: center;
     gap: 8px;
-    width: auto;
-    max-width: 126px;                      /* ~25% narrower than before */
-    margin: 10px 8px 10px 16px;            /* nudged right — roughly lines up with header logo's start point */
+    width: calc(100% - 24px);              /* fills the sidebar column so it can be centred, instead of a fixed narrow box */
+    max-width: 190px;                      /* roomier than the old 126px column-mode width, since text now sits beside the avatar instead of below it */
+    margin: 10px auto;                     /* horizontally centred in the sidebar */
     padding: 7px 10px;                     /* avatar sits left, all 3 text rows stack to its right in one row-flex chip — keeps the chip's vertical footprint tight instead of stacking avatar-on-top-of-text */
     border-radius: 14px;
     background-image: linear-gradient(135deg, #4f46e5, #9333ea, #ec4899); /* default; synced to header colour by applyHeaderColor() */
@@ -3021,13 +3028,10 @@ function _launchApp(){
         </div>
       </div>
 
-      <!-- 3 & 4. Login / Create — compact, side by side -->
-      <div class="ob-card ob-fx5" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <button class="ob-ghost-btn" onclick="obGoLogin()" style="padding:10px 6px;background:rgba(79,70,229,0.14);border:1px solid rgba(129,140,248,0.35);border-radius:11px;color:#c7d2fe;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-          <span style="font-size:14px;">🔑</span>Login
-        </button>
-        <button class="ob-ghost-btn" onclick="obGoSignup()" style="padding:10px 6px;background:rgba(5,150,105,0.14);border:1px solid rgba(52,211,153,0.35);border-radius:11px;color:#a7f3d0;font-weight:800;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-          <span style="font-size:14px;">✨</span>Create Account
+      <!-- 3. Cloud Account — single entry point, works for both new & returning users -->
+      <div class="ob-card ob-fx5">
+        <button class="ob-ghost-btn" onclick="obGoCloud()" style="width:100%;padding:11px 6px;background:rgba(79,70,229,0.14);border:1px solid rgba(129,140,248,0.35);border-radius:11px;color:#c7d2fe;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;">
+          <span style="font-size:15px;">☁️</span>Use Cloud Account
         </button>
       </div>
     </div>
@@ -3046,16 +3050,13 @@ function _launchApp(){
         .ob-submit-btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08);}
         .ob-submit-btn:active:not(:disabled){transform:scale(.98);}
       </style>
-      <!-- Tab switcher -->
-      <div style="display:flex;gap:5px;background:rgba(255,255,255,0.06);border-radius:12px;padding:4px;margin-bottom:14px;">
-        <button id="ob-tab-login" class="ob-tab-btn" onclick="obSwitchAuthTab('login')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">🔑 Login</button>
-        <button id="ob-tab-signup" class="ob-tab-btn" onclick="obSwitchAuthTab('signup')" style="flex:1;padding:8px 4px;font-size:12px;font-weight:700;border:none;border-radius:9px;cursor:pointer;background:transparent;color:rgba(255,255,255,0.5);">✨ Create ID</button>
-      </div>
+      <p style="font-size:11px;color:rgba(255,255,255,0.45);margin:0 0 12px;text-align:center;">Enter your email — we'll send a 6-digit code. Works whether you're new or already have an account.</p>
 
-      <!-- LOGIN panel — OTP flow -->
+      <!-- CLOUD panel — one OTP flow, handles both new & returning users -->
       <div id="ob-panel-login">
-        <!-- Step 1: Email input -->
+        <!-- Step 1: Name (optional) + Email input -->
         <div id="ob-otp-step1">
+          <input id="ob-login-name" class="ob-input" type="text" placeholder="Your Name / Site Name (optional)" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
           <input id="ob-login-email" class="ob-input" type="email" placeholder="your@email.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
           <p id="ob-login-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
           <button id="ob-send-otp-btn" class="ob-submit-btn" onclick="obSendOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.45);">📧 Send OTP</button>
@@ -3065,41 +3066,12 @@ function _launchApp(){
           <p id="ob-otp-sent-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 10px;text-align:center;font-weight:600;"></p>
           <input id="ob-otp-input" class="ob-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);">
           <p id="ob-otp-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-verify-otp-btn" class="ob-submit-btn" onclick="obVerifyOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Login</button>
+          <button id="ob-verify-otp-btn" class="ob-submit-btn" onclick="obVerifyOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Continue</button>
           <button class="ob-ghost-btn" onclick="obResetOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
         </div>
       </div>
 
-      <!-- SIGNUP panel — OTP only (same flow, account auto-created) -->
-      <div id="ob-panel-signup" style="display:none;">
-        <!-- Plan toggle: Pro ₹30/mo vs Enterprise ₹99/mo -->
-        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:10px;margin-bottom:12px;">
-          <div id="ob-plan-toggle" style="display:flex;gap:5px;background:rgba(0,0,0,0.25);border-radius:11px;padding:4px;margin-bottom:9px;">
-            <button type="button" id="ob-plan-btn-pro" onclick="obSelectSignupPlan('pro')" style="flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;">Pro</button>
-            <button type="button" id="ob-plan-btn-ent" onclick="obSelectSignupPlan('enterprise')" style="flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);display:flex;align-items:center;justify-content:center;gap:4px;">Enterprise<span style="background:#f59e0b;color:#1e1b4b;font-size:8px;font-weight:800;padding:1px 5px;border-radius:6px;">NEW</span></button>
-          </div>
-          <div id="ob-plan-price-line" style="display:flex;align-items:baseline;justify-content:center;gap:7px;margin-bottom:2px;">
-            <span id="ob-plan-price-amount" style="font-size:22px;font-weight:900;color:#fff;line-height:1;">₹30<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);">/month</span></span>
-          </div>
-          <p id="ob-plan-desc" style="text-align:center;font-size:9.5px;color:rgba(255,255,255,0.4);margin:0;">Unlimited projects · logo on PDFs · cloud sync · viewers</p>
-        </div>
-        <p style="font-size:10px;color:rgba(255,255,255,0.5);margin:0 0 10px;text-align:center;">Enter your email — we'll send a verification code to create your account.</p>
-        <div id="ob-signup-step1">
-          <input id="ob-signup-name" class="ob-input" type="text" placeholder="Your Name / Site Name (optional)" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
-          <input id="ob-signup-email" class="ob-input" type="email" placeholder="admin@example.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
-          <p id="ob-signup-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-signup-btn" class="ob-submit-btn" onclick="obSendSignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);">📧 Send OTP</button>
-        </div>
-        <div id="ob-signup-step2" style="display:none;">
-          <p id="ob-signup-otp-msg" style="font-size:11px;color:#6ee7b7;margin:0 0 10px;text-align:center;font-weight:600;"></p>
-          <input id="ob-signup-otp-input" class="ob-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Enter 6-digit OTP" maxlength="6" autocomplete="one-time-code" style="width:100%;padding:12px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);border-radius:11px;color:#fff;font-size:18px;outline:none;box-sizing:border-box;margin-bottom:8px;letter-spacing:.2em;text-align:center;" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6);">
-          <p id="ob-signup-otp-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
-          <button id="ob-verify-signup-btn" class="ob-submit-btn" onclick="obVerifySignupOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 14px rgba(5,150,105,.4);margin-bottom:8px;">✅ Verify &amp; Create Account</button>
-          <button class="ob-ghost-btn" onclick="obResetSignupOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
-        </div>
-      </div>
-
-      <p style="text-align:center;margin-top:12px;font-size:10px;color:rgba(255,255,255,0.25);">Cloud features require a subscription after free trial.</p>
+      <p style="text-align:center;margin-top:12px;font-size:10px;color:rgba(255,255,255,0.25);">New here? Plan selection (Pro/Enterprise) comes right after — cloud features require a subscription after the free trial.</p>
     </div>
 
   </div>
@@ -3114,44 +3086,17 @@ function obShowMenu(){
   if (cloudSec) cloudSec.style.display = 'none';
 }
 
-function obGoLogin(){
+// Single entry point for "Use Cloud Account" — replaces the old separate
+// Login / Create Account buttons. One OTP flow serves both new and
+// returning users (signInWithOtp auto-creates an account if one doesn't
+// exist yet, and _handleOtpSuccess below sorts out where to route them
+// afterwards). Plan selection (Pro/Enterprise) now happens once, on the
+// payment screen itself (openPayLanding), instead of being duplicated here.
+function obGoCloud(){
   var menuSec  = document.getElementById('ob-menu-section');
   var cloudSec = document.getElementById('ob-cloud-section');
   if (menuSec)  menuSec.style.display  = 'none';
   if (cloudSec) cloudSec.style.display = 'block';
-  obSwitchAuthTab('login');
-}
-
-function obGoSignup(){
-  var menuSec  = document.getElementById('ob-menu-section');
-  var cloudSec = document.getElementById('ob-cloud-section');
-  if (menuSec)  menuSec.style.display  = 'none';
-  if (cloudSec) cloudSec.style.display = 'block';
-  obSwitchAuthTab('signup');
-  obSelectSignupPlan('pro');
-}
-
-// ── Plan toggle on the Create Account panel: Pro ₹30/mo vs Enterprise ₹99/mo ──
-// Enterprise additionally unlocks cross-device project sharing and the
-// Sales Manager. The choice made here is carried through to the
-// post-signup payment screen (see openPayLanding), so whichever tier the
-// person taps is exactly what they're charged for and what gets activated.
-window._obSelectedPlan = 'pro';
-function obSelectSignupPlan(plan){
-  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
-  window._obSelectedPlan = plan;
-  var proBtn = document.getElementById('ob-plan-btn-pro');
-  var entBtn = document.getElementById('ob-plan-btn-ent');
-  var onStyle  = 'flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;';
-  var offStyle = 'flex:1;padding:8px 4px;border-radius:8px;border:none;font-weight:800;font-size:11.5px;cursor:pointer;transition:all .18s;background:transparent;color:rgba(255,255,255,0.5);';
-  if (proBtn) proBtn.setAttribute('style', plan === 'pro' ? onStyle : offStyle);
-  if (entBtn) entBtn.setAttribute('style', (plan === 'enterprise' ? onStyle : offStyle) + 'display:flex;align-items:center;justify-content:center;gap:4px;');
-  var amountEl = document.getElementById('ob-plan-price-amount');
-  var descEl = document.getElementById('ob-plan-desc');
-  if (amountEl) amountEl.innerHTML = (plan === 'enterprise' ? '₹99' : '₹30') + '<span style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.5);">/month</span>';
-  if (descEl) descEl.textContent = plan === 'enterprise'
-    ? 'Everything in Pro + cross-device project sharing via join code + Sales Manager'
-    : 'Unlimited projects · logo on PDFs · cloud sync · viewers';
 }
 
 // "Join Project" needs no login — open the existing Join Project modal (code entry)
@@ -3191,20 +3136,6 @@ function _obEnterAppAfterJoin(){
     }, 360);
   }
   window._obOnboardingPending = false;
-}
-
-function obSwitchAuthTab(tab){
-  var isLogin = tab === 'login';
-  var btnL = document.getElementById('ob-tab-login');
-  var btnS = document.getElementById('ob-tab-signup');
-  var panL = document.getElementById('ob-panel-login');
-  var panS = document.getElementById('ob-panel-signup');
-  var activeStyle = 'background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;';
-  var idleStyle   = 'background:transparent;color:rgba(255,255,255,0.5);';
-  btnL.style.cssText += isLogin ? activeStyle : idleStyle;
-  btnS.style.cssText += isLogin ? idleStyle   : activeStyle;
-  panL.style.display  = isLogin ? 'block' : 'none';
-  panS.style.display  = isLogin ? 'none'  : 'block';
 }
 
 function _obDismiss(){
@@ -3277,9 +3208,11 @@ function _handleOtpSuccess(user, email, onDismiss) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ONBOARD LOGIN — Step 1: Send OTP
+// CLOUD ACCOUNT — Step 1: Send OTP (one flow for new + returning users)
 // ══════════════════════════════════════════════════════════════
+var _otpPendingName = '';
 function obSendOtp() {
+  var name  = (document.getElementById('ob-login-name') || {}).value || '';
   var email = (document.getElementById('ob-login-email') || {}).value || '';
   email = email.trim().toLowerCase();
   var errEl = document.getElementById('ob-login-err');
@@ -3289,6 +3222,7 @@ function obSendOtp() {
     errEl.textContent = '⚠️ Please enter a valid email'; errEl.style.display = 'block'; return;
   }
   btn.textContent = '⏳ Sending…'; btn.disabled = true;
+  _otpPendingName = name.trim();
   _waitSb(function() {
     _sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } }).then(function(r) {
       btn.textContent = '📧 Send OTP'; btn.disabled = false;
@@ -3308,7 +3242,7 @@ function obSendOtp() {
   });
 }
 
-// Onboard login — Step 2: Verify OTP
+// Cloud Account — Step 2: Verify OTP
 function obVerifyOtp() {
   var otp   = ((document.getElementById('ob-otp-input') || {}).value || '').trim();
   var errEl = document.getElementById('ob-otp-err');
@@ -3320,13 +3254,18 @@ function obVerifyOtp() {
   btn.textContent = '⏳ Verifying…'; btn.disabled = true;
   _waitSb(function() {
     _sb.auth.verifyOtp({ email: _otpPendingEmail, token: otp, type: 'email' }).then(function(r) {
-      btn.textContent = '✅ Verify & Login'; btn.disabled = false;
+      btn.textContent = '✅ Verify & Continue'; btn.disabled = false;
       if (r.error || !r.data || !r.data.user) {
         errEl.textContent = '⚠️ ' + (r.error ? r.error.message : 'Verification failed — check OTP'); errEl.style.display = 'block'; return;
       }
+      // If a name was entered (new users mostly), save it to their profile.
+      // Harmless no-op for returning users who leave it blank.
+      if (_otpPendingName && _sb.auth) {
+        _sb.auth.updateUser({ data: { full_name: _otpPendingName } }).catch(function(){});
+      }
       _handleOtpSuccess(r.data.user, _otpPendingEmail, function() { _obDismiss(); });
     }).catch(function(e) {
-      btn.textContent = '✅ Verify & Login'; btn.disabled = false;
+      btn.textContent = '✅ Verify & Continue'; btn.disabled = false;
       errEl.textContent = '⚠️ ' + (e.message || 'Verification failed'); errEl.style.display = 'block';
     });
   });
@@ -3337,72 +3276,6 @@ function obResetOtp() {
   document.getElementById('ob-otp-step1').style.display = 'block';
   var errEl = document.getElementById('ob-login-err');
   if (errEl) errEl.style.display = 'none';
-}
-
-// ══════════════════════════════════════════════════════════════
-// ONBOARD SIGNUP — same OTP flow, auto-creates account
-// ══════════════════════════════════════════════════════════════
-var _signupPendingEmail = '', _signupPendingName = '';
-
-function obSendSignupOtp() {
-  var name  = (document.getElementById('ob-signup-name') || {}).value || '';
-  var email = ((document.getElementById('ob-signup-email') || {}).value || '').trim().toLowerCase();
-  var errEl = document.getElementById('ob-signup-err');
-  var btn   = document.getElementById('ob-signup-btn');
-  errEl.style.display = 'none';
-  if (!email || email.indexOf('@') === -1) {
-    errEl.textContent = '⚠️ Please enter a valid email'; errEl.style.display = 'block'; return;
-  }
-  btn.textContent = '⏳ Sending…'; btn.disabled = true;
-  _signupPendingEmail = email; _signupPendingName = name.trim();
-  _waitSb(function() {
-    _sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } }).then(function(r) {
-      btn.textContent = '📧 Send OTP'; btn.disabled = false;
-      if (r.error) {
-        errEl.textContent = '⚠️ ' + (r.error.message || 'Failed to send OTP'); errEl.style.display = 'block'; return;
-      }
-      var msgEl = document.getElementById('ob-signup-otp-msg');
-      if (msgEl) msgEl.textContent = '✅ OTP sent to ' + email + ' — check your inbox';
-      document.getElementById('ob-signup-step1').style.display = 'none';
-      document.getElementById('ob-signup-step2').style.display = 'block';
-      setTimeout(function() { var i = document.getElementById('ob-signup-otp-input'); if (i) i.focus(); }, 80);
-    }).catch(function(e) {
-      btn.textContent = '📧 Send OTP'; btn.disabled = false;
-      errEl.textContent = '⚠️ ' + (e.message || 'Failed'); errEl.style.display = 'block';
-    });
-  });
-}
-
-function obVerifySignupOtp() {
-  var otp   = ((document.getElementById('ob-signup-otp-input') || {}).value || '').trim();
-  var errEl = document.getElementById('ob-signup-otp-err');
-  var btn   = document.getElementById('ob-verify-signup-btn');
-  errEl.style.display = 'none';
-  if (!otp || otp.length !== 6 || /^[0-9]{6}$/.test(otp) === false) {
-    errEl.textContent = '⚠️ Enter the 6-digit OTP'; errEl.style.display = 'block'; return;
-  }
-  btn.textContent = '⏳ Verifying…'; btn.disabled = true;
-  _waitSb(function() {
-    _sb.auth.verifyOtp({ email: _signupPendingEmail, token: otp, type: 'email' }).then(function(r) {
-      btn.textContent = '✅ Verify & Create Account'; btn.disabled = false;
-      if (r.error || !r.data || !r.data.user) {
-        errEl.textContent = '⚠️ ' + (r.error ? r.error.message : 'Invalid OTP'); errEl.style.display = 'block'; return;
-      }
-      // Update user metadata with name if provided
-      if (_signupPendingName && _sb.auth) {
-        _sb.auth.updateUser({ data: { full_name: _signupPendingName } }).catch(function(){});
-      }
-      _handleOtpSuccess(r.data.user, _signupPendingEmail, function() { _obDismiss(); });
-    }).catch(function(e) {
-      btn.textContent = '✅ Verify & Create Account'; btn.disabled = false;
-      errEl.textContent = '⚠️ ' + (e.message || 'Verification failed'); errEl.style.display = 'block';
-    });
-  });
-}
-
-function obResetSignupOtp() {
-  document.getElementById('ob-signup-step2').style.display = 'none';
-  document.getElementById('ob-signup-step1').style.display = 'block';
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3535,7 +3408,7 @@ function cmResetSignupOtp() {
 
 // ── Legacy compat stubs (kept so old references don't crash) ──
 function obDoLogin()  { obSendOtp(); }
-function obDoSignup() { obSendSignupOtp(); }
+function obDoSignup() { obSendOtp(); }
 function doSmartLogin() { cmSendOtp(); }
 function doAdminSignup() { cmSendSignupOtp(); }
 
@@ -17058,56 +16931,6 @@ function doSmartLogin() {
 }
 
 function doAdminLogin() { doSmartLogin(); }
-// ── Admin Signup (Supabase) ─────────────────────────────────────
-function doAdminSignup() {
-  var name  = document.getElementById('auth-signup-name').value.trim();
-  var email = document.getElementById('auth-signup-email').value.trim();
-  var pass  = document.getElementById('auth-signup-pass').value;
-  var btn   = document.getElementById('auth-signup-btn');
-  if (!name || !email || !pass) { showAuthErr('signup','Sab fields bharo'); return; }
-  if (pass.length < 6) { showAuthErr('signup','Password kam se kam 6 characters ka hona chahiye'); return; }
-
-  // If Supabase SDK not ready yet, wait and retry automatically
-  if (!_sb) {
-    btn.textContent = '⏳ Loading…'; btn.disabled = true;
-    var tries = 0;
-    var wait = setInterval(function() {
-      tries++;
-      if (_sb) {
-        clearInterval(wait);
-        btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
-        doAdminSignup();
-      } else if (tries > 30) {
-        clearInterval(wait);
-        btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
-        showAuthErr('signup', 'Network slow hai — internet check karo aur reload karo');
-      }
-    }, 200);
-    return;
-  }
-
-  btn.textContent = '⏳ Creating…'; btn.disabled = true;
-
-  _sb.auth.signUp({ email: email, password: pass }).then(function(r) {
-    if (r.error) throw r.error;
-    var user = r.data.user;
-    _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null; _adminSBUser = user;
-    Promise.resolve(_sb.from('admins').upsert({ id: user.id, email: email, subscribed: false }, { onConflict: 'id' })).catch(function(){});
-    closeAuthModal();
-    openPayLanding(true);
-    btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
-  }).catch(function(e) {
-    btn.textContent = '✨ Create Admin Account'; btn.disabled = false;
-    var msg = e.message.includes('already registered') || e.message.includes('already been registered')
-      ? 'Yeh email already registered hai — Login karo' : e.message;
-    showAuthErr('signup', msg);
-  });
-}
-
-function showAuthErr(tab, msg) {
-  var el = document.getElementById('auth-' + tab + '-err');
-  if (el) { el.textContent = '⚠️ ' + msg; el.style.display = 'block'; }
-}
 
 // Shared cloud-restore routine — pulls the newest backup for this admin
 // and hydrates the app state from it. Used both on fresh login
