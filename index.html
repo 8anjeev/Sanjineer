@@ -733,10 +733,36 @@ self.addEventListener('fetch', function(e) {
   window._sanjLog = _sanjLog;
 
   // ── Persist helpers ───────────────────────────────────────────
+  // ── Deleted-project tombstones ──────────────────────────────────
+  // _loadProjects()/_pullProjectListFromCloud() below are deliberately
+  // "union only" — they NEVER drop a project that's missing from one
+  // side, specifically so a project can never be silently lost due to
+  // a sync race. That's the right call for normal syncing, but it means
+  // there was previously no way to actually delete a project at all:
+  // any attempt to just remove it from window.projects would get
+  // silently re-added on the very next _loadProjects() call or cloud
+  // pull. This tombstone store is what lets deleteQdprProject() (see
+  // the QDPR section) actually make a deletion stick, locally AND
+  // across every other device.
+  function _loadDeletedProjects() {
+    try { var v = JSON.parse(localStorage.getItem('sanj_deleted_projects') || '{}'); return (v && typeof v === 'object') ? v : {}; } catch(e) { return {}; }
+  }
+  function _saveDeletedProjects(d) {
+    try { localStorage.setItem('sanj_deleted_projects', JSON.stringify(d)); } catch(e) {}
+  }
+  window._isProjectDeleted = function(pid) { return !!_loadDeletedProjects()[pid]; };
+  window._markProjectDeleted = function(pid) {
+    var d = _loadDeletedProjects();
+    d[pid] = Date.now();
+    _saveDeletedProjects(d);
+  };
+
   function _loadProjects() {
     var stored = [];
     try { stored = JSON.parse(localStorage.getItem('sanj_projects') || '[]'); } catch(e) { stored = []; }
     if (!Array.isArray(stored)) stored = [];
+    var deleted = _loadDeletedProjects();
+    stored = stored.filter(function(p){ return !(p && p.id && deleted[p.id]); });
     // Merge with whatever is already in memory instead of blindly replacing
     // window.projects. QDPR calls _loadProjects() right before rendering its
     // list — if window.projects ever ends up with a project that (for any
@@ -749,6 +775,7 @@ self.addEventListener('fetch', function(e) {
     stored.forEach(function(p){ if (p && p.id) byId[p.id] = p; });
     var changed = false;
     (window.projects || []).forEach(function(p){
+      if (p && p.id && deleted[p.id]) { changed = true; return; } // drop a deleted project still lingering in memory
       if (p && p.id && !byId[p.id]) { byId[p.id] = p; stored.push(p); changed = true; }
     });
     window.projects = stored;
@@ -782,7 +809,7 @@ self.addEventListener('fetch', function(e) {
       _sb.from('cloud_backups').upsert({
         admin_id: _adminSBUser.id,
         backup_key: key,
-        data: { projects: window.projects, updated_at: Date.now() }
+        data: { projects: window.projects, deleted: _loadDeletedProjects(), updated_at: Date.now() }
       }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
         // Silent — this is a background sync of the project list, not a
         // user-initiated backup, so we don't toast success/failure here.
@@ -796,12 +823,24 @@ self.addEventListener('fetch', function(e) {
     _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function(r) {
       if (!r || r.error || !r.data || !r.data.data || !Array.isArray(r.data.data.projects)) return;
       var remote = r.data.data.projects;
+      // Merge in any deletions recorded by another device FIRST, so a
+      // project deleted elsewhere is filtered out below even if this
+      // device still has an old local copy of it.
+      var localDeleted = _loadDeletedProjects();
+      var remoteDeleted = (r.data.data.deleted && typeof r.data.data.deleted === 'object') ? r.data.data.deleted : {};
+      var deletedChanged = false;
+      Object.keys(remoteDeleted).forEach(function(pid){
+        if (!localDeleted[pid] || remoteDeleted[pid] > localDeleted[pid]) { localDeleted[pid] = remoteDeleted[pid]; deletedChanged = true; }
+      });
+      if (deletedChanged) _saveDeletedProjects(localDeleted);
       // Merge by id — union of local + remote, never dropping a project
-      // that only exists on one side (same safe merge used by _loadProjects).
+      // that only exists on one side (same safe merge used by _loadProjects) —
+      // EXCEPT a project either side has tombstoned as deleted.
       var byId = {};
-      (window.projects || []).forEach(function(p){ if (p && p.id) byId[p.id] = p; });
+      (window.projects || []).forEach(function(p){ if (p && p.id && !localDeleted[p.id]) byId[p.id] = p; });
       var changed = false;
-      remote.forEach(function(p){ if (p && p.id && !byId[p.id]) { byId[p.id] = p; changed = true; } });
+      (window.projects || []).some(function(p){ return p && p.id && localDeleted[p.id]; }) && (changed = true);
+      remote.forEach(function(p){ if (p && p.id && !localDeleted[p.id] && !byId[p.id]) { byId[p.id] = p; changed = true; } });
       if (changed) {
         window.projects = Object.keys(byId).map(function(id){ return byId[id]; });
         try { localStorage.setItem('sanj_projects', JSON.stringify(window.projects)); } catch(e) {}
@@ -10113,6 +10152,64 @@ function saveQdprSite(){
   closeQdprProjectModal();
   renderQdprSites();
 }
+// Wipes every localStorage key that belongs to one project (attendance,
+// materials, dept work, drawings, sales, profile, meta, tombstones — every
+// _pk()/_qdprProjKey()-scoped store uses the same 'sanj_project_<pid>_'
+// prefix, so this is the single point that needs to know that pattern).
+function _wipeProjectLocalStorage(pid) {
+  var prefix = 'sanj_project_' + pid + '_';
+  var toRemove = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) toRemove.push(k);
+    }
+    toRemove.forEach(function(k){ localStorage.removeItem(k); });
+  } catch(e) {}
+}
+// Permanently deletes an owned project: previously there was NO way to do
+// this at all — removing a project from window.projects alone would get
+// silently re-added on the next _loadProjects()/cloud pull, since that
+// merge is deliberately union-only (see _loadDeletedProjects notes above).
+// This is only ever offered for projects the current user actually owns
+// (site.editable !== false && !site.joined) — a joined engineer leaves a
+// project instead, via the existing _engineerLeaveProject flow.
+function deleteQdprProject(pid) {
+  var proj = (window.projects || []).find(function(p){ return p.id === pid; });
+  if (!proj) { toast('Project not found', 'err'); return; }
+  var typed = (typeof prompt === 'function') ? prompt('This permanently deletes "' + proj.name + '" — all its reports, materials, photos, and Sales data, on every device. This cannot be undone.\n\nType the project name to confirm:') : null;
+  if (typed === null) return; // cancelled
+  if (typed.trim().toLowerCase() !== (proj.name || '').trim().toLowerCase()) {
+    toast('Name didn\'t match — nothing was deleted', 'err');
+    return;
+  }
+  window.projects = (window.projects || []).filter(function(p){ return p.id !== pid; });
+  if (typeof window._markProjectDeleted === 'function') window._markProjectDeleted(pid);
+  if (typeof _saveProjects === 'function') _saveProjects(); // persists the list + pushes it (and the tombstone) to cloud
+  _wipeProjectLocalStorage(pid);
+  // Best-effort: also remove this project's own cloud_backups row so it
+  // doesn't linger server-side. Non-blocking — the tombstone above is
+  // what actually guarantees the project stays gone even if this fails
+  // (e.g. offline right now).
+  try {
+    if (_sb && _adminSBUser && _adminSBUser.id && typeof _qdprSiteIdFor === 'function') {
+      var cloudKey = _qdprSiteIdFor(pid);
+      if (cloudKey) _sb.from('cloud_backups').delete().eq('admin_id', _adminSBUser.id).eq('backup_key', cloudKey).then(function(){}).catch(function(){});
+    }
+  } catch(e) {}
+  // If the deleted project was the active one, move to whatever's left.
+  if (window.currentProjectId === pid) {
+    if (window.projects.length) {
+      if (typeof switchProject === 'function') switchProject(window.projects[0].id);
+    } else {
+      window.currentProjectId = null;
+      try { localStorage.removeItem('sanj_current_project'); } catch(e) {}
+    }
+  }
+  if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+  renderQdprSites();
+  toast('"' + proj.name + '" deleted', 'ok');
+}
 function delQdprReport(pid, reportId){
   askDel('Delete this daily progress report?', function(){
     var _rpt = qdprLoadProjAD(pid).find(function(d){ return d.__id===reportId; });
@@ -10192,7 +10289,7 @@ function qdprEmptyCard(site){
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
-    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
+    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'+'<button onclick="deleteQdprProject(\''+site.__id+'\')" title="Delete Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">🗑</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
     +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
@@ -10256,7 +10353,7 @@ function qdprFormHTML(site, isEdit){
     +'<button onclick="closeQdprForm()" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">←</button>'
     +'<div style="line-height:1.25"><div style="color:white;font-size:15.5px;font-weight:800">'+(isEdit?'Edit Report':'Add Report')+'</div>'
     +'<div style="color:rgba(255,255,255,.6);font-size:10.5px">'+esc(site.name)+' — '+_qdprFmtDate(f.date)+'</div></div></div>'
-    +'<button onclick="saveQdprReport()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:linear-gradient(135deg,#059669,#10B981);color:white">✓ Save</button>'
+    +'<button onclick="saveQdprReport()" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:linear-gradient(135deg,#059669,#10B981);color:white">✓ Submit</button>'
     +'</div></div>'
     +'<div style="padding:14px;padding-bottom:40px">'
     +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'
@@ -10273,7 +10370,7 @@ function qdprFormHTML(site, isEdit){
     +'<div style="background:'+QC.white+';border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 8px '+QC.ink+'07">'+qdprRowSection('📋','Material Required','matRequired')+'</div>'
     +qdprPhotoSectionHTML()
     +'<div style="display:flex;gap:10px">'
-    +'<button onclick="saveQdprReport()" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;border:none;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(135deg,'+QC.navy+','+QC.royal+');color:white;box-shadow:0 2px 10px '+QC.navy+'40">✓ Save Report</button>'
+    +'<button onclick="saveQdprReport()" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;border:none;font-weight:700;font-size:14px;cursor:pointer;background:linear-gradient(135deg,'+QC.navy+','+QC.royal+');color:white;box-shadow:0 2px 10px '+QC.navy+'40">✓ Submit Report</button>'
     +'<button onclick="closeQdprForm()" style="padding:12px 18px;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;background:transparent;color:'+QC.navy+';border:1.5px solid '+QC.border+'">Cancel</button>'
     +'</div></div></div>';
 }
@@ -10304,7 +10401,7 @@ function saveQdprReport(){
   // box + photo gallery + PDF print) the same way.
   _qdprSyncDailyReport(pid, saved);
   closeQdprForm();
-  toast('Daily report saved ✓ — materials & report synced to project','ok');
+  toast('Daily report submitted ✓ — materials & report synced to project','ok');
   renderQdprSites();
   _qdprRefreshLiveTabsIfActive(pid);
 }
@@ -24001,9 +24098,16 @@ function renderSalesManager() {
         var delFloorBtn = admin
           ? '<button onclick="event.stopPropagation();deleteSalesFloor(\'' + b.id + '\',\'' + fl.id + '\')" style="background:none;border:none;color:rgba(248,113,113,.7);font-size:11px;cursor:pointer;padding:2px 6px;">🗑</button>'
           : '';
+        // FIX: floor plans are commercially sensitive (pricing/layout docs)
+        // and were previously visible to ANY joined engineer, not just the
+        // owner/Sales Manager who can upload them. The view button (and
+        // viewFloorPlan() itself, as defense in depth) are now gated behind
+        // the same isSalesFullAdmin() check used for upload/remove.
         var planBtn = fl.floorPlan
-          ? ('<button onclick="event.stopPropagation();viewFloorPlan(\'' + b.id + '\',\'' + fl.id + '\')" style="background:rgba(99,102,241,.18);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;font-size:9px;font-weight:800;padding:3px 7px;border-radius:7px;cursor:pointer;white-space:nowrap;">📐 Plan</button>'
-            + (admin ? '<button onclick="event.stopPropagation();removeFloorPlan(\'' + b.id + '\',\'' + fl.id + '\')" style="background:none;border:none;color:rgba(248,113,113,.6);font-size:10px;cursor:pointer;padding:2px 4px;">✕</button>' : ''))
+          ? (admin
+              ? ('<button onclick="event.stopPropagation();viewFloorPlan(\'' + b.id + '\',\'' + fl.id + '\')" style="background:rgba(99,102,241,.18);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;font-size:9px;font-weight:800;padding:3px 7px;border-radius:7px;cursor:pointer;white-space:nowrap;">📐 Plan</button>'
+                + '<button onclick="event.stopPropagation();removeFloorPlan(\'' + b.id + '\',\'' + fl.id + '\')" style="background:none;border:none;color:rgba(248,113,113,.6);font-size:10px;cursor:pointer;padding:2px 4px;">✕</button>')
+              : '')
           : (admin ? '<button onclick="event.stopPropagation();triggerFloorPlanUpload(\'' + b.id + '\',\'' + fl.id + '\')" style="background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.25);color:rgba(255,255,255,.5);font-size:9px;font-weight:700;padding:3px 7px;border-radius:7px;cursor:pointer;white-space:nowrap;">📐 + Plan</button>' : '');
 
         return '<div style="background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:8px;overflow:hidden;">'
@@ -24730,6 +24834,12 @@ function _fpInput() {
         var fl = b ? (b.floors || []).find(function (x) { return x.id === targetF; }) : null;
         if (!fl) { toast('⚠️ Floor not found — it may have been deleted', 'err'); return; }
         fl.floorPlan = { url: url, name: file.name, type: file.type || '', uploadedAt: Date.now() };
+        // FIX: floors are merged across devices by comparing __ts (see
+        // _mergeFloors) — without bumping it here, a floor plan uploaded on
+        // one device could silently lose to a stale copy of the same floor
+        // cached on another device, since floor.__ts was previously only
+        // ever set once at floor creation and never touched again.
+        fl.__ts = Date.now();
         ssales(data);
         renderSalesManager();
         toast('📐 Floor plan saved', 'ok');
@@ -24744,6 +24854,7 @@ function triggerFloorPlanUpload(buildingId, floorId) {
   _fpInput().click();
 }
 function viewFloorPlan(buildingId, floorId) {
+  if (!isSalesFullAdmin()) { toast('Only the owner or Sales Manager can view floor plans', 'err'); return; }
   var data = lsales();
   var b = data.buildings.find(function (x) { return x.id === buildingId; });
   var fl = b ? (b.floors || []).find(function (x) { return x.id === floorId; }) : null;
@@ -24768,6 +24879,7 @@ function removeFloorPlan(buildingId, floorId) {
   var fl = b ? (b.floors || []).find(function (x) { return x.id === floorId; }) : null;
   if (!fl) return;
   delete fl.floorPlan;
+  fl.__ts = Date.now(); // see the matching note in the upload handler above
   ssales(data);
   renderSalesManager();
   toast('Floor plan removed', 'ok');
