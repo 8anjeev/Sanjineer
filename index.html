@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+\<!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -1240,7 +1240,15 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   function _onSBAuthReady(user) {
     _adminSBUser = user;
     // Restore cached session UI without relogin
-    var role = safeLS ? safeLS.getItem('cm_admin_role') : null;
+    // Guarded: safeLS (defined later in the file) may not exist yet if this
+    // auth callback fires very early — e.g. when the browser's tracking
+    // prevention (Edge/Safari/Firefox ETP) makes Supabase's session check
+    // resolve before the rest of the page has finished loading. If safeLS
+    // isn't ready yet, just skip the cached-UI restore — it isn't lost,
+    // _onSBAuthReady runs again on the real SIGNED_IN event once everything
+    // has loaded.
+    if (typeof safeLS === 'undefined' || !safeLS) return;
+    var role = safeLS.getItem('cm_admin_role');
     if (role === 'admin') {
       updateCloudBtn && updateCloudBtn();
       refreshCloudModalState && refreshCloudModalState();
@@ -1248,8 +1256,9 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   }
   function _onSBSignedOut() {
     _adminSBUser = null;
-    safeLS && safeLS.removeItem('cm_admin_role');
-    safeLS && safeLS.removeItem('cm_admin_email');
+    if (typeof safeLS === 'undefined' || !safeLS) return;
+    safeLS.removeItem('cm_admin_role');
+    safeLS.removeItem('cm_admin_email');
   }
 
   // ── SanjCloud: dual-write bridge from local ins()/upd()/del() to the
@@ -1454,10 +1463,11 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     return { projectId: 'sanjineer-supabase', apiKey: '', authDomain: '', appId: '' };
   }
   function getSiteId() {
+    if (typeof safeLS === 'undefined' || !safeLS) return '';
     var s = safeLS.getItem(CLOUD_SITE_ID);
     return s || '';
   }
-  function isCloudActivated() { return safeLS.getItem(CLOUD_KEY) === '1'; }
+  function isCloudActivated() { return (typeof safeLS !== 'undefined' && safeLS) ? safeLS.getItem(CLOUD_KEY) === '1' : false; }
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
