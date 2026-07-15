@@ -3220,7 +3220,11 @@ function _waitSb(cb) {
 function _handleOtpSuccess(user, email, onDismiss) {
   _adminSBUser = user;
   window._wsLastUser = user; window._wsLastEmail = email;
-  try { localStorage.setItem('sanj_cloud_choice','cloud'); } catch(e) {}
+  // NOTE: sanj_cloud_choice is intentionally NOT set here anymore — it used
+  // to be set at this point, which meant reopening the app mid-payment (or
+  // mid-workspace-selection) would skip straight to the dashboard on the
+  // next load, bypassing the payment gate entirely. It's now only set in
+  // _wsSelectProject, once a project is actually confirmed and entered.
   safeLS.setItem(ADMIN_ROLE_KEY || 'cm_admin_role', 'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY || 'cm_admin_email', email);
   if (!_sb) { onDismiss(); return; }
@@ -3572,6 +3576,7 @@ function _wsRequirePayment(plan, companyRow) {
     '<p style="' + _wsTitleStyle + '">' + p.label + ' — ₹' + p.rupees + '/month</p>' +
     '<p style="font-size:12px;color:rgba(255,255,255,.55);margin:0 0 16px;">Payment is required to activate this plan. Secured by Razorpay.</p>' +
     '<button id="ws-pay-btn" style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsOpenPayment(\'' + plan + '\',\'' + companyRow.company_id + '\')">💳 Pay ₹' + p.rupees + ' & Continue</button>' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Choose a different plan</button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
 }
@@ -3744,6 +3749,7 @@ function _wsSelectProject(p) {
   safeLS.setItem(WS_PROJECT_KEY, p.project_id);
   safeLS.setItem(WS_PNAME_KEY, p.project_name || '');
   safeLS.setItem(WS_PROLE_KEY, p.role_name || '');
+  try { localStorage.setItem('sanj_cloud_choice', 'cloud'); } catch(e) {}
   // Sync the name typed at login into the app's own per-project profile
   // (sprof → 'engineer' field) — only if that field is still empty, so we
   // never clobber a name someone already set via Settings.
