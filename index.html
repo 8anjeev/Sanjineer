@@ -3031,8 +3031,11 @@ function _launchApp(){
       </div>
     </div>
 
-    <!-- ── MAIN CHOICE MENU: 4 aesthetic buttons ── -->
-    <div id="ob-menu-section" style="width:100%;">
+    <!-- ── MAIN CHOICE MENU: kept as a fallback, reachable via the back
+         button on the login screen below. No longer the default view —
+         login is now the primary entry point since login will be
+         required for everyone. ── -->
+    <div id="ob-menu-section" style="width:100%;display:none;">
 
       <!-- 1. Continue Offline — primary CTA, right below logo -->
       <button class="ob-primary-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:12px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:14px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,0.4);display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;">
@@ -3075,11 +3078,18 @@ function _launchApp(){
       </div>
     </div>
 
-    <!-- ── CLOUD MODE: login / create tabs ── -->
-    <div id="ob-cloud-section" style="display:none;width:100%;">
+    <!-- ── CLOUD MODE: login / create — now the DEFAULT landing screen,
+         since login will be required for everyone. The offline button
+         at the top is a TEMPORARY testing bypass only — remove before
+         final launch. ── -->
+    <div id="ob-cloud-section" style="display:block;width:100%;">
+      <!-- TEMP — testing only, remove before final launch -->
+      <button class="ob-ghost-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:9px 6px;background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.25);border-radius:11px;color:rgba(255,255,255,0.55);font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;">
+        <span style="font-size:13px;">💾</span> Continue Offline <span style="opacity:.6;font-weight:500;">(testing only)</span>
+      </button>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <p style="margin:0;font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);">Cloud Account</p>
-        <button onclick="obShowMenu()" title="Back" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
+        <p style="margin:0;font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);">Login or Create Account</p>
+        <button onclick="obShowMenu()" title="More options" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#8942;</button>
       </div>
       <style>
         .ob-input{transition:border-color .18s,box-shadow .18s,background .18s;}
@@ -3110,14 +3120,15 @@ function _launchApp(){
         </div>
       </div>
 
-      <p style="text-align:center;margin-top:12px;font-size:10px;color:rgba(255,255,255,0.25);">New here? Plan selection (Pro/Enterprise) comes right after — cloud features require a subscription after the free trial.</p>
+      <p style="text-align:center;margin-top:12px;font-size:10px;color:rgba(255,255,255,0.25);">After verifying, you'll choose: Continue Offline, Join a Project, or Pro/Enterprise.</p>
     </div>
 
   </div>
 </div>
 
 <script>
-// ── Onboard menu navigation: 4 buttons → Continue Offline / Login / Create / Join Project ──
+// ── Onboard menu navigation: cloud login is the default view now; the
+// old 4-button menu is reachable as a fallback via the ⋮ button. ──
 function obShowMenu(){
   var menuSec  = document.getElementById('ob-menu-section');
   var cloudSec = document.getElementById('ob-cloud-section');
@@ -3534,18 +3545,92 @@ function _wsRetry() { if (window._wsLastUser) _wsStart(window._wsLastUser, windo
 // ── No workspace yet — offer Free/Pro personal or Enterprise company ──
 function _wsShowCreateWorkspace() {
   _wsBody(
-    '<p style="' + _wsTitleStyle + '">Welcome! Set up your workspace</p>' +
-    '<button style="' + _wsCardStyle + '" onclick="_wsCreatePersonal(\'free\')"><b>🆓 Free — Personal</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Single user, one project</span></button>' +
-    '<button style="' + _wsCardStyle + '" onclick="_wsCreatePersonal(\'pro\')"><b>⭐ Pro — Personal</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Single user, multiple projects · ₹30/mo</span></button>' +
-    '<button style="' + _wsCardStyle + '" onclick="_wsShowEnterpriseForm()"><b>🏢 Enterprise — Company</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Team collaboration, roles & permissions · ₹99/mo</span></button>' +
+    '<p style="' + _wsTitleStyle + '">Get started</p>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsGoOffline()"><b>💾 Continue Offline</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Use the app locally, no cloud</span></button>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsShowJoinForm()"><b>🤝 Join a Project</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Have a project code from your admin?</span></button>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsCreatePersonal(\'pro\')"><b>⭐ Pro — ₹30/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">1 user · 10 projects</span></button>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsShowEnterpriseForm()"><b>🏢 Enterprise — ₹99/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Multiple users · multiple projects</span></button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
+}
+
+// ── Join a Project — self-contained, lives inside the post-OTP screen ──
+// A session already exists at this point (OTP already verified), so this
+// calls redeem_join_code directly — no separate join-time OTP gate needed
+// the way the old pre-login join flow required.
+function _wsShowJoinForm() {
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">Join a project</p>' +
+    '<input id="ws-join-name" type="text" placeholder="Your Name" value="' + _wsEsc(window._wsPendingName || '') + '" style="' + _wsInputStyle + '">' +
+    '<input id="ws-join-code" type="text" placeholder="Project Code" style="' + _wsInputStyle + 'text-transform:uppercase;letter-spacing:.12em;text-align:center;font-weight:800;">' +
+    '<button id="ws-join-btn" style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsSubmitJoin()">🤝 Join Project</button>' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Back</button>' +
+    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
+  );
+}
+function _wsSubmitJoin() {
+  var name = ((document.getElementById('ws-join-name') || {}).value || '').trim();
+  var code = ((document.getElementById('ws-join-code') || {}).value || '').trim().toUpperCase();
+  if (!name) { _wsSetErr('⚠️ Enter your name'); return; }
+  if (!code) { _wsSetErr('⚠️ Enter the project code'); return; }
+  window._wsPendingName = name;
+  var btn = document.getElementById('ws-join-btn');
+  if (btn) { btn.textContent = '⏳ Joining…'; btn.disabled = true; }
+  _sb.rpc('redeem_join_code', { p_code: code }).then(function(r) {
+    if (r.error) throw r.error;
+    var projectId = r.data || null;
+    if (!projectId) {
+      // Company-level code — no specific project attached, fall back to
+      // the normal company/project selection so they can pick one.
+      toast('✅ Joined company — choose a project', 'ok');
+      _wsStart(window._wsLastUser, window._wsLastEmail, window._wsOnDone);
+      return;
+    }
+    _sb.rpc('get_my_companies').then(function(cr) {
+      var companies = (cr && cr.data) || [];
+      var companyId = companies.length ? companies[0].company_id : null;
+      if (companies.length) {
+        var c = companies[0];
+        window._wsCompanyId = c.company_id;
+        safeLS.setItem(WS_COMPANY_KEY, c.company_id);
+        safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
+      }
+      if (!companyId) { _wsFinishJoin(projectId, null, name, null); return; }
+      _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
+        var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
+        _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null);
+      }).catch(function() { _wsFinishJoin(projectId, null, name, null); });
+    }).catch(function() { _wsFinishJoin(projectId, null, name, null); });
+  }).catch(function(e) {
+    if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+    _wsSetErr(/could not find the table|schema cache/i.test(e.message || '') ? 'App not fully set up yet — ask your admin to finish setup.' : '⚠️ ' + (e.message || 'Invalid code'));
+  });
+}
+function _wsFinishJoin(projectId, roleName, memberName, projectName) {
+  window._wsProjectId = projectId;
+  safeLS.setItem(WS_PROJECT_KEY, projectId);
+  safeLS.setItem(WS_PNAME_KEY, projectName || '');
+  safeLS.setItem(WS_PROLE_KEY, roleName || '');
+  try { localStorage.setItem('sanj_cloud_choice', 'joined'); } catch(e) {}
+  try {
+    var existing = lprof() || {};
+    if (memberName && !existing.engineer) sprof(Object.assign({}, existing, { engineer: memberName }));
+  } catch(e) {}
+  _applyPermState(roleName || 'viewer').then(function() {
+    _wsHide();
+    toast('✅ Joined' + (projectName ? ' "' + projectName + '"' : ' project'), 'ok');
+    if (typeof window._wsOnDone === 'function') window._wsOnDone();
+  });
+}
+function _wsGoOffline() {
+  _wsHide();
+  if (typeof obChooseLocal === 'function') obChooseLocal();
 }
 function _wsShowEnterpriseForm() {
   _wsBody(
     '<p style="' + _wsTitleStyle + '">Company name</p>' +
     '<input id="ws-company-name" type="text" placeholder="e.g. Sanjineer Constructions" style="' + _wsInputStyle + '">' +
-    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateEnterprise()">Create Company</button>' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateEnterprise()">Create Company — ₹99/m</button>' +
     '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Back</button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
@@ -3556,11 +3641,11 @@ function _wsCreatePersonal(tier) {
     if (r.error) { _wsShowCreateWorkspace(); _wsSetErr(r.error.message); return; }
     var row = { company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier };
     if (tier !== 'pro') { _wsSelectCompany(row); return; }
-    _wsRequirePayment('pro', row);
+    _wsLaunchPayment('pro', row);
   }).catch(function(e) { _wsShowCreateWorkspace(); _wsSetErr(e.message); });
 }
 
-// ── Payment gate ──────────────────────────────────────────────
+// ── Payment — launched directly, no intermediate "confirm plan" screen ──
 // PHASE 2.5: the browser is never trusted to report payment success.
 // Razorpay's client-side `handler` only tells us the checkout closed —
 // the actual activation (subscriptions.status/payment_status) happens
@@ -3569,21 +3654,20 @@ function _wsCreatePersonal(tier) {
 // now denies client writes entirely (see lockdown_rls.sql), so even if
 // this code tried to write directly, it would be rejected. Instead we
 // poll until the webhook has done its job.
-function _wsRequirePayment(plan, companyRow) {
+//
+// PHASE 3 FIX: choosing Pro/Enterprise now opens Razorpay checkout
+// immediately — no extra "Pay ₹X & Continue" screen in between. If the
+// checkout is dismissed or the payment fails, this loops back to the
+// plan-choice screen (_wsShowCreateWorkspace) rather than leaving a
+// dead-end payment button, so the only way out is completing payment
+// or explicitly choosing Continue Offline.
+function _wsLaunchPayment(plan, companyRow) {
   window._wsPendingCompanyRow = companyRow;
-  var p = PLAN_PRICING[plan];
-  _wsBody(
-    '<p style="' + _wsTitleStyle + '">' + p.label + ' — ₹' + p.rupees + '/month</p>' +
-    '<p style="font-size:12px;color:rgba(255,255,255,.55);margin:0 0 16px;">Payment is required to activate this plan. Secured by Razorpay.</p>' +
-    '<button id="ws-pay-btn" style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsOpenPayment(\'' + plan + '\',\'' + companyRow.company_id + '\')">💳 Pay ₹' + p.rupees + ' & Continue</button>' +
-    '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Choose a different plan</button>' +
-    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
-  );
+  _wsLoading('Opening payment…');
+  _wsOpenPayment(plan, companyRow.company_id);
 }
 function _wsOpenPayment(plan, companyId) {
   var p = PLAN_PRICING[plan];
-  var btn = document.getElementById('ws-pay-btn');
-  if (btn) { btn.textContent = '⏳ Opening payment…'; btn.disabled = true; }
   var userId = window._wsLastUser && window._wsLastUser.id;
   var openIt = function() {
     var email = window._wsLastEmail || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
@@ -3602,25 +3686,30 @@ function _wsOpenPayment(plan, companyId) {
         toast('✅ Payment received — activating…', 'ok');
         _wsPollActivation(companyId, 0);
       },
-      modal: { ondismiss: function() { if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; } } }
+      modal: {
+        ondismiss: function() {
+          toast('Payment cancelled', 'info');
+          _wsShowCreateWorkspace();
+        }
+      }
     };
     try {
       var rzp = new Razorpay(options);
       rzp.on('payment.failed', function(resp) {
         toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err');
-        if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; }
+        _wsShowCreateWorkspace();
       });
       rzp.open();
     } catch(e) {
+      _wsShowCreateWorkspace();
       _wsSetErr(e.message);
-      if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; }
     }
   };
   if (typeof Razorpay === 'undefined') {
     var s = document.createElement('script');
     s.src = 'https://checkout.razorpay.com/v1/checkout.js';
     s.onload = openIt;
-    s.onerror = function() { _wsSetErr('Payment gateway failed to load — check your connection'); if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; } };
+    s.onerror = function() { _wsShowCreateWorkspace(); _wsSetErr('Payment gateway failed to load — check your connection'); };
     document.head.appendChild(s);
   } else { openIt(); }
 }
@@ -3651,7 +3740,7 @@ function _wsCreateEnterprise() {
   _wsLoading('Creating your company…');
   _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
     if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
-    _wsRequirePayment('enterprise', { company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
+    _wsLaunchPayment('enterprise', { company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
   }).catch(function(e) { _wsShowEnterpriseForm(); _wsSetErr(e.message); });
 }
 function _wsSetErr(msg) { var e = document.getElementById('ws-err'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
@@ -3680,7 +3769,7 @@ function _wsSelectCompany(c) {
     _wsLoading('Checking subscription…');
     _sb.from('subscriptions').select('payment_status').eq('company_id', c.company_id).maybeSingle().then(function(r) {
       var paid = r && r.data && r.data.payment_status === 'paid';
-      if (!paid) { _wsRequirePayment(c.plan_tier, c); return; }
+      if (!paid) { _wsLaunchPayment(c.plan_tier, c); return; }
       _wsSelectCompanyConfirmed(c);
     }).catch(function() { _wsSelectCompanyConfirmed(c); });
     return;
