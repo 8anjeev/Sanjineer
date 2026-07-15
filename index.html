@@ -3226,6 +3226,13 @@ function _handleOtpSuccess(user, email, onDismiss) {
   if (!_sb) { onDismiss(); return; }
   window._sbSubActive = true;
   window._sbSubChecked = true;
+  // Name typed at login (whichever flow it came from) — synced into the
+  // app's own profile object once workspace/project selection finishes,
+  // since auth.updateUser's full_name alone never reaches sprof()/the UI.
+  var pendingName = (typeof _otpPendingName !== 'undefined' && _otpPendingName) ||
+                     (typeof _cmcName !== 'undefined' && _cmcName) ||
+                     (user.user_metadata && user.user_metadata.full_name) || '';
+  window._wsPendingName = pendingName;
   _wsStart(user, email, function() {
     onDismiss();
     if (typeof onAdminLoginSuccess === 'function') onAdminLoginSuccess(email, user, null);
@@ -3543,8 +3550,95 @@ function _wsCreatePersonal(tier) {
   _wsLoading('Creating your workspace…');
   _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: tier }).then(function(r) {
     if (r.error) { _wsShowCreateWorkspace(); _wsSetErr(r.error.message); return; }
-    _wsSelectCompany({ company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier });
+    var row = { company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier };
+    if (tier !== 'pro') { _wsSelectCompany(row); return; }
+    _wsRequirePayment('pro', row);
   }).catch(function(e) { _wsShowCreateWorkspace(); _wsSetErr(e.message); });
+}
+
+// ── Payment gate ──────────────────────────────────────────────
+// PHASE 2.5: the browser is never trusted to report payment success.
+// Razorpay's client-side `handler` only tells us the checkout closed —
+// the actual activation (subscriptions.status/payment_status) happens
+// server-side in the razorpay-webhook Edge Function, which verifies
+// Razorpay's signature before writing anything. RLS on `subscriptions`
+// now denies client writes entirely (see lockdown_rls.sql), so even if
+// this code tried to write directly, it would be rejected. Instead we
+// poll until the webhook has done its job.
+function _wsRequirePayment(plan, companyRow) {
+  window._wsPendingCompanyRow = companyRow;
+  var p = PLAN_PRICING[plan];
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">' + p.label + ' — ₹' + p.rupees + '/month</p>' +
+    '<p style="font-size:12px;color:rgba(255,255,255,.55);margin:0 0 16px;">Payment is required to activate this plan. Secured by Razorpay.</p>' +
+    '<button id="ws-pay-btn" style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsOpenPayment(\'' + plan + '\',\'' + companyRow.company_id + '\')">💳 Pay ₹' + p.rupees + ' & Continue</button>' +
+    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
+  );
+}
+function _wsOpenPayment(plan, companyId) {
+  var p = PLAN_PRICING[plan];
+  var btn = document.getElementById('ws-pay-btn');
+  if (btn) { btn.textContent = '⏳ Opening payment…'; btn.disabled = true; }
+  var userId = window._wsLastUser && window._wsLastUser.id;
+  var openIt = function() {
+    var email = window._wsLastEmail || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
+    var options = {
+      key: 'rzp_live_SRrnyG5XusYMpE',
+      amount: p.amount, currency: 'INR',
+      name: 'Sanjineer Cloud', description: p.desc,
+      prefill: { name: window._wsPendingName || '', email: email },
+      // company_id/user_id here are what the razorpay-webhook Edge
+      // Function reads from payment.notes to know which company to
+      // activate — this is the only thing the client contributes to
+      // the activation decision, everything else is server-verified.
+      notes: { purpose: 'sanjineer_workspace_creation', plan: plan, company_id: companyId, user_id: userId },
+      theme: { color: '#4f46e5' },
+      handler: function(response) {
+        toast('✅ Payment received — activating…', 'ok');
+        _wsPollActivation(companyId, 0);
+      },
+      modal: { ondismiss: function() { if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; } } }
+    };
+    try {
+      var rzp = new Razorpay(options);
+      rzp.on('payment.failed', function(resp) {
+        toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err');
+        if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; }
+      });
+      rzp.open();
+    } catch(e) {
+      _wsSetErr(e.message);
+      if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; }
+    }
+  };
+  if (typeof Razorpay === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = openIt;
+    s.onerror = function() { _wsSetErr('Payment gateway failed to load — check your connection'); if (btn) { btn.textContent = '💳 Pay ₹' + p.rupees + ' & Continue'; btn.disabled = false; } };
+    document.head.appendChild(s);
+  } else { openIt(); }
+}
+// Polls subscriptions.payment_status (SELECT is still allowed by RLS —
+// only writes were locked down) until the webhook flips it to 'paid'.
+// Razorpay webhooks are usually near-instant but not guaranteed; ~30s
+// of polling covers normal delivery, after which we let the person
+// manually retry rather than spin forever.
+function _wsPollActivation(companyId, attempt) {
+  _wsLoading(attempt === 0 ? 'Verifying payment…' : 'Still verifying…');
+  _sb.from('subscriptions').select('payment_status').eq('company_id', companyId).maybeSingle().then(function(r) {
+    var paid = r && r.data && r.data.payment_status === 'paid';
+    if (paid) { _wsSelectCompany(window._wsPendingCompanyRow); return; }
+    if (attempt >= 15) {
+      _wsBody(
+        '<p style="' + _wsTitleStyle + '">⏳ Still confirming…</p>' +
+        '<p style="font-size:12px;color:rgba(255,255,255,.55);margin:0 0 14px;">Payment was received — activation is just taking a little longer than usual.</p>' +
+        '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsPollActivation(\'' + companyId + '\',0)">Check again</button>'
+      );
+      return;
+    }
+    setTimeout(function() { _wsPollActivation(companyId, attempt + 1); }, 2000);
+  }).catch(function() { setTimeout(function() { _wsPollActivation(companyId, attempt + 1); }, 2000); });
 }
 function _wsCreateEnterprise() {
   var name = ((document.getElementById('ws-company-name') || {}).value || '').trim();
@@ -3552,7 +3646,7 @@ function _wsCreateEnterprise() {
   _wsLoading('Creating your company…');
   _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
     if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
-    _wsSelectCompany({ company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
+    _wsRequirePayment('enterprise', { company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
   }).catch(function(e) { _wsShowEnterpriseForm(); _wsSetErr(e.message); });
 }
 function _wsSetErr(msg) { var e = document.getElementById('ws-err'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
@@ -3573,12 +3667,34 @@ function _wsSelectCompanyByIdx(i) { _wsSelectCompany(window._wsCompanyRows[i]); 
 function _wsEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
 // ── Company chosen — persist + load its projects ──
+// PHASE 2.5: if this is a paid tier that still hasn't been confirmed
+// paid (e.g. they closed the tab mid-payment last time), route back
+// into the payment gate instead of letting them straight into the app.
 function _wsSelectCompany(c) {
+  if ((c.plan_tier === 'pro' || c.plan_tier === 'enterprise') && c.role_name === 'owner') {
+    _wsLoading('Checking subscription…');
+    _sb.from('subscriptions').select('payment_status').eq('company_id', c.company_id).maybeSingle().then(function(r) {
+      var paid = r && r.data && r.data.payment_status === 'paid';
+      if (!paid) { _wsRequirePayment(c.plan_tier, c); return; }
+      _wsSelectCompanyConfirmed(c);
+    }).catch(function() { _wsSelectCompanyConfirmed(c); });
+    return;
+  }
+  _wsSelectCompanyConfirmed(c);
+}
+function _wsSelectCompanyConfirmed(c) {
   window._wsCompanyId = c.company_id;
   safeLS.setItem(WS_COMPANY_KEY, c.company_id);
   safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
   safeLS.setItem(WS_CROLE_KEY, c.role_name || 'owner');
   safeLS.setItem(WS_CPLAN_KEY, c.plan_tier || '');
+  // Sync into the app's own display profile — this is what header/print/
+  // settings actually read (sglobal), not the companies table directly.
+  try {
+    var g = lglobal() || {};
+    if (c.company_name) g.company = c.company_name;
+    sglobal(g);
+  } catch(e) {}
   _wsLoading('Loading projects…');
   _sb.rpc('get_my_projects', { p_company_id: c.company_id }).then(function(r) {
     if (r.error) { _wsShowError('Could not load projects', r.error.message); return; }
@@ -3628,6 +3744,15 @@ function _wsSelectProject(p) {
   safeLS.setItem(WS_PROJECT_KEY, p.project_id);
   safeLS.setItem(WS_PNAME_KEY, p.project_name || '');
   safeLS.setItem(WS_PROLE_KEY, p.role_name || '');
+  // Sync the name typed at login into the app's own per-project profile
+  // (sprof → 'engineer' field) — only if that field is still empty, so we
+  // never clobber a name someone already set via Settings.
+  try {
+    var existing = lprof() || {};
+    if (window._wsPendingName && !existing.engineer) {
+      sprof(Object.assign({}, existing, { engineer: window._wsPendingName }));
+    }
+  } catch(e) {}
   _wsHide();
   toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
   if (typeof window._wsOnDone === 'function') window._wsOnDone();
