@@ -3744,6 +3744,59 @@ function _wsShowProjectList(rows) {
 function _wsSelectProjectByIdx(i) { _wsSelectProject(window._wsProjectRows[i]); }
 
 // ── Project chosen — persist, dismiss overlay, hand back to caller ──
+// ══════════════════════════════════════════════════════════════
+// PHASE 3 — PERMISSION SYSTEM (cached-once-per-session design)
+// Replaces three uncoordinated legacy flags (isAdmin's cousin
+// _ENGINEER_READONLY, the old _IS_VIEWER, and salesOnly) with one
+// cached Set of permission keys, loaded once at login/project-select
+// from the real role_permissions table — not re-fetched on every
+// check, matching the existing synchronous call-site pattern so none
+// of the ~40 existing read-sites need to change.
+// ══════════════════════════════════════════════════════════════
+var _ALL_PERM_KEYS_CACHE = null;
+function _permLoadAllKeys() {
+  if (_ALL_PERM_KEYS_CACHE) return Promise.resolve(_ALL_PERM_KEYS_CACHE);
+  return _sb.from('permissions').select('key').then(function(r) {
+    _ALL_PERM_KEYS_CACHE = (r.data || []).map(function(x) { return x.key; });
+    return _ALL_PERM_KEYS_CACHE;
+  });
+}
+function _permLoadForRole(roleName) {
+  // Owner isn't granted permissions via role_permissions at all — ownership
+  // itself is the grant (matches has_permission()'s companies.owner_id
+  // shortcut on the DB side). Give them every key rather than querying.
+  if (roleName === 'owner') return _permLoadAllKeys();
+  return _sb.from('roles')
+    .select('id, role_permissions(permissions(key))')
+    .eq('name', roleName)
+    .single()
+    .then(function(r) {
+      var rp = (r.data && r.data.role_permissions) || [];
+      return rp.map(function(x) { return x.permissions && x.permissions.key; }).filter(Boolean);
+    });
+}
+function hasPerm(key) { return !!(window._permSet && window._permSet.has(key)); }
+// Sets the legacy flags every existing call site already reads, but now
+// derived from the real permission set instead of a local membership
+// object. roleName is whatever get_my_projects()/get_my_companies()
+// returned for the current context.
+function _applyPermState(roleName) {
+  return _permLoadForRole(roleName).then(function(keys) {
+    window._permSet = new Set(keys);
+    window._ENGINEER_READONLY = (roleName !== 'owner') && !hasPerm('files.manage');
+    window._IS_VIEWER = (roleName === 'viewer');
+    window._SALES_ADMIN_MODE = (roleName === 'sales_admin');
+  }).catch(function(e) {
+    console.error('permission load failed:', e.message);
+    // Fail closed — if we can't confirm what someone's allowed to do,
+    // treat them as read-only rather than silently granting write access.
+    window._permSet = new Set();
+    window._ENGINEER_READONLY = (roleName !== 'owner');
+    window._IS_VIEWER = false;
+    window._SALES_ADMIN_MODE = false;
+  });
+}
+
 function _wsSelectProject(p) {
   window._wsProjectId = p.project_id;
   safeLS.setItem(WS_PROJECT_KEY, p.project_id);
@@ -3759,10 +3812,13 @@ function _wsSelectProject(p) {
       sprof(Object.assign({}, existing, { engineer: window._wsPendingName }));
     }
   } catch(e) {}
-  _wsHide();
-  toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
-  if (typeof window._wsOnDone === 'function') window._wsOnDone();
+  _applyPermState(p.role_name || 'owner').then(function() {
+    _wsHide();
+    toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
+    if (typeof window._wsOnDone === 'function') window._wsOnDone();
+  });
 }
+
 
 </script>
 
@@ -23127,11 +23183,14 @@ window.doJoinProject = function() {
           return;
         }
 
-        // Project-level join — go straight in. Company id isn't returned by
-        // this RPC, so fetch it via get_my_companies so window._wsCompanyId
-        // stays correct for Phase 4 sync.
+        // Project-level join — go straight in. Company id/role isn't
+        // returned by redeem_join_code itself, so fetch both via
+        // get_my_companies + get_my_projects — this also gives us the
+        // real role_name needed to load the correct permission set
+        // (Phase 3), not just the ids.
         _sb.rpc('get_my_companies').then(function(cr) {
           var companies = (cr && cr.data) || [];
+          var companyId = companies.length ? companies[0].company_id : null;
           if (companies.length) {
             var c = companies[0];
             window._wsCompanyId = c.company_id;
@@ -23141,13 +23200,27 @@ window.doJoinProject = function() {
           }
           window._wsProjectId = projectId;
           safeLS.setItem(WS_PROJECT_KEY, projectId);
-          if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
-          toast('✅ Joined project', 'ok');
+          var finish = function(roleName) {
+            safeLS.setItem(WS_PROLE_KEY, roleName || '');
+            _applyPermState(roleName || 'viewer').then(function() {
+              if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+              toast('✅ Joined project', 'ok');
+            });
+          };
+          if (!companyId) { finish(null); return; }
+          _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
+            var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
+            finish(proj ? proj.role_name : null);
+          }).catch(function() { finish(null); });
         }).catch(function() {
           window._wsProjectId = projectId;
           safeLS.setItem(WS_PROJECT_KEY, projectId);
-          if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
-          toast('✅ Joined project', 'ok');
+          // Couldn't confirm role — _applyPermState fails closed (read-only)
+          // rather than silently granting write access.
+          _applyPermState(null).then(function() {
+            if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+            toast('✅ Joined project', 'ok');
+          });
         });
       }).catch(function(e) {
         if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
