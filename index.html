@@ -1258,6 +1258,25 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     if (typeof _updateSalesNavTabVisibility === 'function') { try { _updateSalesNavTabVisibility(); } catch(e2) {} }
     return plan;
   };
+  // PHASE 3 FIX: new-schema equivalent — the new login flow (_wsStart)
+  // never touches the admins table, so _applyPlanFromAdminRow above never
+  // runs for anyone going through it. That silently left window.isEnterpriseUser
+  // permanently false, blocking Sales Manager / Share Project / Cross-Device
+  // Sharing / PO Approvals even for genuinely paid Enterprise owners. This
+  // derives the same three flags from a company's real plan_tier instead.
+  window._applyPlanFromCompany = function(planTier) {
+    var plan = (planTier === 'enterprise') ? 'enterprise' : (planTier === 'pro' ? 'pro' : 'free');
+    window.userPlan = plan;
+    window.isProUser = (plan === 'pro' || plan === 'enterprise');
+    window.isEnterpriseUser = (plan === 'enterprise');
+    try {
+      localStorage.setItem('isProUser', window.isProUser ? 'true' : 'false');
+      localStorage.setItem('cm_plan', plan);
+    } catch(e) {}
+    if (typeof _updateSalesNavTabVisibility === 'function') { try { _updateSalesNavTabVisibility(); } catch(e2) {} }
+    if (typeof _settRefreshUpgradeBtn === 'function') { try { _settRefreshUpgradeBtn(); } catch(e3) {} }
+    return plan;
+  };
 
 
   // Init Supabase client (SDK loaded synchronously via CDN)
@@ -3083,13 +3102,17 @@ function _launchApp(){
          at the top is a TEMPORARY testing bypass only — remove before
          final launch. ── -->
     <div id="ob-cloud-section" style="display:block;width:100%;">
-      <!-- TEMP — testing only, remove before final launch -->
-      <button class="ob-ghost-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:9px 6px;background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.25);border-radius:11px;color:rgba(255,255,255,0.55);font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;">
+      <!-- TEMP — testing only, remove before final launch. Hidden when
+           this screen is reopened from Settings (already inside the app). -->
+      <button id="ob-cloud-temp-offline" class="ob-ghost-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:9px 6px;background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.25);border-radius:11px;color:rgba(255,255,255,0.55);font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;">
         <span style="font-size:13px;">💾</span> Continue Offline <span style="opacity:.6;font-weight:500;">(testing only)</span>
       </button>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <p style="margin:0;font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);">Login or Create Account</p>
-        <button onclick="obShowMenu()" title="More options" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#8942;</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button id="ob-cancel-btn" onclick="_obDismiss()" title="Cancel" style="display:none;width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:13px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
+          <button onclick="obShowMenu()" title="More options" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#8942;</button>
+        </div>
       </div>
       <style>
         .ob-input{transition:border-color .18s,box-shadow .18s,background .18s;}
@@ -3134,6 +3157,29 @@ function obShowMenu(){
   var cloudSec = document.getElementById('ob-cloud-section');
   if (menuSec)  menuSec.style.display  = 'block';
   if (cloudSec) cloudSec.style.display = 'none';
+}
+// ── Settings → Login/Cloud button — ONE login module, reused ──
+// Previously this opened a separate password-based modal (openCloudModal,
+// with its own login/signup tabs and now-dead check_viewer_credentials
+// RPC). It now reopens the exact same OTP screen used at first launch —
+// same code, same _wsStart flow after — instead of a second, different
+// login system living in parallel.
+function _settOpenLogin() {
+  if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
+  var ao = document.getElementById('auth-onboard');
+  if (!ao) return;
+  var offlineBtn = document.getElementById('ob-cloud-temp-offline');
+  var cancelBtn  = document.getElementById('ob-cancel-btn');
+  if (offlineBtn) offlineBtn.style.display = 'none'; // already in the app — irrelevant here
+  if (cancelBtn) cancelBtn.style.display = 'flex';    // give a way back out
+  var s1 = document.getElementById('ob-otp-step1'), s2 = document.getElementById('ob-otp-step2');
+  if (s1) s1.style.display = 'block';
+  if (s2) s2.style.display = 'none';
+  var menuSec = document.getElementById('ob-menu-section'), cloudSec = document.getElementById('ob-cloud-section');
+  if (menuSec) menuSec.style.display = 'none';
+  if (cloudSec) cloudSec.style.display = 'block';
+  ao.style.opacity = '1';
+  ao.style.display = 'flex';
 }
 
 // Single entry point for "Use Cloud Account" — replaces the old separate
@@ -3499,7 +3545,7 @@ function _wsOverlay() {
   el.id = 'ws-overlay';
   el.style.cssText = 'position:fixed;inset:0;z-index:800000;display:none;align-items:center;justify-content:center;background:rgba(8,8,20,.72);backdrop-filter:blur(6px);padding:16px;box-sizing:border-box;';
   el.innerHTML =
-    '<div id="ws-panel" style="width:100%;max-width:420px;max-height:86vh;overflow-y:auto;background:linear-gradient(160deg,#1e1b3a,#151330);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.5);">' +
+    '<div id="ws-panel" style="width:100%;max-width:320px;max-height:80vh;overflow-y:auto;background:linear-gradient(160deg,#1e1b3a,#151330);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);">' +
       '<div id="ws-body"></div>' +
     '</div>';
   document.body.appendChild(el);
@@ -3509,11 +3555,11 @@ function _wsShow() { _wsOverlay().style.display = 'flex'; }
 function _wsHide() { var el = document.getElementById('ws-overlay'); if (el) el.style.display = 'none'; }
 function _wsBody(html) { document.getElementById('ws-body').innerHTML = html; }
 
-var _wsBtnStyle   = 'width:100%;padding:13px;margin-bottom:8px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.4);text-align:left;';
-var _wsCardStyle  = 'width:100%;padding:14px;margin-bottom:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:14px;color:#fff;text-align:left;cursor:pointer;';
-var _wsInputStyle = 'width:100%;padding:11px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:11px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:10px;';
-var _wsTitleStyle = 'margin:0 0 14px;font-size:16px;font-weight:800;color:#fff;';
-var _wsErrStyle   = 'font-size:12px;color:#fca5a5;margin:8px 0 0;';
+var _wsBtnStyle   = 'width:100%;padding:8px;margin-bottom:5px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:.8rem;cursor:pointer;box-shadow:0 3px 10px rgba(79,70,229,.4);text-align:left;';
+var _wsCardStyle  = 'width:100%;padding:9px;margin-bottom:5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:10px;color:#fff;text-align:left;cursor:pointer;font-size:.85rem;';
+var _wsInputStyle = 'width:100%;padding:7px 9px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:8px;color:#fff;font-size:12.5px;outline:none;box-sizing:border-box;margin-bottom:6px;';
+var _wsTitleStyle = 'margin:0 0 8px;font-size:13.5px;font-weight:800;color:#fff;';
+var _wsErrStyle   = 'font-size:10.5px;color:#fca5a5;margin:5px 0 0;';
 
 function _wsLoading(msg) {
   _wsBody('<p style="' + _wsTitleStyle + '">' + (msg || 'Loading…') + '</p><div style="height:3px;width:100%;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;"><div style="height:100%;width:40%;background:linear-gradient(90deg,#4f46e5,#7c3aed);animation:_wsBar 1s ease-in-out infinite;"></div></div><style>@keyframes _wsBar{0%{margin-left:-40%}100%{margin-left:100%}}</style>');
@@ -3548,7 +3594,7 @@ function _wsShowCreateWorkspace() {
     '<p style="' + _wsTitleStyle + '">Get started</p>' +
     '<button style="' + _wsCardStyle + '" onclick="_wsGoOffline()"><b>💾 Continue Offline</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Use the app locally, no cloud</span></button>' +
     '<button style="' + _wsCardStyle + '" onclick="_wsShowJoinForm()"><b>🤝 Join a Project</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Have a project code from your admin?</span></button>' +
-    '<button style="' + _wsCardStyle + '" onclick="_wsCreatePersonal(\'pro\')"><b>⭐ Pro — ₹30/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">1 user · 10 projects</span></button>' +
+    '<button style="' + _wsCardStyle + '" onclick="_wsShowProForm()"><b>⭐ Pro — ₹30/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">1 user · 10 projects</span></button>' +
     '<button style="' + _wsCardStyle + '" onclick="_wsShowEnterpriseForm()"><b>🏢 Enterprise — ₹99/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Multiple users · multiple projects</span></button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
@@ -3589,11 +3635,13 @@ function _wsSubmitJoin() {
     _sb.rpc('get_my_companies').then(function(cr) {
       var companies = (cr && cr.data) || [];
       var companyId = companies.length ? companies[0].company_id : null;
+      var planTier = companies.length ? companies[0].plan_tier : null;
       if (companies.length) {
         var c = companies[0];
         window._wsCompanyId = c.company_id;
         safeLS.setItem(WS_COMPANY_KEY, c.company_id);
         safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
+        if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
       }
       if (!companyId) { _wsFinishJoin(projectId, null, name, null); return; }
       _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
@@ -3628,20 +3676,59 @@ function _wsGoOffline() {
 }
 function _wsShowEnterpriseForm() {
   _wsBody(
-    '<p style="' + _wsTitleStyle + '">Company name</p>' +
-    '<input id="ws-company-name" type="text" placeholder="e.g. Sanjineer Constructions" style="' + _wsInputStyle + '">' +
-    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateEnterprise()">Create Company — ₹99/m</button>' +
+    '<p style="' + _wsTitleStyle + '">Enterprise — ₹99/m</p>' +
+    '<input id="ws-company-name" type="text" placeholder="Company Name" style="' + _wsInputStyle + '">' +
+    '<input id="ws-owner-name" type="text" placeholder="Your Name (Owner)" value="' + _wsEsc(window._wsPendingName || '') + '" style="' + _wsInputStyle + '">' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateEnterprise()">Continue to Payment — ₹99</button>' +
     '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Back</button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
 }
+// ── Pro — same pattern as Enterprise: Company/Project + User/owner, then
+// payment. "Project" stands in for "Company" here since a Pro workspace
+// is personal (is_personal_workspace = true, no real company entity),
+// but the flow map calls for a name-collection step either way. ──
+function _wsShowProForm() {
+  _wsBody(
+    '<p style="' + _wsTitleStyle + '">Pro — ₹30/m</p>' +
+    '<input id="ws-pro-project" type="text" placeholder="Project Name" style="' + _wsInputStyle + '">' +
+    '<input id="ws-pro-name" type="text" placeholder="Your Name (Owner)" value="' + _wsEsc(window._wsPendingName || '') + '" style="' + _wsInputStyle + '">' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsSubmitProForm()">Continue to Payment — ₹30</button>' +
+    '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;" onclick="_wsShowCreateWorkspace()">← Back</button>' +
+    '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
+  );
+}
+function _wsSubmitProForm() {
+  var projectName = ((document.getElementById('ws-pro-project') || {}).value || '').trim();
+  var ownerName = ((document.getElementById('ws-pro-name') || {}).value || '').trim();
+  if (!projectName) { _wsSetErr('⚠️ Enter a project name'); return; }
+  if (!ownerName) { _wsSetErr('⚠️ Enter your name'); return; }
+  window._wsPendingName = ownerName;
+  _wsLoading('Creating your workspace…');
+  _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: 'pro' }).then(function(r) {
+    if (r.error) { _wsShowProForm(); _wsSetErr(r.error.message); return; }
+    var companyId = r.data;
+    var row = { company_id: companyId, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: 'pro' };
+    // Create the first project now too, so after payment confirms there's
+    // already exactly one project and the person lands straight on it
+    // instead of hitting an empty "create your first project" screen.
+    _sb.rpc('create_project', { p_company_id: companyId, p_name: projectName, p_code: null, p_address: null, p_start_date: null, p_end_date: null })
+      .then(function() { _wsLaunchPayment('pro', row); })
+      .catch(function() {
+        // Non-fatal — the create-project screen after payment covers this
+        // if it didn't go through for some reason.
+        _wsLaunchPayment('pro', row);
+      });
+  }).catch(function(e) { _wsShowProForm(); _wsSetErr(e.message); });
+}
 function _wsCreatePersonal(tier) {
+  // Free/other non-pro tiers only — Pro now goes through _wsShowProForm
+  // first to collect the project + owner name per the flow map.
   _wsLoading('Creating your workspace…');
   _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: tier }).then(function(r) {
     if (r.error) { _wsShowCreateWorkspace(); _wsSetErr(r.error.message); return; }
     var row = { company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier };
-    if (tier !== 'pro') { _wsSelectCompany(row); return; }
-    _wsLaunchPayment('pro', row);
+    _wsSelectCompany(row);
   }).catch(function(e) { _wsShowCreateWorkspace(); _wsSetErr(e.message); });
 }
 
@@ -3734,9 +3821,79 @@ function _wsPollActivation(companyId, attempt) {
     setTimeout(function() { _wsPollActivation(companyId, attempt + 1); }, 2000);
   }).catch(function() { setTimeout(function() { _wsPollActivation(companyId, attempt + 1); }, 2000); });
 }
+
+// ── Pro → Enterprise upgrade — combines remaining paid days ──
+// Reuses the SAME company_id (unlike a fresh Enterprise signup, which
+// creates a brand-new company). Sending the existing company_id in the
+// Razorpay notes lets razorpay-webhook see the prior subscription row and
+// add its remaining time to the new 30 days, instead of the person losing
+// whatever they'd already paid for on Pro. Called from Settings.
+// Shows the "Upgrade to Enterprise" Settings button only for a Pro-plan
+// company owner — hidden for Free, Enterprise (already there), or anyone
+// who isn't the owner (joined engineers/sales_admin can't buy the company
+// a plan upgrade).
+function _settRefreshUpgradeBtn() {
+  var btn = document.getElementById('sett-upgrade-btn');
+  if (!btn) return;
+  var role = safeLS.getItem(WS_CROLE_KEY);
+  var plan = safeLS.getItem(WS_CPLAN_KEY);
+  btn.style.display = (role === 'owner' && plan === 'pro') ? 'flex' : 'none';
+}
+function _wsUpgradeToEnterprise() {
+  var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
+  if (!companyId) { toast('⚠️ No active workspace found — log in first', 'err'); return; }
+  if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
+  var userId = window._wsLastUser && window._wsLastUser.id;
+  var p = PLAN_PRICING.enterprise;
+  var openIt = function() {
+    var email = window._wsLastEmail || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
+    var options = {
+      key: 'rzp_live_SRrnyG5XusYMpE',
+      amount: p.amount, currency: 'INR',
+      name: 'Sanjineer Cloud', description: 'Upgrade to Enterprise',
+      prefill: { email: email },
+      notes: { purpose: 'sanjineer_plan_upgrade', plan: 'enterprise', company_id: companyId, user_id: userId },
+      theme: { color: '#4f46e5' },
+      handler: function() {
+        toast('✅ Payment received — upgrading…', 'ok');
+        _wsPollUpgrade(companyId, 0);
+      },
+      modal: { ondismiss: function() { toast('Upgrade cancelled', 'info'); } }
+    };
+    try {
+      var rzp = new Razorpay(options);
+      rzp.on('payment.failed', function(resp) { toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err'); });
+      rzp.open();
+    } catch(e) { toast('⚠️ ' + e.message, 'err'); }
+  };
+  if (typeof Razorpay === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = openIt;
+    s.onerror = function() { toast('⚠️ Payment gateway failed to load — check your connection', 'err'); };
+    document.head.appendChild(s);
+  } else { openIt(); }
+}
+function _wsPollUpgrade(companyId, attempt) {
+  _sb.from('subscriptions').select('plan_tier,payment_status,current_period_end').eq('company_id', companyId).maybeSingle().then(function(r) {
+    var upgraded = r && r.data && r.data.plan_tier === 'enterprise' && r.data.payment_status === 'paid';
+    if (upgraded) {
+      toast('🎉 Upgraded to Enterprise!', 'ok');
+      safeLS.setItem(WS_CPLAN_KEY, 'enterprise');
+      if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany('enterprise');
+      return;
+    }
+    if (attempt >= 15) { toast('Payment received — upgrade is taking a little longer than usual, check back shortly', 'err'); return; }
+    setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1); }, 2000);
+  }).catch(function() { setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1); }, 2000); });
+}
+
 function _wsCreateEnterprise() {
   var name = ((document.getElementById('ws-company-name') || {}).value || '').trim();
+  var ownerName = ((document.getElementById('ws-owner-name') || {}).value || '').trim();
   if (!name) { _wsSetErr('⚠️ Enter a company name'); return; }
+  if (!ownerName) { _wsSetErr('⚠️ Enter your name'); return; }
+  window._wsPendingName = ownerName;
   _wsLoading('Creating your company…');
   _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
     if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
@@ -3782,6 +3939,11 @@ function _wsSelectCompanyConfirmed(c) {
   safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
   safeLS.setItem(WS_CROLE_KEY, c.role_name || 'owner');
   safeLS.setItem(WS_CPLAN_KEY, c.plan_tier || '');
+  // Fixes Sales Manager / Share Project / Cross-Device Sharing / PO
+  // Approvals being blocked for genuinely paid Enterprise owners — those
+  // all gate on window.isEnterpriseUser, which only _applyPlanFromCompany
+  // sets now that the new login flow never touches the old admins table.
+  if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
   // Sync into the app's own display profile — this is what header/print/
   // settings actually read (sglobal), not the companies table directly.
   try {
@@ -4093,11 +4255,21 @@ function _wsSelectProject(p) {
     </div>
 
     <!-- Login / Cloud -->
-    <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();openCloudModal()" id="sett-login-btn">
+    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_settOpenLogin()" id="sett-login-btn">
       <span style="font-size:15px;flex-shrink:0" id="sett-login-icon">🔒</span>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span id="sett-login-title">Login / Cloud</span>
         <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sett-login-sub">Sign in for backup &amp; sync</span>
+      </div>
+    </button>
+
+    <!-- Upgrade to Enterprise — hidden by default, shown via JS (see
+         _settRefreshUpgradeBtn) only for a Pro-plan company owner. -->
+    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_wsUpgradeToEnterprise()" id="sett-upgrade-btn" style="display:none;">
+      <span style="font-size:15px;flex-shrink:0">👑</span>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <span>Upgrade to Enterprise</span>
+        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">₹99/m · remaining Pro days carry over</span>
       </div>
     </button>
 
@@ -23286,6 +23458,7 @@ window.doJoinProject = function() {
             safeLS.setItem(WS_COMPANY_KEY, c.company_id);
             safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
             safeLS.setItem(WS_CROLE_KEY, c.role_name || '');
+            if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
           }
           window._wsProjectId = projectId;
           safeLS.setItem(WS_PROJECT_KEY, projectId);
