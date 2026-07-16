@@ -1032,9 +1032,36 @@ self.addEventListener('fetch', function(e) {
     try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
 
     _renderProjectDropdown();
+    // BUGFIX: if the real project name wasn't available yet at join time
+    // (e.g. get_my_projects raced ahead of the membership row becoming
+    // visible right after redeem_join_code), the dropdown was permanently
+    // stuck showing the generic "Joined Project" placeholder — nothing
+    // ever went back to correct it. Retry fetching the real name shortly
+    // after and fix it in place once it resolves.
+    if (!projectName) { _wsResolveJoinedProjectName(id, companyId, cloudProjectId, 0); }
     return id;
   }
   window._ensureLocalProjectForJoin = _ensureLocalProjectForJoin;
+
+  function _wsResolveJoinedProjectName(localId, companyId, cloudProjectId, attempt) {
+    if (!companyId || typeof _sb === 'undefined' || !_sb) return;
+    _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
+      var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === cloudProjectId; });
+      if (proj && proj.project_name) {
+        var p = window.projects.find(function(x){ return x.id === localId; });
+        if (p && p.name !== proj.project_name) {
+          p.name = proj.project_name;
+          _saveProjects();
+          _renderProjectDropdown();
+        }
+        return;
+      }
+      if (attempt < 5) setTimeout(function(){ _wsResolveJoinedProjectName(localId, companyId, cloudProjectId, attempt + 1); }, 2000);
+    }).catch(function() {
+      if (attempt < 5) setTimeout(function(){ _wsResolveJoinedProjectName(localId, companyId, cloudProjectId, attempt + 1); }, 2000);
+    });
+  }
+  window._wsResolveJoinedProjectName = _wsResolveJoinedProjectName;
 
   // ── Custom modal (replaces prompt()) ─────────────────────────
   function _showProjectModal(title, defaultVal, onConfirm, defaultAddress) {
@@ -3583,6 +3610,18 @@ var _wsErrStyle   = 'font-size:10.5px;color:#fca5a5;margin:5px 0 0;';
 
 function _wsLoading(msg) {
   _wsBody('<p style="' + _wsTitleStyle + '">' + (msg || 'Loading…') + '</p><div style="height:3px;width:100%;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;"><div style="height:100%;width:40%;background:linear-gradient(90deg,#4f46e5,#7c3aed);animation:_wsBar 1s ease-in-out infinite;"></div></div><style>@keyframes _wsBar{0%{margin-left:-40%}100%{margin-left:100%}}</style>');
+  // BUGFIX: this overlay used to have no way out if whatever it was
+  // waiting on (subscription check, network call, etc.) never resolved —
+  // the person was stuck looking at a blank spinner with no button and no
+  // timeout. If nothing has replaced this loading state within 20s, offer
+  // a manual close instead of leaving them stranded.
+  clearTimeout(window._wsLoadingWatchdog);
+  window._wsLoadingWatchdog = setTimeout(function() {
+    var body = document.getElementById('ws-body');
+    if (body && body.innerHTML.indexOf('_wsBar') !== -1) {
+      body.innerHTML += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;margin-top:8px;" onclick="_wsHide()">This is taking a while — close</button>';
+    }
+  }, 20000);
 }
 
 // ── Entry point — called from _handleOtpSuccess after a verified OTP ──
@@ -3898,9 +3937,13 @@ function _settRefreshLoginBtn() {
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
   if (email && companyId) {
     var plan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
-    var planLabel = plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free';
+    var role = safeLS.getItem(WS_CROLE_KEY) || '';
+    // BUGFIX: a project-code joiner isn't the plan owner — show them as a
+    // Member instead of implying they personally hold the company's plan.
+    var isMember = (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) || (role && role !== 'owner');
+    var planLabel = isMember ? '🤝 Member' : (plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free');
     titleEl.textContent = email;
-    subEl.textContent = planLabel + ' plan · tap to manage';
+    subEl.textContent = planLabel + (isMember ? ' · tap to manage' : ' plan · tap to manage');
     if (iconEl) iconEl.textContent = '👤';
   } else {
     titleEl.textContent = 'Login / Cloud';
@@ -3913,7 +3956,35 @@ function _settRefreshLoginBtn() {
 function _settLoginBtnClick() {
   var email = safeLS.getItem(ADMIN_EMAIL_KEY);
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
-  if (email && companyId) { _settShowPlanManage(); } else { _settOpenLogin(); }
+  if (email && companyId) { _settShowPlanManage(); return; }
+  // BUGFIX: previously, if the in-memory/local company id hadn't been
+  // resolved yet on this tab (e.g. right after a page reload, before
+  // anything else happened to call _wsStart), this immediately assumed
+  // "logged out" and threw the person back to the OTP login screen even
+  // though Supabase still had a perfectly valid restored session for
+  // them — annoying on its own, and the resulting re-run of the whole
+  // workspace/plan-selection flow is what produced the "stuck blank"
+  // follow-on symptom. Check the real session first and only fall back
+  // to a full login if one genuinely doesn't exist.
+  if (typeof _sb !== 'undefined' && _sb && _sb.auth) {
+    _wsShow();
+    _wsLoading('Checking your account…');
+    _sb.auth.getSession().then(function(r) {
+      var session = r && r.data && r.data.session;
+      if (session && session.user) {
+        window._wsLastUser = session.user;
+        window._wsLastEmail = session.user.email || email || '';
+        safeLS.setItem(ADMIN_EMAIL_KEY || 'cm_admin_email', window._wsLastEmail);
+        safeLS.setItem(ADMIN_ROLE_KEY || 'cm_admin_role', 'admin');
+        _wsStart(session.user, window._wsLastEmail, function() { _wsHide(); _settShowPlanManage(); });
+      } else {
+        _wsHide();
+        _settOpenLogin();
+      }
+    }).catch(function() { _wsHide(); _settOpenLogin(); });
+    return;
+  }
+  _settOpenLogin();
 }
 // The panel requested: email + current plan, upgrade options if owner,
 // back button returns to the app (not back into the login flow).
@@ -4103,11 +4174,30 @@ function _wsEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, funct
 function _wsSelectCompany(c) {
   if ((c.plan_tier === 'pro' || c.plan_tier === 'enterprise') && c.role_name === 'owner') {
     _wsLoading('Checking subscription…');
-    _sb.from('subscriptions').select('payment_status').eq('company_id', c.company_id).maybeSingle().then(function(r) {
-      var paid = r && r.data && r.data.payment_status === 'paid';
-      if (!paid) { _wsLaunchPayment(c.plan_tier, c); return; }
+    // BUGFIX: also read current_period_end so an actually-lapsed
+    // subscription is caught (not just payment_status), and — critically —
+    // stop treating a failed/errored query the same as "not paid". A
+    // returning subscriber whose SELECT hit a transient RLS/network error
+    // was being silently redirected to the payment/checkout screen even
+    // though they already had a valid, active subscription on record.
+    // Query errors now fail OPEN (let them into the app) instead of
+    // failing into the payment gate — server-side RLS/webhooks remain the
+    // real enforcement layer regardless, so this only affects UX routing.
+    _sb.from('subscriptions').select('payment_status,current_period_end').eq('company_id', c.company_id).maybeSingle().then(function(r) {
+      if (r && r.error) {
+        console.warn('[_wsSelectCompany] subscription check failed — letting user through instead of forcing payment:', r.error.message);
+        _wsSelectCompanyConfirmed(c);
+        return;
+      }
+      var d = r && r.data;
+      var paid = !!d && d.payment_status === 'paid';
+      var expired = !!(d && d.current_period_end && new Date(d.current_period_end).getTime() < Date.now());
+      if (!paid || expired) { _wsLaunchPayment(c.plan_tier, c); return; }
       _wsSelectCompanyConfirmed(c);
-    }).catch(function() { _wsSelectCompanyConfirmed(c); });
+    }).catch(function(e) {
+      console.warn('[_wsSelectCompany] subscription check threw — letting user through instead of forcing payment:', e && e.message);
+      _wsSelectCompanyConfirmed(c);
+    });
     return;
   }
   _wsSelectCompanyConfirmed(c);
@@ -4748,9 +4838,20 @@ function openSettingsPanel() {
       // Show which plan this cloud account is on, right ahead of the
       // "Cloud Account" label, so it's visible at a glance from Settings
       // without having to open the Cloud modal itself.
-      var _planPrefix = window.isEnterpriseUser ? '👑 Enterprise · '
+      // BUGFIX: this previously always fell back to a generic "Admin ·"
+      // label for Free-tier owners (never actually saying "Free"), AND
+      // showed the COMPANY's plan tier (Enterprise/Pro) for anyone who had
+      // simply joined that company's project with a project code — making
+      // a plain member look like they personally owned an Enterprise/Pro
+      // subscription. Distinguish "joined via project code" (→ Member)
+      // from the actual owner, and label the Free tier correctly.
+      var _joinedRole = safeLS.getItem(WS_CROLE_KEY) || '';
+      var _isJoinedMember = (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE)
+                           || (_joinedRole && _joinedRole !== 'owner');
+      var _planPrefix = _isJoinedMember ? '🤝 Member · '
+                       : window.isEnterpriseUser ? '👑 Enterprise · '
                        : window.isProUser        ? '⭐ Pro · '
-                       : 'Admin · ';
+                       : '🆓 Free · ';
       if (t) t.textContent = _planPrefix + 'Cloud Account';
       if (s) s.textContent = 'Manage backup & sync';
       if (ic) ic.textContent = '☁️';
@@ -10585,7 +10686,42 @@ function qdprSaveProjAD(pid, arr){
   if (pid === window.currentProjectId) {
     AD = arr;
     if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  } else {
+    // BUGFIX: QDPR intentionally lets an admin file a report (worker
+    // summary, materials, etc.) against ANY of their projects, not just
+    // whichever one happens to be open on screen — but this branch used
+    // to only ever save to this device's own localStorage. It never
+    // reached project_backups, so a report filed for a non-active project
+    // silently never synced to the cloud or showed up on any other
+    // device. Push just that project's own record array now too.
+    if (typeof _qdprSyncOtherProjectDb === 'function') { try { _qdprSyncOtherProjectDb(pid); } catch(e) {} }
   }
+}
+// ── Cross-device sync for QDPR reports saved against a NON-active project ──
+// Pulls that project's current cloud row first and only replaces the `db`
+// field (where qdpr_entry / worker-summary records live), merging via the
+// same tombstone-aware record merge used everywhere else — so nothing else
+// already backed up for that project (meta/materials/dept/profile/etc.)
+// gets clobbered by this partial push.
+function _qdprSyncOtherProjectDb(pid) {
+  if (typeof _sb === 'undefined' || !_sb) return;
+  if (typeof _adminSBUser === 'undefined' || !_adminSBUser) return;
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+  var ids = map[pid];
+  if (!ids || !ids.companyId || !ids.projectId) return; // not linked to the cloud yet — nothing to push to
+  _sb.from('project_backups').select('data').eq('project_id', ids.projectId).maybeSingle().then(function(r) {
+    var cloudData = (r && r.data && r.data.data) || {};
+    var localDb  = qdprLoadProjAD(pid);
+    var remoteDb = cloudData.db || [];
+    var mergedDb = (typeof _mergeRecordArrays === 'function' && typeof _loadTombstones === 'function')
+      ? _mergeRecordArrays(localDb, remoteDb, _loadTombstones())
+      : localDb;
+    var payload = Object.assign({}, cloudData, { db: mergedDb, lastSync: Date.now() });
+    _sb.from('project_backups').upsert({
+      project_id: ids.projectId, company_id: ids.companyId, data: payload
+    }, { onConflict: 'project_id' }).catch(function(){});
+  }).catch(function(){});
 }
 function qdprInsertToProj(pid, obj){
   var arr = qdprLoadProjAD(pid);
