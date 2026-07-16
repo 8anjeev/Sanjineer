@@ -3600,8 +3600,13 @@ function _wsStart(user, email, onDone) {
     if (r.error) { _wsShowError('Could not load your workspaces', r.error.message); return; }
     var rows = r.data || [];
     if (rows.length === 0) { _wsShowCreateWorkspace(); return; }
-    if (rows.length === 1) { _wsSelectCompany(rows[0]); return; }
-    _wsShowCompanyList(rows);
+    // Never show a "choose a workspace" picker — a returning or existing
+    // user should land straight past this into their project/dashboard.
+    // Prefer whichever company they used last (if still present), else
+    // just the first one the backend returned.
+    var stored = safeLS.getItem(WS_COMPANY_KEY);
+    var pick = rows.find(function(c){ return c.company_id === stored; }) || rows[0];
+    _wsSelectCompany(pick);
   }).catch(function(e) { _wsShowError('Could not load your workspaces', e.message); });
 }
 
@@ -3912,31 +3917,68 @@ function _settLoginBtnClick() {
 }
 // The panel requested: email + current plan, upgrade options if owner,
 // back button returns to the app (not back into the login flow).
+// Increments on every manual close — pending poll loops (_wsPollUpgrade)
+// check this and stop silently instead of doing anything after the
+// panel's been closed, so a slow/pending upgrade check can never make
+// the panel feel "stuck" or reopen itself unexpectedly.
+window._wsPollGen = window._wsPollGen || 0;
+function _wsCloseAccountPanel() {
+  window._wsPollGen++;
+  _wsHide();
+}
 function _settShowPlanManage() {
   if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
   var email = safeLS.getItem(ADMIN_EMAIL_KEY) || '';
   var plan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
   var role = safeLS.getItem(WS_CROLE_KEY) || '';
-  var planLabel = plan === 'enterprise' ? '🏢 Enterprise — ₹99/m' : plan === 'pro' ? '⭐ Pro — ₹30/m' : '🆓 Free';
-  var html = '<p style="' + _wsTitleStyle + '">Account</p>' +
-    '<div style="' + _wsCardStyle + 'cursor:default;"><b>' + _wsEsc(email) + '</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Current plan: ' + planLabel + '</span></div>';
-  if (role === 'owner' && plan !== 'enterprise') {
-    if (plan !== 'pro') {
-      html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToPro()"><b>⭐ Upgrade to Pro — ₹30/m</b></button>';
-    }
-    html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — ₹99/m</b>' +
-      (plan === 'pro' ? '<br><span style="font-size:11px;color:rgba(255,255,255,.5);">Remaining Pro days carry over</span>' : '') + '</button>';
-  } else if (plan === 'enterprise') {
-    html += '<p style="font-size:11px;color:rgba(255,255,255,.5);margin:8px 0;">You\'re on our top plan. 🎉</p>';
-  }
-  html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;margin-top:4px;" onclick="_wsHide()">← Back</button>';
+  var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
+  var isOwner = role === 'owner';
   _wsShow();
-  _wsBody(html);
+  _wsLoading('Loading account…');
+  var renderWithValidity = function(validityText) {
+    var planLabel = plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free';
+    var html = '<p style="' + _wsTitleStyle + '">Account</p>' +
+      '<div style="' + _wsCardStyle + 'cursor:default;"><b>' + _wsEsc(email) + '</b><br>' +
+      '<span style="font-size:11px;color:rgba(255,255,255,.5);">Plan: ' + planLabel + '</span><br>' +
+      '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + validityText + '</span></div>';
+    // Joined members (not the owner) only ever see email + validity —
+    // they don't own the company, so there's nothing for them to upgrade.
+    if (isOwner && plan !== 'enterprise') {
+      if (plan !== 'pro') {
+        html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToPro()"><b>⭐ Upgrade to Pro — ₹30/m</b></button>';
+      }
+      html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — ₹99/m</b>' +
+        (plan === 'pro' ? '<br><span style="font-size:11px;color:rgba(255,255,255,.5);">Remaining Pro days carry over</span>' : '') + '</button>';
+    } else if (isOwner && plan === 'enterprise') {
+      html += '<p style="font-size:11px;color:rgba(255,255,255,.5);margin:8px 0;">You\'re on our top plan. 🎉</p>';
+    }
+    html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;margin-top:4px;" onclick="_wsCloseAccountPanel()">← Back</button>';
+    _wsBody(html);
+  };
+  if (!companyId || plan === 'free') {
+    renderWithValidity(plan === 'free' ? 'No expiry — Free plan' : '');
+    return;
+  }
+  _sb.from('subscriptions').select('current_period_end,payment_status').eq('company_id', companyId).maybeSingle().then(function(r) {
+    var d = r && r.data;
+    var validityText = 'No validity on record';
+    if (d && d.current_period_end) {
+      var end = new Date(d.current_period_end);
+      var daysLeft = Math.ceil((end - Date.now()) / 86400000);
+      validityText = (daysLeft > 0)
+        ? 'Valid until ' + end.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) + ' (' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left)'
+        : 'Expired ' + end.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
+    } else if (d && d.payment_status && d.payment_status !== 'paid') {
+      validityText = 'Payment pending';
+    }
+    renderWithValidity(validityText);
+  }).catch(function() { renderWithValidity('Could not load validity — try again shortly'); });
 }
 function _wsUpgradeToPro() {
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
   if (!companyId) { toast('⚠️ No active workspace found — log in first', 'err'); return; }
-  _wsHide();
+  var gen = window._wsPollGen;
+  _wsCloseAccountPanel();
   var userId = window._wsLastUser && window._wsLastUser.id;
   var p = PLAN_PRICING.pro;
   var openIt = function() {
@@ -3948,7 +3990,7 @@ function _wsUpgradeToPro() {
       prefill: { email: email },
       notes: { purpose: 'sanjineer_plan_upgrade', plan: 'pro', company_id: companyId, user_id: userId },
       theme: { color: '#4f46e5' },
-      handler: function() { toast('✅ Payment received — upgrading…', 'ok'); _wsPollUpgrade(companyId, 0, 'pro'); },
+      handler: function() { toast('✅ Payment received — upgrading…', 'ok'); _wsPollUpgrade(companyId, 0, 'pro', gen); },
       modal: { ondismiss: function() { toast('Upgrade cancelled', 'info'); } }
     };
     try {
@@ -3968,7 +4010,8 @@ function _wsUpgradeToPro() {
 function _wsUpgradeToEnterprise() {
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
   if (!companyId) { toast('⚠️ No active workspace found — log in first', 'err'); return; }
-  _wsHide();
+  var gen = window._wsPollGen;
+  _wsCloseAccountPanel();
   var userId = window._wsLastUser && window._wsLastUser.id;
   var p = PLAN_PRICING.enterprise;
   var openIt = function() {
@@ -3982,7 +4025,7 @@ function _wsUpgradeToEnterprise() {
       theme: { color: '#4f46e5' },
       handler: function() {
         toast('✅ Payment received — upgrading…', 'ok');
-        _wsPollUpgrade(companyId, 0, 'enterprise');
+        _wsPollUpgrade(companyId, 0, 'enterprise', gen);
       },
       modal: { ondismiss: function() { toast('Upgrade cancelled', 'info'); } }
     };
@@ -4000,8 +4043,9 @@ function _wsUpgradeToEnterprise() {
     document.head.appendChild(s);
   } else { openIt(); }
 }
-function _wsPollUpgrade(companyId, attempt, targetPlan) {
+function _wsPollUpgrade(companyId, attempt, targetPlan, gen) {
   targetPlan = targetPlan || 'enterprise';
+  gen = (gen === undefined) ? window._wsPollGen : gen;
   _sb.from('subscriptions').select('plan_tier,payment_status,current_period_end').eq('company_id', companyId).maybeSingle().then(function(r) {
     var upgraded = r && r.data && r.data.plan_tier === targetPlan && r.data.payment_status === 'paid';
     if (upgraded) {
@@ -4011,9 +4055,16 @@ function _wsPollUpgrade(companyId, attempt, targetPlan) {
       if (typeof _settRefreshLoginBtn === 'function') _settRefreshLoginBtn();
       return;
     }
+    // Panel was closed manually since this poll chain started — stop
+    // quietly. The subscription itself still activates via the webhook
+    // regardless; this only stops a stale loop from doing anything visual.
+    if (gen !== window._wsPollGen) return;
     if (attempt >= 15) { toast('Payment received — upgrade is taking a little longer than usual, check back shortly', 'err'); return; }
-    setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1, targetPlan); }, 2000);
-  }).catch(function() { setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1, targetPlan); }, 2000); });
+    setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1, targetPlan, gen); }, 2000);
+  }).catch(function() {
+    if (gen !== window._wsPollGen) return;
+    setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1, targetPlan, gen); }, 2000);
+  });
 }
 
 function _wsCreateEnterprise() {
@@ -22375,16 +22426,10 @@ window._regenerateSalesJoinCode = function(projectId) {
   });
 };
 
-window._revokeMember = function(memberId, projectId) {
-  if (!_sb || !_adminSBUser) return;
-  if (!confirm('Revoke access for this person? They will be logged out on their next sync.')) return;
-  _sb.from('project_members').delete().eq('id', memberId).eq('admin_id', _adminSBUser.id)
-    .then(function(r) {
-      if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
-      toast('🚫 Access revoked', 'ok');
-      _renderShareProjBody(projectId);
-    });
-};
+// NOTE: window._revokeMember is defined earlier (project_team_members-based,
+// matches the new schema) — removed the stale duplicate that used to live
+// here and silently override it, since JS keeps the LAST function
+// declaration when the same name is declared twice.
 
 // ══════════════════════════════════════════════════════════════
 // CONTACTS — per-project phone book for suppliers, contractors,
@@ -25535,8 +25580,9 @@ document.addEventListener('DOMContentLoaded', function () {
 //  without going through Settings → Share Project. Whoever redeems
 //  this code lands in a locked, full-CRUD Sales Manager only (see
 //  window._enterSalesEngineerMode) and stays signed in across visits.
-//  Reuses the same project_join_codes table/role ('sales') as the
-//  Share Project flow, so both surfaces stay in sync.
+//  Reuses the same join_codes table/sales_admin role as the
+//  Share Project flow (see _regenerateSalesJoinCode), so both surfaces
+//  stay in sync.
 // ══════════════════════════════════════════════════════════════
 function _salesCodeGenChars() {
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -25573,19 +25619,10 @@ function _updateSalesClientsBadge() {
 // project, or generates one if none exists yet, then shows it in place
 // of the button (with a copy icon) and copies it to the clipboard.
 // Any further click on the (now code-shaped) button copies it again.
-// Friendlier text for the one concrete, reproducible failure mode here:
-// the project_join_codes table's CHECK constraint doesn't yet allow the
-// 'sales' role value (only 'read'/'write' were set up originally), so the
-// insert bounces off the database with `project_join_codes_role_check`.
-// That's a schema issue, not a code bug — surface it clearly so whoever
-// owns the Supabase project knows exactly what to run.
 function _salesCodeErrMsg(e) {
   var msg = (e && e.message) || '';
-  if (/role_check|check constraint/i.test(msg)) {
-    return "⚠️ Database isn't set up for Sales Manager codes yet — run the project_join_codes_role_check fix (add 'sales' to the allowed roles) in Supabase → SQL Editor, then try again.";
-  }
   if (/could not find the table|schema cache/i.test(msg)) {
-    return "⚠️ Database not set up yet — run join_code_system.sql in Supabase → SQL Editor, then reload.";
+    return "⚠️ Database not set up yet — run the schema SQL in Supabase → SQL Editor, then reload.";
   }
   return '⚠️ ' + (msg || 'Could not generate code');
 }
@@ -25600,25 +25637,29 @@ function _salesMgrCodeClick() {
     return;
   }
   if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser) { toast('Login as admin first', 'err'); return; }
-  var projectId = window.currentProjectId;
-  if (!projectId) { toast('No active project', 'err'); return; }
+  if (typeof window.SanjCloud === 'undefined' || !window.SanjCloud.resolveContext) { toast('Cloud not ready — try again in a moment', 'err'); return; }
   btn.disabled = true;
   btn.style.opacity = '.5';
-  _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).eq('role', 'sales').order('created_at', { ascending: false }).limit(1)
-    .then(function (r) {
-      if (r.error) throw r.error;
-      var row = (r.data && r.data[0]) || null;
-      if (row) return row.code;
-      var proj = (window.projects || []).find(function (p) { return p.id === projectId; });
-      var code = _salesCodeGenChars();
-      return _sb.from('project_join_codes').insert({
-        admin_id: _adminSBUser.id,
-        project_id: projectId,
-        project_name: proj ? proj.name : null,
-        code: code,
-        role: 'sales',
-        active: true
-      }).then(function (ir) { if (ir.error) throw ir.error; return code; });
+  window.SanjCloud.resolveContext(function(c) {
+    if (!c) { btn.disabled = false; btn.style.opacity = '1'; toast('⚠️ Could not resolve cloud identity — make sure you\'re logged in', 'err'); return; }
+    _sb.from('roles').select('id').eq('name', 'sales_admin').single().then(function(rr) {
+      if (rr.error || !rr.data) throw (rr.error || new Error('sales_admin role not set up in the database yet'));
+      var roleId = rr.data.id;
+      return _sb.from('join_codes').select('*').eq('company_id', c.companyId).eq('project_id', c.projectId).eq('active', true).eq('role_id', roleId).order('created_at', { ascending: false }).limit(1)
+        .then(function (r) {
+          if (r.error) throw r.error;
+          var row = (r.data && r.data[0]) || null;
+          if (row) return row.code;
+          var code = _salesCodeGenChars();
+          return _sb.from('join_codes').insert({
+            company_id: c.companyId,
+            project_id: c.projectId,
+            code: code,
+            role_id: roleId,
+            active: true,
+            created_by: _adminSBUser.id
+          }).then(function (ir) { if (ir.error) throw ir.error; return code; });
+        });
     }).then(function (code) {
       btn.disabled = false;
       btn.style.opacity = '1';
@@ -25632,6 +25673,7 @@ function _salesMgrCodeClick() {
       btn.style.opacity = '1';
       toast(_salesCodeErrMsg(e), 'err');
     });
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
