@@ -22133,13 +22133,33 @@ function _genDeviceToken() {
 function _jhtml(s) { return (typeof _escHtml === 'function') ? _escHtml(s) : String(s); }
 function _ownerMissingTableMsg(e) {
   var msg = (e && e.message) || '';
-  if (/role_check|check constraint/i.test(msg)) {
-    return "⚠️ Database isn't set up for Sales Admin codes yet — the project_join_codes table's check constraint needs 'sales' added to its allowed roles. Run the role_check fix in Supabase → SQL Editor, then try again.";
-  }
   if (/could not find the table|schema cache/i.test(msg)) {
-    return "⚠️ Database not set up yet — run join_code_system.sql in Supabase → SQL Editor (Settings → API → wait ~30s for the schema cache to refresh, or restart your Supabase API), then reload this page.";
+    return "⚠️ Database not set up yet — run the schema SQL in Supabase → SQL Editor (Settings → API → wait ~30s for the schema cache to refresh, or restart your Supabase API), then reload this page.";
   }
   return '⚠️ ' + _jhtml(msg || 'Something went wrong');
+}
+
+// PHASE 4 FIX: join codes now live in the new join_codes table (real
+// company_id/project_id, role_id instead of a free-text role column) —
+// the redeem side (doJoinProject / _wsSubmitJoin) only ever reads from
+// there. Codes generated into the old project_join_codes table were
+// invisible to it, which is why every generated code came back "invalid
+// or inactive" no matter what. This maps the old simple read/write/sales
+// scheme onto real schema roles and resolves cloud ids via SanjCloud
+// before touching anything.
+var _OLD_TO_NEW_ROLE = { read: 'viewer', write: 'site_engineer', sales: 'sales_admin' };
+var _roleIdCache = {};
+function _getRoleId(roleName, cb) {
+  if (_roleIdCache[roleName]) { cb(_roleIdCache[roleName]); return; }
+  _sb.from('roles').select('id').eq('name', roleName).single().then(function(r) {
+    if (r.error || !r.data) { cb(null); return; }
+    _roleIdCache[roleName] = r.data.id;
+    cb(r.data.id);
+  }).catch(function(){ cb(null); });
+}
+function _resolveCloudCtx(cb) {
+  if (typeof window.SanjCloud === 'undefined' || !window.SanjCloud.resolveContext) { cb(null); return; }
+  window.SanjCloud.resolveContext(cb);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -22186,26 +22206,32 @@ function _renderShareProjBody(projectId) {
       + '</div>';
     return;
   }
-  // Only the Engineer join code (role read/write) lives here — the Sales
-  // Admin join code is generated/shown exclusively from the 🔑 button
-  // inside the Sales section itself (see _salesMgrCodeClick), not from
-  // this general Share Project dropdown modal.
-  Promise.all([
-    _sb.from('project_join_codes').select('*').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write']).order('created_at', {ascending:false}).limit(1),
-    _sb.from('project_members').select('id,member_name,role,created_at,last_seen').eq('admin_id', _adminSBUser.id).eq('project_id', projectId).order('created_at', {ascending:false})
-  ]).then(function(results) {
-    var codeRow = (results[0].data && results[0].data[0]) || null;
-    var members = results[1].data || [];
-    _paintShareProjBody(projectId, codeRow, members);
-  }).catch(function(e) {
-    body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
+  _resolveCloudCtx(function(c) {
+    if (!c) {
+      body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ Could not resolve this project\'s cloud identity — make sure you\'re logged in, then try again.</p>';
+      return;
+    }
+    // Only the Engineer join code (viewer/site_engineer) lives here — the
+    // Sales Admin join code is generated/shown exclusively from the 🔑
+    // button inside the Sales section itself (see _salesMgrCodeClick).
+    Promise.all([
+      _sb.from('join_codes').select('*,roles(name)').eq('company_id', c.companyId).eq('project_id', c.projectId).eq('active', true).order('created_at', {ascending:false}),
+      _sb.from('project_team_members').select('id,user_id,created_at,roles(name),profiles(full_name)').eq('project_id', c.projectId).order('created_at', {ascending:false})
+    ]).then(function(results) {
+      var codeRows = (results[0].data || []).filter(function(r){ return r.roles && (r.roles.name === 'viewer' || r.roles.name === 'site_engineer'); });
+      var codeRow = codeRows[0] || null;
+      var members = (results[1].data || []).filter(function(m){ return m.roles && m.roles.name !== 'sales_admin'; });
+      _paintShareProjBody(projectId, c, codeRow, members);
+    }).catch(function(e) {
+      body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
+    });
   });
 }
 
-function _paintShareProjBody(projectId, codeRow, members) {
+function _paintShareProjBody(projectId, cloudCtx, codeRow, members) {
   var body = document.getElementById('share-proj-body');
   if (!body) return;
-  var role = codeRow ? codeRow.role : 'write';
+  var role = codeRow && codeRow.roles ? codeRow.roles.name : 'site_engineer';
 
   var codeBlock = codeRow
     ? (
@@ -22214,8 +22240,8 @@ function _paintShareProjBody(projectId, codeRow, members) {
         + '<button onclick="_copyShareCode(\'' + codeRow.code + '\')" style="padding:7px 16px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📋 Copy Code</button>'
         + '</div>'
         + '<div style="display:flex;gap:6px;margin-bottom:12px;">'
-        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'read\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='read' ? 'rgba(251,191,36,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='read' ? 'rgba(251,191,36,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='read' ? '#fde68a' : 'rgba(255,255,255,.5)') + ';">👁️ Read-only</button>'
-        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'write\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='write' ? 'rgba(52,211,153,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='write' ? 'rgba(52,211,153,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='write' ? '#a7f3d0' : 'rgba(255,255,255,.5)') + ';">✏️ Read &amp; Write</button>'
+        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'read\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='viewer' ? 'rgba(251,191,36,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='viewer' ? 'rgba(251,191,36,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='viewer' ? '#fde68a' : 'rgba(255,255,255,.5)') + ';">👁️ Read-only</button>'
+        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'write\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='site_engineer' ? 'rgba(52,211,153,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='site_engineer' ? 'rgba(52,211,153,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='site_engineer' ? '#a7f3d0' : 'rgba(255,255,255,.5)') + ';">✏️ Read &amp; Write</button>'
         + '</div>'
         + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px;">🔄 Regenerate Code (old code stops working)</button>'
       )
@@ -22226,13 +22252,15 @@ function _paintShareProjBody(projectId, codeRow, members) {
 
   var memberRows = members.length
     ? members.map(function(m) {
-        var seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : 'never synced';
-        var roleLabel = m.role === 'sales' ? '🏢 sales admin' : (m.role==='write' ? '✏️ write' : '👁️ read');
-        var roleColor = m.role === 'sales' ? '#67e8f9' : (m.role==='write' ? '#6ee7b7' : '#fde68a');
+        var name = (m.profiles && m.profiles.full_name) || 'Unnamed';
+        var roleName = m.roles ? m.roles.name : 'viewer';
+        var roleLabel = roleName === 'site_engineer' ? '✏️ write' : '👁️ read';
+        var roleColor = roleName === 'site_engineer' ? '#6ee7b7' : '#fde68a';
+        var joined = m.created_at ? new Date(m.created_at).toLocaleString() : '';
         return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
           + '<div style="flex:1;min-width:0;">'
-          + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(m.member_name || 'Unnamed') + ' <span style="font-size:9px;color:' + roleColor + ';font-weight:700;">' + roleLabel + '</span></p>'
-          + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Last sync: ' + _jhtml(seen) + '</p>'
+          + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(name) + ' <span style="font-size:9px;color:' + roleColor + ';font-weight:700;">' + roleLabel + '</span></p>'
+          + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Joined: ' + _jhtml(joined) + '</p>'
           + '</div>'
           + '<button onclick="_revokeMember(\'' + m.id + '\',\'' + projectId + '\')" title="Revoke access" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:#fca5a5;font-size:10px;font-weight:700;cursor:pointer;">Revoke</button>'
           + '</div>';
@@ -22255,67 +22283,96 @@ window._copyShareCode = function(code) {
 window._regenerateJoinCode = function(projectId) {
   if (!_sb || !_adminSBUser) return;
   if (!window.isEnterpriseUser) { if (typeof _showUpgradePopup==='function') _showUpgradePopup('Cross-Device Sharing'); return; }
-  var proj = (window.projects || []).find(function(p){ return p.id === projectId; });
   var body = document.getElementById('share-proj-body');
   if (body) body.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Generating…</p>';
-  // Deactivate any previous active ENGINEER codes for this project first —
-  // the Sales Admin code (role 'sales') is a separate row and untouched.
-  _sb.from('project_join_codes').update({active:false}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write'])
-    .then(function() {
-      return _sb.from('project_join_codes').insert({
-        admin_id: _adminSBUser.id,
-        project_id: projectId,
-        project_name: proj ? proj.name : null,
-        code: _genJoinCode(),
-        role: 'write',
-        active: true
+  _resolveCloudCtx(function(c) {
+    if (!c) { if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ Could not resolve cloud identity</p>'; return; }
+    _getRoleId('site_engineer', function(roleId) {
+      if (!roleId) { if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ Roles not set up in the database yet</p>'; return; }
+      // Deactivate any previous active ENGINEER codes for this project
+      // first — the Sales Admin code (role sales_admin) is untouched.
+      _getRoleId('viewer', function(viewerRoleId) {
+        _sb.from('join_codes').update({active:false}).eq('company_id', c.companyId).eq('project_id', c.projectId).eq('active', true).in('role_id', [roleId, viewerRoleId].filter(Boolean))
+          .then(function() {
+            return _sb.from('join_codes').insert({
+              company_id: c.companyId,
+              project_id: c.projectId,
+              code: _genJoinCode(),
+              role_id: roleId,
+              active: true,
+              created_by: _adminSBUser.id
+            });
+          }).then(function(r) {
+            if (r.error) throw r.error;
+            toast('✅ New join code generated', 'ok');
+            _renderShareProjBody(projectId);
+          }).catch(function(e) {
+            if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
+          });
       });
-    }).then(function(r) {
-      if (r.error) throw r.error;
-      toast('✅ New join code generated', 'ok');
-      _renderShareProjBody(projectId);
-    }).catch(function(e) {
-      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
     });
+  });
 };
 
-window._setJoinCodeRole = function(projectId, role) {
+window._setJoinCodeRole = function(projectId, oldRole) {
   if (!_sb || !_adminSBUser) return;
-  _sb.from('project_join_codes').update({role: role}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).in('role', ['read','write'])
-    .then(function(r) {
-      if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
-      toast(role === 'write' ? '✏️ New joiners get Read & Write' : '👁️ New joiners get Read-only', 'ok');
-      _renderShareProjBody(projectId);
+  var newRoleName = _OLD_TO_NEW_ROLE[oldRole] || 'site_engineer';
+  _resolveCloudCtx(function(c) {
+    if (!c) return;
+    _getRoleId(newRoleName, function(roleId) {
+      if (!roleId) { toast('⚠️ Role not found in database', 'err'); return; }
+      _sb.from('join_codes').update({role_id: roleId}).eq('company_id', c.companyId).eq('project_id', c.projectId).eq('active', true)
+        .then(function(r) {
+          if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
+          toast(newRoleName === 'site_engineer' ? '✏️ New joiners get Read & Write' : '👁️ New joiners get Read-only', 'ok');
+          _renderShareProjBody(projectId);
+        });
     });
+  });
 };
 
-// Sales Admin join code — a distinct code/row (role:'sales') that coexists
-// with the engineer code above. Anyone who redeems THIS code is routed
-// straight into a locked, full-CRUD Sales Manager with the rest of the
-// app hidden (see window._enterSalesEngineerMode).
+window._revokeMember = function(memberRowId, projectId) {
+  if (!_sb) return;
+  if (!confirm('Revoke this person\'s access to the project?')) return;
+  _sb.from('project_team_members').delete().eq('id', memberRowId).then(function(r) {
+    if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
+    toast('Access revoked', 'ok');
+    _renderShareProjBody(projectId);
+  });
+};
+
+// Sales Admin join code — a distinct code/row (role sales_admin) that
+// coexists with the engineer code above. Anyone who redeems THIS code is
+// routed straight into a locked, full-CRUD Sales Manager with the rest
+// of the app hidden (see window._enterSalesEngineerMode).
 window._regenerateSalesJoinCode = function(projectId) {
   if (!_sb || !_adminSBUser) return;
   if (!window.isEnterpriseUser) { if (typeof _showUpgradePopup==='function') _showUpgradePopup('Sales Manager'); return; }
-  var proj = (window.projects || []).find(function(p){ return p.id === projectId; });
   var body = document.getElementById('share-proj-body');
   if (body) body.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Generating…</p>';
-  _sb.from('project_join_codes').update({active:false}).eq('admin_id', _adminSBUser.id).eq('project_id', projectId).eq('active', true).eq('role', 'sales')
-    .then(function() {
-      return _sb.from('project_join_codes').insert({
-        admin_id: _adminSBUser.id,
-        project_id: projectId,
-        project_name: proj ? proj.name : null,
-        code: _genJoinCode(),
-        role: 'sales',
-        active: true
-      });
-    }).then(function(r) {
-      if (r.error) throw r.error;
-      toast('✅ New Sales Admin code generated', 'ok');
-      _renderShareProjBody(projectId);
-    }).catch(function(e) {
-      if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
+  _resolveCloudCtx(function(c) {
+    if (!c) { if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ Could not resolve cloud identity</p>'; return; }
+    _getRoleId('sales_admin', function(roleId) {
+      if (!roleId) { if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ sales_admin role not set up in the database yet</p>'; return; }
+      _sb.from('join_codes').update({active:false}).eq('company_id', c.companyId).eq('project_id', c.projectId).eq('active', true).eq('role_id', roleId)
+        .then(function() {
+          return _sb.from('join_codes').insert({
+            company_id: c.companyId,
+            project_id: c.projectId,
+            code: _genJoinCode(),
+            role_id: roleId,
+            active: true,
+            created_by: _adminSBUser.id
+          });
+        }).then(function(r) {
+          if (r.error) throw r.error;
+          toast('✅ New Sales Admin code generated', 'ok');
+          _renderShareProjBody(projectId);
+        }).catch(function(e) {
+          if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
+        });
     });
+  });
 };
 
 window._revokeMember = function(memberId, projectId) {
