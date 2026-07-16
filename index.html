@@ -865,7 +865,8 @@ self.addEventListener('fetch', function(e) {
     return (window.isProUser || window.isEnterpriseUser) ? Infinity : 1;
   }
   function createProject(name) {
-    if ((window.projects || []).length >= _ownProjectLimit()) {
+    var ownedCount = (window.projects || []).filter(function(p){ return !p.joined; }).length;
+    if (ownedCount >= _ownProjectLimit()) {
       if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Multiple Projects');
       return null;
     }
@@ -994,6 +995,46 @@ self.addEventListener('fetch', function(e) {
     return def;
   }
   window._ensureLocalProject = _ensureLocalProject;
+
+  // Creates (or reuses, on rejoin) a local project shell for a project
+  // joined by code — distinct from _ensureLocalProject (which is only for
+  // "Continue Offline" own-projects). Marked joined:true so it never
+  // counts against _ownProjectLimit(), and the company/project mapping is
+  // seeded directly into sanj_sb_project_map — ensureContext then finds it
+  // immediately instead of trying to "resolve or create" a company, which
+  // would be wrong here since we already know exactly which one was joined.
+  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName) {
+    var mapKey = 'sanj_sb_project_map';
+    var map = {};
+    try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+
+    // Already joined this exact cloud project before on this device? Reuse
+    // the same local shell instead of creating a duplicate.
+    var existingLocalId = null;
+    Object.keys(map).forEach(function(localId) {
+      if (map[localId] && map[localId].projectId === cloudProjectId) existingLocalId = localId;
+    });
+    if (existingLocalId && window.projects.find(function(p){ return p.id === existingLocalId; })) {
+      window.currentProjectId = existingLocalId;
+      try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
+      _renderProjectDropdown();
+      return existingLocalId;
+    }
+
+    var id = _genProjectId();
+    var proj = { id: id, name: projectName || 'Joined Project', created_at: Date.now(), joined: true };
+    window.projects.push(proj);
+    _saveProjects();
+    window.currentProjectId = id;
+    try { localStorage.setItem('sanj_current_project', id); } catch(e) {}
+
+    map[id] = { companyId: companyId, projectId: cloudProjectId };
+    try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+
+    _renderProjectDropdown();
+    return id;
+  }
+  window._ensureLocalProjectForJoin = _ensureLocalProjectForJoin;
 
   // ── Custom modal (replaces prompt()) ─────────────────────────
   function _showProjectModal(title, defaultVal, onConfirm, defaultAddress) {
@@ -1491,10 +1532,44 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       });
     }
 
+    // ── Full-fidelity blob push/pull, added for Phase 4 ────────────────
+    // The per-table mirror above (mirrorUpsert/mirrorDelete) only carries
+    // a curated SUBSET of fields per record — enough for future reporting,
+    // but NOT safe as a pull/merge source: pulling those tables back down
+    // and treating them as authoritative would silently drop any local
+    // field not in that subset the moment a remote copy looked "newer".
+    // project_backups instead stores the exact same full local_payload
+    // shape (db/meta/mats/dept/prof/... — see _buildLocalPayload) that the
+    // old cloud_backups blob used, just resolved through ensureContext
+    // instead of the old admin_id+backup_key/device-token schemes. This
+    // is what actually gets pulled and merged — the per-table mirror stays
+    // write-only until each mapping is made field-complete separately.
+    function pushBlob(payload, cb) {
+      ensureContext(function(c) {
+        if (!c) { cb && cb({ error: 'not signed in / no project context' }); return; }
+        _sb.from('project_backups').upsert({
+          project_id: c.projectId, company_id: c.companyId, data: payload
+        }, { onConflict: 'project_id' }).then(function(res) {
+          cb && cb(res);
+        }).catch(function(e) { cb && cb({ error: e }); });
+      });
+    }
+    function pullBlob(cb) {
+      ensureContext(function(c) {
+        if (!c) { cb && cb(null, null); return; }
+        _sb.from('project_backups').select('data,updated_at').eq('project_id', c.projectId).maybeSingle()
+          .then(function(res) { cb && cb(res.error || null, res.data); })
+          .catch(function(e) { cb && cb(e, null); });
+      });
+    }
+
     return {
       mirrorUpsert: function(record) { if (isSignedIn()) doUpsert(record, false); },
       mirrorDelete: function(record, id) { if (isSignedIn()) doDelete(record, id, false); },
       flushQueue: flushQueue,
+      pushBlob: pushBlob,
+      pullBlob: pullBlob,
+      resolveContext: ensureContext,
       _ctx: function() { return ctx; } // debugging helper — call window.SanjCloud._ctx() in console
     };
   })();
@@ -3655,11 +3730,22 @@ function _wsSubmitJoin() {
   });
 }
 function _wsFinishJoin(projectId, roleName, memberName, projectName) {
+  // Activates SanjCloud's write-mirroring for joined members — it gates on
+  // isSignedIn(), which checks _adminSBUser. That was only ever set on
+  // owner login, so joined engineers/sales_admins silently no-op'd even
+  // after Phase 2 gave them real Supabase Auth sessions. This closes that gap.
+  if (window._wsLastUser) _adminSBUser = window._wsLastUser;
   window._wsProjectId = projectId;
   safeLS.setItem(WS_PROJECT_KEY, projectId);
   safeLS.setItem(WS_PNAME_KEY, projectName || '');
   safeLS.setItem(WS_PROLE_KEY, roleName || '');
   try { localStorage.setItem('sanj_cloud_choice', 'joined'); } catch(e) {}
+  // Creates the local project shell this join needs — without this,
+  // window.currentProjectId stays unset and every local read/write
+  // (including SanjCloud's ensureContext) has nothing to scope to.
+  if (typeof window._ensureLocalProjectForJoin === 'function') {
+    window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName);
+  }
   try {
     var existing = lprof() || {};
     if (memberName && !existing.engineer) sprof(Object.assign({}, existing, { engineer: memberName }));
@@ -3667,6 +3753,7 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName) {
   _applyPermState(roleName || 'viewer').then(function() {
     _wsHide();
     toast('✅ Joined' + (projectName ? ' "' + projectName + '"' : ' project'), 'ok');
+    if (typeof window.startAutoSync === 'function') window.startAutoSync();
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
   });
 }
@@ -16459,9 +16546,9 @@ function cloudBackupNow(silent) {
 
   function _doPush(payload, _retriesLeft) {
     if (_retriesLeft === undefined) _retriesLeft = 4;
-    _sb.from('cloud_backups').upsert({
-      admin_id: _adminSBUser.id, backup_key: siteId, data: payload
-    }, { onConflict: 'admin_id,backup_key' }).then(function(r) {
+    new Promise(function(resolve) {
+      window.SanjCloud.pushBlob(payload, function(res) { resolve(res || {}); });
+    }).then(function(r) {
       if (r.error) {
         // Could be transient (network blip, temporary Supabase error) — retry
         // with backoff rather than silently losing this push forever. The
@@ -16472,7 +16559,7 @@ function cloudBackupNow(silent) {
           return;
         }
         safeLS.setItem('cm_push_pending', '1'); // picked up by the online-reconnect handler
-        if (!silent) toast('Backup failed: ' + r.error.message, 'err');
+        if (!silent) toast('Backup failed: ' + (r.error.message || r.error), 'err');
         return;
       }
       safeLS.removeItem('cm_push_pending');
@@ -16495,12 +16582,17 @@ function cloudBackupNow(silent) {
     });
   }
 
-  // Step 1: Fetch latest cloud data first
-  _sb.from('cloud_backups')
-    .select('data,updated_at')
-    .eq('admin_id', _adminSBUser.id)
-    .eq('backup_key', siteId)
-    .single()
+  // Step 1: Fetch latest cloud data first — via SanjCloud.pullBlob, which
+  // resolves the current local project to its real company/project_id
+  // through ensureContext (the same resolver the per-table mirror uses),
+  // then reads project_backups. Wrapped in a Promise matching the original
+  // .single() shape (fetchResult.data.data) so the merge logic below —
+  // unchanged since it was built for cloud_backups — needs no edits.
+  new Promise(function(resolve) {
+    window.SanjCloud.pullBlob(function(err, row) {
+      resolve({ data: row ? { data: row.data, updated_at: row.updated_at } : null, error: err });
+    });
+  })
     .then(function(fetchResult) {
       if (_staleProject()) {
         // The user switched projects while this fetch was in flight. Bail
@@ -16601,14 +16693,14 @@ function cloudRestoreNow() {
   if (!siteId) { toast('No Site ID', 'err'); return; }
   var _epoch = window._projectEpoch; // capture before the (blocking) confirm() and the async fetch
   if (!confirm('⚠️ This will replace ALL local data with cloud data. Continue?')) return;
-  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', siteId).single().then(function(r) {
+  window.SanjCloud.pullBlob(function(err, row) {
     if (window._projectEpoch !== _epoch || getSiteId() !== siteId) {
       _sanjLog('restore ABORTED (project switched)', 'siteId=' + siteId);
       toast('Project changed — restore cancelled. Please retry.', 'err');
       return;
     }
-    if (r.error || !r.data) { toast('No cloud data found for this Site ID', 'err'); return; }
-    var d = r.data.data;
+    if (err || !row) { toast('No cloud data found for this project', 'err'); return; }
+    var d = row.data;
     _applyFullBackup(d, true); // forceOverwrite: user explicitly confirmed replacing ALL local data
     // also keep legacy field compat for very old backups
     if (d.nid) safeLS.setItem('cm_nid', d.nid);
@@ -16814,38 +16906,45 @@ function _startAdminRealtime() {
     _adminRealtimeChannel = null;
   }
   _adminRealtimeSiteId = siteId;
-  _sanjLog('realtime subscribe', 'siteId=' + siteId);
-  try {
-    _adminRealtimeChannel = _sb
-      .channel('admin-sync-' + siteId)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'cloud_backups',
-        // Scoped to THIS project's row only -- each project gets its own
-        // subscription (point 9). backup_key already encodes the admin id
-        // (see getSiteId()), so this can't cross into another admin's data.
-        filter: 'backup_key=eq.' + siteId
-      }, function(payload) {
-        try {
-          // Defense in depth: re-check we're still looking at the same
-          // project in case a switch happened between subscribe and this
-          // event firing, before the old channel had a chance to tear down.
-          if (payload && payload.new && payload.new.backup_key !== getSiteId()) return;
-          if (payload && payload.new && payload.new.data) {
-            _applyCloudData(payload.new.data, true);
-            var el = document.getElementById('cloud-sync-dot');
-            if (el) { el.style.background = '#a78bfa'; setTimeout(function(){ el.style.background='#22c55e'; }, 1500); }
-          }
-        } catch(e) {}
-      })
-      .subscribe(function(status) {
-        var dot = document.getElementById('cloud-sync-dot');
-        if (dot) dot.style.background = (status === 'SUBSCRIBED') ? '#22c55e' : '#fbbf24';
-      });
-  } catch(e) {
-    console.warn('Admin realtime subscription failed (ok in offline):', e);
-  }
+  // Resolve the real project_id first — the subscription filter needs the
+  // actual UUID, not the legacy siteId, since it's now watching
+  // project_backups (see pushBlob/pullBlob) instead of cloud_backups.
+  if (typeof window.SanjCloud === 'undefined' || !window.SanjCloud.resolveContext) return;
+  window.SanjCloud.resolveContext(function(c) {
+    if (!c || _adminRealtimeSiteId !== siteId) return; // context unresolved, or superseded by another switch
+    _sanjLog('realtime subscribe', 'projectId=' + c.projectId);
+    try {
+      _adminRealtimeChannel = _sb
+        .channel('admin-sync-' + c.projectId)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'project_backups',
+          // Scoped to THIS project's row only — each project gets its own
+          // subscription, keyed by the real project_id (RLS on the table
+          // itself is the actual security boundary either way).
+          filter: 'project_id=eq.' + c.projectId
+        }, function(payload) {
+          try {
+            // Defense in depth: re-check we're still looking at the same
+            // project in case a switch happened between subscribe and this
+            // event firing, before the old channel had a chance to tear down.
+            if (payload && payload.new && payload.new.project_id !== c.projectId) return;
+            if (payload && payload.new && payload.new.data) {
+              _applyCloudData(payload.new.data, true);
+              var el = document.getElementById('cloud-sync-dot');
+              if (el) { el.style.background = '#a78bfa'; setTimeout(function(){ el.style.background='#22c55e'; }, 1500); }
+            }
+          } catch(e) {}
+        })
+        .subscribe(function(status) {
+          var dot = document.getElementById('cloud-sync-dot');
+          if (dot) dot.style.background = (status === 'SUBSCRIBED') ? '#22c55e' : '#fbbf24';
+        });
+    } catch(e) {
+      console.warn('Admin realtime subscription failed (ok in offline):', e);
+    }
+  });
 }
 
 function startAutoSync() {
@@ -23462,17 +23561,23 @@ window.doJoinProject = function() {
           }
           window._wsProjectId = projectId;
           safeLS.setItem(WS_PROJECT_KEY, projectId);
-          var finish = function(roleName) {
+          if (session && session.user) _adminSBUser = session.user;
+          var finish = function(roleName, projName) {
             safeLS.setItem(WS_PROLE_KEY, roleName || '');
+            safeLS.setItem(WS_PNAME_KEY, projName || '');
+            if (typeof window._ensureLocalProjectForJoin === 'function') {
+              window._ensureLocalProjectForJoin(projectId, companyId, projName);
+            }
             _applyPermState(roleName || 'viewer').then(function() {
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
+              if (typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
             });
           };
-          if (!companyId) { finish(null); return; }
+          if (!companyId) { finish(null, null); return; }
           _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
             var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
-            finish(proj ? proj.role_name : null);
+            finish(proj ? proj.role_name : null, proj ? proj.project_name : null);
           }).catch(function() { finish(null); });
         }).catch(function() {
           window._wsProjectId = projectId;
