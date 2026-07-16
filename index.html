@@ -1316,6 +1316,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     } catch(e) {}
     if (typeof _updateSalesNavTabVisibility === 'function') { try { _updateSalesNavTabVisibility(); } catch(e2) {} }
     if (typeof _settRefreshUpgradeBtn === 'function') { try { _settRefreshUpgradeBtn(); } catch(e3) {} }
+    if (typeof _settRefreshLoginBtn === 'function') { try { _settRefreshLoginBtn(); } catch(e4) {} }
     return plan;
   };
 
@@ -3125,57 +3126,7 @@ function _launchApp(){
       </div>
     </div>
 
-    <!-- ── MAIN CHOICE MENU: kept as a fallback, reachable via the back
-         button on the login screen below. No longer the default view —
-         login is now the primary entry point since login will be
-         required for everyone. ── -->
-    <div id="ob-menu-section" style="width:100%;display:none;">
-
-      <!-- 1. Continue Offline — primary CTA, right below logo -->
-      <button class="ob-primary-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:12px 20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:14px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,0.4);display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:6px;">
-        <span class="ob-sheen"></span>
-        <span style="width:26px;height:26px;background:rgba(255,255,255,0.18);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💾</span> Continue Offline
-      </button>
-      <p class="ob-card ob-fx2" style="text-align:center;font-size:10px;color:rgba(255,255,255,0.32);margin:0 0 10px;">No account needed — your data stays on this device</p>
-
-      <!-- 2. Join Project — right after Continue Offline -->
-      <button class="ob-ghost-btn ob-card ob-fx3" onclick="obGoJoinProject()" style="width:100%;padding:10px 6px;background:rgba(217,119,6,0.14);border:1px solid rgba(251,191,36,0.35);border-radius:12px;color:#fde68a;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:16px;">
-        <span style="font-size:15px;">🤝</span> Join a Project with Code
-      </button>
-
-      <!-- divider -->
-      <div class="ob-card ob-fx3" style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.14));"></div>
-        <p style="font-size:9px;color:rgba(255,255,255,0.35);font-weight:700;letter-spacing:.06em;margin:0;white-space:nowrap;">OR USE A CLOUD ACCOUNT</p>
-        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(255,255,255,0.14),transparent);"></div>
-      </div>
-
-      <!-- PRO features teaser -->
-      <div class="ob-card ob-fx4" style="width:100%;background:linear-gradient(135deg,rgba(79,70,229,0.16),rgba(139,92,246,0.1));border:1px solid rgba(165,180,252,0.25);border-radius:14px;padding:11px 13px;margin-bottom:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-          <span style="font-size:13px;">👑</span>
-          <p style="margin:0;font-size:11.5px;font-weight:800;color:#c7d2fe;">PRO &amp; Enterprise — from ₹30/month</p>
-        </div>
-        <div style="display:flex;flex-direction:column;">
-          <div class="ob-feat-row"><span class="ob-feat-ic">🗂️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Multi-Project — manage unlimited projects</p></div>
-          <div class="ob-feat-row"><span class="ob-feat-ic">🖼️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Your company logo on every PDF &amp; report</p></div>
-          <div class="ob-feat-row"><span class="ob-feat-ic">🔄</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Real-time cloud sync across all devices</p></div>
-          <div class="ob-feat-row"><span class="ob-feat-ic">👁️</span><p style="margin:0;font-size:9.5px;color:#a5b4fc;">Unlimited viewer accounts — free</p></div>
-        </div>
-      </div>
-
-      <!-- 3. Cloud Account — single entry point, works for both new & returning users -->
-      <div class="ob-card ob-fx5">
-        <button class="ob-ghost-btn" onclick="obGoCloud()" style="width:100%;padding:11px 6px;background:rgba(79,70,229,0.14);border:1px solid rgba(129,140,248,0.35);border-radius:11px;color:#c7d2fe;font-weight:800;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;">
-          <span style="font-size:15px;">☁️</span>Use Cloud Account
-        </button>
-      </div>
-    </div>
-
-    <!-- ── CLOUD MODE: login / create — now the DEFAULT landing screen,
-         since login will be required for everyone. The offline button
-         at the top is a TEMPORARY testing bypass only — remove before
-         final launch. ── -->
+    <!-- ── CLOUD MODE: login / create — the only entry screen now. ── -->
     <div id="ob-cloud-section" style="display:block;width:100%;">
       <!-- TEMP — testing only, remove before final launch. Hidden when
            this screen is reopened from Settings (already inside the app). -->
@@ -3184,10 +3135,7 @@ function _launchApp(){
       </button>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <p style="margin:0;font-size:12px;font-weight:800;color:rgba(255,255,255,0.5);">Login or Create Account</p>
-        <div style="display:flex;align-items:center;gap:6px;">
-          <button id="ob-cancel-btn" onclick="_obDismiss()" title="Cancel" style="display:none;width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:13px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
-          <button onclick="obShowMenu()" title="More options" style="width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#8942;</button>
-        </div>
+        <button id="ob-cancel-btn" onclick="_obDismiss()" title="Cancel" style="display:none;width:28px;height:28px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:13px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;">&#10005;</button>
       </div>
       <style>
         .ob-input{transition:border-color .18s,box-shadow .18s,background .18s;}
@@ -3197,13 +3145,12 @@ function _launchApp(){
         .ob-submit-btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08);}
         .ob-submit-btn:active:not(:disabled){transform:scale(.98);}
       </style>
-      <p style="font-size:11px;color:rgba(255,255,255,0.45);margin:0 0 12px;text-align:center;">Enter your email — we'll send a 6-digit code. Works whether you're new or already have an account.</p>
 
       <!-- CLOUD panel — one OTP flow, handles both new & returning users -->
       <div id="ob-panel-login">
-        <!-- Step 1: Name (optional) + Email input -->
+        <!-- Step 1: Email input only — name is collected later (Join/Pro/
+             Enterprise forms already ask for it where it's actually needed) -->
         <div id="ob-otp-step1">
-          <input id="ob-login-name" class="ob-input" type="text" placeholder="Your Name / Site Name (optional)" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
           <input id="ob-login-email" class="ob-input" type="email" placeholder="your@email.com" autocomplete="email" style="width:100%;padding:10px 13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:11px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px;">
           <p id="ob-login-err" style="font-size:11px;color:#fca5a5;margin:0 0 8px;display:none;"></p>
           <button id="ob-send-otp-btn" class="ob-submit-btn" onclick="obSendOtp()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;box-shadow:0 4px 16px rgba(79,70,229,.45);">📧 Send OTP</button>
@@ -3217,21 +3164,19 @@ function _launchApp(){
           <button class="ob-ghost-btn" onclick="obResetOtp()" style="width:100%;padding:8px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.4);font-size:11px;font-weight:600;cursor:pointer;">← Change Email</button>
         </div>
       </div>
-
-      <p style="text-align:center;margin-top:12px;font-size:10px;color:rgba(255,255,255,0.25);">After verifying, you'll choose: Continue Offline, Join a Project, or Pro/Enterprise.</p>
     </div>
 
   </div>
 </div>
 
 <script>
-// ── Onboard menu navigation: cloud login is the default view now; the
-// old 4-button menu is reachable as a fallback via the ⋮ button. ──
+// ── Onboard menu navigation — the old 4-button fallback menu (Continue
+// Offline / Join / Use Cloud) has been removed entirely; login is the
+// only entry screen now. obShowMenu is kept as a harmless no-op in case
+// anything still references it. ──
 function obShowMenu(){
-  var menuSec  = document.getElementById('ob-menu-section');
-  var cloudSec = document.getElementById('ob-cloud-section');
-  if (menuSec)  menuSec.style.display  = 'block';
-  if (cloudSec) cloudSec.style.display = 'none';
+  // No-op — the old 4-button fallback menu was removed entirely. Kept as
+  // a stub only so any stray reference doesn't throw.
 }
 // ── Settings → Login/Cloud button — ONE login module, reused ──
 // Previously this opened a separate password-based modal (openCloudModal,
@@ -3646,6 +3591,12 @@ function _wsStart(user, email, onDone) {
   _wsShow();
   _wsLoading('Setting up your workspace…');
   _sb.rpc('get_my_companies').then(function(r) {
+    // DIAGNOSTIC — open the browser console during login to see exactly
+    // what the backend returned for this account. If a returning/paid
+    // user is being sent to the plan-choice screen, this line shows
+    // whether get_my_companies genuinely returned 0 rows (real account
+    // gap) vs something else (a bug worth chasing separately).
+    console.log('[_wsStart] get_my_companies for', email, '→', r.error ? ('ERROR: ' + r.error.message) : (r.data || []));
     if (r.error) { _wsShowError('Could not load your workspaces', r.error.message); return; }
     var rows = r.data || [];
     if (rows.length === 0) { _wsShowCreateWorkspace(); return; }
@@ -3919,6 +3870,11 @@ function _wsPollActivation(companyId, attempt) {
 // company owner — hidden for Free, Enterprise (already there), or anyone
 // who isn't the owner (joined engineers/sales_admin can't buy the company
 // a plan upgrade).
+// Shows the "Upgrade to Enterprise" Settings button only for a Pro-plan
+// company owner — hidden for Free, Enterprise (already there), or anyone
+// who isn't the owner (joined engineers/sales_admin can't buy the company
+// a plan upgrade). Superseded by _settRefreshLoginBtn below, kept for the
+// dedicated upgrade row some Settings layouts may still reference.
 function _settRefreshUpgradeBtn() {
   var btn = document.getElementById('sett-upgrade-btn');
   if (!btn) return;
@@ -3926,10 +3882,93 @@ function _settRefreshUpgradeBtn() {
   var plan = safeLS.getItem(WS_CPLAN_KEY);
   btn.style.display = (role === 'owner' && plan === 'pro') ? 'flex' : 'none';
 }
+// ── Settings login button — shows email + plan when logged in, opens
+// login when not. Call after any login/logout/plan change. ──
+function _settRefreshLoginBtn() {
+  var titleEl = document.getElementById('sett-login-title');
+  var subEl = document.getElementById('sett-login-sub');
+  var iconEl = document.getElementById('sett-login-icon');
+  if (!titleEl || !subEl) return;
+  var email = safeLS.getItem(ADMIN_EMAIL_KEY);
+  var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
+  if (email && companyId) {
+    var plan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
+    var planLabel = plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free';
+    titleEl.textContent = email;
+    subEl.textContent = planLabel + ' plan · tap to manage';
+    if (iconEl) iconEl.textContent = '👤';
+  } else {
+    titleEl.textContent = 'Login / Cloud';
+    subEl.textContent = 'Sign in for backup & sync';
+    if (iconEl) iconEl.textContent = '🔒';
+  }
+}
+// Dispatcher for the Settings login button — logged in → plan management,
+// logged out → the login screen.
+function _settLoginBtnClick() {
+  var email = safeLS.getItem(ADMIN_EMAIL_KEY);
+  var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
+  if (email && companyId) { _settShowPlanManage(); } else { _settOpenLogin(); }
+}
+// The panel requested: email + current plan, upgrade options if owner,
+// back button returns to the app (not back into the login flow).
+function _settShowPlanManage() {
+  if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
+  var email = safeLS.getItem(ADMIN_EMAIL_KEY) || '';
+  var plan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
+  var role = safeLS.getItem(WS_CROLE_KEY) || '';
+  var planLabel = plan === 'enterprise' ? '🏢 Enterprise — ₹99/m' : plan === 'pro' ? '⭐ Pro — ₹30/m' : '🆓 Free';
+  var html = '<p style="' + _wsTitleStyle + '">Account</p>' +
+    '<div style="' + _wsCardStyle + 'cursor:default;"><b>' + _wsEsc(email) + '</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Current plan: ' + planLabel + '</span></div>';
+  if (role === 'owner' && plan !== 'enterprise') {
+    if (plan !== 'pro') {
+      html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToPro()"><b>⭐ Upgrade to Pro — ₹30/m</b></button>';
+    }
+    html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — ₹99/m</b>' +
+      (plan === 'pro' ? '<br><span style="font-size:11px;color:rgba(255,255,255,.5);">Remaining Pro days carry over</span>' : '') + '</button>';
+  } else if (plan === 'enterprise') {
+    html += '<p style="font-size:11px;color:rgba(255,255,255,.5);margin:8px 0;">You\'re on our top plan. 🎉</p>';
+  }
+  html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;margin-top:4px;" onclick="_wsHide()">← Back</button>';
+  _wsShow();
+  _wsBody(html);
+}
+function _wsUpgradeToPro() {
+  var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
+  if (!companyId) { toast('⚠️ No active workspace found — log in first', 'err'); return; }
+  _wsHide();
+  var userId = window._wsLastUser && window._wsLastUser.id;
+  var p = PLAN_PRICING.pro;
+  var openIt = function() {
+    var email = window._wsLastEmail || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
+    var options = {
+      key: 'rzp_live_SRrnyG5XusYMpE',
+      amount: p.amount, currency: 'INR',
+      name: 'Sanjineer Cloud', description: 'Upgrade to Pro',
+      prefill: { email: email },
+      notes: { purpose: 'sanjineer_plan_upgrade', plan: 'pro', company_id: companyId, user_id: userId },
+      theme: { color: '#4f46e5' },
+      handler: function() { toast('✅ Payment received — upgrading…', 'ok'); _wsPollUpgrade(companyId, 0, 'pro'); },
+      modal: { ondismiss: function() { toast('Upgrade cancelled', 'info'); } }
+    };
+    try {
+      var rzp = new Razorpay(options);
+      rzp.on('payment.failed', function(resp) { toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err'); });
+      rzp.open();
+    } catch(e) { toast('⚠️ ' + e.message, 'err'); }
+  };
+  if (typeof Razorpay === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = openIt;
+    s.onerror = function() { toast('⚠️ Payment gateway failed to load — check your connection', 'err'); };
+    document.head.appendChild(s);
+  } else { openIt(); }
+}
 function _wsUpgradeToEnterprise() {
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
   if (!companyId) { toast('⚠️ No active workspace found — log in first', 'err'); return; }
-  if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
+  _wsHide();
   var userId = window._wsLastUser && window._wsLastUser.id;
   var p = PLAN_PRICING.enterprise;
   var openIt = function() {
@@ -3943,7 +3982,7 @@ function _wsUpgradeToEnterprise() {
       theme: { color: '#4f46e5' },
       handler: function() {
         toast('✅ Payment received — upgrading…', 'ok');
-        _wsPollUpgrade(companyId, 0);
+        _wsPollUpgrade(companyId, 0, 'enterprise');
       },
       modal: { ondismiss: function() { toast('Upgrade cancelled', 'info'); } }
     };
@@ -3961,18 +4000,20 @@ function _wsUpgradeToEnterprise() {
     document.head.appendChild(s);
   } else { openIt(); }
 }
-function _wsPollUpgrade(companyId, attempt) {
+function _wsPollUpgrade(companyId, attempt, targetPlan) {
+  targetPlan = targetPlan || 'enterprise';
   _sb.from('subscriptions').select('plan_tier,payment_status,current_period_end').eq('company_id', companyId).maybeSingle().then(function(r) {
-    var upgraded = r && r.data && r.data.plan_tier === 'enterprise' && r.data.payment_status === 'paid';
+    var upgraded = r && r.data && r.data.plan_tier === targetPlan && r.data.payment_status === 'paid';
     if (upgraded) {
-      toast('🎉 Upgraded to Enterprise!', 'ok');
-      safeLS.setItem(WS_CPLAN_KEY, 'enterprise');
-      if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany('enterprise');
+      toast('🎉 Upgraded to ' + (targetPlan === 'enterprise' ? 'Enterprise' : 'Pro') + '!', 'ok');
+      safeLS.setItem(WS_CPLAN_KEY, targetPlan);
+      if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(targetPlan);
+      if (typeof _settRefreshLoginBtn === 'function') _settRefreshLoginBtn();
       return;
     }
     if (attempt >= 15) { toast('Payment received — upgrade is taking a little longer than usual, check back shortly', 'err'); return; }
-    setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1); }, 2000);
-  }).catch(function() { setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1); }, 2000); });
+    setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1, targetPlan); }, 2000);
+  }).catch(function() { setTimeout(function() { _wsPollUpgrade(companyId, attempt + 1, targetPlan); }, 2000); });
 }
 
 function _wsCreateEnterprise() {
@@ -4342,7 +4383,7 @@ function _wsSelectProject(p) {
     </div>
 
     <!-- Login / Cloud -->
-    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_settOpenLogin()" id="sett-login-btn">
+    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_settLoginBtnClick()" id="sett-login-btn">
       <span style="font-size:15px;flex-shrink:0" id="sett-login-icon">🔒</span>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span id="sett-login-title">Login / Cloud</span>
@@ -4631,6 +4672,8 @@ function openSettingsPanel() {
   var gear    = document.getElementById('sett-gear');
   if (!panel) return;
   _armModalGuard('settings-panel');
+  if (typeof _settRefreshLoginBtn === 'function') { try { _settRefreshLoginBtn(); } catch(e) {} }
+  if (typeof _settRefreshUpgradeBtn === 'function') { try { _settRefreshUpgradeBtn(); } catch(e) {} }
 
   // Close any other overlay that might already be open — Settings should
   // always be reachable and on top, never left stacked behind/under
