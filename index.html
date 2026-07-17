@@ -1496,14 +1496,22 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         && typeof _sb !== 'undefined' && _sb;
     }
 
-    // Resolve (and lazily create) the company_id/project_id this browser's
-    // current local project maps to. Cached in localStorage per legacy
-    // project id so this only runs once per project per device.
+    // Resolve the company_id/project_id this browser's current local
+    // project maps to. Cached in localStorage per legacy project id,
+    // seeded exclusively by the explicit login/workspace flow (_wsStart,
+    // _wsSelectCompanyConfirmed, _wsSelectProject, _ensureLocalProjectForJoin)
+    // — this function ONLY reads that mapping, it never creates a
+    // company/project itself. It used to: any time this ran before the
+    // real login flow had finished resolving things (e.g. right after
+    // "Continue Offline" then logging in later, or a race on first
+    // sync), it would silently bootstrap/create its OWN company and
+    // project, completely uncoordinated with the one the person actually
+    // set up — producing duplicate companies/projects with the same name
+    // that kept multiplying every time it ran again for a still-unmapped
+    // local project.
     function ensureContext(cb) {
       if (!isSignedIn() || !window.currentProjectId) { cb(null); return; }
       if (ctx.ready && ctx.legacyProjectId === window.currentProjectId) { cb(ctx); return; }
-      if (ctx.inFlight) { setTimeout(function(){ ensureContext(cb); }, 300); return; }
-      ctx.inFlight = true;
 
       var mapKey = 'sanj_sb_project_map';
       var map = {};
@@ -1517,41 +1525,13 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         return;
       }
 
-      // No mapping yet for this legacy project — resolve/create a company,
-      // then create a matching cloud project, then cache the mapping.
-      _sb.rpc('get_my_companies').then(function(r) {
-        var companyId = null;
-        if (!r.error && r.data && r.data.length) {
-          var enterprise = r.data.find(function(c){ return !c.is_personal_workspace; });
-          companyId = (window.isEnterpriseUser && enterprise) ? enterprise.company_id : r.data[0].company_id;
-        }
-        var afterCompany = function(companyId) {
-          if (!companyId) { ctx.inFlight = false; cb(null); return; }
-          var projName = 'Project';
-          try {
-            var p = (window.projects || []).find(function(pp){ return pp.id === legacyPid; });
-            if (p && p.name) projName = p.name;
-          } catch(e) {}
-          _sb.rpc('create_project', { p_company_id: companyId, p_name: projName }).then(function(pr) {
-            ctx.inFlight = false;
-            if (pr.error || !pr.data) { log('create_project failed', pr.error); cb(null); return; }
-            var newMap = {}; try { newMap = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
-            newMap[legacyPid] = { companyId: companyId, projectId: pr.data };
-            try { localStorage.setItem(mapKey, JSON.stringify(newMap)); } catch(e) {}
-            ctx = { companyId: companyId, projectId: pr.data, legacyProjectId: legacyPid, ready: true, inFlight: false };
-            cb(ctx);
-          }).catch(function(e){ ctx.inFlight = false; log('create_project error', e); cb(null); });
-        };
-        if (companyId) { afterCompany(companyId); return; }
-        var bootstrapPlan = window.isEnterpriseUser ? null : (window.isProUser ? 'pro' : 'free');
-        var bootstrapCall = bootstrapPlan
-          ? _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: bootstrapPlan })
-          : _sb.rpc('create_enterprise_company', { p_company_name: (window._companyName || 'My Company') });
-        bootstrapCall.then(function(br) {
-          if (br.error || !br.data) { ctx.inFlight = false; log('company bootstrap failed', br.error); cb(null); return; }
-          afterCompany(br.data);
-        }).catch(function(e){ ctx.inFlight = false; log('company bootstrap error', e); cb(null); });
-      }).catch(function(e){ ctx.inFlight = false; log('get_my_companies error', e); cb(null); });
+      // No mapping yet for this local project — it was created via
+      // "Continue Offline" and never linked to a cloud project through
+      // Login or Join. Nothing to mirror to until the person actually
+      // logs in / joins through the real flow; that's what establishes
+      // this mapping, not this function.
+      log('no cloud mapping for local project', legacyPid, '— not creating one');
+      cb(null);
     }
 
     // Simple localStorage-backed retry queue for failed pushes (offline, or
@@ -3772,18 +3752,19 @@ function _wsSubmitJoin() {
         safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
         if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
       }
-      if (!companyId) { _wsFinishJoin(projectId, null, name, null); return; }
+      if (!companyId) { _wsFinishJoin(projectId, null, name, null, null); return; }
+      var companyName = companies.length ? companies[0].company_name : null;
       _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
         var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
-        _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null);
-      }).catch(function() { _wsFinishJoin(projectId, null, name, null); });
-    }).catch(function() { _wsFinishJoin(projectId, null, name, null); });
+        _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null, companyName);
+      }).catch(function() { _wsFinishJoin(projectId, null, name, null, companyName); });
+    }).catch(function() { _wsFinishJoin(projectId, null, name, null, null); });
   }).catch(function(e) {
     if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
     _wsSetErr(/could not find the table|schema cache/i.test(e.message || '') ? 'App not fully set up yet — ask your admin to finish setup.' : '⚠️ ' + (e.message || 'Invalid code'));
   });
 }
-function _wsFinishJoin(projectId, roleName, memberName, projectName) {
+function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName) {
   // Activates SanjCloud's write-mirroring for joined members — it gates on
   // isSignedIn(), which checks _adminSBUser. That was only ever set on
   // owner login, so joined engineers/sales_admins silently no-op'd even
@@ -3803,6 +3784,16 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName) {
   try {
     var existing = lprof() || {};
     if (memberName && !existing.engineer) sprof(Object.assign({}, existing, { engineer: memberName }));
+  } catch(e) {}
+  // FIX: joined members never got the company name synced into sglobal()
+  // at all — only the owner path did this. Their header/print stayed
+  // blank or wrong regardless of what the owner had named the company.
+  try {
+    if (companyName) {
+      var g = lglobal() || {};
+      g.company = companyName;
+      sglobal(g);
+    }
   } catch(e) {}
   _applyPermState(roleName || 'viewer').then(function() {
     _wsHide();
@@ -24018,6 +24009,7 @@ window.doJoinProject = function() {
         _sb.rpc('get_my_companies').then(function(cr) {
           var companies = (cr && cr.data) || [];
           var companyId = companies.length ? companies[0].company_id : null;
+          var companyName = companies.length ? companies[0].company_name : null;
           if (companies.length) {
             var c = companies[0];
             window._wsCompanyId = c.company_id;
@@ -24035,6 +24027,16 @@ window.doJoinProject = function() {
             if (typeof window._ensureLocalProjectForJoin === 'function') {
               window._ensureLocalProjectForJoin(projectId, companyId, projName);
             }
+            // FIX: joined members never got the company name synced into
+            // sglobal() — only the owner path did. Header/print stayed
+            // blank or wrong regardless of what the owner had named it.
+            try {
+              if (companyName) {
+                var g = lglobal() || {};
+                g.company = companyName;
+                sglobal(g);
+              }
+            } catch(e) {}
             _applyPermState(roleName || 'viewer').then(function() {
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
               if (typeof window.startAutoSync === 'function') window.startAutoSync();
