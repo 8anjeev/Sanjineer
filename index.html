@@ -3085,6 +3085,15 @@ function dismissWelcome(){
         if(cc){
           // Already chose before — skip straight to app
           _launchApp();
+          // A Sales Admin joiner stays locked to the Sales Manager on
+          // every return visit, not just the moment they first joined —
+          // otherwise closing and reopening the app would drop them onto
+          // the normal dashboard, which defeats the point of the lock.
+          try {
+            if (cc === 'joined' && safeLS.getItem(WS_PROLE_KEY) === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
+              setTimeout(function(){ window._enterSalesEngineerMode(); }, 400);
+            }
+          } catch(e2) {}
           return;
         }
       }catch(e){}
@@ -3800,6 +3809,14 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName) {
     toast('✅ Joined' + (projectName ? ' "' + projectName + '"' : ' project'), 'ok');
     if (typeof window.startAutoSync === 'function') window.startAutoSync();
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
+    // Sales Admin join code → locked full-screen Sales Manager only, no
+    // way back to the rest of the app. Fires right after entering the
+    // app so the main dashboard DOM exists for the Sales modal to
+    // overlay on top of (_enterSalesLockedMode retries if it's not
+    // ready yet, so this is safe even if rendering hasn't finished).
+    if (roleName === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
+      setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
+    }
   });
 }
 function _wsGoOffline() {
@@ -4367,6 +4384,14 @@ function _applyPermState(roleName) {
     window._ENGINEER_READONLY = (roleName !== 'owner') && !hasPerm('files.manage');
     window._IS_VIEWER = (roleName === 'viewer');
     window._SALES_ADMIN_MODE = (roleName === 'sales_admin');
+    // FIX: this was never set for new-schema joins (only the old,
+    // bypassed _engineerStart path set it) — meaning isSalesFullAdmin()
+    // and updateOwnerBtn() both fell through to "owner" behavior for
+    // every joined engineer, regardless of their real role. Any role
+    // that isn't the real owner is, by definition, an engineer-mode
+    // session (whether they came in as site_engineer, viewer, or
+    // sales_admin — sales_admin is still not the company owner).
+    window._ENGINEER_MODE = (roleName !== 'owner');
   }).catch(function(e) {
     console.error('permission load failed:', e.message);
     // Fail closed — if we can't confirm what someone's allowed to do,
@@ -4375,6 +4400,7 @@ function _applyPermState(roleName) {
     window._ENGINEER_READONLY = (roleName !== 'owner');
     window._IS_VIEWER = false;
     window._SALES_ADMIN_MODE = false;
+    window._ENGINEER_MODE = (roleName !== 'owner');
   });
 }
 
@@ -16253,7 +16279,8 @@ function updateOwnerBtn() {
   var btn = document.getElementById('owner-hdr-btn');
   if (!btn) return;
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
-  btn.style.display = (isAdmin && !window._ENGINEER_MODE) ? 'flex' : 'none';
+  var hasPaidPlan = (window.userPlan === 'pro' || window.userPlan === 'enterprise');
+  btn.style.display = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE) ? 'flex' : 'none';
 }
 
 // -- Open / Close Cloud Modal --
@@ -24012,6 +24039,9 @@ window.doJoinProject = function() {
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
               if (typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
+              if (roleName === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
+                setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
+              }
             });
           };
           if (!companyId) { finish(null, null); return; }
@@ -24906,6 +24936,12 @@ function _engActiveSalesInfo() {
   return null;
 }
 function isEngineerSalesOnly() {
+  // New-schema joins set this reliably (see _applyPermState) — this is
+  // the real signal now. _engActiveSalesInfo() (the old local-membership
+  // array lookup) is kept as a fallback OR, but it's never populated for
+  // new-schema joins, so it would otherwise always report false even for
+  // a real sales_admin joiner.
+  if (typeof window._SALES_ADMIN_MODE !== 'undefined' && window._SALES_ADMIN_MODE) return true;
   var m = _engActiveSalesInfo();
   return !!(typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE && m && m.salesOnly);
 }
