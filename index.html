@@ -1044,6 +1044,34 @@ self.addEventListener('fetch', function(e) {
   window._ensureLocalProjectForJoin = _ensureLocalProjectForJoin;
 
   function _wsResolveJoinedProjectName(localId, companyId, cloudProjectId, attempt) {
+    if (typeof _sb === 'undefined' || !_sb) return;
+    var applyName = function(name) {
+      if (!name) return false;
+      var p = window.projects.find(function(x){ return x.id === localId; });
+      if (p && p.name !== name) {
+        p.name = name;
+        _saveProjects();
+        _renderProjectDropdown();
+      }
+      return true;
+    };
+    // BUGFIX: get_my_projects(p_company_id) turned out to not reliably
+    // surface a project the account only *joined* (vs owns) — retrying it
+    // alone could spin forever and never resolve the real name. Read the
+    // project's own row directly first (a joined member has read access
+    // to the project they belong to), and only fall back to the
+    // company-scoped RPC if that read isn't available for some reason.
+    _sb.from('projects').select('name').eq('id', cloudProjectId).maybeSingle().then(function(r) {
+      var name = r && r.data && r.data.name;
+      if (applyName(name)) return;
+      _wsResolveJoinedProjectNameViaRpc(localId, companyId, cloudProjectId, attempt);
+    }).catch(function() {
+      _wsResolveJoinedProjectNameViaRpc(localId, companyId, cloudProjectId, attempt);
+    });
+  }
+  window._wsResolveJoinedProjectName = _wsResolveJoinedProjectName;
+
+  function _wsResolveJoinedProjectNameViaRpc(localId, companyId, cloudProjectId, attempt) {
     if (!companyId || typeof _sb === 'undefined' || !_sb) return;
     _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
       var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === cloudProjectId; });
@@ -1056,12 +1084,17 @@ self.addEventListener('fetch', function(e) {
         }
         return;
       }
-      if (attempt < 5) setTimeout(function(){ _wsResolveJoinedProjectName(localId, companyId, cloudProjectId, attempt + 1); }, 2000);
+      // Longer, more generous retry window (up to ~2 minutes total) since
+      // the delay causing this is out of our control (server-side
+      // replication/visibility lag), and give up silently rather than
+      // spinning forever — the name will still self-heal the next time
+      // this project becomes the active one (see switchProject()).
+      if (attempt < 8) setTimeout(function(){ _wsResolveJoinedProjectNameViaRpc(localId, companyId, cloudProjectId, attempt + 1); }, Math.min(2000 * (attempt + 1), 15000));
     }).catch(function() {
-      if (attempt < 5) setTimeout(function(){ _wsResolveJoinedProjectName(localId, companyId, cloudProjectId, attempt + 1); }, 2000);
+      if (attempt < 8) setTimeout(function(){ _wsResolveJoinedProjectNameViaRpc(localId, companyId, cloudProjectId, attempt + 1); }, Math.min(2000 * (attempt + 1), 15000));
     });
   }
-  window._wsResolveJoinedProjectName = _wsResolveJoinedProjectName;
+  window._wsResolveJoinedProjectNameViaRpc = _wsResolveJoinedProjectNameViaRpc;
 
   // ── Custom modal (replaces prompt()) ─────────────────────────
   function _showProjectModal(title, defaultVal, onConfirm, defaultAddress) {
@@ -1113,6 +1146,23 @@ self.addEventListener('fetch', function(e) {
   function _renderProjectDropdown() {
     var wrap = document.getElementById('project-dropdown-wrap');
     if (!wrap) return;
+    // BUGFIX safety net: if a joined project is still sitting on the
+    // generic placeholder name (its earlier resolve attempt gave up, or
+    // this is an older session from before that retry logic existed),
+    // try resolving it again here rather than leaving it wrong forever.
+    // Guarded so it only ever fires once per project per page load.
+    window._wsNameHealAttempted = window._wsNameHealAttempted || {};
+    (window.projects || []).forEach(function(p) {
+      if (p.joined && p.name === 'Joined Project' && !window._wsNameHealAttempted[p.id]) {
+        window._wsNameHealAttempted[p.id] = true;
+        var map = {};
+        try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+        var ids = map[p.id];
+        if (ids && ids.projectId && typeof _wsResolveJoinedProjectName === 'function') {
+          _wsResolveJoinedProjectName(p.id, ids.companyId, ids.projectId, 0);
+        }
+      }
+    });
     var current = window.projects.find(function(p){ return p.id === window.currentProjectId; });
     var name = current ? current.name : 'Select Project';
 
@@ -4190,9 +4240,20 @@ function _wsSelectCompany(c) {
         return;
       }
       var d = r && r.data;
-      var paid = !!d && d.payment_status === 'paid';
-      var expired = !!(d && d.current_period_end && new Date(d.current_period_end).getTime() < Date.now());
-      if (!paid || expired) { _wsLaunchPayment(c.plan_tier, c); return; }
+      if (!d) {
+        // No subscriptions row at all for this company. This does NOT
+        // necessarily mean "never paid" — it also happens for accounts
+        // provisioned/upgraded directly (support, manual grants, etc.)
+        // where companies.plan_tier is the source of truth and no billing
+        // row was ever created. Only the presence of an EXPLICITLY unpaid
+        // record (below) should route someone to checkout — the absence
+        // of a record must not.
+        _wsSelectCompanyConfirmed(c);
+        return;
+      }
+      var explicitlyUnpaid = d.payment_status === 'failed' || d.payment_status === 'cancelled' || d.payment_status === 'pending';
+      var expired = !!(d.current_period_end && new Date(d.current_period_end).getTime() < Date.now());
+      if (explicitlyUnpaid || expired) { _wsLaunchPayment(c.plan_tier, c); return; }
       _wsSelectCompanyConfirmed(c);
     }).catch(function(e) {
       console.warn('[_wsSelectCompany] subscription check threw — letting user through instead of forcing payment:', e && e.message);
@@ -10688,41 +10749,59 @@ function qdprSaveProjAD(pid, arr){
     if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
   } else {
     // BUGFIX: QDPR intentionally lets an admin file a report (worker
-    // summary, materials, etc.) against ANY of their projects, not just
-    // whichever one happens to be open on screen — but this branch used
-    // to only ever save to this device's own localStorage. It never
-    // reached project_backups, so a report filed for a non-active project
-    // silently never synced to the cloud or showed up on any other
-    // device. Push just that project's own record array now too.
-    if (typeof _qdprSyncOtherProjectDb === 'function') { try { _qdprSyncOtherProjectDb(pid); } catch(e) {} }
+    // summary, materials, floor, etc.) against ANY of their projects, not
+    // just whichever one happens to be open on screen — but this branch
+    // used to only ever save to this device's own localStorage, never
+    // reaching the cloud at all. Push it now.
+    if (typeof _qdprScheduleOtherProjectPush === 'function') { try { _qdprScheduleOtherProjectPush(pid); } catch(e) {} }
   }
 }
-// ── Cross-device sync for QDPR reports saved against a NON-active project ──
-// Pulls that project's current cloud row first and only replaces the `db`
-// field (where qdpr_entry / worker-summary records live), merging via the
-// same tombstone-aware record merge used everywhere else — so nothing else
-// already backed up for that project (meta/materials/dept/profile/etc.)
-// gets clobbered by this partial push.
-function _qdprSyncOtherProjectDb(pid) {
+// ── Cross-device sync for QDPR data saved against a NON-active project ──
+// IMPORTANT: this must use the SAME storage as _qdprPullAllOwnedProjects()
+// reads from and _qdprPushProfileToCloud() already writes to — the legacy
+// per-project cloud_backups row (admin_id + backup_key, matching
+// _qdprSiteIdFor(pid)/getSiteId()'s key format) — NOT project_backups,
+// which is a separate backend used only for the currently-ACTIVE project
+// (see SanjCloud.pushBlob/pullBlob). Pushing to project_backups here would
+// silently go nowhere anyone actually reads it back from for other
+// projects, which is exactly why this kept looking "not synced".
+var _qdprOtherProjPushTimers = {};
+function _qdprScheduleOtherProjectPush(pid) {
+  // Debounced so saving a report (which touches both the report array and
+  // materials in the same action) coalesces into a single push/merge
+  // instead of two racing writes to the same cloud row.
+  if (_qdprOtherProjPushTimers[pid]) clearTimeout(_qdprOtherProjPushTimers[pid]);
+  _qdprOtherProjPushTimers[pid] = setTimeout(function() {
+    delete _qdprOtherProjPushTimers[pid];
+    _qdprSyncOtherProjectToCloud(pid);
+  }, 400);
+}
+window._qdprScheduleOtherProjectPush = _qdprScheduleOtherProjectPush;
+function _qdprSyncOtherProjectToCloud(pid) {
   if (typeof _sb === 'undefined' || !_sb) return;
-  if (typeof _adminSBUser === 'undefined' || !_adminSBUser) return;
-  var map = {};
-  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
-  var ids = map[pid];
-  if (!ids || !ids.companyId || !ids.projectId) return; // not linked to the cloud yet — nothing to push to
-  _sb.from('project_backups').select('data').eq('project_id', ids.projectId).maybeSingle().then(function(r) {
-    var cloudData = (r && r.data && r.data.data) || {};
-    var localDb  = qdprLoadProjAD(pid);
-    var remoteDb = cloudData.db || [];
-    var mergedDb = (typeof _mergeRecordArrays === 'function' && typeof _loadTombstones === 'function')
-      ? _mergeRecordArrays(localDb, remoteDb, _loadTombstones())
-      : localDb;
-    var payload = Object.assign({}, cloudData, { db: mergedDb, lastSync: Date.now() });
-    _sb.from('project_backups').upsert({
-      project_id: ids.projectId, company_id: ids.companyId, data: payload
-    }, { onConflict: 'project_id' }).catch(function(){});
+  if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return;
+  var base = 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12);
+  var key = base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
+  _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function(r) {
+    var cloudData = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : {};
+    var tombs = (typeof _loadTombstones === 'function') ? _loadTombstones() : {};
+    var localDb   = qdprLoadProjAD(pid);
+    var mergedDb  = (typeof _mergeRecordArrays === 'function') ? _mergeRecordArrays(localDb, cloudData.db || [], tombs) : localDb;
+    var localMats = qdprLoadProjMats(pid);
+    var mergedMats = (typeof _mergeArrayStore === 'function') ? _mergeArrayStore(localMats, cloudData.mats || [], tombs, 'id', '__ts', 'mat__') : localMats;
+    cloudData.db = mergedDb;
+    cloudData.mats = mergedMats;
+    // meta (site note/photos) is a single object, not a record array — this
+    // device just edited it, so it's the newest copy; keep it as-is rather
+    // than risk a stale remote object winning a field-by-field merge.
+    cloudData.meta = qdprLoadProjMeta(pid);
+    cloudData.updated_at = Date.now();
+    _sb.from('cloud_backups').upsert({
+      admin_id: _adminSBUser.id, backup_key: key, data: cloudData
+    }, { onConflict: 'admin_id,backup_key' }).catch(function(){});
   }).catch(function(){});
 }
+window._qdprSyncOtherProjectToCloud = _qdprSyncOtherProjectToCloud;
 function qdprInsertToProj(pid, obj){
   var arr = qdprLoadProjAD(pid);
   var rec = Object.assign({__id: uid(), __ts: Date.now()}, obj);
@@ -10733,7 +10812,13 @@ function qdprInsertToProj(pid, obj){
 function qdprUpdateInProj(pid, id, patch){
   var arr = qdprLoadProjAD(pid);
   var idx = arr.findIndex(function(d){ return d.__id===id; });
-  if (idx>-1) { arr[idx] = Object.assign({}, arr[idx], patch); qdprSaveProjAD(pid, arr); return arr[idx]; }
+  // BUGFIX: __ts wasn't being refreshed on update, only on first insert.
+  // The cloud merge picks whichever copy of a record has the newer __ts —
+  // so an edited report (new worker counts/types/floor/work-done entered
+  // just now) could still carry its original insert-time timestamp and
+  // silently lose to an older, stale remote copy during the next pull,
+  // making the edit look like it "didn't save" on other devices.
+  if (idx>-1) { arr[idx] = Object.assign({}, arr[idx], patch, { __ts: Date.now() }); qdprSaveProjAD(pid, arr); return arr[idx]; }
   return null;
 }
 function qdprDeleteFromProj(pid, id){
@@ -10744,7 +10829,13 @@ function qdprLoadProjMats(pid){
 }
 function qdprSaveProjMats(pid, mats){
   try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mats)); } catch(e){}
-  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  if (pid === window.currentProjectId) {
+    if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  } else if (typeof _qdprScheduleOtherProjectPush === 'function') {
+    // Same bug/fix as qdprSaveProjAD above — materials entered via a QDPR
+    // report against a non-active project need to reach the cloud too.
+    try { _qdprScheduleOtherProjectPush(pid); } catch(e) {}
+  }
 }
 
 // ── Owner's OWN multi-project cloud refresh (for QDPR) ─────────────
@@ -10772,13 +10863,24 @@ function _qdprMergeCloudIntoProject(pid, d) {
   var mergedDb = (typeof _mergeRecordArrays === 'function')
     ? _mergeRecordArrays(localDb, d.db || [], tombs)
     : (d.db && d.db.length ? d.db : localDb);
-  qdprSaveProjAD(pid, mergedDb);
+  try { safeLS.setItem(_qdprProjKey(pid, DB), JSON.stringify(mergedDb)); } catch(e) {}
+  if (pid === window.currentProjectId) AD = mergedDb;
 
   var localMats = qdprLoadProjMats(pid);
   var mergedMats = (typeof _mergeArrayStore === 'function')
     ? _mergeArrayStore(localMats, d.mats || [], tombs, 'id', '__ts', 'mat__')
     : (d.mats && d.mats.length ? d.mats : localMats);
-  qdprSaveProjMats(pid, mergedMats);
+  try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mergedMats)); } catch(e) {}
+
+  // BUGFIX: meta (site note/photos, from the Report tab) and prof
+  // (address/profile) were being pushed to this project's cloud row by
+  // _qdprPushProfileToCloud/qdprSaveProjMeta but never actually read back
+  // here — so they reached the cloud but never made it to any OTHER
+  // device. Apply them now too, writing straight to storage (not through
+  // the save+push wrappers) so pulling incoming data doesn't immediately
+  // trigger a redundant push right back to the cloud.
+  if (d.meta && typeof d.meta === 'object') { try { safeLS.setItem(_qdprProjKey(pid, META), JSON.stringify(d.meta)); } catch(e) {} }
+  if (d.prof && typeof d.prof === 'object') { try { safeLS.setItem('sanj_project_' + pid + '_cm_profile', JSON.stringify(d.prof)); } catch(e) {} }
 }
 function _qdprPullAllOwnedProjects() {
   if (!_sb || !_adminSBUser || !_adminSBUser.id) return Promise.resolve();
@@ -10807,7 +10909,13 @@ function qdprLoadProjMeta(pid){
 }
 function qdprSaveProjMeta(pid, m){
   try { safeLS.setItem(_qdprProjKey(pid, META), JSON.stringify(m)); } catch(e){}
-  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  if (pid === window.currentProjectId) {
+    if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  } else if (typeof _qdprScheduleOtherProjectPush === 'function') {
+    // Same bug/fix as qdprSaveProjAD — the Report tab's status/photos for
+    // a non-active project need to reach the cloud too.
+    try { _qdprScheduleOtherProjectPush(pid); } catch(e) {}
+  }
 }
 
 // Push "Materials Received" rows from a saved QDPR report straight into
@@ -22398,6 +22506,18 @@ function _renderShareProjBody(projectId) {
       body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">⚠️ Could not resolve this project\'s cloud identity — make sure you\'re logged in, then try again.</p>';
       return;
     }
+    // BUGFIX: the owner authenticates and creates/owns the company/project,
+    // but nothing ever actually wrote a row for THEM into
+    // project_team_members — that table only ever got populated by joiners
+    // redeeming a code. So the owner never showed up in their own "People
+    // with access" list, and any future feature that queries this table
+    // for "everyone on this project" would silently miss the owner too.
+    // Best-effort, non-blocking: try to write a real row for them now so
+    // this is fixed at the data layer going forward, not just cosmetically
+    // in this one screen. If the write fails for any reason (schema/RLS
+    // we can't see from here), the synthetic owner row added below still
+    // guarantees they're visibly correct in the UI either way.
+    if (typeof _ensureOwnerTeamRow === 'function') { try { _ensureOwnerTeamRow(c); } catch(e) {} }
     // Only the Engineer join code (viewer/site_engineer) lives here — the
     // Sales Admin join code is generated/shown exclusively from the 🔑
     // button inside the Sales section itself (see _salesMgrCodeClick).
@@ -22407,11 +22527,30 @@ function _renderShareProjBody(projectId) {
     ]).then(function(results) {
       var codeRows = (results[0].data || []).filter(function(r){ return r.roles && (r.roles.name === 'viewer' || r.roles.name === 'site_engineer'); });
       var codeRow = codeRows[0] || null;
-      var members = (results[1].data || []).filter(function(m){ return m.roles && m.roles.name !== 'sales_admin'; });
+      var members = (results[1].data || []).filter(function(m){ return m.roles && m.roles.name !== 'sales_admin' && m.user_id !== _adminSBUser.id; });
       _paintShareProjBody(projectId, c, codeRow, members);
     }).catch(function(e) {
       body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
     });
+  });
+}
+// BUGFIX (future-proofing): writes a project_team_members row for the
+// current owner so they exist in the same table joiners are recorded in —
+// upsert is safe to call repeatedly (no-ops once it exists). Best-effort
+// only: this table is normally populated by the redeem_join_code RPC
+// server-side, so if RLS doesn't permit a direct owner insert this simply
+// fails silently and the UI-level fallback (synthetic row, see
+// _paintShareProjBody) keeps things correct for the person either way.
+function _ensureOwnerTeamRow(c) {
+  if (!_sb || !_adminSBUser || !c || !c.companyId || !c.projectId) return;
+  _getRoleId('owner', function(ownerRoleId) {
+    if (!ownerRoleId) return;
+    _sb.from('project_team_members').upsert({
+      project_id: c.projectId,
+      company_id: c.companyId,
+      user_id: _adminSBUser.id,
+      role_id: ownerRoleId
+    }, { onConflict: 'project_id,user_id' }).then(function(){}).catch(function(){});
   });
 }
 
@@ -22437,6 +22576,22 @@ function _paintShareProjBody(projectId, cloudCtx, codeRow, members) {
         + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;">➕ Generate Engineer Join Code</button>'
       );
 
+  // BUGFIX: the owner is always the first, permanent member of their own
+  // project — show them explicitly rather than leaving the list looking
+  // like only invited engineers exist. Built from what's already known
+  // locally (no extra round trip needed), not revokable since there's
+  // always exactly one owner per company.
+  var ownerName = (function() {
+    try { var p = lprof(); if (p && p.engineer) return p.engineer; } catch(e) {}
+    return (_adminSBUser && _adminSBUser.email) ? _adminSBUser.email.split('@')[0] : 'You';
+  })();
+  var ownerPlanLabel = window.isEnterpriseUser ? '👑 Enterprise' : window.isProUser ? '⭐ Pro' : '🆓 Free';
+  var ownerRow = '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+    + '<div style="flex:1;min-width:0;">'
+    + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(ownerName) + ' <span style="font-size:9px;color:#a78bfa;font-weight:700;">👑 owner</span></p>'
+    + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Plan: <span style="color:#c4b5fd;font-weight:700;">' + ownerPlanLabel + '</span></p>'
+    + '</div></div>';
+
   var memberRows = members.length
     ? members.map(function(m) {
         var name = (m.profiles && m.profiles.full_name) || 'Unnamed';
@@ -22447,17 +22602,21 @@ function _paintShareProjBody(projectId, cloudCtx, codeRow, members) {
         return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
           + '<div style="flex:1;min-width:0;">'
           + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(name) + ' <span style="font-size:9px;color:' + roleColor + ';font-weight:700;">' + roleLabel + '</span></p>'
-          + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Joined: ' + _jhtml(joined) + '</p>'
+          // Joined members don't hold a subscription of their own — they
+          // ride on the owner's plan, so make that explicit here rather
+          // than leaving the column blank.
+          + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Plan: <span style="color:#93c5fd;">🤝 Member (' + ownerPlanLabel.replace(/^[^ ]+ /, '') + ' plan)</span> · Joined ' + _jhtml(joined) + '</p>'
           + '</div>'
           + '<button onclick="_revokeMember(\'' + m.id + '\',\'' + projectId + '\')" title="Revoke access" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:#fca5a5;font-size:10px;font-weight:700;cursor:pointer;">Revoke</button>'
           + '</div>';
       }).join('')
-    : '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">No one has joined with this code yet</p>';
+    : '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">No one else has joined with this code yet</p>';
 
   body.innerHTML = '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👷 Engineer Join Code</p>'
     + codeBlock
     + '<div style="margin-top:14px;">'
-    + '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👥 People with access (' + members.length + ')</p>'
+    + '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👥 People with access (' + (members.length + 1) + ')</p>'
+    + ownerRow
     + memberRows
     + '</div>';
 }
