@@ -3831,7 +3831,13 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   _applyPermState(roleName || 'viewer').then(function() {
     _wsHide();
     toast('✅ Joined' + (projectName ? ' "' + projectName + '"' : ' project'), 'ok');
-    if (typeof window.startAutoSync === 'function') window.startAutoSync();
+    // FIX: a sales_admin joiner has no business pulling/pushing the
+    // general project data set (BOQ, materials, attendance, everything)
+    // — that's exactly what was making a Sales code join "open the
+    // project" behind the lock. Sales Manager reads/writes its own
+    // sales-specific data separately; the general sync engine is for
+    // everything else.
+    if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
     // Sales Admin join code → locked full-screen Sales Manager only, no
     // way back to the rest of the app. Fires right after entering the
@@ -24099,7 +24105,7 @@ window.doJoinProject = function() {
             } catch(e) {}
             _applyPermState(roleName || 'viewer').then(function() {
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
-              if (typeof window.startAutoSync === 'function') window.startAutoSync();
+              if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
               if (roleName === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
                 setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
