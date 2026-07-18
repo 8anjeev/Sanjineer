@@ -865,13 +865,31 @@ self.addEventListener('fetch', function(e) {
     return (window.isProUser || window.isEnterpriseUser) ? Infinity : 1;
   }
   function createProject(name) {
+    // Joined members never create projects — that's the owner's company
+    // to manage, not theirs. This blocks it even if the button is somehow
+    // still reachable, as defense in depth alongside hiding it in the UI.
+    if (window._ENGINEER_MODE) {
+      if (typeof toast === 'function') toast('⚠️ Only the project owner can create projects', 'err');
+      return null;
+    }
     var ownedCount = (window.projects || []).filter(function(p){ return !p.joined; }).length;
     if (ownedCount >= _ownProjectLimit()) {
       if (typeof _showUpgradePopup === 'function') _showUpgradePopup('Multiple Projects');
       return null;
     }
+    var trimmedName = (name || '').trim();
+    // Duplicate check is case-insensitive — "Site A" and "site a" count as
+    // the same project name, matching how someone would actually expect
+    // "no duplicate names" to work.
+    var dupe = (window.projects || []).some(function(p) {
+      return p.name && trimmedName && p.name.trim().toLowerCase() === trimmedName.toLowerCase();
+    });
+    if (dupe) {
+      if (typeof toast === 'function') toast('⚠️ A project named "' + trimmedName + '" already exists', 'err');
+      return null;
+    }
     var id = _genProjectId();
-    var proj = { id: id, name: name || ('Project ' + (window.projects.length + 1)), created_at: Date.now() };
+    var proj = { id: id, name: trimmedName || ('Project ' + (window.projects.length + 1)), created_at: Date.now() };
     window.projects.push(proj);
     _saveProjects();
     return proj;
@@ -3063,6 +3081,21 @@ function dismissWelcome(){
       try{
         var cc=localStorage.getItem('sanj_cloud_choice');
         if(cc){
+          // Restore plan/permission state from what was cached last
+          // session BEFORE showing the dashboard — these are in-memory
+          // flags (isEnterpriseUser, userPlan, _ENGINEER_MODE, etc.) that
+          // reset to blank on every page reload otherwise, since they
+          // were only ever set during the original login/join call, not
+          // on resume. Without this, Sales Manager/Share Project/logo
+          // upload/company-field gating all silently ran on blank flags
+          // after any reload — not just for Enterprise owners, for
+          // everyone, until something else happened to refresh them.
+          try {
+            var _rPlan = safeLS.getItem(WS_CPLAN_KEY);
+            var _rRole = safeLS.getItem(WS_CROLE_KEY);
+            if (_rPlan && typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(_rPlan);
+            if (_rRole && typeof _applyPermState === 'function') _applyPermState(_rRole);
+          } catch(eRestore) {}
           // Already chose before — skip straight to app
           _launchApp();
           // A Sales Admin joiner stays locked to the Sales Manager on
@@ -4066,9 +4099,17 @@ function _settShowPlanManage() {
   _wsLoading('Loading account…');
   var renderWithValidity = function(validityText) {
     var planLabel = plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free';
-    var html = '<p style="' + _wsTitleStyle + '">Account</p>' +
-      '<div style="' + _wsCardStyle + 'cursor:default;"><b>' + _wsEsc(email) + '</b><br>' +
-      '<span style="font-size:11px;color:rgba(255,255,255,.5);">Plan: ' + planLabel + '</span><br>' +
+    var roleTag = isOwner ? planLabel : (planLabel + ' · Member');
+    var html =
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+        '<div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 4px 12px rgba(99,102,241,.35);">☁️</div>' +
+        '<div style="min-width:0;">' +
+          '<p style="margin:0;font-size:14px;font-weight:900;color:#fff;">Sanjineer Cloud</p>' +
+          '<p style="margin:0;font-size:10px;color:rgba(199,210,254,.75);">Account · Plan · Sync</p>' +
+        '</div>' +
+      '</div>' +
+      '<div style="' + _wsCardStyle + 'cursor:default;background:rgba(255,255,255,.05);"><b>' + _wsEsc(email) + '</b><br>' +
+      '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + roleTag + '</span><br>' +
       '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + validityText + '</span></div>';
     // Joined members (not the owner) only ever see email + validity —
     // they don't own the company, so there's nothing for them to upgrade.
@@ -4313,10 +4354,16 @@ function _wsCreateProject() {
   var name = ((document.getElementById('ws-proj-name') || {}).value || '').trim();
   var addr = ((document.getElementById('ws-proj-address') || {}).value || '').trim();
   if (!name) { _wsSetErr('⚠️ Enter a project name'); return; }
-  _wsLoading('Creating project…');
-  _sb.rpc('create_project', { p_company_id: window._wsCompanyId, p_name: name, p_code: null, p_address: addr || null, p_start_date: null, p_end_date: null }).then(function(r) {
-    if (r.error) { _wsShowCreateProject(); _wsSetErr(r.error.message); return; }
-    _wsSelectProject({ project_id: r.data, project_name: name, role_name: safeLS.getItem(WS_CROLE_KEY) || 'owner' });
+  _wsLoading('Checking project name…');
+  _sb.rpc('get_my_projects', { p_company_id: window._wsCompanyId }).then(function(pr) {
+    var existing = (pr && pr.data) || [];
+    var dupe = existing.some(function(p) { return p.project_name && p.project_name.trim().toLowerCase() === name.toLowerCase(); });
+    if (dupe) { _wsShowCreateProject(); _wsSetErr('⚠️ A project named "' + name + '" already exists'); return; }
+    _wsLoading('Creating project…');
+    _sb.rpc('create_project', { p_company_id: window._wsCompanyId, p_name: name, p_code: null, p_address: addr || null, p_start_date: null, p_end_date: null }).then(function(r) {
+      if (r.error) { _wsShowCreateProject(); _wsSetErr(r.error.message); return; }
+      _wsSelectProject({ project_id: r.data, project_name: name, role_name: safeLS.getItem(WS_CROLE_KEY) || 'owner' });
+    }).catch(function(e) { _wsShowCreateProject(); _wsSetErr(e.message); });
   }).catch(function(e) { _wsShowCreateProject(); _wsSetErr(e.message); });
 }
 
@@ -9252,9 +9299,16 @@ function openEditProfile() {
   document.getElementById('edit-header-color').value = p.headerColor || '';
 
   // ── Company fields: name, address, GST, logo — owner/admin only ──
+  var isCompanyOwner = _isProfileOwnerNow();
   document.getElementById('edit-company').value = p.company || '';
   document.getElementById('edit-address').value = p.address || '';
   document.getElementById('edit-gst').value = p.gst || '';
+  document.getElementById('edit-company').disabled = !isCompanyOwner;
+  document.getElementById('edit-address').disabled = !isCompanyOwner;
+  document.getElementById('edit-gst').disabled = !isCompanyOwner;
+  [document.getElementById('edit-company'), document.getElementById('edit-address'), document.getElementById('edit-gst')].forEach(function(el) {
+    if (el) el.style.opacity = isCompanyOwner ? '1' : '.55';
+  });
   var img = document.getElementById('edit-logo-img');
   var prev = document.getElementById('edit-logo-preview');
   var clr = document.getElementById('edit-logo-clear');
@@ -18198,7 +18252,13 @@ function onAdminLoginSuccess(email, user, app) {
   safeLS.setItem(CLOUD_SITE_ID, siteId);
   window._pullLatestCloudBackup(user, { silent: false });
   setTimeout(function() { cloudBackupNow(); }, 3000);
-  openCloudModal();
+  // REMOVED: openCloudModal() used to fire here unconditionally on every
+  // single login — that's exactly the old "Sanjineer Cloud / Admin /
+  // Backup·Restore" panel popping up unexpectedly after login. The new
+  // account panel (_settShowPlanManage, reachable from Settings) is the
+  // intended replacement now; this function still runs for its real
+  // side effects (cloud pull, auto-sync start) but no longer forces
+  // that old modal open as a side effect.
   updateCloudBtn();
 }
 
