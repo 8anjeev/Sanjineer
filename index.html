@@ -934,38 +934,6 @@ self.addEventListener('fetch', function(e) {
 
     window.currentProjectId = projectId;
     try { localStorage.setItem('sanj_current_project', projectId); } catch(e) {}
-
-    // Joined (non-owned) project shells carry a company_id/cloud_project_id/
-    // role mapping (sanj_sb_project_map) written at join time. Keep the
-    // active workspace pointers (WS_COMPANY_KEY/WS_PROJECT_KEY/WS_PROLE_KEY)
-    // and the live permission set in sync with whichever shell is now
-    // active — without this, switching between multiple joined projects
-    // left every permission check (readonly flags, hasPerm(), and Phase 4's
-    // future auth.uid()-scoped sync) still pointed at whichever project was
-    // joined FIRST, no matter which one was actually on screen.
-    var _swProj = window.projects.find(function(p){ return p.id === projectId; });
-    if (_swProj && _swProj.joined) {
-      var _swMap = {};
-      try { _swMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
-      var _swIds = _swMap[projectId];
-      if (_swIds && _swIds.projectId) {
-        window._wsCompanyId = _swIds.companyId;
-        window._wsProjectId = _swIds.projectId;
-        try {
-          if (typeof WS_COMPANY_KEY !== 'undefined') safeLS.setItem(WS_COMPANY_KEY, _swIds.companyId || '');
-          if (typeof WS_PROJECT_KEY !== 'undefined') safeLS.setItem(WS_PROJECT_KEY, _swIds.projectId || '');
-          if (typeof WS_PNAME_KEY   !== 'undefined') safeLS.setItem(WS_PNAME_KEY, _swProj.name || '');
-          if (typeof WS_PROLE_KEY   !== 'undefined') safeLS.setItem(WS_PROLE_KEY, _swIds.role || '');
-        } catch(e) {}
-        if (typeof _applyPermState === 'function') {
-          _applyPermState(_swIds.role || null).then(function() {
-            if (typeof _settRefreshLoginBtn === 'function') _settRefreshLoginBtn();
-            _renderProjectDropdown();
-          });
-        }
-      }
-    }
-
     _renderProjectDropdown();
 
     // Show one clean loading screen for the switch instead of letting the
@@ -1053,15 +1021,7 @@ self.addEventListener('fetch', function(e) {
   // seeded directly into sanj_sb_project_map — ensureContext then finds it
   // immediately instead of trying to "resolve or create" a company, which
   // would be wrong here since we already know exactly which one was joined.
-  // Silent variant — finds or creates the local project shell for a cloud
-  // project WITHOUT activating it (no currentProjectId change, no reload,
-  // no dropdown re-render). Used by the multi-project switcher to resolve
-  // local ids for joined projects up front, and shared by
-  // _ensureLocalProjectForJoin below so both paths write the same map
-  // format — now including role, so the switcher can show read/write
-  // badges and switchProject() can restore the right permission set
-  // without a network round-trip every time.
-  function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName) {
+  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName) {
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
@@ -1073,13 +1033,9 @@ self.addEventListener('fetch', function(e) {
       if (map[localId] && map[localId].projectId === cloudProjectId) existingLocalId = localId;
     });
     if (existingLocalId && window.projects.find(function(p){ return p.id === existingLocalId; })) {
-      // Keep the stored role fresh — it can change between joins/re-logins,
-      // and a stale role would show the wrong badge / restore the wrong
-      // permission set on switch.
-      if (roleName && map[existingLocalId].role !== roleName) {
-        map[existingLocalId].role = roleName;
-        try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
-      }
+      window.currentProjectId = existingLocalId;
+      try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
+      _renderProjectDropdown();
       return existingLocalId;
     }
 
@@ -1087,17 +1043,12 @@ self.addEventListener('fetch', function(e) {
     var proj = { id: id, name: projectName || 'Joined Project', created_at: Date.now(), joined: true };
     window.projects.push(proj);
     _saveProjects();
-
-    map[id] = { companyId: companyId, projectId: cloudProjectId, role: roleName || '' };
-    try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
-    return id;
-  }
-  window._resolveLocalShellForCloudProject = _resolveLocalShellForCloudProject;
-
-  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName, roleName) {
-    var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName);
     window.currentProjectId = id;
     try { localStorage.setItem('sanj_current_project', id); } catch(e) {}
+
+    map[id] = { companyId: companyId, projectId: cloudProjectId };
+    try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+
     _renderProjectDropdown();
     // BUGFIX: if the real project name wasn't available yet at join time
     // (e.g. get_my_projects raced ahead of the membership row becoming
@@ -1213,19 +1164,6 @@ self.addEventListener('fetch', function(e) {
   function _renderProjectDropdown() {
     var wrap = document.getElementById('project-dropdown-wrap');
     if (!wrap) return;
-
-    // Joined (non-owner) sessions get a lighter switcher: switch-only, with
-    // a read/write badge per project, no rename/share/new-project actions
-    // (those stay owner-only — a joined engineer/sales_admin has no
-    // business generating join codes or creating projects for someone
-    // else's company). This replaces the old device-token engineer
-    // dropdown, which read from a local membership array Phase 2's
-    // auth.uid()-based join flow stopped populating.
-    if (window._ENGINEER_MODE) {
-      _renderEngineerProjectDropdown(wrap);
-      return;
-    }
-
     // BUGFIX safety net: if a joined project is still sitting on the
     // generic placeholder name (its earlier resolve attempt gave up, or
     // this is an older session from before that retry logic existed),
@@ -1350,69 +1288,6 @@ self.addEventListener('fetch', function(e) {
       }
     });
   }
-
-  // ── Engineer/joined-member dropdown — switch only, live-role badges ──
-  // Source of truth is window.projects (filtered to joined:true shells)
-  // cross-referenced with sanj_sb_project_map for each shell's role, which
-  // is populated straight from get_my_projects()/redeem_join_code results
-  // at join time (see _resolveLocalShellForCloudProject above) — not the
-  // dead sj_eng_memberships array the old device-token switcher read from.
-  function _renderEngineerProjectDropdown(wrap) {
-    var map = {};
-    try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
-    var joined = (window.projects || []).filter(function(p){ return p.joined; });
-    var current = joined.find(function(p){ return p.id === window.currentProjectId; }) || joined[0];
-    var name = current ? current.name : 'Project';
-
-    if (joined.length <= 1) {
-      wrap.innerHTML = '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);padding:2px 8px;">' + _escHtml(name) + '</span>';
-      return;
-    }
-
-    var items = joined.map(function(p) {
-      var active = (p.id === window.currentProjectId);
-      var role = (map[p.id] && map[p.id].role) || '';
-      var badgeColor = role === 'write' ? '#6ee7b7' : role === 'sales_admin' ? '#93c5fd' : '#fde68a';
-      var badgeIcon = role === 'write' ? '✏️' : role === 'sales_admin' ? '🏢' : '👁️';
-      var pid = _escHtml(p.id);
-      return '<div data-eng-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:' + (active ? 'rgba(99,102,241,0.2)' : 'transparent') + ';-webkit-tap-highlight-color:transparent;">'
-        + '<span style="font-size:13px;flex-shrink:0">' + (active ? '✅' : '📁') + '</span>'
-        + '<span style="font-size:12px;font-weight:' + (active ? '700' : '500') + ';color:' + (active ? '#a5b4fc' : 'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(p.name) + '</span>'
-        + '<span style="font-size:9px;color:' + badgeColor + ';flex-shrink:0">' + badgeIcon + '</span>'
-        + '</div>';
-    }).join('');
-
-    wrap.innerHTML = '<div id="eng-proj-dd-inner" style="position:relative;display:inline-flex;">'
-      + '<button id="eng-proj-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:pointer;min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
-      + '<span style="font-size:11px;flex-shrink:0">🗂️</span>'
-      + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
-      + '<span id="eng-proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;">▾</span>'
-      + '</button>'
-      + '<div id="eng-proj-dd-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:190px;max-width:250px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
-      + items
-      + '</div></div>';
-
-    var btn = document.getElementById('eng-proj-dd-btn');
-    var menu = document.getElementById('eng-proj-dd-menu');
-    if (btn && menu) {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        menu.style.display = (menu.style.display === 'none' ? 'block' : 'none');
-      });
-      menu.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var sw = e.target.closest('[data-eng-proj-switch]');
-        if (!sw) return;
-        menu.style.display = 'none';
-        var pid = sw.getAttribute('data-eng-proj-switch');
-        if (pid !== window.currentProjectId) switchProject(pid);
-      });
-    }
-  }
-  document.addEventListener('click', function() {
-    var menu = document.getElementById('eng-proj-dd-menu');
-    if (menu) menu.style.display = 'none';
-  });
 
   // ── Close menu on outside tap/click ──────────────────────────
   document.addEventListener('click', function(e) {
@@ -3937,7 +3812,7 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   // window.currentProjectId stays unset and every local read/write
   // (including SanjCloud's ensureContext) has nothing to scope to.
   if (typeof window._ensureLocalProjectForJoin === 'function') {
-    window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName, roleName);
+    window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName);
   }
   try {
     var existing = lprof() || {};
@@ -3955,7 +3830,6 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   } catch(e) {}
   _applyPermState(roleName || 'viewer').then(function() {
     _wsHide();
-    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
     toast('✅ Joined' + (projectName ? ' "' + projectName + '"' : ' project'), 'ok');
     // FIX: a sales_admin joiner has no business pulling/pushing the
     // general project data set (BOQ, materials, attendance, everything)
@@ -4370,16 +4244,26 @@ function _wsPollUpgrade(companyId, attempt, targetPlan, gen) {
 }
 
 function _wsCreateEnterprise() {
+  // Guard against double-submit — create_enterprise_company has no
+  // idempotency check (unlike bootstrap_personal_workspace, which
+  // returns the existing personal workspace if one's already there), so
+  // a double-tap or slow-network double-submit would silently create
+  // two separate companies with the same name. This was very likely a
+  // second real contributor (alongside the ensureContext bug) to the
+  // duplicate projects/companies found and cleaned up earlier.
+  if (window._wsCreatingEnterprise) return;
   var name = ((document.getElementById('ws-company-name') || {}).value || '').trim();
   var ownerName = ((document.getElementById('ws-owner-name') || {}).value || '').trim();
   if (!name) { _wsSetErr('⚠️ Enter a company name'); return; }
   if (!ownerName) { _wsSetErr('⚠️ Enter your name'); return; }
+  window._wsCreatingEnterprise = true;
   window._wsPendingName = ownerName;
   _wsLoading('Creating your company…');
   _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
+    window._wsCreatingEnterprise = false;
     if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
     _wsLaunchPayment('enterprise', { company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
-  }).catch(function(e) { _wsShowEnterpriseForm(); _wsSetErr(e.message); });
+  }).catch(function(e) { window._wsCreatingEnterprise = false; _wsShowEnterpriseForm(); _wsSetErr(e.message); });
 }
 function _wsSetErr(msg) { var e = document.getElementById('ws-err'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
 
@@ -24217,7 +24101,7 @@ window.doJoinProject = function() {
             safeLS.setItem(WS_PROLE_KEY, roleName || '');
             safeLS.setItem(WS_PNAME_KEY, projName || '');
             if (typeof window._ensureLocalProjectForJoin === 'function') {
-              window._ensureLocalProjectForJoin(projectId, companyId, projName, roleName);
+              window._ensureLocalProjectForJoin(projectId, companyId, projName);
             }
             // FIX: joined members never got the company name synced into
             // sglobal() — only the owner path did. Header/print stayed
@@ -24230,7 +24114,6 @@ window.doJoinProject = function() {
               }
             } catch(e) {}
             _applyPermState(roleName || 'viewer').then(function() {
-              if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
               if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
@@ -24328,47 +24211,27 @@ function joinVerifyOtp() {
   });
 }
 
-// LIVE (Phase 2/3) version — sourced from window.projects (joined:true
-// shells) cross-referenced with sanj_sb_project_map for each shell's role.
-// Both are populated by _resolveLocalShellForCloudProject at join time from
-// real get_my_projects()/redeem_join_code data, not the dead
-// sj_eng_memberships array the old device-token switcher (below, kept only
-// for the not-yet-removed legacy code paths) read from.
-//
-// No "Leave" action here yet: leaving a project needs a backend RPC to
-// actually revoke the membership row, which doesn't exist in this schema
-// yet. A local-only "leave" would misleadingly hide the project on this
-// device while the server still shows the person as a member — worth
-// building properly (with a real revoke) rather than faking it here.
 window._refreshJoinTabUI = function() {
-  var map = {};
-  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
-  var list = (window.projects || []).filter(function(p){ return p.joined; }).map(function(p) {
-    var ids = map[p.id] || {};
-    return { pid: p.id, pname: p.name, role: ids.role || '' };
-  });
+  var list = _engLoadMemberships();
   var pre  = document.getElementById('ctab-join-prelogin');
   var post = document.getElementById('ctab-join-postlogin');
   var listWrap = document.getElementById('join-projects-list');
   var nameEl = document.getElementById('join-member-name');
   if (pre) pre.style.display = 'block'; // joining more projects is always available
-  if (nameEl && !nameEl.value) {
-    try { var _p = (typeof lprof === 'function') ? lprof() : null; if (_p && _p.engineer) nameEl.value = _p.engineer; } catch(e) {}
-  }
+  if (nameEl && !nameEl.value && list.length) nameEl.value = list[list.length - 1].name || '';
   if (post) post.style.display = list.length ? 'block' : 'none';
   if (listWrap) {
-    var activePid = window.currentProjectId;
+    var activePid = _engGetActivePid();
     listWrap.innerHTML = list.map(function(m) {
       var active = (m.pid === activePid);
-      var roleColor = m.role === 'write' ? '#6ee7b7' : m.role === 'sales_admin' ? '#93c5fd' : '#fde68a';
-      var roleLabel = m.role === 'write' ? '✏️ Read & Write' : m.role === 'sales_admin' ? '🏢 Sales Admin' : '👁️ Read-only';
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08);">'
         + '<div data-eng-switch="' + _jhtml(m.pid) + '" style="flex:1;min-width:0;cursor:pointer;display:flex;align-items:center;gap:6px;">'
         + '<span style="font-size:13px;flex-shrink:0;">' + (active ? '✅' : '📁') + '</span>'
         + '<span style="flex:1;min-width:0;">'
         + '<p style="font-size:12px;font-weight:800;color:' + (active ? '#a7f3d0' : '#fff') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(m.pname) + '</p>'
-        + '<p style="font-size:9px;color:' + roleColor + ';">' + roleLabel + (active ? ' · active' : '') + '</p>'
+        + '<p style="font-size:9px;color:' + (m.role==='write' ? '#6ee7b7' : '#fde68a') + ';">' + (m.role==='write' ? '✏️ Read & Write' : '👁️ Read-only') + (active ? ' · active' : '') + '</p>'
         + '</span></div>'
+        + '<button data-eng-leave="' + _jhtml(m.pid) + '" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">Leave</button>'
         + '</div>';
     }).join('');
   }
@@ -24376,10 +24239,12 @@ window._refreshJoinTabUI = function() {
 
 document.addEventListener('click', function(e) {
   var sw = e.target.closest ? e.target.closest('[data-eng-switch]') : null;
-  if (sw) {
-    var pid = sw.getAttribute('data-eng-switch');
-    if (pid !== window.currentProjectId && typeof switchProject === 'function') switchProject(pid);
-    if (typeof closeCloudModal === 'function') closeCloudModal();
+  if (sw) { window._engineerSwitchTo(sw.getAttribute('data-eng-switch')); return; }
+  var lv = e.target.closest ? e.target.closest('[data-eng-leave]') : null;
+  if (lv) {
+    var pid = lv.getAttribute('data-eng-leave');
+    var m = _engFindMembership(pid);
+    if (confirm('Leave "' + ((m && m.pname) || 'this project') + '"?')) window._engineerLeaveProject(pid);
   }
 });
 
