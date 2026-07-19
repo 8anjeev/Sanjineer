@@ -428,7 +428,29 @@ self.addEventListener('fetch', function(e) {
 
   // For Supabase API calls — network first, queue if offline
   if (url.includes('supabase.co')) {
-    if (e.request.method !== 'GET') {
+    // ROOT-CAUSE FIX (offline queue): this used to intercept and queue
+    // EVERY non-GET request to any supabase.co URL — that included RPC
+    // calls (/rest/v1/rpc/*: create_project, redeem_join_code,
+    // assign_member_to_project, mark_po_received, ...) and Auth requests
+    // (/auth/v1/*: login, OTP verify). Both got a fake HTTP 202
+    // {offline_queued:true} handed back as if the call had succeeded,
+    // and both got blindly replayed later as a raw HTTP request with no
+    // idempotency awareness — no distinction between a safe-to-resend
+    // upsert and a one-shot side-effecting call. That's exactly the
+    // mechanism that could recreate the duplicate-project bug (create
+    // project offline -> fake success -> user retries when back online
+    // -> the queued replay of the FIRST attempt also fires -> two
+    // creates), and for Auth it's worse: a queued OTP verify replays a
+    // token that's already expired by the time connectivity returns,
+    // and the fake 202 in the meantime doesn't remotely match the real
+    // {session,user} shape callers expect, which is a crash risk.
+    // Only genuinely idempotent REST table writes (upserts with
+    // on_conflict, which collapse safely no matter how many times they
+    // land) are safe to queue-and-replay this way. RPCs and Auth must
+    // fail honestly offline so the caller's own error handling runs —
+    // not be silently masked as success.
+    var isRpcOrAuth = (url.indexOf('/rest/v1/rpc/') !== -1) || (url.indexOf('/auth/v1/') !== -1);
+    if (e.request.method !== 'GET' && !isRpcOrAuth) {
       // Mutation — try network; if offline, clone & queue
       e.respondWith(
         fetch(e.request.clone()).catch(function() {
@@ -453,6 +475,13 @@ self.addEventListener('fetch', function(e) {
           });
         })
       );
+      return;
+    }
+    if (e.request.method !== 'GET' && isRpcOrAuth) {
+      // RPC or Auth mutation — let it fail honestly offline. No queue,
+      // no fake success. The app's own .catch()/error handlers (already
+      // present at every _sb.rpc()/auth call site) are what should run.
+      e.respondWith(fetch(e.request));
       return;
     }
     // GET to Supabase — network first, no cache
@@ -864,6 +893,45 @@ self.addEventListener('fetch', function(e) {
   function _ownProjectLimit() {
     return (window.isProUser || window.isEnterpriseUser) ? Infinity : 1;
   }
+  // Shared by createProject() below AND by cloudBackupNow()'s self-heal
+  // check (see PHASE 4 FOLLOW-UP there) — creates the cloud-side project
+  // row for a LOCAL project that has no sanj_sb_project_map entry yet,
+  // and writes that mapping so SanjCloud.ensureContext can resolve it.
+  // Only meaningful for an owned (non-joined) project while signed in.
+  function _repairOwnedProjectCloudLink(proj, cb) {
+    var companyId = (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId) || (typeof WS_COMPANY_KEY !== 'undefined' ? safeLS.getItem(WS_COMPANY_KEY) : null);
+    if (!companyId || typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) {
+      if (cb) cb(false);
+      return;
+    }
+    function _writeMapAndFinish(cloudProjectId) {
+      try {
+        var map = {};
+        try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+        map[proj.id] = { companyId: companyId, projectId: cloudProjectId, role: 'owner' };
+        localStorage.setItem('sanj_sb_project_map', JSON.stringify(map));
+      } catch(e) {}
+      if (cb) cb(true);
+    }
+    // Safety: this can now run silently in the background (see
+    // cloudBackupNow's self-heal check) rather than only from an explicit
+    // "+ New Project" click, so guard against creating a duplicate cloud
+    // project if one with this exact name already exists for the company
+    // (e.g. from a partial sync on another device) — link to that one
+    // instead of creating a second copy.
+    _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
+      var existing = ((pr && pr.data) || []).find(function(p) {
+        return p.project_name && p.project_name.trim().toLowerCase() === (proj.name || '').trim().toLowerCase();
+      });
+      if (existing) { _writeMapAndFinish(existing.project_id); return; }
+      _sb.rpc('create_project', { p_company_id: companyId, p_name: proj.name, p_code: null, p_address: null, p_start_date: null, p_end_date: null })
+        .then(function(r) {
+          if (r.error || !r.data) { console.error('Cloud link failed for project "' + proj.name + '":', r.error); if (cb) cb(false); return; }
+          _writeMapAndFinish(r.data);
+        }).catch(function(e) { console.error('Cloud link failed for project "' + proj.name + '":', e); if (cb) cb(false); });
+    }).catch(function(e) { console.error('Cloud link lookup failed for project "' + proj.name + '":', e); if (cb) cb(false); });
+  }
+
   function createProject(name) {
     // Joined members never create projects — that's the owner's company
     // to manage, not theirs. This blocks it even if the button is somehow
@@ -892,6 +960,22 @@ self.addEventListener('fetch', function(e) {
     var proj = { id: id, name: trimmedName || ('Project ' + (window.projects.length + 1)), created_at: Date.now() };
     window.projects.push(proj);
     _saveProjects();
+    // BUGFIX: this used to only ever create a LOCAL shell — fine for the
+    // very first offline-first bootstrap project, but for an already
+    // signed-in owner adding another project via the in-app "+ New
+    // Project" button, nothing here ever created the matching cloud
+    // project row or wrote a sanj_sb_project_map entry for it. Every
+    // save on that project would then fail forever with "Backup failed:
+    // not signed in / no project context" (SanjCloud.ensureContext
+    // finding no mapping for it), even though the owner genuinely was
+    // signed in — the project itself just had no cloud counterpart to
+    // sync to.
+    _repairOwnedProjectCloudLink(proj, function(ok) {
+      // Kick a push immediately rather than waiting for the next
+      // debounced save, in case the owner switches to this project and
+      // starts entering data before the RPC above resolved.
+      if (ok && window.currentProjectId === id && typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch(e) {} }
+    });
     return proj;
   }
 
@@ -934,6 +1018,56 @@ self.addEventListener('fetch', function(e) {
 
     window.currentProjectId = projectId;
     try { localStorage.setItem('sanj_current_project', projectId); } catch(e) {}
+
+    // Joined (non-owned) project shells carry a company_id/cloud_project_id/
+    // role mapping (sanj_sb_project_map) written at join time. Keep the
+    // active workspace pointers (WS_COMPANY_KEY/WS_PROJECT_KEY/WS_PROLE_KEY)
+    // and the live permission set in sync with whichever shell is now
+    // active — without this, switching between multiple joined projects
+    // left every permission check (readonly flags, hasPerm(), and Phase 4's
+    // future auth.uid()-scoped sync) still pointed at whichever project was
+    // joined FIRST, no matter which one was actually on screen.
+    var _swProj = window.projects.find(function(p){ return p.id === projectId; });
+    if (_swProj && _swProj.joined) {
+      var _swMap = {};
+      try { _swMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+      var _swIds = _swMap[projectId];
+      if (_swIds && _swIds.projectId) {
+        window._wsCompanyId = _swIds.companyId;
+        window._wsProjectId = _swIds.projectId;
+        try {
+          if (typeof WS_COMPANY_KEY !== 'undefined') safeLS.setItem(WS_COMPANY_KEY, _swIds.companyId || '');
+          if (typeof WS_PROJECT_KEY !== 'undefined') safeLS.setItem(WS_PROJECT_KEY, _swIds.projectId || '');
+          if (typeof WS_PNAME_KEY   !== 'undefined') safeLS.setItem(WS_PNAME_KEY, _swProj.name || '');
+          if (typeof WS_PROLE_KEY   !== 'undefined') safeLS.setItem(WS_PROLE_KEY, _swIds.role || '');
+        } catch(e) {}
+        if (typeof _applyPermState === 'function') {
+          _applyPermState(_swIds.role || null).then(function() {
+            if (typeof _settRefreshLoginBtn === 'function') _settRefreshLoginBtn();
+            _renderProjectDropdown();
+          });
+        }
+      }
+    } else if (_swProj && !_swProj.joined) {
+      // OWNED project switch. sanj_sb_project_map covers these too (every
+      // owned project gets a map entry via _repairOwnedProjectCloudLink /
+      // the session-reconciliation pass), so the same lookup applies here.
+      // Without this branch, WS_PROJECT_KEY only ever reflected whichever
+      // project was active at LOGIN time — switching between two of your
+      // own projects in-app (e.g. Pragati Residency <-> Tulsi apartment)
+      // never updated it, so "resume last active project on next login"
+      // would silently resume the wrong one.
+      var _swOwnMap = {};
+      try { _swOwnMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+      var _swOwnIds = _swOwnMap[projectId];
+      if (_swOwnIds && _swOwnIds.projectId) {
+        try {
+          if (typeof WS_PROJECT_KEY !== 'undefined') safeLS.setItem(WS_PROJECT_KEY, _swOwnIds.projectId || '');
+          if (typeof WS_PNAME_KEY   !== 'undefined') safeLS.setItem(WS_PNAME_KEY, _swProj.name || '');
+        } catch(e) {}
+      }
+    }
+
     _renderProjectDropdown();
 
     // Show one clean loading screen for the switch instead of letting the
@@ -1021,7 +1155,15 @@ self.addEventListener('fetch', function(e) {
   // seeded directly into sanj_sb_project_map — ensureContext then finds it
   // immediately instead of trying to "resolve or create" a company, which
   // would be wrong here since we already know exactly which one was joined.
-  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName) {
+  // Silent variant — finds or creates the local project shell for a cloud
+  // project WITHOUT activating it (no currentProjectId change, no reload,
+  // no dropdown re-render). Used by the multi-project switcher to resolve
+  // local ids for joined projects up front, and shared by
+  // _ensureLocalProjectForJoin below so both paths write the same map
+  // format — now including role, so the switcher can show read/write
+  // badges and switchProject() can restore the right permission set
+  // without a network round-trip every time.
+  function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName) {
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
@@ -1033,9 +1175,13 @@ self.addEventListener('fetch', function(e) {
       if (map[localId] && map[localId].projectId === cloudProjectId) existingLocalId = localId;
     });
     if (existingLocalId && window.projects.find(function(p){ return p.id === existingLocalId; })) {
-      window.currentProjectId = existingLocalId;
-      try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
-      _renderProjectDropdown();
+      // Keep the stored role fresh — it can change between joins/re-logins,
+      // and a stale role would show the wrong badge / restore the wrong
+      // permission set on switch.
+      if (roleName && map[existingLocalId].role !== roleName) {
+        map[existingLocalId].role = roleName;
+        try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+      }
       return existingLocalId;
     }
 
@@ -1043,12 +1189,17 @@ self.addEventListener('fetch', function(e) {
     var proj = { id: id, name: projectName || 'Joined Project', created_at: Date.now(), joined: true };
     window.projects.push(proj);
     _saveProjects();
+
+    map[id] = { companyId: companyId, projectId: cloudProjectId, role: roleName || '' };
+    try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+    return id;
+  }
+  window._resolveLocalShellForCloudProject = _resolveLocalShellForCloudProject;
+
+  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName, roleName) {
+    var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName);
     window.currentProjectId = id;
     try { localStorage.setItem('sanj_current_project', id); } catch(e) {}
-
-    map[id] = { companyId: companyId, projectId: cloudProjectId };
-    try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
-
     _renderProjectDropdown();
     // BUGFIX: if the real project name wasn't available yet at join time
     // (e.g. get_my_projects raced ahead of the membership row becoming
@@ -1164,6 +1315,19 @@ self.addEventListener('fetch', function(e) {
   function _renderProjectDropdown() {
     var wrap = document.getElementById('project-dropdown-wrap');
     if (!wrap) return;
+
+    // Joined (non-owner) sessions get a lighter switcher: switch-only, with
+    // a read/write badge per project, no rename/share/new-project actions
+    // (those stay owner-only — a joined engineer/sales_admin has no
+    // business generating join codes or creating projects for someone
+    // else's company). This replaces the old device-token engineer
+    // dropdown, which read from a local membership array Phase 2's
+    // auth.uid()-based join flow stopped populating.
+    if (window._ENGINEER_MODE) {
+      _renderEngineerProjectDropdown(wrap);
+      return;
+    }
+
     // BUGFIX safety net: if a joined project is still sitting on the
     // generic placeholder name (its earlier resolve attempt gave up, or
     // this is an older session from before that retry logic existed),
@@ -1288,6 +1452,72 @@ self.addEventListener('fetch', function(e) {
       }
     });
   }
+
+  // ── Engineer/joined-member dropdown — switch only, live-role badges ──
+  // Source of truth is window.projects (filtered to joined:true shells)
+  // cross-referenced with sanj_sb_project_map for each shell's role, which
+  // is populated straight from get_my_projects()/redeem_join_code results
+  // at join time (see _resolveLocalShellForCloudProject above) — not the
+  // dead sj_eng_memberships array the old device-token switcher read from.
+  function _renderEngineerProjectDropdown(wrap) {
+    var map = {};
+    try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+    var joined = (window.projects || []).filter(function(p){ return p.joined; });
+    var current = joined.find(function(p){ return p.id === window.currentProjectId; }) || joined[0];
+    var name = current ? current.name : 'Project';
+
+    if (joined.length <= 1) {
+      wrap.innerHTML = '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);padding:2px 8px;">' + _escHtml(name) + '</span>';
+      return;
+    }
+
+    var items = joined.map(function(p) {
+      var active = (p.id === window.currentProjectId);
+      var role = (map[p.id] && map[p.id].role) || '';
+      // BUGFIX: real DB role name for read/write is 'site_engineer' (see
+      // Team panel's roles.name usage) — 'write' never matches anything,
+      // so every write-access engineer was shown the read-only badge here.
+      var badgeColor = role === 'site_engineer' ? '#6ee7b7' : role === 'sales_admin' ? '#93c5fd' : '#fde68a';
+      var badgeIcon = role === 'site_engineer' ? '✏️' : role === 'sales_admin' ? '🏢' : '👁️';
+      var pid = _escHtml(p.id);
+      return '<div data-eng-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:' + (active ? 'rgba(99,102,241,0.2)' : 'transparent') + ';-webkit-tap-highlight-color:transparent;">'
+        + '<span style="font-size:13px;flex-shrink:0">' + (active ? '✅' : '📁') + '</span>'
+        + '<span style="font-size:12px;font-weight:' + (active ? '700' : '500') + ';color:' + (active ? '#a5b4fc' : 'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(p.name) + '</span>'
+        + '<span style="font-size:9px;color:' + badgeColor + ';flex-shrink:0">' + badgeIcon + '</span>'
+        + '</div>';
+    }).join('');
+
+    wrap.innerHTML = '<div id="eng-proj-dd-inner" style="position:relative;display:inline-flex;">'
+      + '<button id="eng-proj-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:pointer;min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
+      + '<span style="font-size:11px;flex-shrink:0">🗂️</span>'
+      + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
+      + '<span id="eng-proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;">▾</span>'
+      + '</button>'
+      + '<div id="eng-proj-dd-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:190px;max-width:250px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
+      + items
+      + '</div></div>';
+
+    var btn = document.getElementById('eng-proj-dd-btn');
+    var menu = document.getElementById('eng-proj-dd-menu');
+    if (btn && menu) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        menu.style.display = (menu.style.display === 'none' ? 'block' : 'none');
+      });
+      menu.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var sw = e.target.closest('[data-eng-proj-switch]');
+        if (!sw) return;
+        menu.style.display = 'none';
+        var pid = sw.getAttribute('data-eng-proj-switch');
+        if (pid !== window.currentProjectId) switchProject(pid);
+      });
+    }
+  }
+  document.addEventListener('click', function() {
+    var menu = document.getElementById('eng-proj-dd-menu');
+    if (menu) menu.style.display = 'none';
+  });
 
   // ── Close menu on outside tap/click ──────────────────────────
   document.addEventListener('click', function(e) {
@@ -1448,6 +1678,72 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       updateCloudBtn && updateCloudBtn();
       refreshCloudModalState && refreshCloudModalState();
     }
+    // ROOT-CAUSE FIX: on a SILENT session restore (Supabase already had a
+    // valid token — page refresh, reopen, new tab), everything above only
+    // re-reads THIS APP's own localStorage caches. It never re-derives
+    // membership/company/project/plan from the database. Those caches are
+    // written exactly once, at the end of the interactive OTP-login flow
+    // (_wsStart/_wsFinishJoin) — if they're ever missing, stale, or wiped
+    // (new device/browser, cleared storage, an app update that predates a
+    // given cache key, or a save firing before that async login flow had
+    // finished writing them), the app permanently shows a signed-in-but-
+    // Free/no-project user, and every cloud save fails with "Backup
+    // failed: not signed in / no project context" (SanjCloud.ensureContext
+    // has nothing to resolve). This reconciles the same way the login
+    // flow does — get_my_companies() -> get_my_projects() — every time a
+    // session is silently restored, so membership/plan/project context is
+    // rebuilt from the source of truth (the database) instead of trusting
+    // a cache that may never have been populated correctly.
+    _reconcileMembershipFromServer(user);
+  }
+
+  var _reconcileInFlight = false;
+  function _reconcileMembershipFromServer(user) {
+    if (_reconcileInFlight) return;
+    if (typeof _sb === 'undefined' || !_sb || !user) return;
+    // Skip for viewer-link sessions and genuinely-offline users who never
+    // went through cloud login/join — nothing to reconcile for them.
+    var role = safeLS.getItem('cm_admin_role');
+    var choice = (function(){ try { return localStorage.getItem('sanj_cloud_choice'); } catch(e) { return null; } })();
+    if (role !== 'admin' && choice !== 'joined') return;
+    _reconcileInFlight = true;
+    _sb.rpc('get_my_companies').then(function(r) {
+      _reconcileInFlight = false;
+      if (r.error) { console.warn('[reconcile] get_my_companies failed', r.error); return; }
+      var rows = r.data || [];
+      if (!rows.length) return; // nothing to restore — leave existing state alone
+      var storedCompany = (typeof WS_COMPANY_KEY !== 'undefined') ? safeLS.getItem(WS_COMPANY_KEY) : null;
+      var company = rows.find(function(c){ return c.company_id === storedCompany; }) || rows[0];
+      window._wsCompanyId = company.company_id;
+      if (typeof WS_COMPANY_KEY !== 'undefined') safeLS.setItem(WS_COMPANY_KEY, company.company_id);
+      if (typeof WS_CNAME_KEY !== 'undefined') safeLS.setItem(WS_CNAME_KEY, company.company_name || '');
+      if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(company.plan_tier);
+
+      _sb.rpc('get_my_projects', { p_company_id: company.company_id }).then(function(pr) {
+        if (pr.error || !pr.data) { console.warn('[reconcile] get_my_projects failed', pr.error); return; }
+        var serverProjects = pr.data || [];
+        var hadCurrent = !!window.currentProjectId;
+        var restoredId = null;
+        var storedProject = (typeof WS_PROJECT_KEY !== 'undefined') ? safeLS.getItem(WS_PROJECT_KEY) : null;
+        serverProjects.forEach(function(p) {
+          if (!p || !p.project_id) return;
+          // Idempotent: reuses the existing local shell + map entry if one
+          // already exists for this cloud project, only creates one if
+          // genuinely missing — never duplicates window.projects.
+          var localId = (typeof window._resolveLocalShellForCloudProject === 'function')
+            ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name)
+            : null;
+          if (localId && p.project_id === storedProject) restoredId = localId;
+        });
+        if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
+        // Only auto-restore the active project if none is currently set —
+        // never override a project the person is actively viewing.
+        if (!hadCurrent && restoredId) {
+          window.currentProjectId = restoredId;
+          try { localStorage.setItem('sanj_current_project', restoredId); } catch(e) {}
+        }
+      }).catch(function(e) { console.warn('[reconcile] get_my_projects error', e); });
+    }).catch(function(e) { _reconcileInFlight = false; console.warn('[reconcile] get_my_companies error', e); });
   }
   function _onSBSignedOut() {
     _adminSBUser = null;
@@ -3096,38 +3392,17 @@ function dismissWelcome(){
             if (_rPlan && typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(_rPlan);
             if (_rRole && typeof _applyPermState === 'function') _applyPermState(_rRole);
           } catch(eRestore) {}
-          // THE ACTUAL REMAINING GAP: _adminSBUser is an in-memory variable
-          // only ever set during the live login/join call — it resets to
-          // null on every reload and was NEVER restored here. isSignedIn()
-          // requires _adminSBUser.id, and ensureContext() checks
-          // isSignedIn() FIRST before even looking at the project mapping
-          // — meaning every push/pull/backup silently failed with "not
-          // signed in / no project context" after ANY reload, no matter
-          // how correct the rest of the sync chain was. Restoring it from
-          // the real Supabase session (the actual source of truth) before
-          // launching the app, rather than launching immediately and
-          // racing whatever the person does first.
-          var _finishResume = function() {
-            _launchApp();
-            // A Sales Admin joiner stays locked to the Sales Manager on
-            // every return visit, not just the moment they first joined —
-            // otherwise closing and reopening the app would drop them onto
-            // the normal dashboard, which defeats the point of the lock.
-            try {
-              if (cc === 'joined' && safeLS.getItem(WS_PROLE_KEY) === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
-                setTimeout(function(){ window._enterSalesEngineerMode(); }, 400);
-              }
-            } catch(e2) {}
-          };
-          if (typeof _sb !== 'undefined' && _sb && _sb.auth) {
-            _sb.auth.getSession().then(function(res) {
-              var sess = res && res.data && res.data.session;
-              if (sess && sess.user) { _adminSBUser = sess.user; }
-              _finishResume();
-            }).catch(function() { _finishResume(); });
-          } else {
-            _finishResume();
-          }
+          // Already chose before — skip straight to app
+          _launchApp();
+          // A Sales Admin joiner stays locked to the Sales Manager on
+          // every return visit, not just the moment they first joined —
+          // otherwise closing and reopening the app would drop them onto
+          // the normal dashboard, which defeats the point of the lock.
+          try {
+            if (cc === 'joined' && safeLS.getItem(WS_PROLE_KEY) === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
+              setTimeout(function(){ window._enterSalesEngineerMode(); }, 400);
+            }
+          } catch(e2) {}
           return;
         }
       }catch(e){}
@@ -3683,9 +3958,9 @@ function _wsOverlay() {
   if (el) return el;
   el = document.createElement('div');
   el.id = 'ws-overlay';
-  el.style.cssText = 'position:fixed;inset:0;z-index:800000;display:none;align-items:center;justify-content:center;background:rgba(8,8,20,.72);backdrop-filter:blur(6px);padding:16px;box-sizing:border-box;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:800000;display:none;align-items:center;justify-content:center;background:rgba(6,5,16,.78);backdrop-filter:blur(6px);padding:16px;box-sizing:border-box;';
   el.innerHTML =
-    '<div id="ws-panel" style="width:100%;max-width:320px;max-height:80vh;overflow-y:auto;background:linear-gradient(160deg,#1e1b3a,#151330);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);">' +
+    '<div id="ws-panel" style="width:100%;max-width:320px;max-height:80vh;overflow-y:auto;background:linear-gradient(165deg,#0F0C28,#241C5C 55%,#3A1D5E);border:1px solid rgba(232,185,77,.10);border-radius:16px;padding:14px;box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03);">' +
       '<div id="ws-body"></div>' +
     '</div>';
   document.body.appendChild(el);
@@ -3695,8 +3970,17 @@ function _wsShow() { _wsOverlay().style.display = 'flex'; }
 function _wsHide() { var el = document.getElementById('ws-overlay'); if (el) el.style.display = 'none'; }
 function _wsBody(html) { document.getElementById('ws-body').innerHTML = html; }
 
-var _wsBtnStyle   = 'width:100%;padding:8px;margin-bottom:5px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:.8rem;cursor:pointer;box-shadow:0 3px 10px rgba(79,70,229,.4);text-align:left;';
-var _wsCardStyle  = 'width:100%;padding:9px;margin-bottom:5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:10px;color:#fff;text-align:left;cursor:pointer;font-size:.85rem;';
+var _wsBtnStyle   = 'width:100%;padding:8px;margin-bottom:5px;background:linear-gradient(135deg,#4F3FC7,#6C5CE7);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:.8rem;cursor:pointer;box-shadow:0 3px 10px rgba(108,92,231,.4);text-align:left;';
+// Neutral/muted — Continue Offline, Join a Project. Deliberately quiet:
+// these don't monetize, so they shouldn't visually compete with Pro/Enterprise.
+var _wsCardStyle  = 'width:100%;padding:9px;margin-bottom:5px;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#fff;text-align:left;cursor:pointer;font-size:.85rem;';
+// Pro tier — a modest indigo accent, one step up from neutral.
+var _wsCardStylePro = 'width:100%;padding:9px;margin-bottom:5px;background:linear-gradient(180deg,rgba(108,92,231,.16),rgba(108,92,231,.05));border:1px solid rgba(108,92,231,.4);border-radius:10px;color:#fff;text-align:left;cursor:pointer;font-size:.85rem;box-shadow:0 3px 14px rgba(108,92,231,.15);';
+// Enterprise tier — the flagship. Gold, drawn from the crest logo, used
+// nowhere else this boldly in the picker — this is the one card meant to
+// visually win the comparison, the way a real pricing page highlights its
+// recommended plan instead of presenting every tier identically.
+var _wsCardStyleEnterprise = 'width:100%;padding:10px 9px;margin-bottom:5px;background:linear-gradient(165deg,rgba(232,185,77,.22),rgba(184,137,46,.08));border:1.5px solid rgba(232,185,77,.55);border-radius:10px;color:#fff;text-align:left;cursor:pointer;font-size:.85rem;box-shadow:0 4px 18px rgba(232,185,77,.18);position:relative;';
 var _wsInputStyle = 'width:100%;padding:7px 9px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:8px;color:#fff;font-size:12.5px;outline:none;box-sizing:border-box;margin-bottom:6px;';
 var _wsTitleStyle = 'margin:0 0 8px;font-size:13.5px;font-weight:800;color:#fff;';
 var _wsErrStyle   = 'font-size:10.5px;color:#fca5a5;margin:5px 0 0;';
@@ -3718,123 +4002,28 @@ function _wsLoading(msg) {
 }
 
 // ── Entry point — called from _handleOtpSuccess after a verified OTP ──
-// SINGLE SOURCE OF TRUTH for resolving "what should this session see" —
-// called on every fresh login AND on every resume (see the resume path
-// below). Previously this only checked get_my_companies(), which joins
-// through `memberships` — a project-level-only joiner (redeemed a
-// project-specific code) never gets a memberships row, only
-// project_team_members, so that check always came back empty for them
-// and silently fell through to the "new user, pick a plan" screen. That
-// was Bug #1: it happened on every fresh login for such a user, not just
-// on resume. get_my_projects(null) (no company filter) returns every
-// project this user can access regardless of HOW they're a member,
-// which is what's actually needed here.
 function _wsStart(user, email, onDone) {
   window._wsOnDone = onDone || function(){};
-  window._wsLastUser = user; window._wsLastEmail = email;
-  _adminSBUser = user;
   _wsShow();
-  _wsLoading('Loading your workspace…');
-  _sb.rpc('get_my_projects', { p_company_id: null }).then(function(r) {
-    console.log('[_wsStart] get_my_projects(null) for', email, '→', r.error ? ('ERROR: ' + r.error.message) : (r.data || []));
-    if (r.error) { _wsShowError('Could not load your workspace', r.error.message); return; }
-    var allProjects = r.data || [];
-    if (allProjects.length === 0) {
-      // Genuinely no project access — check if they at least own a
-      // company with no project created yet (fresh signup that dropped
-      // off mid-setup), before concluding they're a brand-new user.
-      _sb.rpc('get_my_companies').then(function(cr) {
-        var companies = (cr && cr.data) || [];
-        if (companies.length === 0) { _wsShowCreateWorkspace(); return; }
-        var stored = safeLS.getItem(WS_COMPANY_KEY);
-        var pick = companies.find(function(c){ return c.company_id === stored; }) || companies[0];
-        _wsSelectCompany(pick);
-      }).catch(function(){ _wsShowCreateWorkspace(); });
-      return;
-    }
-    // Never show a "choose a project" picker on login — auto-select,
-    // preferring whichever project was used last on this device.
-    var storedProjectId = safeLS.getItem(WS_PROJECT_KEY);
-    var chosen = allProjects.find(function(p){ return p.project_id === storedProjectId; }) || allProjects[0];
-    _wsEnterProject(chosen);
-  }).catch(function(e) { _wsShowError('Could not load your workspace', e.message); });
-}
-
-// ── THE unified finishing path — replaces the three separate,
-// independently-maintained "finish" blocks that used to live in
-// _wsSelectProject / _wsFinishJoin / doJoinProject's inline finish().
-// Having three copies of "apply plan, apply permissions, sync company
-// name, start sync, check sales lock" is exactly the "state in multiple
-// independent places" that caused these regressions — every time one
-// copy got fixed, the other two silently kept the old behavior. Now
-// there is exactly one. Takes a row shaped like what get_my_projects()
-// returns: {project_id, project_name, company_id, company_name,
-// plan_tier, role_name}.
-function _wsEnterProject(row) {
-  window._wsCompanyId = row.company_id;
-  window._wsProjectId = row.project_id;
-  safeLS.setItem(WS_COMPANY_KEY, row.company_id);
-  safeLS.setItem(WS_CNAME_KEY, row.company_name || '');
-  safeLS.setItem(WS_CROLE_KEY, row.role_name || '');
-  safeLS.setItem(WS_CPLAN_KEY, row.plan_tier || '');
-  safeLS.setItem(WS_PROJECT_KEY, row.project_id);
-  safeLS.setItem(WS_PNAME_KEY, row.project_name || '');
-  safeLS.setItem(WS_PROLE_KEY, row.role_name || '');
-
-  if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(row.plan_tier);
-
-  // Always re-synced fresh from the database on every entry, not just
-  // once at join/creation time — so a company rename by the owner
-  // reaches every device on next login instead of only the device that
-  // made the change.
-  try {
-    var g = lglobal() || {};
-    if (row.company_name) g.company = row.company_name;
-    sglobal(g);
-  } catch(e) {}
-
-  // Owner-tier payment gate — only meaningful for the actual owner role;
-  // a joined member never sees this regardless of the company's plan.
-  if (row.role_name === 'owner' && (row.plan_tier === 'pro' || row.plan_tier === 'enterprise')) {
-    _wsLoading('Checking subscription…');
-    _sb.from('subscriptions').select('payment_status').eq('company_id', row.company_id).maybeSingle().then(function(pr) {
-      var paid = pr && pr.data && pr.data.payment_status === 'paid';
-      if (!paid) { _wsLaunchPayment(row.plan_tier, { company_id: row.company_id, company_name: row.company_name, role_name: row.role_name, plan_tier: row.plan_tier }); return; }
-      _wsFinishEnterProject(row);
-    }).catch(function() { _wsFinishEnterProject(row); });
-    return;
-  }
-  _wsFinishEnterProject(row);
-}
-
-function _wsFinishEnterProject(row) {
-  // Links this cloud project to a real local project (creating/reusing
-  // one) and seeds sanj_sb_project_map — what ensureContext() (and every
-  // push/pull) depends on to resolve which local project maps to which
-  // cloud project. This used to only run for the owner's path; now it's
-  // part of the single unified entry so it always runs, regardless of
-  // how someone got here.
-  if (typeof window._ensureLocalProjectForOwner === 'function') {
-    window._ensureLocalProjectForOwner(row.project_id, row.company_id, row.project_name);
-  }
-  try {
-    var existing = lprof() || {};
-    if (window._wsPendingName && !existing.engineer) sprof(Object.assign({}, existing, { engineer: window._wsPendingName }));
-  } catch(e) {}
-  _applyPermState(row.role_name || 'viewer').then(function() {
-    _wsHide();
-    try { localStorage.setItem('sanj_cloud_choice', 'cloud'); } catch(e) {}
-    toast('✅ ' + (row.project_name || 'Project') + ' ready', 'ok');
-    // sales_admin skips the general multi-module sync entirely — they
-    // only ever need company name + sales data, and pulling the whole
-    // project's data set is exactly what made a Sales code join "open
-    // the project" behind the visual lock.
-    if (row.role_name !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
-    if (typeof window._wsOnDone === 'function') window._wsOnDone();
-    if (row.role_name === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
-      setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
-    }
-  });
+  _wsLoading('Setting up your workspace…');
+  _sb.rpc('get_my_companies').then(function(r) {
+    // DIAGNOSTIC — open the browser console during login to see exactly
+    // what the backend returned for this account. If a returning/paid
+    // user is being sent to the plan-choice screen, this line shows
+    // whether get_my_companies genuinely returned 0 rows (real account
+    // gap) vs something else (a bug worth chasing separately).
+    console.log('[_wsStart] get_my_companies for', email, '→', r.error ? ('ERROR: ' + r.error.message) : (r.data || []));
+    if (r.error) { _wsShowError('Could not load your workspaces', r.error.message); return; }
+    var rows = r.data || [];
+    if (rows.length === 0) { _wsShowCreateWorkspace(); return; }
+    // Never show a "choose a workspace" picker — a returning or existing
+    // user should land straight past this into their project/dashboard.
+    // Prefer whichever company they used last (if still present), else
+    // just the first one the backend returned.
+    var stored = safeLS.getItem(WS_COMPANY_KEY);
+    var pick = rows.find(function(c){ return c.company_id === stored; }) || rows[0];
+    _wsSelectCompany(pick);
+  }).catch(function(e) { _wsShowError('Could not load your workspaces', e.message); });
 }
 
 function _wsShowError(title, detail) {
@@ -3852,8 +4041,11 @@ function _wsShowCreateWorkspace() {
     '<p style="' + _wsTitleStyle + '">Get started</p>' +
     '<button style="' + _wsCardStyle + '" onclick="_wsGoOffline()"><b>💾 Continue Offline</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Use the app locally, no cloud</span></button>' +
     '<button style="' + _wsCardStyle + '" onclick="_wsShowJoinForm()"><b>🤝 Join a Project</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Have a project code from your admin?</span></button>' +
-    '<button style="' + _wsCardStyle + '" onclick="_wsShowProForm()"><b>⭐ Pro — ₹30/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">1 user · 10 projects</span></button>' +
-    '<button style="' + _wsCardStyle + '" onclick="_wsShowEnterpriseForm()"><b>🏢 Enterprise — ₹99/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.5);">Multiple users · multiple projects</span></button>' +
+    '<button style="' + _wsCardStylePro + '" onclick="_wsShowProForm()"><b>⭐ Pro — ₹30/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.55);">1 user · 10 projects</span></button>' +
+    '<button style="' + _wsCardStyleEnterprise + '" onclick="_wsShowEnterpriseForm()">' +
+      '<span style="position:absolute;top:-8px;right:10px;background:linear-gradient(135deg,#B8892E,#E8B94D);color:#1E1B3A;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:6px;letter-spacing:.03em;box-shadow:0 2px 6px rgba(0,0,0,.25);">RECOMMENDED</span>' +
+      '<b>🏢 Enterprise — ₹99/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.65);">Multiple users · multiple projects</span>' +
+    '</button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
 }
@@ -3904,9 +4096,7 @@ function _wsSubmitJoin() {
       if (!companyId) { _wsFinishJoin(projectId, null, name, null, null); return; }
       var companyName = companies.length ? companies[0].company_name : null;
       _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
-        var freshRows = (pr && pr.data) || [];
-        if (typeof _pruneStaleLocalProjects === 'function') _pruneStaleLocalProjects(companyId, freshRows);
-        var proj = freshRows.find(function(x) { return x.project_id === projectId; });
+        var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
         _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null, companyName);
       }).catch(function() { _wsFinishJoin(projectId, null, name, null, companyName); });
     }).catch(function() { _wsFinishJoin(projectId, null, name, null, null); });
@@ -3930,7 +4120,7 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   // window.currentProjectId stays unset and every local read/write
   // (including SanjCloud's ensureContext) has nothing to scope to.
   if (typeof window._ensureLocalProjectForJoin === 'function') {
-    window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName);
+    window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName, roleName);
   }
   try {
     var existing = lprof() || {};
@@ -3948,6 +4138,7 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   } catch(e) {}
   _applyPermState(roleName || 'viewer').then(function() {
     _wsHide();
+    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
     toast('✅ Joined' + (projectName ? ' "' + projectName + '"' : ' project'), 'ok');
     // FIX: a sales_admin joiner has no business pulling/pushing the
     // general project data set (BOQ, materials, attendance, everything)
@@ -4362,26 +4553,16 @@ function _wsPollUpgrade(companyId, attempt, targetPlan, gen) {
 }
 
 function _wsCreateEnterprise() {
-  // Guard against double-submit — create_enterprise_company has no
-  // idempotency check (unlike bootstrap_personal_workspace, which
-  // returns the existing personal workspace if one's already there), so
-  // a double-tap or slow-network double-submit would silently create
-  // two separate companies with the same name. This was very likely a
-  // second real contributor (alongside the ensureContext bug) to the
-  // duplicate projects/companies found and cleaned up earlier.
-  if (window._wsCreatingEnterprise) return;
   var name = ((document.getElementById('ws-company-name') || {}).value || '').trim();
   var ownerName = ((document.getElementById('ws-owner-name') || {}).value || '').trim();
   if (!name) { _wsSetErr('⚠️ Enter a company name'); return; }
   if (!ownerName) { _wsSetErr('⚠️ Enter your name'); return; }
-  window._wsCreatingEnterprise = true;
   window._wsPendingName = ownerName;
   _wsLoading('Creating your company…');
   _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
-    window._wsCreatingEnterprise = false;
     if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
     _wsLaunchPayment('enterprise', { company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
-  }).catch(function(e) { window._wsCreatingEnterprise = false; _wsShowEnterpriseForm(); _wsSetErr(e.message); });
+  }).catch(function(e) { _wsShowEnterpriseForm(); _wsSetErr(e.message); });
 }
 function _wsSetErr(msg) { var e = document.getElementById('ws-err'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
 
@@ -4446,45 +4627,6 @@ function _wsSelectCompany(c) {
   }
   _wsSelectCompanyConfirmed(c);
 }
-// Removes local project entries left over from before duplicates were
-// cleaned up server-side (or from any future edge case) — anything
-// mapped to this company via sanj_sb_project_map whose cloud project_id
-// no longer appears in a FRESH get_my_projects() result gets pruned.
-// Never touches genuine offline-only local projects (no cloud mapping at
-// all) — only ones that were tied to this company and are now stale.
-function _pruneStaleLocalProjects(companyId, freshCloudRows) {
-  try {
-    var mapKey = 'sanj_sb_project_map';
-    var map = {};
-    try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
-    var validCloudIds = (freshCloudRows || []).map(function(r){ return r.project_id; });
-    var toRemove = {};
-    var changed = false;
-    Object.keys(map).forEach(function(localId) {
-      var entry = map[localId];
-      if (!entry || entry.companyId !== companyId) return; // not this company, leave alone
-      if (validCloudIds.indexOf(entry.projectId) === -1) {
-        // Stale — this local project's cloud counterpart no longer
-        // exists/is no longer accessible. Remove both the mapping and
-        // the local project entry itself.
-        delete map[localId];
-        toRemove[localId] = true;
-        changed = true;
-      }
-    });
-    if (changed) {
-      try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
-      window.projects = (window.projects || []).filter(function(p) { return !toRemove[p.id]; });
-      // If we just deleted the currently-active local project, clear the
-      // pointer so nothing tries to keep operating on a removed project.
-      if (toRemove[window.currentProjectId]) window.currentProjectId = null;
-      _saveProjects();
-      if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
-    }
-  } catch(e) { console.error('prune stale projects failed:', e); }
-}
-window._pruneStaleLocalProjects = _pruneStaleLocalProjects;
-
 function _wsSelectCompanyConfirmed(c) {
   window._wsCompanyId = c.company_id;
   safeLS.setItem(WS_COMPANY_KEY, c.company_id);
@@ -4498,8 +4640,6 @@ function _wsSelectCompanyConfirmed(c) {
   if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
   // Sync into the app's own display profile — this is what header/print/
   // settings actually read (sglobal), not the companies table directly.
-  // Always re-synced fresh on every login, not just once at join time,
-  // so a company rename by the owner reaches every device on next login.
   try {
     var g = lglobal() || {};
     if (c.company_name) g.company = c.company_name;
@@ -4509,9 +4649,19 @@ function _wsSelectCompanyConfirmed(c) {
   _sb.rpc('get_my_projects', { p_company_id: c.company_id }).then(function(r) {
     if (r.error) { _wsShowError('Could not load projects', r.error.message); return; }
     var rows = r.data || [];
-    _pruneStaleLocalProjects(c.company_id, rows);
     if (rows.length === 0) { _wsShowCreateProject(); return; }
     if (rows.length === 1) { _wsSelectProject(rows[0]); return; }
+    // Never show a "choose a project" picker on login either — same
+    // principle as _wsStart's company skip above. A returning user with
+    // several projects should land straight on whichever one they were
+    // last working in, not be stopped and asked every single login.
+    // Only fall back to the picker when there's genuinely no valid
+    // resume point: first-ever login that lands on >1 projects at once
+    // (e.g. multiple joins before ever picking one), or their last
+    // active project was since deleted/removed from this company.
+    var storedProjectId = safeLS.getItem(WS_PROJECT_KEY);
+    var resume = storedProjectId && rows.find(function(p){ return p.project_id === storedProjectId; });
+    if (resume) { _wsSelectProject(resume); return; }
     _wsShowProjectList(rows);
   }).catch(function(e) { _wsShowError('Could not load projects', e.message); });
 }
@@ -4588,6 +4738,30 @@ function _permLoadForRole(roleName) {
     });
 }
 function hasPerm(key) { return !!(window._permSet && window._permSet.has(key)); }
+// PHASE 4 FOLLOW-UP: a viewer (either a joined member with role='viewer',
+// or a public share-link viewer — both set window._IS_VIEWER) must not be
+// able to write core project data. Nothing enforced this before: _IS_VIEWER
+// only ever hid/showed tabs (via sj_viewer_perms, which a join-code viewer
+// never has set, so it silently didn't apply to them), and the app's only
+// real write gate (window._ENGINEER_READONLY) covers file/photo uploads
+// only (hasPerm('files.manage')), nothing else. This is the single choke
+// point every core data tab's save function (sd/smat/sdept/smach/sdrw/
+// sbgt/sms/spl) now checks before persisting or syncing — mirrors
+// _scheduleCloudPush being the single choke point for sync itself.
+// Note: this blocks the write from ever being saved or synced, which is
+// the property that actually matters (no unauthorized data reaching other
+// devices) — but since the calling form code has usually already mutated
+// its in-memory array/object before calling save, the UI may still show
+// the attempted change until the next reload/tab switch. Hiding every
+// Add/Edit button per-tab would close that visual gap too but is a much
+// larger, separate change; flag if you want that as a follow-up.
+function _blockIfReadOnlyData() {
+  if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) {
+    toast('👁️ Read-only access — this project is shared/joined as view-only', 'err');
+    return true;
+  }
+  return false;
+}
 // Sets the legacy flags every existing call site already reads, but now
 // derived from the real permission set instead of a local membership
 // object. roleName is whatever get_my_projects()/get_my_companies()
@@ -4606,6 +4780,29 @@ function _applyPermState(roleName) {
     // session (whether they came in as site_engineer, viewer, or
     // sales_admin — sales_admin is still not the company owner).
     window._ENGINEER_MODE = (roleName !== 'owner');
+    // PHASE 4 REBUILD: isCloudActivated() (localStorage 'cm_cloud_activated')
+    // used to only ever get set by the owner's manual "Activate Cloud"
+    // toggle. A joined engineer never sees that screen and has no way to
+    // set it themselves — but several sync-loop gates (startAutoSync's
+    // interval, the online-reconnect handler) still checked it, which
+    // silently starved engineer sessions of pulls even after the push-side
+    // fix above. Reaching this point means a real signed-in role/permission
+    // context was just established (owner login, project switch, or
+    // engineer join) — that IS cloud being active, for either role.
+    try { safeLS.setItem('cm_cloud_activated', '1'); } catch(e) {}
+    // ROOT-CAUSE FIX (Bug #5): autoInitCloud() at boot is what normally
+    // starts realtime + polling (startAutoSync()), but for a BRAND NEW
+    // join in this same session it already ran and finished before
+    // _ENGINEER_MODE existed to check — its one-time engineer branch
+    // never saw this session. Starting it here too, the instant an
+    // engineer role is actually established, closes that gap. Both
+    // startAutoSync() and _startAdminRealtime() are already idempotent
+    // (they no-op/replace cleanly if already running for this project),
+    // so calling this again for an owner switch is harmless.
+    if (window._ENGINEER_MODE && typeof _sb !== 'undefined' && _sb && typeof _adminSBUser !== 'undefined' && _adminSBUser
+        && typeof startAutoSync === 'function') {
+      try { startAutoSync(); } catch(e) {}
+    }
   }).catch(function(e) {
     console.error('permission load failed:', e.message);
     // Fail closed — if we can't confirm what someone's allowed to do,
@@ -4618,69 +4815,12 @@ function _applyPermState(roleName) {
   });
 }
 
-// Links the owner's selected cloud project to a real local project and
-// seeds sanj_sb_project_map — this is what ensureContext() (and therefore
-// ALL of SanjCloud's push/pull/mirror) depends on to know which local
-// project maps to which cloud project. _ensureLocalProjectForJoin already
-// does this for JOINED members, but nothing equivalent ever ran for the
-// owner's own login — meaning window.currentProjectId never matched the
-// cloud project they'd just selected, and every sync call silently
-// no-op'd (no mapping found) from the very start.
-function _ensureLocalProjectForOwner(cloudProjectId, companyId, projectName) {
-  var mapKey = 'sanj_sb_project_map';
-  var map = {};
-  try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
-
-  // Already mapped from a previous login on this device? Reuse it.
-  var existingLocalId = null;
-  Object.keys(map).forEach(function(localId) {
-    if (map[localId] && map[localId].projectId === cloudProjectId) existingLocalId = localId;
-  });
-  if (existingLocalId && (window.projects || []).find(function(p){ return p.id === existingLocalId; })) {
-    window.currentProjectId = existingLocalId;
-    try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
-    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
-    return existingLocalId;
-  }
-
-  // Not mapped yet. If there's an existing local project with a matching
-  // name that isn't already linked to some other cloud project, link it —
-  // preserves any local-only data (e.g. from using the app offline before
-  // ever logging in) instead of silently orphaning it.
-  var candidate = (window.projects || []).find(function(p) {
-    if (map[p.id]) return false; // already linked elsewhere
-    return p.name && projectName && p.name.trim().toLowerCase() === projectName.trim().toLowerCase();
-  });
-  var localId;
-  if (candidate) {
-    localId = candidate.id;
-  } else {
-    localId = _genProjectId();
-    window.projects.push({ id: localId, name: projectName || 'Project', created_at: Date.now() });
-    _saveProjects();
-  }
-  window.currentProjectId = localId;
-  try { localStorage.setItem('sanj_current_project', localId); } catch(e) {}
-  map[localId] = { companyId: companyId, projectId: cloudProjectId };
-  try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
-  if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
-  return localId;
-}
-window._ensureLocalProjectForOwner = _ensureLocalProjectForOwner;
-
 function _wsSelectProject(p) {
   window._wsProjectId = p.project_id;
   safeLS.setItem(WS_PROJECT_KEY, p.project_id);
   safeLS.setItem(WS_PNAME_KEY, p.project_name || '');
   safeLS.setItem(WS_PROLE_KEY, p.role_name || '');
   try { localStorage.setItem('sanj_cloud_choice', 'cloud'); } catch(e) {}
-  // THE FIX: link this cloud project to a real local project before
-  // anything else runs. Without this, window.currentProjectId never
-  // matched what was just selected, and ensureContext() (used by every
-  // push/pull) always failed to find a mapping.
-  if (typeof window._ensureLocalProjectForOwner === 'function') {
-    window._ensureLocalProjectForOwner(p.project_id, window._wsCompanyId, p.project_name);
-  }
   // Sync the name typed at login into the app's own per-project profile
   // (sprof → 'engineer' field) — only if that field is still empty, so we
   // never clobber a name someone already set via Settings.
@@ -4693,7 +4833,6 @@ function _wsSelectProject(p) {
   _applyPermState(p.role_name || 'owner').then(function() {
     _wsHide();
     toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
-    if (typeof window.startAutoSync === 'function') window.startAutoSync();
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
   });
 }
@@ -4790,40 +4929,51 @@ function _wsSelectProject(p) {
   <!-- Backdrop -->
   <div id="sett-backdrop" style="position:absolute;inset:0;background:rgba(0,0,0,0);backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);transition:background .28s ease,backdrop-filter .28s ease,-webkit-backdrop-filter .28s ease;"></div>
   <!-- Drawer -->
-  <div id="sett-drawer" style="position:relative;z-index:1;width:100%;max-width:270px;background:linear-gradient(160deg,#1a1740 0%,#2d2a6e 55%,#3d1a6e 100%);border-radius:0 20px 20px 0;padding:14px 12px 12px 12px;box-shadow:10px 10px 50px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.07);transform:translateY(-110%) translateX(-110%);transition:transform .32s cubic-bezier(0.34,1.15,0.64,1),opacity .28s ease;opacity:0;">
+  <div id="sett-drawer" style="position:relative;z-index:1;width:100%;max-width:270px;background:linear-gradient(165deg,#0F0C28 0%,#241C5C 45%,#4A1F72 85%,#5B2470 100%);border-radius:0 20px 20px 0;padding:14px 12px 12px 12px;box-shadow:10px 10px 50px rgba(0,0,0,0.65),0 0 0 1px rgba(232,185,77,0.08),inset 1px 0 0 rgba(255,255,255,0.04);transform:translateY(-110%) translateX(-110%);transition:transform .32s cubic-bezier(0.34,1.15,0.64,1),opacity .28s ease;opacity:0;">
 
     <style>
+      /* ── Premium palette tokens (grounded in the crest logo's gold) ── */
+      :root {
+        --sj-gold: #E8B94D;
+        --sj-gold-deep: #B8892E;
+        --sj-gold-soft: rgba(232,185,77,.16);
+        --sj-indigo: #6C5CE7;
+        --sj-indigo-deep: #4F3FC7;
+      }
+
       /* ── Micro-animation tokens ── */
       @keyframes sett-pop  {0%{opacity:0;transform:scale(.92) translateY(6px)}100%{opacity:1;transform:none}}
       @keyframes sett-spin {0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
       @keyframes bar-grow  {from{width:0}to{width:var(--bar-w)}}
       @keyframes ripple    {to{transform:scale(4);opacity:0}}
-      @keyframes num-pop   {0%{transform:scale(1.18);color:#a5b4fc}100%{transform:scale(1);color:inherit}}
+      @keyframes num-pop   {0%{transform:scale(1.18);color:#F0CD7A}100%{transform:scale(1);color:inherit}}
 
       .sett-btn {
         width:100%;display:flex;align-items:center;gap:8px;
-        background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);
+        background:linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.03));
+        border:1px solid rgba(255,255,255,0.10);
         border-radius:10px;padding:7px 10px;cursor:pointer;color:#fff;
         font-size:11px;font-weight:700;margin-bottom:5px;
         transition:background .18s,border-color .18s,transform .16s,box-shadow .18s;
         -webkit-tap-highlight-color:transparent;outline:none;text-align:left;
         position:relative;overflow:hidden;
       }
-      .sett-btn:hover  {background:rgba(255,255,255,0.11);border-color:rgba(255,255,255,0.2);box-shadow:0 4px 16px rgba(99,102,241,.2);}
+      .sett-btn:hover  {background:linear-gradient(180deg,rgba(255,255,255,0.15),rgba(255,255,255,0.05));border-color:rgba(232,185,77,.3);box-shadow:0 4px 16px rgba(232,185,77,.12);}
       .sett-btn:active {transform:scale(.96);}
       .sett-btn .ripple-el {
-        position:absolute;border-radius:50%;background:rgba(255,255,255,0.18);
+        position:absolute;border-radius:50%;background:rgba(232,185,77,0.22);
         width:60px;height:60px;margin-left:-30px;margin-top:-30px;
         animation:ripple .5s linear;pointer-events:none;
       }
 
       .sett-switch {
         display:flex;align-items:center;justify-content:space-between;
-        background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);
+        background:linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.03));
+        border:1px solid rgba(255,255,255,0.10);
         border-radius:10px;padding:7px 10px;margin-bottom:5px;
         transition:background .18s,border-color .18s;
       }
-      .sett-switch:hover {background:rgba(255,255,255,0.1);}
+      .sett-switch:hover {background:linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.05));border-color:rgba(232,185,77,.22);}
       .sett-switch-label {display:flex;align-items:center;gap:11px;color:#fff;font-size:12px;font-weight:700;}
 
       .tog-track {
@@ -4832,7 +4982,7 @@ function _wsSelectProject(p) {
         position:relative;cursor:pointer;
         transition:background .25s cubic-bezier(.34,1.2,.64,1),border-color .25s;flex-shrink:0;
       }
-      .tog-track.on {background:linear-gradient(90deg,#6366f1,#a855f7);border-color:#818cf8;}
+      .tog-track.on {background:linear-gradient(90deg,var(--sj-gold-deep),var(--sj-gold));border-color:#F0CD7A;box-shadow:0 0 10px rgba(232,185,77,.35);}
       .tog-thumb {
         width:14px;height:14px;border-radius:50%;background:#fff;
         position:absolute;top:2px;left:2px;
@@ -4841,7 +4991,7 @@ function _wsSelectProject(p) {
       }
       .tog-track.on .tog-thumb {transform:translateX(16px);}
 
-      .view-seg {display:flex;gap:5px;background:rgba(0,0,0,0.25);border-radius:10px;padding:4px;}
+      .view-seg {display:flex;gap:5px;background:rgba(0,0,0,0.3);border-radius:10px;padding:4px;border:1px solid rgba(255,255,255,.05);}
       .view-btn {
         flex:1;padding:7px 0;border:none;border-radius:7px;
         font-size:11px;font-weight:700;cursor:pointer;
@@ -4850,8 +5000,8 @@ function _wsSelectProject(p) {
         -webkit-tap-highlight-color:transparent;
       }
       .view-btn.active {
-        background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;
-        box-shadow:0 3px 12px rgba(79,70,229,.5);
+        background:linear-gradient(135deg,var(--sj-indigo-deep),var(--sj-indigo));color:#fff;
+        box-shadow:0 3px 12px rgba(108,92,231,.5);
         animation:sett-pop .22s ease;
       }
       .view-btn:not(.active):active {transform:scale(.94);}
@@ -4884,7 +5034,7 @@ function _wsSelectProject(p) {
 
     <!-- Login / Cloud -->
     <button class="sett-btn sett-row" onclick="_settRipple(event,this);_settLoginBtnClick()" id="sett-login-btn">
-      <span style="font-size:15px;flex-shrink:0" id="sett-login-icon">🔒</span>
+      <span style="font-size:14px;flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--sj-gold-soft);border:1px solid rgba(232,185,77,.35);display:flex;align-items:center;justify-content:center;" id="sett-login-icon">🔒</span>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span id="sett-login-title">Login / Cloud</span>
         <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sett-login-sub">Sign in for backup &amp; sync</span>
@@ -4892,12 +5042,14 @@ function _wsSelectProject(p) {
     </button>
 
     <!-- Upgrade to Enterprise — hidden by default, shown via JS (see
-         _settRefreshUpgradeBtn) only for a Pro-plan company owner. -->
-    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_wsUpgradeToEnterprise()" id="sett-upgrade-btn" style="display:none;">
+         _settRefreshUpgradeBtn) only for a Pro-plan company owner. This is
+         the single highest-value CTA in the panel, so it's the one place
+         gold goes bold rather than just accenting a border. -->
+    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_wsUpgradeToEnterprise()" id="sett-upgrade-btn" style="display:none;background:linear-gradient(135deg,var(--sj-gold-deep),var(--sj-gold));border-color:#F0CD7A;box-shadow:0 4px 16px rgba(232,185,77,.3);">
       <span style="font-size:15px;flex-shrink:0">👑</span>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <span>Upgrade to Enterprise</span>
-        <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)">₹99/m · remaining Pro days carry over</span>
+        <span style="color:#1E1B3A;font-weight:800;">Upgrade to Enterprise</span>
+        <span style="font-size:9px;font-weight:600;color:rgba(30,27,58,0.65)">₹99/m · remaining Pro days carry over</span>
       </div>
     </button>
 
@@ -4959,7 +5111,7 @@ function _wsSelectProject(p) {
     </div>
 
     <!-- Manage Tabs -->
-    <div class="sett-row" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
+    <div class="sett-row" style="background:linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
       <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="_toggleManageTabs()">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:15px">🗂️</span>
@@ -4977,12 +5129,12 @@ function _wsSelectProject(p) {
     </div>
 
     <!-- Sales (Enterprise feature) -->
-    <div class="sett-row" id="sales-sett-row" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;cursor:pointer;" onclick="openSalesManager()">
+    <div class="sett-row" id="sales-sett-row" style="background:linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:7px 10px;margin-bottom:5px;cursor:pointer;" onclick="openSalesManager()">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:15px">🏢</span>
           <div style="display:flex;flex-direction:column;gap:1px">
-            <span style="font-size:11px;font-weight:700;color:#fff">Sales <span id="sales-sett-ent-badge" style="display:none;background:#f59e0b;color:#1e1b4b;font-size:8px;font-weight:800;padding:1px 5px;border-radius:6px;margin-left:3px;">ENTERPRISE</span></span>
+            <span style="font-size:11px;font-weight:700;color:#fff">Sales <span id="sales-sett-ent-badge" style="display:none;background:linear-gradient(135deg,var(--sj-gold-deep),var(--sj-gold));color:#1E1B3A;font-size:8px;font-weight:800;padding:1px 5px;border-radius:6px;margin-left:3px;">ENTERPRISE</span></span>
             <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sales-sett-sub">Buildings, floors, flats, pricing & bookings</span>
           </div>
         </div>
@@ -4992,13 +5144,13 @@ function _wsSelectProject(p) {
 
     <!-- Dashboard View -->
     <!-- Signatures section -->
-    <div id="sett-sig-section" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
+    <div id="sett-sig-section" style="background:linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.10);border-radius:10px;padding:7px 10px;margin-bottom:5px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:15px">✍️</span>
           <span style="font-size:11px;font-weight:700;color:#fff">Signatures</span>
         </div>
-        <button onclick="_settRipple(event,this);openSignatureModal(-1)" style="font-size:9px;font-weight:700;padding:3px 9px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:7px;cursor:pointer">+ Add</button>
+        <button onclick="_settRipple(event,this);openSignatureModal(-1)" style="font-size:9px;font-weight:700;padding:3px 9px;background:linear-gradient(135deg,var(--sj-indigo-deep),var(--sj-indigo));color:#fff;border:none;border-radius:7px;cursor:pointer">+ Add</button>
       </div>
       <div id="sig-list-wrap" style="max-height:120px;overflow-y:auto"><p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;margin:4px 0">No signatures yet</p></div>
     </div>
@@ -8748,13 +8900,13 @@ function snapData(snap) {
 }
 
 function ld(){try{var _v=JSON.parse(safeLS.getItem(_pk(DB))||'[]');if(window._SANJ_SYNC_DEBUG)_sanjLog('load db','key='+_pk(DB),'count='+(_v&&_v.length));return _v;}catch(e){return [];}}
-function sd(d){safeLS.setItem(_pk(DB),JSON.stringify(d));if(window._SANJ_SYNC_DEBUG)_sanjLog('save db','key='+_pk(DB),'count='+(d&&d.length),'ts='+Date.now());_scheduleCloudPush();}
+function sd(d){if(_blockIfReadOnlyData())return;safeLS.setItem(_pk(DB),JSON.stringify(d));if(window._SANJ_SYNC_DEBUG)_sanjLog('save db','key='+_pk(DB),'count='+(d&&d.length),'ts='+Date.now());_scheduleCloudPush();}
 function lm(){try{return JSON.parse(safeLS.getItem(_pk(META))||'{}');}catch(e){return {};}}
 function sm(x){safeLS.setItem(_pk(META),JSON.stringify(x));if(window._SANJ_SYNC_DEBUG)_sanjLog('save meta','key='+_pk(META),'ts='+Date.now());_scheduleCloudPush();}
 function lmat(){try{return JSON.parse(safeLS.getItem(_pk(MATS))||'[]');}catch(e){return [];}}
-function smat(x){ try { x = _autoStampArray(lmat(), x || []); } catch(e) {} safeLS.setItem(_pk(MATS),JSON.stringify(x));_scheduleCloudPush();}
+function smat(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampArray(lmat(), x || []); } catch(e) {} safeLS.setItem(_pk(MATS),JSON.stringify(x));_scheduleCloudPush();}
 function ldept(){try{return JSON.parse(safeLS.getItem(_pk(DEPT))||'{}');}catch(e){return {};}}
-function sdept(x){ try { x = _autoStampKeyed(ldept(), x || {}); } catch(e) {} safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush();}
+function sdept(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampKeyed(ldept(), x || {}); } catch(e) {} safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush();}
 function lprof(){try{return JSON.parse(safeLS.getItem(_pk(PROF))||'null');}catch(e){return null;}}
 function sprof(x){
   try {
@@ -11014,7 +11166,7 @@ function openQdprPanel(){
   }
   var _qdprPulls = [];
   if (typeof window._qdprPullAllOwnedProjects === 'function') _qdprPulls.push(window._qdprPullAllOwnedProjects());
-  if (typeof window._engineerPullAll === 'function') _qdprPulls.push(window._engineerPullAll(true));
+  if (typeof window._qdprPullAllJoinedProjects === 'function') _qdprPulls.push(window._qdprPullAllJoinedProjects());
   if (_qdprPulls.length) {
     Promise.all(_qdprPulls).then(_qdprRenderOnce).catch(_qdprRenderOnce);
     setTimeout(_qdprRenderOnce, 1500); // safety cap — never a long wait
@@ -11048,6 +11200,7 @@ function qdprLoadProjAD(pid){
   try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, DB)) || '[]'); } catch(e){ return []; }
 }
 function qdprSaveProjAD(pid, arr){
+  if (_blockIfReadOnlyData()) return;
   try { safeLS.setItem(_qdprProjKey(pid, DB), JSON.stringify(arr)); } catch(e){}
   if (pid === window.currentProjectId) {
     AD = arr;
@@ -11189,7 +11342,15 @@ function _qdprMergeCloudIntoProject(pid, d) {
 }
 function _qdprPullAllOwnedProjects() {
   if (!_sb || !_adminSBUser || !_adminSBUser.id) return Promise.resolve();
-  var list = (window.projects || []).filter(function(p) { return p && p.id; });
+  // BUGFIX: this used to iterate EVERY project including joined:true
+  // shells, but _qdprSiteIdFor()/cloud_backups is admin_id-scoped — for a
+  // joined project that key never matched anything the actual project
+  // owner ever wrote (they push under their own admin_id and their own
+  // local shell id, neither of which this device knows), so the query
+  // silently no-op'd for every joined project on every call. Restricting
+  // this to actually-owned projects makes that explicit; joined projects
+  // are handled by _qdprPullAllJoinedProjects below instead.
+  var list = (window.projects || []).filter(function(p) { return p && p.id && !p.joined; });
   if (!list.length) return Promise.resolve();
   return Promise.all(list.map(function(p) {
     var siteId = _qdprSiteIdFor(p.id);
@@ -11206,6 +11367,41 @@ function _qdprPullAllOwnedProjects() {
   }));
 }
 window._qdprPullAllOwnedProjects = _qdprPullAllOwnedProjects;
+
+// PHASE 4 REBUILD: the joined-project counterpart to
+// _qdprPullAllOwnedProjects above. Every joined:true shell in
+// window.projects has a real cloud project_id/company_id recorded in
+// sanj_sb_project_map (written at join time by
+// _resolveLocalShellForCloudProject) — this pulls each one's row
+// straight from project_backups (the same auth.uid()-scoped table
+// SanjCloud.pushBlob/pullBlob use for the active project) and merges it
+// into that project's own local storage via the same
+// _qdprMergeCloudIntoProject helper the owned-project pull uses, so QDPR
+// shows fresh data for every project someone has joined, not just
+// whichever one happens to be active. Replaces the old
+// window._engineerPullAll() call, which depended on sj_eng_memberships —
+// an array the current auth.uid()-based join flow never populates, so
+// it silently pulled nothing for any new-schema join.
+function _qdprPullAllJoinedProjects() {
+  if (!_sb || !_adminSBUser || !_adminSBUser.id) return Promise.resolve();
+  var joined = (window.projects || []).filter(function(p) { return p && p.id && p.joined; });
+  if (!joined.length) return Promise.resolve();
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+  return Promise.all(joined.map(function(p) {
+    var ids = map[p.id];
+    if (!ids || !ids.projectId) return Promise.resolve();
+    return _sb.from('project_backups')
+      .select('data,updated_at')
+      .eq('project_id', ids.projectId)
+      .maybeSingle()
+      .then(function(r) {
+        if (r.error || !r.data || !r.data.data) return;
+        _qdprMergeCloudIntoProject(p.id, r.data.data);
+      }).catch(function() {});
+  }));
+}
+window._qdprPullAllJoinedProjects = _qdprPullAllJoinedProjects;
 // Project-scoped Daily Report meta (same storage the Report tab's lm()/sm()
 // read and write for the currently-active project — see _pk(META) above).
 // Used to sync QDPR's Site Note + Photos into that project's Report tab.
@@ -11328,12 +11524,22 @@ function _qdprRefreshLiveTabsIfActive(pid){
 }
 
 // Every project the user can see in QDPR: their own local projects PLUS
-// any projects they joined elsewhere via a share/join code (token). Joined
-// projects use the same storage scope the engineer-join flow already uses
-// ('eng_'+pid) so their reports/materials are read from the right place.
+// any projects they joined elsewhere via a share/join code. Both live in
+// window.projects (owned: no `joined` flag; joined: `joined:true`) and
+// use the exact same storage scheme (_pk()/_qdprProjKey() keyed straight
+// off the project's real local id) — there's no separate namespace for
+// joined projects any more, so this must not invent one.
+//
+// PHASE 4 REBUILD: this used to source joined projects from
+// sj_eng_memberships (via _engLoadMemberships()) under an 'eng_'+pid
+// storage prefix — an array the current auth.uid()-based join flow never
+// populates, and a prefix nothing else in the app writes to any more. In
+// practice that meant QDPR silently showed ZERO joined projects for any
+// new-schema join, no matter how many projects were actually joined.
 function _qdprAllSites(){
-  var mem = (typeof _engLoadMemberships === 'function') ? _engLoadMemberships() : [];
-  var own = (window.projects||[]).map(function(p){
+  var allProjects = window.projects || [];
+  var joinedShells = allProjects.filter(function(p){ return p && p.joined; });
+  var own = allProjects.filter(function(p){ return p && !p.joined; }).map(function(p){
     return { id: p.id, name: p.name, address: p.address||'', editable: true, canWrite: true, joined: false, isDefault: !!p.isDefault, __hasData: qdprLoadProjAD(p.id).length>0 };
   });
   // The very first project the app auto-creates for a brand-new device is
@@ -11341,19 +11547,35 @@ function _qdprAllSites(){
   // real project (and never actually used the placeholder), don't show it
   // alongside the joined project(s). If they DID start using it (it has
   // reports), keep showing it so no data disappears.
-  if (mem.length) {
+  if (joinedShells.length) {
     own = own.filter(function(p){ return !(p.isDefault && !p.__hasData); });
   }
-  var joined = mem.map(function(m){
-    var gp = lglobal('eng_'+m.pid) || {};
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+  var joined = joinedShells.map(function(p){
+    var ids = map[p.id] || {};
+    var gp = lglobal() || {}; // company-level profile is shared across every project, owned or joined
     var pp = null;
-    try { pp = JSON.parse(localStorage.getItem('sanj_project_eng_'+m.pid+'_cm_profile') || 'null'); } catch(e) { pp = null; }
+    try { pp = JSON.parse(localStorage.getItem('sanj_project_' + p.id + '_cm_profile') || 'null'); } catch(e) { pp = null; }
     // Prefer this project's OWN site address (set by its admin for this
     // specific site) over the admin's company-level address — the company
     // address is the same across every project that admin owns, so using
     // it here would show the same address for every joined project.
-    var addr = (pp && pp.address) || gp.address || '';
-    return { id: 'eng_'+m.pid, name: m.pname, address: addr, editable: false, canWrite: (m.role==='write'), joined: true };
+    var addr = p.address || (pp && pp.address) || gp.address || '';
+    // BUGFIX: this used to compare ids.role === 'write' — but the real DB
+    // role for a read/write join is 'site_engineer' (confirmed against the
+    // Team panel above, which reads the actual roles.name column), so that
+    // comparison never matched and every write-capable joined engineer was
+    // silently treated as read-only here — which isn't just a mislabeled
+    // badge, canWrite actually gates the Add/Edit/Delete Report buttons
+    // below. For the project currently open, prefer the authoritative,
+    // permission-driven window._ENGINEER_READONLY (set in _applyPermState
+    // from the real role_permissions grant); for other joined projects in
+    // this list we only have the raw role name to go on.
+    var canWrite = (p.id === window.currentProjectId && typeof window._ENGINEER_READONLY !== 'undefined')
+      ? !window._ENGINEER_READONLY
+      : (ids.role === 'site_engineer');
+    return { id: p.id, name: p.name, address: addr, editable: false, canWrite: canWrite, joined: true };
   });
   return own.concat(joined);
 }
@@ -11532,8 +11754,10 @@ function _wipeProjectLocalStorage(pid) {
 // silently re-added on the next _loadProjects()/cloud pull, since that
 // merge is deliberately union-only (see _loadDeletedProjects notes above).
 // This is only ever offered for projects the current user actually owns
-// (site.editable !== false && !site.joined) — a joined engineer leaves a
-// project instead, via the existing _engineerLeaveProject flow.
+// (site.editable !== false && !site.joined) — there is currently no
+// "leave project" action for a joined engineer at all (no backend RPC
+// exists yet to revoke a project_team_members row from the joined side;
+// see the note near window._refreshJoinTabUI).
 function deleteQdprProject(pid) {
   var proj = (window.projects || []).find(function(p){ return p.id === pid; });
   if (!proj) { toast('Project not found', 'err'); return; }
@@ -14398,7 +14622,7 @@ if (!safeLS.getItem('pwa_dismissed')) { var b=document.getElementById('pwa-banne
 // ============================================================
 var MACH_KEY = 'cm_machinery';
 function lmach(){try{return JSON.parse(safeLS.getItem(_pk(MACH_KEY))||'{}');}catch(e){return {};}}
-function smach(x){safeLS.setItem(_pk(MACH_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function smach(x){if(_blockIfReadOnlyData())return;safeLS.setItem(_pk(MACH_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function loadMachinery(){
   var t=ist(), sel=document.getElementById('mach-date');
@@ -14686,7 +14910,7 @@ var DRW_KEY='cm_drawings';
 var _currentRoom='R1';
 var ROOMS=['R1','R2','R3','R4','R5','R6','R7','R8'];
 function ldrw(){try{return JSON.parse(safeLS.getItem(_pk(DRW_KEY))||'{}');}catch(e){return {};}}
-function sdrw(x){ try { x = _autoStampKeyed(ldrw(), x || {}); } catch(e) {} safeLS.setItem(_pk(DRW_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function sdrw(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampKeyed(ldrw(), x || {}); } catch(e) {} safeLS.setItem(_pk(DRW_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function initDrawingsTab(){
   buildRoomTabs();renderDrawings();
@@ -14798,6 +15022,7 @@ function delDrawing(room,id){
 var BGT_KEY='cm_budget';
 function lbgt(){try{return JSON.parse(safeLS.getItem(_pk(BGT_KEY))||'null');}catch(e){return null;}}
 function sbgt(x){
+  if (_blockIfReadOnlyData()) return;
   try {
     var ftsK = _pk(BGT_KEY) + '_fts';
     var oldFts = JSON.parse(safeLS.getItem(ftsK) || '{}');
@@ -14873,7 +15098,7 @@ function renderBudgetStats(){
 // ============================================================
 var MS_KEY='cm_milestones';
 function lms(){try{return JSON.parse(safeLS.getItem(_pk(MS_KEY))||'[]');}catch(e){return [];}}
-function sms(x){ try { x = _autoStampArray(lms(), x || []); } catch(e) {} safeLS.setItem(_pk(MS_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function sms(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampArray(lms(), x || []); } catch(e) {} safeLS.setItem(_pk(MS_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function loadScheduleTab(){
   renderSchedule(); setTimeout(renderGantt, 200);
@@ -16001,7 +16226,7 @@ function boqParseTextToStructure(text){
 // ============================================================
 var PL_KEY='cm_punchlist';
 function lpl(){try{return JSON.parse(safeLS.getItem(_pk(PL_KEY))||'[]');}catch(e){return [];}}
-function spl(x){ try { x = _autoStampArray(lpl(), x || []); } catch(e) {} safeLS.setItem(_pk(PL_KEY),JSON.stringify(x));_scheduleCloudPush();}
+function spl(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampArray(lpl(), x || []); } catch(e) {} safeLS.setItem(_pk(PL_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
 function loadPunchTab(){renderPunchList();}
 
@@ -16743,10 +16968,81 @@ function autoInitCloud() {
     // header dropdown and QDPR list on this device/login too.
     if (typeof _pullProjectListFromCloud === 'function') _pullProjectListFromCloud();
     startAutoSync();
+  } else if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE && _adminSBUser) {
+    // ROOT-CAUSE FIX (Bug #5 — realtime): startAutoSync() is what starts
+    // BOTH the 10s polling fallback and _startAdminRealtime()'s realtime
+    // subscription. This whole function only ever checked ADMIN_ROLE_KEY
+    // ('cm_admin_role' === 'admin'), which is exclusively an owner flag —
+    // it is never set for a joined engineer. So a joined engineer got
+    // exactly ONE pull (at project-select time, via _wsSelectProject) and
+    // then NOTHING ever synced to their screen again for the rest of the
+    // session: no realtime, no polling, nothing — until they left and
+    // rejoined. This branch fires the identical pull+realtime path for
+    // an engineer session (real Supabase Auth user already set in
+    // _wsFinishJoin/_wsSelectProject) that owners already had. Skips
+    // _pullProjectListFromCloud deliberately — that reads the OWNER's
+    // own admin_id-scoped project list and has no meaning for an
+    // engineer's session.
+    _adminCloudPull(true, function() { if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader(); });
+    startAutoSync();
   }
 }
 
 // ── MASTER RESTORE: applies ALL backed-up data to local storage ──────────────
+// Newest-wins per key, using the modified-at map each side sends along, for
+// the generic cm_all bucket (BOQ, quotations, invoices, POs, suppliers,
+// subcon bills, visits, tools, rentals, Sales/clients, contract, and any
+// other module not in _dedicatedKeys). Extracted into its own function so
+// there is exactly one implementation — previously this only existed
+// inline inside _applyFullBackup, and cloudBackupNow's own separate
+// pre-push merge step (which handles db/machinery/mats/etc. with its own
+// equivalent per-record logic) never merged cm_all at all: it fetched the
+// remote copy, discarded it without merging, then pushed a fresh snapshot
+// built purely from local state — silently overwriting any cm_all-bucket
+// data (Sales/client details, and every other non-dedicated module) that
+// existed only on the OTHER device since the last successful pull. This
+// is the actual cause of "sometimes doesn't upload client/project data."
+function _mergeCmAllBucket(remoteCmAll, remoteCmAllTs, forceOverwrite) {
+  if (!remoteCmAll || typeof remoteCmAll !== 'object') return;
+  var _dedicatedKeys = {
+    'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
+    'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
+    'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+  };
+  var _localTs  = _loadCmModTs();
+  var _remoteTs = (remoteCmAllTs && typeof remoteCmAllTs === 'object') ? remoteCmAllTs : {};
+  var _newTsMap = JSON.parse(JSON.stringify(_localTs));
+  Object.keys(remoteCmAll).forEach(function(k) {
+    if (_dedicatedKeys[k]) return;
+    var v = remoteCmAll[k];
+    if (v === null || v === undefined) return;
+    // Sales Manager data (buildings -> floors -> flats) gets a real nested
+    // merge instead of "whole blob, one timestamp wins" — see
+    // _mergeSalesData for why that matters here specifically.
+    if (k === 'cm_sales' && !forceOverwrite) {
+      try {
+        var _localSales = JSON.parse(safeLS.getItem(_pk(k)) || 'null') || { buildings: [] };
+        var _remoteSales = (typeof v === 'string') ? JSON.parse(v) : v;
+        var _salesTombs = _mergeTombstones(_loadTombstones(), remoteCmAll.tombstones || {});
+        var _mergedSales = _mergeSalesData(_localSales, _remoteSales, _salesTombs);
+        safeLS.setItem(_pk(k), JSON.stringify(_mergedSales));
+        var _rt = _remoteTs[k] || 0;
+        if (_rt) _newTsMap[k] = _rt;
+      } catch (e) {}
+      return;
+    }
+    var lt = _localTs[k] || 0;
+    var rt = _remoteTs[k] || 0;
+    if (!forceOverwrite && lt && rt && rt <= lt) {
+      _sanjLog('cm_all SKIPPED (local newer)', 'key=' + k, 'localTs=' + lt, 'remoteTs=' + rt);
+      return;
+    }
+    safeLS.setItem(_pk(k), v);
+    if (rt) _newTsMap[k] = rt;
+  });
+  try { safeLS.setItem(_pk('_cm_mod_ts'), JSON.stringify(_newTsMap)); } catch(e) {}
+}
+
 function _applyFullBackup(d, forceOverwrite) {
   if (!d) return;
   // Core tab data
@@ -16775,68 +17071,7 @@ function _applyFullBackup(d, forceOverwrite) {
   if (d.nid)        safeLS.setItem('cm_nid', String(d.nid));
   // All cm_ keys (BOQ schedule, BOQ today data per date, BOQ project info,
   //   visits, quotations, subcon bills, PO, suppliers, invoices, tools, rentals, etc.)
-  if (d.cm_all && typeof d.cm_all === 'object') {
-    // Guard against old cloud backups (pushed before this fix) whose cm_all
-    // bucket still contains a raw, unmerged duplicate of cm_data/cm_meta/
-    // cm_matstore/cm_dept/cm_profile/cm_machinery/cm_drawings/cm_budget/
-    // cm_milestones/cm_punchlist/cm_tombstones — applying those would
-    // silently undo the proper merge this function just did a few lines
-    // above for exactly those same keys.
-    var _dedicatedKeys = {
-      'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
-      'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
-      'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
-    };
-    // Newest-wins per key, using the modified-at map each side sends along.
-    // Before this, every one of these modules (BOQ, quotations, invoices,
-    // POs, suppliers, subcon bills, visits, tools, rentals, contract...)
-    // was overwritten unconditionally by whatever arrived in a pull, even
-    // if the local copy was edited more recently and hadn't synced yet
-    // — the single biggest remaining source of "my changes disappeared."
-    var _localTs  = _loadCmModTs();
-    var _remoteTs = (d.cm_all_ts && typeof d.cm_all_ts === 'object') ? d.cm_all_ts : {};
-    var _newTsMap = JSON.parse(JSON.stringify(_localTs));
-    Object.keys(d.cm_all).forEach(function(k) {
-      if (_dedicatedKeys[k]) return;
-      var v = d.cm_all[k];
-      if (v === null || v === undefined) return;
-      // Sales Manager data (buildings → floors → flats) gets a real
-      // nested merge instead of "whole blob, one timestamp wins" — see
-      // _mergeSalesData for why that matters here specifically.
-      // forceOverwrite (explicit "restore from cloud") intentionally
-      // skips this and falls through to the plain overwrite below, same
-      // as every other key, since that action's whole point is to
-      // discard local state.
-      if (k === 'cm_sales' && !forceOverwrite) {
-        try {
-          var _localSales = JSON.parse(safeLS.getItem(_pk(k)) || 'null') || { buildings: [] };
-          var _remoteSales = (typeof v === 'string') ? JSON.parse(v) : v;
-          var _salesTombs = _mergeTombstones(_loadTombstones(), d.tombstones || {});
-          var _mergedSales = _mergeSalesData(_localSales, _remoteSales, _salesTombs);
-          safeLS.setItem(_pk(k), JSON.stringify(_mergedSales));
-          var _rt = _remoteTs[k] || 0;
-          if (_rt) _newTsMap[k] = _rt;
-        } catch (e) {}
-        return;
-      }
-      var lt = _localTs[k] || 0;
-      var rt = _remoteTs[k] || 0;
-      // No timestamp on either side (legacy/never-tracked data): fall back
-      // to applying it, same as the old behavior, so nothing silently
-      // stops syncing just because it predates this fix. forceOverwrite
-      // (set by an explicit, user-confirmed "restore from cloud") always
-      // applies the remote copy regardless of timestamps — that action's
-      // whole point is to discard local state, so silently keeping a
-      // "newer" local key there would contradict what the user asked for.
-      if (!forceOverwrite && lt && rt && rt <= lt) {
-        _sanjLog('cm_all SKIPPED (local newer)', 'key=' + k, 'localTs=' + lt, 'remoteTs=' + rt);
-        return; // local edit is newer (or tied) — keep it, discard the remote copy
-      }
-      safeLS.setItem(_pk(k), v);
-      if (rt) _newTsMap[k] = rt;
-    });
-    try { safeLS.setItem(_pk('_cm_mod_ts'), JSON.stringify(_newTsMap)); } catch(e) {}
-  }
+  _mergeCmAllBucket(d.cm_all, d.cm_all_ts, forceOverwrite);
   // Legacy: old backup format (v2.1) used separate boq_schedule + extra keys
   if (d.boq_schedule) safeLS.setItem(_pk('cm_boq_schedule'), d.boq_schedule);
   if (d.extra && typeof d.extra === 'object') {
@@ -17108,6 +17343,29 @@ function _autoStampKeyed(oldObj, newObj) {
 function cloudBackupNow(silent) {
   if (!_sb) { if (!silent) toast('Supabase not ready', 'err'); return; }
   if (!_adminSBUser) { if (!silent) toast('Login required to backup', 'err'); return; }
+  // SELF-HEAL: an owned (non-joined) project with no sanj_sb_project_map
+  // entry has nothing for SanjCloud.ensureContext to resolve — every push
+  // from here would fail with "Backup failed: not signed in / no project
+  // context" even though the owner genuinely is signed in; the PROJECT
+  // just has no cloud counterpart. This happens for any project created
+  // before the createProject() fix above, or if a repair attempt itself
+  // failed earlier (offline, etc). Repairing here — the single place
+  // every save (via _scheduleCloudPush) and every sync cycle already
+  // passes through — fixes it wherever it's actually hit, rather than
+  // chasing every login/bootstrap path that could have left a project in
+  // this state.
+  var _cbnProj = (window.projects || []).find(function(p){ return p.id === window.currentProjectId; });
+  if (_cbnProj && !_cbnProj.joined && typeof _repairOwnedProjectCloudLink === 'function') {
+    var _cbnMap = {};
+    try { _cbnMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+    if (!_cbnMap[_cbnProj.id] || !_cbnMap[_cbnProj.id].projectId) {
+      _repairOwnedProjectCloudLink(_cbnProj, function(ok) {
+        if (ok) cloudBackupNow(silent); // retry now that the link exists
+        else if (!silent) toast('Backup failed: could not link this project to your account', 'err');
+      });
+      return; // nothing to push against yet — repair (or its retry) handles it
+    }
+  }
   var siteId = getSiteId();
   if (!siteId) { if (!silent) toast('No Site ID configured', 'err'); return; }
   // Captured at call time. _buildLocalPayload() and the remote-merge step
@@ -17213,6 +17471,36 @@ function cloudBackupNow(silent) {
       if (el) el.textContent = 'Synced: ' + now;
       if (!silent) toast('☁️ Backed up to cloud!', 'ok');
       updateCloudBtn();
+      // BUGFIX (Phase 4 follow-on): the primary push moved to project_backups
+      // when SanjCloud.pushBlob was introduced, but viewer share-links
+      // (openViewerModal/fetchLatest) and cross-device-same-owner restore
+      // (cloudRestoreNow's old callers, _pullLatestCloudBackup-style flows)
+      // still read from the legacy admin_id-scoped cloud_backups row — which
+      // silently stopped receiving any writes, so both went stale/empty.
+      // Mirror the same payload there too, best-effort and non-blocking:
+      // never retried, never toasted, never allowed to affect the retry
+      // logic of the real (project_backups) push above — this is a
+      // convenience copy, not the source of truth.
+      //
+      // Owner-only: an engineer's Supabase user id is NOT the project
+      // owner's admin_id, so cloud_backups' RLS (admin_id = auth.uid())
+      // would reject an engineer's write here anyway — and semantically,
+      // viewer links / this device-recovery backup are the OWNER's own
+      // artifacts, not something a joined engineer's session should be
+      // writing on their behalf. The owner's own next sync cycle (pulled
+      // from project_backups via realtime/_adminCloudPull, see below)
+      // already carries forward whatever engineers pushed, so this stays
+      // eventually consistent without engineers touching this table.
+      if (!(typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE)) {
+        try {
+          var _legacyKey = getSiteId();
+          if (_sb && _adminSBUser && _legacyKey) {
+            _sb.from('cloud_backups').upsert({
+              admin_id: _adminSBUser.id, backup_key: _legacyKey, data: payload
+            }, { onConflict: 'admin_id,backup_key' }).then(function(){}).catch(function(){});
+          }
+        } catch(e) {}
+      }
     }).catch(function(err) {
       // Actual network failure (offline, DNS, etc.) throws instead of
       // resolving with r.error — without this catch it was an unhandled
@@ -17312,6 +17600,17 @@ function cloudBackupNow(silent) {
         _absorbFieldBag(lprof, function(){ return _pk(PROF); }, cloudData.prof, cloudData.prof_fts);
         _absorbFieldBag(lglobal, function(){ return _globalProfKey(); }, cloudData.global_prof, cloudData.global_prof_fts);
         _absorbFieldBag(lbgt, function(){ return _pk(BGT_KEY); }, cloudData.budget, cloudData.budget_fts);
+
+        // Generic cm_all bucket — BOQ, quotations, invoices, POs, suppliers,
+        // subcon bills, visits, tools, rentals, Sales/clients, contract, and
+        // any other module not in the dedicated-key list above. This was
+        // previously never merged here at all: the fetched remote copy was
+        // simply discarded, and Step 4 below pushed a fresh snapshot built
+        // purely from local state — silently overwriting whatever the OTHER
+        // device had added to this bucket since the last successful pull
+        // (this is what caused client/Sales details and other non-dedicated
+        // module data to sometimes vanish from the cloud after an upload).
+        if (typeof _mergeCmAllBucket === 'function') _mergeCmAllBucket(cloudData.cm_all, cloudData.cm_all_ts, false);
 
         // Update _lastCloudTimestamp so _adminCloudPull doesn't re-apply this
         _lastCloudTimestamp = cloudData.lastSync || _lastCloudTimestamp;
@@ -17503,40 +17802,47 @@ var _adminCloudPullInFlight = false;
 function _adminCloudPull(silent, doneCb) {
   var _done = function() { if (typeof doneCb === 'function') { try { doneCb(); } catch(e) {} } };
   if (!_sb || !_adminSBUser) { _done(); return; }
-  var siteId = getSiteId();
+  var siteId = getSiteId(); // still used purely as a local staleness token below, not as a query key
   if (!siteId) { _done(); return; }
   // Loading lock — don't stack overlapping pulls for the same project.
   if (_adminCloudPullInFlight) { _sanjLog('pull skipped (already in flight)'); _done(); return; }
+  if (typeof window.SanjCloud === 'undefined' || !window.SanjCloud.pullBlob) { _done(); return; }
   _adminCloudPullInFlight = true;
   var _epoch = window._projectEpoch;
   var _reqStart = Date.now();
   _sanjLog('pull start', 'siteId=' + siteId);
-  _sb.from('cloud_backups')
-    .select('data,updated_at')
-    .eq('admin_id', _adminSBUser.id)
-    .eq('backup_key', siteId)
-    .single()
-    .then(function(r) {
-      _adminCloudPullInFlight = false;
-      // Discard this response if the user has switched projects since the
-      // request was sent, OR if the active project's siteId no longer
-      // matches the one we queried — either way, applying it now would
-      // write project A's cloud data into project B's local storage.
-      if (window._projectEpoch !== _epoch || getSiteId() !== siteId) {
-        _sanjLog('pull DISCARDED (stale)', 'reqSite=' + siteId, 'nowSite=' + getSiteId(), 'tookMs=' + (Date.now() - _reqStart));
-        _done();
-        return;
-      }
-      if (r.error || !r.data || !r.data.data) { _done(); return; }
-      var remoteTs = r.data.data.lastSync || 0;
-      // Apply cloud data if it's strictly newer than what we last applied.
-      // On first open _lastCloudTimestamp is 0 so this always pulls on startup.
-      if (remoteTs > _lastCloudTimestamp) {
-        _sanjLog('pull applied', 'remoteTs=' + remoteTs, 'tookMs=' + (Date.now() - _reqStart));
-        _applyCloudData(r.data.data, !!silent);
-      }
+  // PHASE 4 REBUILD: this used to query the legacy cloud_backups table
+  // (admin_id + backup_key). That table stopped being the source of
+  // truth once pushes moved to project_backups (see cloudBackupNow ->
+  // window.SanjCloud.pushBlob), so this poll was silently checking a
+  // table nothing wrote to any more — for the OWNER as much as for an
+  // engineer, since admin_id-scoped cloud_backups was never something
+  // an engineer's session could read anyway (different auth.uid()).
+  // Routing through SanjCloud.pullBlob (project_backups, resolved via
+  // ensureContext -> sanj_sb_project_map) makes this identical for an
+  // owner's own project and a joined engineer's project shell — same
+  // resolver switchProject()/realtime already use.
+  window.SanjCloud.pullBlob(function(err, row) {
+    _adminCloudPullInFlight = false;
+    // Discard this response if the user has switched projects since the
+    // request was sent, OR if the active project's siteId no longer
+    // matches the one we queried — either way, applying it now would
+    // write project A's cloud data into project B's local storage.
+    if (window._projectEpoch !== _epoch || getSiteId() !== siteId) {
+      _sanjLog('pull DISCARDED (stale)', 'reqSite=' + siteId, 'nowSite=' + getSiteId(), 'tookMs=' + (Date.now() - _reqStart));
       _done();
-    }).catch(function(e) { _adminCloudPullInFlight = false; _done(); });
+      return;
+    }
+    if (err || !row || !row.data) { _done(); return; }
+    var remoteTs = row.data.lastSync || 0;
+    // Apply cloud data if it's strictly newer than what we last applied.
+    // On first open _lastCloudTimestamp is 0 so this always pulls on startup.
+    if (remoteTs > _lastCloudTimestamp) {
+      _sanjLog('pull applied', 'remoteTs=' + remoteTs, 'tookMs=' + (Date.now() - _reqStart));
+      _applyCloudData(row.data, !!silent);
+    }
+    _done();
+  });
 }
 
 var _adminRealtimeSiteId = null; // which project's siteId the current channel is scoped to
@@ -17561,7 +17867,7 @@ function _startAdminRealtime() {
       _adminRealtimeChannel = _sb
         .channel('admin-sync-' + c.projectId)
         .on('postgres_changes', {
-          event: 'UPDATE',
+          event: '*', // INSERT (first push for a brand-new project row) and UPDATE
           schema: 'public',
           table: 'project_backups',
           // Scoped to THIS project's row only — each project gets its own
@@ -17591,13 +17897,22 @@ function _startAdminRealtime() {
   });
 }
 
+// isCloudActivated() reflects the OWNER's manual "Activate Cloud" toggle.
+// A joined engineer's session never sees that screen — being signed in
+// via Supabase (set at join time in doJoinProject) IS their equivalent
+// of cloud being on, so they must not be gated behind a flag they have
+// no way to set. Same reasoning as _scheduleCloudPush above.
+function _syncGateOpen() {
+  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) return !!_getAdminDb();
+  return !!(_getAdminDb() && isCloudActivated());
+}
 function startAutoSync() {
   if (_cloudSyncTimer) clearInterval(_cloudSyncTimer);
   // PULL only every 10s — pushing is now done on every data save (debounced)
   var SYNC_MS = 10000;
   _cloudSyncTimer = setInterval(function() {
-    if (!_getAdminDb() || !isCloudActivated()) return;
-    _adminCloudPull(true); // pull-only: check if another device pushed newer data
+    if (!_syncGateOpen()) return;
+    _adminCloudPull(true); // pull-only: check if another device/user pushed newer data
   }, SYNC_MS);
   // Start Realtime for instant push notifications from other devices
   _startAdminRealtime();
@@ -17613,7 +17928,7 @@ function startAutoSync() {
   if (!window._sanjOnlineHandlerAttached) {
     window._sanjOnlineHandlerAttached = true;
     window.addEventListener('online', function() {
-      if (!_getAdminDb() || !isCloudActivated()) return;
+      if (!_syncGateOpen()) return;
       if (safeLS.getItem('cm_push_pending') === '1') {
         cloudBackupNow(true);
       }
@@ -17625,14 +17940,30 @@ function startAutoSync() {
 // ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
 var _cloudPushTimer = null;
 function _scheduleCloudPush() {
-  // Engineer/collaborator sessions (joined via project code) push through their own
-  // scoped RPC channel instead of the admin cloud_backups path.
-  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
-    if (typeof _engineerSchedulePush === 'function') _engineerSchedulePush();
-    return;
+  // PHASE 4 REBUILD: engineer/collaborator sessions (joined via project code)
+  // used to push through a separate device-token RPC channel
+  // (engineer_put_data, keyed by sj_eng_memberships) that the current
+  // auth.uid()-based join flow (redeem_join_code) never populates — so
+  // every engineer push silently no-op'd. There is no reason for a
+  // second code path any more: cloudBackupNow() already pulls+merges+
+  // pushes through window.SanjCloud (project_backups, resolved via
+  // ensureContext -> sanj_sb_project_map, RLS-scoped to auth.uid()) for
+  // the owner, and that same resolution works identically for a joined
+  // engineer's local project shell. So every signed-in session — owner
+  // or engineer — now goes through the exact same push path.
+  //
+  // isCloudActivated() reflects the OWNER's manual "Activate Cloud"
+  // toggle and is meaningless for a joined engineer (they never see
+  // that screen — their session being signed in via Supabase IS their
+  // "cloud activated" state, set explicitly at join time in
+  // doJoinProject). Read-only joins (window._ENGINEER_READONLY) never reach here
+  // in the first place — every write-triggering call site already
+  // checks window._ENGINEER_READONLY before mutating data.
+  var _isEngineerSession = (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE);
+  if (!_isEngineerSession) {
+    if (!isCloudActivated || typeof isCloudActivated !== 'function') return;
+    if (!isCloudActivated()) return;
   }
-  if (!isCloudActivated || typeof isCloudActivated !== 'function') return;
-  if (!isCloudActivated()) return;
   var _epoch = window._projectEpoch;
   if (_cloudPushTimer) clearTimeout(_cloudPushTimer);
   _cloudPushTimer = setTimeout(function() {
@@ -24143,96 +24474,19 @@ function _ownerOpenDesktopDashboard() {
 
 // ══════════════════════════════════════════════════════════════
 // ENGINEER SIDE — Join one or more projects via code
-// An engineer's device can hold MULTIPLE independent project
-// memberships at once (e.g. joined with 2-3 different codes from
-// the same or different admins). Each membership has its own
-// device_token, role and project id — they are stored as a list
-// and the engineer can switch between them like an owner switches
-// projects, with read/write scoped per-membership.
+// PHASE 4 CLEANUP: this used to also define a parallel device-token
+// membership store (sj_eng_memberships / _engLoadMemberships / etc.)
+// that the current auth.uid()-based join flow below (doJoinProject ->
+// redeem_join_code) never wrote to — dead code removed. The live
+// equivalent is window.projects (joined:true shells) cross-referenced
+// with sanj_sb_project_map, written by _resolveLocalShellForCloudProject
+// (see the MULTI-PROJECT STATE block near the top of the file) and
+// consumed by _renderEngineerProjectDropdown, _refreshJoinTabUI below,
+// and _qdprAllSites/_qdprPullAllJoinedProjects.
 // ══════════════════════════════════════════════════════════════
 
 window._ENGINEER_MODE = false;
 window._ENGINEER_READONLY = false;
-var _engPushTimer = null;
-var _engSyncTimer = null;
-
-function _engKeys() {
-  return {
-    list:   'sj_eng_memberships',   // JSON array: [{pid,pname,role,token,admin_id,name}, ...]
-    active: 'sj_eng_active_pid',    // currently selected project's pid
-    // legacy single-project keys — kept only so we can migrate old sessions
-    token:  'sj_eng_device_token',
-    admin:  'sj_eng_admin',
-    pid:    'sj_eng_project_id',
-    pname:  'sj_eng_project_name',
-    role:   'sj_eng_role',
-    name:   'sj_eng_member_name'
-  };
-}
-
-// ── Membership list helpers ──────────────────────────────────
-function _engLoadMemberships() {
-  var K = _engKeys();
-  var list = [];
-  try { list = JSON.parse(safeLS.getItem(K.list) || '[]'); } catch(e) { list = []; }
-  if (!Array.isArray(list)) list = [];
-  // One-time migration from the old single-project session format
-  if (!list.length && safeLS.getItem(K.token) && safeLS.getItem(K.pid)) {
-    list.push({
-      pid:      safeLS.getItem(K.pid),
-      pname:    safeLS.getItem(K.pname) || 'Project',
-      role:     safeLS.getItem(K.role)  || 'write',
-      token:    safeLS.getItem(K.token),
-      admin_id: safeLS.getItem(K.admin) || '',
-      name:     safeLS.getItem(K.name)  || 'Engineer'
-    });
-    _engSaveMemberships(list);
-    safeLS.setItem(K.active, list[0].pid);
-    [K.token, K.admin, K.pid, K.pname, K.role, K.name].forEach(function(k){ safeLS.removeItem(k); });
-  }
-  // Self-heal: Sales Admin join codes are meant to be full read/write on
-  // Sales (see window._enterSalesEngineerMode — "full CRUD on Sales only").
-  // A session joined before the role-normalization fix (or restored from
-  // an older cached copy) can still be sitting on the raw role:'sales'
-  // value instead of 'write', which silently forced it into read-only
-  // mode everywhere role is checked — including file uploads, which then
-  // failed with "Not signed in" (getSupabaseAccessToken refuses to sign
-  // in anonymously for a read-only session). Normalize it here, once,
-  // for every load, so old bad data never has to be manually fixed.
-  var healed = false;
-  list.forEach(function(m) {
-    if (m && m.role === 'sales') { m.role = 'write'; m.salesOnly = true; healed = true; }
-  });
-  if (healed) _engSaveMemberships(list);
-  return list;
-}
-// This whole engineer/joined-project module runs inside an IIFE, so plain
-// function declarations here are NOT visible to the rest of the app by
-// default. QDPR's project-merge logic (_qdprAllSites, in a different
-// <script> block) needs to call this one specifically to find joined
-// projects — without this export it silently saw zero joined projects,
-// no matter how many were actually joined.
-window._engLoadMemberships = _engLoadMemberships;
-function _engSaveMemberships(list) {
-  try { safeLS.setItem(_engKeys().list, JSON.stringify(list)); } catch(e) {}
-}
-function _engFindMembership(pid) {
-  return _engLoadMemberships().find(function(m){ return m.pid === pid; }) || null;
-}
-function _engGetActivePid() {
-  return safeLS.getItem(_engKeys().active) || '';
-}
-function _engSetActivePid(pid) {
-  try { safeLS.setItem(_engKeys().active, pid); } catch(e) {}
-}
-function _engActiveMembership() {
-  var pid = _engGetActivePid();
-  return pid ? _engFindMembership(pid) : null;
-}
-// Exported so modules outside this IIFE (e.g. the Sales Manager, which
-// needs to know if the joined membership is a Sales-Admin-only join) can
-// read the active membership without duplicating the storage logic.
-window._engActiveMembership = _engActiveMembership;
 
 // Redeeming a join code must never create a device-only identity. Without a
 // real Supabase session behind it, this person has no valid JWT — every
@@ -24319,7 +24573,7 @@ window.doJoinProject = function() {
             safeLS.setItem(WS_PROLE_KEY, roleName || '');
             safeLS.setItem(WS_PNAME_KEY, projName || '');
             if (typeof window._ensureLocalProjectForJoin === 'function') {
-              window._ensureLocalProjectForJoin(projectId, companyId, projName);
+              window._ensureLocalProjectForJoin(projectId, companyId, projName, roleName);
             }
             // FIX: joined members never got the company name synced into
             // sglobal() — only the owner path did. Header/print stayed
@@ -24332,6 +24586,7 @@ window.doJoinProject = function() {
               }
             } catch(e) {}
             _applyPermState(roleName || 'viewer').then(function() {
+              if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
               if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
@@ -24342,9 +24597,7 @@ window.doJoinProject = function() {
           };
           if (!companyId) { finish(null, null); return; }
           _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
-            var freshRows = (pr && pr.data) || [];
-            if (typeof _pruneStaleLocalProjects === 'function') _pruneStaleLocalProjects(companyId, freshRows);
-            var proj = freshRows.find(function(x) { return x.project_id === projectId; });
+            var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
             finish(proj ? proj.role_name : null, proj ? proj.project_name : null);
           }).catch(function() { finish(null); });
         }).catch(function() {
@@ -24431,27 +24684,50 @@ function joinVerifyOtp() {
   });
 }
 
+// LIVE (Phase 2/3) version — sourced from window.projects (joined:true
+// shells) cross-referenced with sanj_sb_project_map for each shell's role.
+// Both are populated by _resolveLocalShellForCloudProject at join time from
+// real get_my_projects()/redeem_join_code data. (PHASE 4 CLEANUP: the old
+// device-token switcher that used to sit below this, reading from the
+// dead sj_eng_memberships array, has been removed — this was always the
+// only one actually reachable from the current join flow.)
+//
+// No "Leave" action here yet: leaving a project needs a backend RPC to
+// actually revoke the membership row, which doesn't exist in this schema
+// yet. A local-only "leave" would misleadingly hide the project on this
+// device while the server still shows the person as a member — worth
+// building properly (with a real revoke) rather than faking it here.
 window._refreshJoinTabUI = function() {
-  var list = _engLoadMemberships();
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+  var list = (window.projects || []).filter(function(p){ return p.joined; }).map(function(p) {
+    var ids = map[p.id] || {};
+    return { pid: p.id, pname: p.name, role: ids.role || '' };
+  });
   var pre  = document.getElementById('ctab-join-prelogin');
   var post = document.getElementById('ctab-join-postlogin');
   var listWrap = document.getElementById('join-projects-list');
   var nameEl = document.getElementById('join-member-name');
   if (pre) pre.style.display = 'block'; // joining more projects is always available
-  if (nameEl && !nameEl.value && list.length) nameEl.value = list[list.length - 1].name || '';
+  if (nameEl && !nameEl.value) {
+    try { var _p = (typeof lprof === 'function') ? lprof() : null; if (_p && _p.engineer) nameEl.value = _p.engineer; } catch(e) {}
+  }
   if (post) post.style.display = list.length ? 'block' : 'none';
   if (listWrap) {
-    var activePid = _engGetActivePid();
+    var activePid = window.currentProjectId;
     listWrap.innerHTML = list.map(function(m) {
       var active = (m.pid === activePid);
+      // BUGFIX: real DB role name for read/write is 'site_engineer', not
+      // 'write' — see the two fixes above for the same mismatch.
+      var roleColor = m.role === 'site_engineer' ? '#6ee7b7' : m.role === 'sales_admin' ? '#93c5fd' : '#fde68a';
+      var roleLabel = m.role === 'site_engineer' ? '✏️ Read & Write' : m.role === 'sales_admin' ? '🏢 Sales Admin' : '👁️ Read-only';
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08);">'
         + '<div data-eng-switch="' + _jhtml(m.pid) + '" style="flex:1;min-width:0;cursor:pointer;display:flex;align-items:center;gap:6px;">'
         + '<span style="font-size:13px;flex-shrink:0;">' + (active ? '✅' : '📁') + '</span>'
         + '<span style="flex:1;min-width:0;">'
         + '<p style="font-size:12px;font-weight:800;color:' + (active ? '#a7f3d0' : '#fff') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(m.pname) + '</p>'
-        + '<p style="font-size:9px;color:' + (m.role==='write' ? '#6ee7b7' : '#fde68a') + ';">' + (m.role==='write' ? '✏️ Read & Write' : '👁️ Read-only') + (active ? ' · active' : '') + '</p>'
+        + '<p style="font-size:9px;color:' + roleColor + ';">' + roleLabel + (active ? ' · active' : '') + '</p>'
         + '</span></div>'
-        + '<button data-eng-leave="' + _jhtml(m.pid) + '" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">Leave</button>'
         + '</div>';
     }).join('');
   }
@@ -24459,351 +24735,13 @@ window._refreshJoinTabUI = function() {
 
 document.addEventListener('click', function(e) {
   var sw = e.target.closest ? e.target.closest('[data-eng-switch]') : null;
-  if (sw) { window._engineerSwitchTo(sw.getAttribute('data-eng-switch')); return; }
-  var lv = e.target.closest ? e.target.closest('[data-eng-leave]') : null;
-  if (lv) {
-    var pid = lv.getAttribute('data-eng-leave');
-    var m = _engFindMembership(pid);
-    if (confirm('Leave "' + ((m && m.pname) || 'this project') + '"?')) window._engineerLeaveProject(pid);
+  if (sw) {
+    var pid = sw.getAttribute('data-eng-switch');
+    if (pid !== window.currentProjectId && typeof switchProject === 'function') switchProject(pid);
+    if (typeof closeCloudModal === 'function') closeCloudModal();
   }
 });
 
-window._engineerSwitchTo = function(pid) {
-  var m = _engFindMembership(pid);
-  if (!m) return;
-  _engSetActivePid(pid);
-  window._ENGINEER_MODE = true;
-  window._ENGINEER_READONLY = (m.role !== 'write' && !m.salesOnly);
-  if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
-  if (m.salesOnly && typeof window._enterSalesEngineerMode === 'function') {
-    setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
-    return;
-  }
-  setTimeout(function() {
-    try {
-      AD = ld();
-      applyProfile();
-      var activeBtn = document.querySelector('.tab-btn.active');
-      var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
-      if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
-    } catch(e) {}
-  }, 150);
-};
-
-window._engineerLeaveProject = function(pid) {
-  var list = _engLoadMemberships().filter(function(m){ return m.pid !== pid; });
-  _engSaveMemberships(list);
-  if (_engGetActivePid() === pid) {
-    if (list.length) { _engSetActivePid(list[0].pid); } else { safeLS.removeItem(_engKeys().active); }
-  }
-  toast('Left project', 'ok');
-  if (list.length) {
-    _engineerStart(_engGetActivePid());
-  } else {
-    window._engineerLogout();
-  }
-};
-
-window._engineerLogout = function() {
-  var K = _engKeys();
-  safeLS.removeItem(K.list);
-  safeLS.removeItem(K.active);
-  [K.token, K.admin, K.pid, K.pname, K.role, K.name].forEach(function(k){ safeLS.removeItem(k); });
-  window._ENGINEER_MODE = false;
-  window._ENGINEER_READONLY = false;
-  if (_engSyncTimer) { clearInterval(_engSyncTimer); _engSyncTimer = null; }
-  var projWrap = document.getElementById('project-dropdown-wrap');
-  if (projWrap) projWrap.style.display = '';
-  var m = document.getElementById('_share-proj-modal'); if (m) m.remove();
-  var eng = document.getElementById('eng-dd-inner'); if (eng) eng.remove();
-  toast('Left all projects', 'ok');
-  if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
-  setTimeout(function(){ location.reload(); }, 600);
-};
-
-// ── Small dropdown for switching between multiple joined projects ──
-function _engBuildDropdownHtml(list, activePid) {
-  var current = list.find(function(m){ return m.pid === activePid; }) || list[0];
-  var items = list.map(function(m) {
-    var act = (m.pid === (current ? current.pid : null));
-    return '<div data-eng-dd-switch="' + _jhtml(m.pid) + '" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:' + (act ? 'rgba(99,102,241,0.2)' : 'transparent') + ';-webkit-tap-highlight-color:transparent;">'
-      + '<span style="font-size:13px;flex-shrink:0">' + (act ? '✅' : '📁') + '</span>'
-      + '<span style="font-size:12px;font-weight:' + (act ? '700' : '500') + ';color:' + (act ? '#a5b4fc' : 'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _jhtml(m.pname) + '</span>'
-      + '<span style="font-size:9px;color:' + (m.role==='write' ? '#6ee7b7' : '#fde68a') + ';flex-shrink:0">' + (m.role==='write' ? '✏️' : '👁️') + '</span>'
-      + '</div>';
-  }).join('');
-  return '<div id="eng-dd-inner" style="position:relative;display:inline-flex;">'
-    + '<button id="eng-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:pointer;min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
-    + '<span style="font-size:11px;flex-shrink:0">🗂️</span>'
-    + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _jhtml(current ? current.pname : 'Project') + '</span>'
-    + '<span id="eng-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;">▾</span>'
-    + '</button>'
-    + '<div id="eng-dd-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:190px;max-width:250px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
-    + items
-    + '</div></div>';
-}
-function _engBindDropdown() {
-  var btn = document.getElementById('eng-dd-btn');
-  var menu = document.getElementById('eng-dd-menu');
-  if (!btn || !menu) return;
-  btn.onclick = function(e) { e.stopPropagation(); menu.style.display = (menu.style.display === 'none' ? 'block' : 'none'); };
-  document.querySelectorAll('[data-eng-dd-switch]').forEach(function(el) {
-    el.onclick = function(e) { e.stopPropagation(); menu.style.display = 'none'; window._engineerSwitchTo(el.getAttribute('data-eng-dd-switch')); };
-  });
-}
-document.addEventListener('click', function() {
-  var menu = document.getElementById('eng-dd-menu');
-  if (menu) menu.style.display = 'none';
-});
-
-// Engineer sessions use the SAME main interface as everyone else — we only
-// hide the Admin/Owner buttons (an engineer isn't the account owner), show
-// a lightweight project switcher when they've joined more than one project,
-// and repurpose the Settings panel's "Login / Cloud" row into a
-// "Leave Project" shortcut, since engineers never need the admin login/cloud flow.
-function _applyEngineerUIMode() {
-  var list = _engLoadMemberships();
-  var activePid = _engGetActivePid();
-  var active = _engFindMembership(activePid) || list[0];
-  var pname = active ? active.pname : 'Project';
-
-  var projWrap = document.getElementById('project-dropdown-wrap');
-  if (projWrap) {
-    projWrap.style.display = '';
-    if (list.length > 1) {
-      projWrap.innerHTML = _engBuildDropdownHtml(list, activePid);
-      _engBindDropdown();
-    } else {
-      projWrap.innerHTML = '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);padding:2px 8px;">' + _jhtml(pname) + '</span>';
-    }
-  }
-  if (typeof updateCloudBtn === 'function') updateCloudBtn();
-
-  var loginBtn = document.getElementById('sett-login-btn');
-  if (loginBtn) {
-    loginBtn.onclick = function(e){ _settRipple && _settRipple(e, loginBtn); closeSettingsPanel(); if (confirm('Leave "' + pname + '"?')) window._engineerLeaveProject(activePid); };
-    var icon = document.getElementById('sett-login-icon');
-    var title = document.getElementById('sett-login-title');
-    var sub = document.getElementById('sett-login-sub');
-    if (icon) icon.textContent = '🤝';
-    if (title) title.textContent = 'Leave Project';
-    if (sub) sub.textContent = (active && active.salesOnly ? '🏢 Sales Admin' : (active && active.role === 'write' ? 'Read & Write' : 'Read-only')) + ' — ' + pname + (list.length > 1 ? ' (' + list.length + ' projects joined)' : '');
-  }
-}
-
-function _prefillEngineerProfile() {
-  // IMPORTANT: never write the project name into the "company" field.
-  // Company name must always come from the owner/admin's global profile
-  // (synced via cloud) so every user under the same admin sees the same
-  // company name in the header and on every PDF. We only prefill the
-  // engineer's own display name here as a harmless placeholder until the
-  // real cloud data (including the admin's global_prof.company) arrives.
-  var m = _engActiveMembership();
-  var mname = m ? m.name : 'Engineer';
-  try {
-    var existing = (typeof lprof === 'function') ? lprof() : null;
-    if (!existing || !existing.engineer) {
-      if (typeof sprof === 'function') sprof(Object.assign({}, existing || {}, { engineer: mname }));
-      if (typeof applyProfile === 'function') applyProfile();
-    }
-  } catch(e) {}
-}
-
-function _showEngineerBar() { /* kept as a no-op for backward compatibility */ }
-
-function _engineerBuildPayload() {
-  var _allCmKeys = {};
-  var _prefix = window.currentProjectId ? ('sanj_project_' + window.currentProjectId + '_') : '';
-  try {
-    var _ls = window.localStorage;
-    for (var _ki = 0; _ki < _ls.length; _ki++) {
-      var _kk = _ls.key(_ki);
-      if (!_kk) continue;
-      var isProjectKey = _prefix && _kk.indexOf(_prefix + 'cm_') === 0;
-      if (isProjectKey) {
-        var _shortK = _kk.slice(_prefix.length);
-        var _v = safeLS.getItem(_kk);
-        if (_v !== null) _allCmKeys[_shortK] = _v;
-      }
-    }
-  } catch(e2) {}
-  var _activeM = _engActiveMembership();
-  return {
-    db: ld(), meta: lm(), mats: lmat(), dept: ldept(), prof: lprof(), global_prof: lglobal(),
-    machinery: lmach(), drawings: ldrw(), budget: lbgt(), milestones: lms(), punchlist: lpl(),
-    rfi: [], safety: [],
-    nid: parseInt(safeLS.getItem('cm_nid') || '1'),
-    cm_all: _allCmKeys,
-    settings: {
-      dark_mode: safeLS.getItem('sanj_dark_mode') || '0',
-      dash_view: safeLS.getItem('sanj_dash_view') || 'current',
-      hidden_tabs: safeLS.getItem('sanj_hidden_tabs') || '[]',
-      guide: safeLS.getItem('sanj_guide_enabled') || '1',
-      swipe: safeLS.getItem('sanj_swipe_enabled') || '1',
-      signatures: safeLS.getItem('sanj_signatures') || '[]'
-    },
-    lastSync: Date.now(),
-    syncedBy: (_activeM && _activeM.name) || 'Engineer',
-    version: '3.0',
-    tombstones: (typeof _loadTombstones === 'function') ? _loadTombstones() : {}
-  };
-}
-
-window._engineerSchedulePush = function() {
-  var m = _engActiveMembership();
-  if (!m) return;
-  if (m.role !== 'write') {
-    toast('🔒 Read-only access — changes stay on this device only', 'info');
-    return;
-  }
-  if (_engPushTimer) clearTimeout(_engPushTimer);
-  _engPushTimer = setTimeout(function() {
-    _engPushTimer = null;
-    window._engineerPush();
-  }, 3000);
-};
-
-window._engineerPush = function(_retriesLeft) {
-  var m = _engActiveMembership();
-  if (!_sb || !m) return;
-  if (m.role !== 'write') return;
-  if (_retriesLeft === undefined) _retriesLeft = 4;
-  var pid = m.pid;
-  var payload = _engineerBuildPayload();
-  _sb.rpc('engineer_put_data', { p_device_token: m.token, p_payload: payload }).then(function(r) {
-    if (r.error) {
-      if (/not authorized/i.test(r.error.message || '')) {
-        toast('⚠️ Your access to "' + m.pname + '" was revoked', 'err');
-        window._engineerLeaveProject(pid);
-        return;
-      }
-      // Network hiccup or transient server error (e.g. "TypeError: Load
-      // failed" when connectivity drops mid-request) — retry with backoff
-      // instead of giving up after one attempt. The entry is already saved
-      // locally either way; this only affects how fast it reaches the
-      // owner's dashboard / other devices on this project.
-      if (_retriesLeft > 0) {
-        setTimeout(function(){ window._engineerPush(_retriesLeft - 1); }, 3000);
-        return;
-      }
-      safeLS.setItem('cm_eng_push_pending', '1');
-      toast('⚠️ Sync failed: ' + r.error.message + ' — will retry when back online', 'err');
-      return;
-    }
-    safeLS.removeItem('cm_eng_push_pending');
-    var dot = document.getElementById('engineer-sync-dot');
-    if (dot) { dot.style.background = '#22c55e'; }
-  }).catch(function() {
-    if (_retriesLeft > 0) {
-      setTimeout(function(){ window._engineerPush(_retriesLeft - 1); }, 3000);
-    } else {
-      safeLS.setItem('cm_eng_push_pending', '1');
-      toast('⚠️ Sync failed — offline. Will retry when back online', 'err');
-    }
-  });
-};
-
-// The instant the browser regains connectivity, retry any engineer push
-// that failed while offline rather than waiting for the next manual edit.
-if (!window._sanjEngOnlineHandlerAttached) {
-  window._sanjEngOnlineHandlerAttached = true;
-  window.addEventListener('online', function() {
-    if (safeLS.getItem('cm_eng_push_pending') === '1' && typeof window._engineerPush === 'function') {
-      window._engineerPush();
-    }
-  });
-}
-
-// Pull cloud data for a specific membership and apply it into that
-// project's OWN local scope, regardless of which project is "active".
-function _engApplyCloudDataToPid(pid, payload, silent) {
-  var prevId = window.currentProjectId;
-  // Was the person actually looking at this project when the pull
-  // landed? _engineerPullAll() pulls EVERY joined project every 10s in
-  // the background so they all stay synced — but _applyCloudData used to
-  // unconditionally re-render the currently visible tab regardless of
-  // WHICH project's data just arrived. That meant switching to any other
-  // joined project's background poll made the tab you were actually
-  // looking at visibly dip/flicker every ~10s even though nothing on
-  // screen had changed. Only the pull for the project currently on
-  // screen should touch the UI; the rest should merge into storage
-  // silently in the background.
-  var isVisible = (prevId === 'eng_' + pid);
-  window.currentProjectId = 'eng_' + pid;
-  try { if (typeof _applyCloudData === 'function') _applyCloudData(payload, true, 'eng_' + pid, isVisible); }
-  finally { window.currentProjectId = prevId; }
-}
-function _engPullMembership(m, silent) {
-  if (!_sb || !m) return Promise.resolve();
-  return _sb.rpc('engineer_get_data', { p_device_token: m.token }).then(function(r) {
-    if (r.error) {
-      if (/not authorized/i.test(r.error.message || '')) {
-        if (!silent) toast('⚠️ Your access to "' + m.pname + '" was revoked', 'err');
-        window._engineerLeaveProject(m.pid);
-      }
-      return;
-    }
-    var row = (r.data && r.data[0]) ? r.data[0] : null;
-    if (m.pid === _engGetActivePid()) {
-      var dot = document.getElementById('engineer-sync-dot');
-      if (dot) dot.style.background = '#22c55e';
-    }
-    if (!row || !row.payload) { if (!silent && m.pid === _engGetActivePid()) toast('No data yet — ask admin to sync once', 'info'); return; }
-    _engApplyCloudDataToPid(m.pid, row.payload, silent);
-  }).catch(function() {});
-}
-window._engineerPull = function(silent) {
-  var m = _engActiveMembership();
-  if (m) _engPullMembership(m, silent);
-};
-// Pulls EVERY joined project (not just the active one) so all of them stay
-// in sync in the background — used by QDPR's merged project list and by
-// the periodic sync timer.
-window._engineerPullAll = function(silent) {
-  var list = _engLoadMemberships();
-  return Promise.all(list.map(function(m){ return _engPullMembership(m, silent); }));
-};
-
-function _startEngineerSync() {
-  if (_engSyncTimer) clearInterval(_engSyncTimer);
-  // Pulls EVERY joined project every 10s, so all of them stay synced —
-  // not just whichever one happens to be active.
-  _engSyncTimer = setInterval(function(){ window._engineerPullAll(true); }, 10000);
-}
-
-function _engineerStart(pid) {
-  var list = _engLoadMemberships();
-  if (!list.length) return;
-  var target = (pid && _engFindMembership(pid)) ? pid
-    : (_engGetActivePid() && _engFindMembership(_engGetActivePid())) ? _engGetActivePid()
-    : list[0].pid;
-  _engSetActivePid(target);
-  var m = _engFindMembership(target);
-  window._ENGINEER_MODE = true;
-  window._ENGINEER_READONLY = (m.role !== 'write');
-  // Isolated local namespace per joined project so none of these collide
-  // with each other, with the device's own admin projects, or with each
-  // other when the engineer has joined multiple projects.
-  window.currentProjectId = 'eng_' + target;
-  _prefillEngineerProfile();
-  _applyEngineerUIMode();
-  window._engineerPull(false);
-  _startEngineerSync();
-  if (typeof _refreshJoinTabUI === 'function') _refreshJoinTabUI();
-  // A Sales-Admin join code locks this whole session into the Sales
-  // Manager — nothing else in the app should be reachable.
-  if (m.salesOnly && typeof window._enterSalesEngineerMode === 'function') {
-    setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
-  }
-}
-
-// Resume an existing engineer session (with all its joined projects) on page load
-document.addEventListener('DOMContentLoaded', function() {
-  var list = _engLoadMemberships();
-  if (list.length) {
-    setTimeout(function(){ _engineerStart(_engGetActivePid()); }, 400);
-  }
-});
 
 })();
 </script>
@@ -25197,8 +25135,10 @@ function _smActivityLoad() {
 function _smActorName() {
   try {
     if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
-      var m = (typeof _engActiveMembership === 'function') ? _engActiveMembership() : null;
-      if (m && m.name) return m.name;
+      try {
+        var _p = (typeof lprof === 'function') ? lprof() : null;
+        if (_p && _p.engineer) return _p.engineer;
+      } catch (e) {}
       return 'Sales Admin';
     }
     if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) return 'Sales Admin';
@@ -25229,19 +25169,14 @@ function _smLogActivity(action, detail) {
 function _salesViewerPerms() {
   try { return JSON.parse(safeLS.getItem('sj_viewer_perms') || '[]'); } catch (e) { return []; }
 }
-function _engActiveSalesInfo() {
-  try { if (typeof window._engActiveMembership === 'function') return window._engActiveMembership(); } catch (e) {}
-  return null;
-}
+// PHASE 4 CLEANUP: used to fall back to window._engActiveMembership(),
+// which read the now-removed device-token sj_eng_memberships array and
+// was never populated by the current auth.uid()-based join flow anyway.
+// window._SALES_ADMIN_MODE (set in _applyPermState from the real
+// role_name) has been the actual live signal all along.
+function _engActiveSalesInfo() { return null; }
 function isEngineerSalesOnly() {
-  // New-schema joins set this reliably (see _applyPermState) — this is
-  // the real signal now. _engActiveSalesInfo() (the old local-membership
-  // array lookup) is kept as a fallback OR, but it's never populated for
-  // new-schema joins, so it would otherwise always report false even for
-  // a real sales_admin joiner.
-  if (typeof window._SALES_ADMIN_MODE !== 'undefined' && window._SALES_ADMIN_MODE) return true;
-  var m = _engActiveSalesInfo();
-  return !!(typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE && m && m.salesOnly);
+  return !!(typeof window._SALES_ADMIN_MODE !== 'undefined' && window._SALES_ADMIN_MODE);
 }
 // Whether Sales is even unlocked at all for this session. For the owner's
 // own device this is a straight Enterprise-plan check; a viewer link or an
@@ -26192,10 +26127,11 @@ function _salesViewerExit() {
   catch (e) { window.location.reload(); }
 }
 function _salesEngineerExit() {
+  // No real leave-project RPC exists yet for the current schema (see the
+  // note near window._refreshJoinTabUI) — reloading is the honest
+  // available action rather than faking a local-only leave.
   if (!confirm('Leave this Sales Admin session?')) return;
-  var m = _engActiveSalesInfo();
-  if (m && typeof window._engineerLeaveProject === 'function') { window._engineerLeaveProject(m.pid); }
-  else { try { window.location.reload(); } catch (e) {} }
+  try { window.location.reload(); } catch (e) {}
 }
 
 // Initial paint of the dashboard sales card once app data has loaded.
