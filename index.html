@@ -3788,7 +3788,9 @@ function _wsSubmitJoin() {
       if (!companyId) { _wsFinishJoin(projectId, null, name, null, null); return; }
       var companyName = companies.length ? companies[0].company_name : null;
       _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
-        var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
+        var freshRows = (pr && pr.data) || [];
+        if (typeof _pruneStaleLocalProjects === 'function') _pruneStaleLocalProjects(companyId, freshRows);
+        var proj = freshRows.find(function(x) { return x.project_id === projectId; });
         _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null, companyName);
       }).catch(function() { _wsFinishJoin(projectId, null, name, null, companyName); });
     }).catch(function() { _wsFinishJoin(projectId, null, name, null, null); });
@@ -4328,6 +4330,45 @@ function _wsSelectCompany(c) {
   }
   _wsSelectCompanyConfirmed(c);
 }
+// Removes local project entries left over from before duplicates were
+// cleaned up server-side (or from any future edge case) — anything
+// mapped to this company via sanj_sb_project_map whose cloud project_id
+// no longer appears in a FRESH get_my_projects() result gets pruned.
+// Never touches genuine offline-only local projects (no cloud mapping at
+// all) — only ones that were tied to this company and are now stale.
+function _pruneStaleLocalProjects(companyId, freshCloudRows) {
+  try {
+    var mapKey = 'sanj_sb_project_map';
+    var map = {};
+    try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+    var validCloudIds = (freshCloudRows || []).map(function(r){ return r.project_id; });
+    var toRemove = {};
+    var changed = false;
+    Object.keys(map).forEach(function(localId) {
+      var entry = map[localId];
+      if (!entry || entry.companyId !== companyId) return; // not this company, leave alone
+      if (validCloudIds.indexOf(entry.projectId) === -1) {
+        // Stale — this local project's cloud counterpart no longer
+        // exists/is no longer accessible. Remove both the mapping and
+        // the local project entry itself.
+        delete map[localId];
+        toRemove[localId] = true;
+        changed = true;
+      }
+    });
+    if (changed) {
+      try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+      window.projects = (window.projects || []).filter(function(p) { return !toRemove[p.id]; });
+      // If we just deleted the currently-active local project, clear the
+      // pointer so nothing tries to keep operating on a removed project.
+      if (toRemove[window.currentProjectId]) window.currentProjectId = null;
+      _saveProjects();
+      if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    }
+  } catch(e) { console.error('prune stale projects failed:', e); }
+}
+window._pruneStaleLocalProjects = _pruneStaleLocalProjects;
+
 function _wsSelectCompanyConfirmed(c) {
   window._wsCompanyId = c.company_id;
   safeLS.setItem(WS_COMPANY_KEY, c.company_id);
@@ -4341,6 +4382,8 @@ function _wsSelectCompanyConfirmed(c) {
   if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
   // Sync into the app's own display profile — this is what header/print/
   // settings actually read (sglobal), not the companies table directly.
+  // Always re-synced fresh on every login, not just once at join time,
+  // so a company rename by the owner reaches every device on next login.
   try {
     var g = lglobal() || {};
     if (c.company_name) g.company = c.company_name;
@@ -4350,6 +4393,7 @@ function _wsSelectCompanyConfirmed(c) {
   _sb.rpc('get_my_projects', { p_company_id: c.company_id }).then(function(r) {
     if (r.error) { _wsShowError('Could not load projects', r.error.message); return; }
     var rows = r.data || [];
+    _pruneStaleLocalProjects(c.company_id, rows);
     if (rows.length === 0) { _wsShowCreateProject(); return; }
     if (rows.length === 1) { _wsSelectProject(rows[0]); return; }
     _wsShowProjectList(rows);
@@ -4458,12 +4502,69 @@ function _applyPermState(roleName) {
   });
 }
 
+// Links the owner's selected cloud project to a real local project and
+// seeds sanj_sb_project_map — this is what ensureContext() (and therefore
+// ALL of SanjCloud's push/pull/mirror) depends on to know which local
+// project maps to which cloud project. _ensureLocalProjectForJoin already
+// does this for JOINED members, but nothing equivalent ever ran for the
+// owner's own login — meaning window.currentProjectId never matched the
+// cloud project they'd just selected, and every sync call silently
+// no-op'd (no mapping found) from the very start.
+function _ensureLocalProjectForOwner(cloudProjectId, companyId, projectName) {
+  var mapKey = 'sanj_sb_project_map';
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+
+  // Already mapped from a previous login on this device? Reuse it.
+  var existingLocalId = null;
+  Object.keys(map).forEach(function(localId) {
+    if (map[localId] && map[localId].projectId === cloudProjectId) existingLocalId = localId;
+  });
+  if (existingLocalId && (window.projects || []).find(function(p){ return p.id === existingLocalId; })) {
+    window.currentProjectId = existingLocalId;
+    try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
+    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    return existingLocalId;
+  }
+
+  // Not mapped yet. If there's an existing local project with a matching
+  // name that isn't already linked to some other cloud project, link it —
+  // preserves any local-only data (e.g. from using the app offline before
+  // ever logging in) instead of silently orphaning it.
+  var candidate = (window.projects || []).find(function(p) {
+    if (map[p.id]) return false; // already linked elsewhere
+    return p.name && projectName && p.name.trim().toLowerCase() === projectName.trim().toLowerCase();
+  });
+  var localId;
+  if (candidate) {
+    localId = candidate.id;
+  } else {
+    localId = _genProjectId();
+    window.projects.push({ id: localId, name: projectName || 'Project', created_at: Date.now() });
+    _saveProjects();
+  }
+  window.currentProjectId = localId;
+  try { localStorage.setItem('sanj_current_project', localId); } catch(e) {}
+  map[localId] = { companyId: companyId, projectId: cloudProjectId };
+  try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+  if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+  return localId;
+}
+window._ensureLocalProjectForOwner = _ensureLocalProjectForOwner;
+
 function _wsSelectProject(p) {
   window._wsProjectId = p.project_id;
   safeLS.setItem(WS_PROJECT_KEY, p.project_id);
   safeLS.setItem(WS_PNAME_KEY, p.project_name || '');
   safeLS.setItem(WS_PROLE_KEY, p.role_name || '');
   try { localStorage.setItem('sanj_cloud_choice', 'cloud'); } catch(e) {}
+  // THE FIX: link this cloud project to a real local project before
+  // anything else runs. Without this, window.currentProjectId never
+  // matched what was just selected, and ensureContext() (used by every
+  // push/pull) always failed to find a mapping.
+  if (typeof window._ensureLocalProjectForOwner === 'function') {
+    window._ensureLocalProjectForOwner(p.project_id, window._wsCompanyId, p.project_name);
+  }
   // Sync the name typed at login into the app's own per-project profile
   // (sprof → 'engineer' field) — only if that field is still empty, so we
   // never clobber a name someone already set via Settings.
@@ -4476,6 +4577,7 @@ function _wsSelectProject(p) {
   _applyPermState(p.role_name || 'owner').then(function() {
     _wsHide();
     toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
+    if (typeof window.startAutoSync === 'function') window.startAutoSync();
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
   });
 }
@@ -24124,7 +24226,9 @@ window.doJoinProject = function() {
           };
           if (!companyId) { finish(null, null); return; }
           _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
-            var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
+            var freshRows = (pr && pr.data) || [];
+            if (typeof _pruneStaleLocalProjects === 'function') _pruneStaleLocalProjects(companyId, freshRows);
+            var proj = freshRows.find(function(x) { return x.project_id === projectId; });
             finish(proj ? proj.role_name : null, proj ? proj.project_name : null);
           }).catch(function() { finish(null); });
         }).catch(function() {
