@@ -3096,17 +3096,38 @@ function dismissWelcome(){
             if (_rPlan && typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(_rPlan);
             if (_rRole && typeof _applyPermState === 'function') _applyPermState(_rRole);
           } catch(eRestore) {}
-          // Already chose before — skip straight to app
-          _launchApp();
-          // A Sales Admin joiner stays locked to the Sales Manager on
-          // every return visit, not just the moment they first joined —
-          // otherwise closing and reopening the app would drop them onto
-          // the normal dashboard, which defeats the point of the lock.
-          try {
-            if (cc === 'joined' && safeLS.getItem(WS_PROLE_KEY) === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
-              setTimeout(function(){ window._enterSalesEngineerMode(); }, 400);
-            }
-          } catch(e2) {}
+          // THE ACTUAL REMAINING GAP: _adminSBUser is an in-memory variable
+          // only ever set during the live login/join call — it resets to
+          // null on every reload and was NEVER restored here. isSignedIn()
+          // requires _adminSBUser.id, and ensureContext() checks
+          // isSignedIn() FIRST before even looking at the project mapping
+          // — meaning every push/pull/backup silently failed with "not
+          // signed in / no project context" after ANY reload, no matter
+          // how correct the rest of the sync chain was. Restoring it from
+          // the real Supabase session (the actual source of truth) before
+          // launching the app, rather than launching immediately and
+          // racing whatever the person does first.
+          var _finishResume = function() {
+            _launchApp();
+            // A Sales Admin joiner stays locked to the Sales Manager on
+            // every return visit, not just the moment they first joined —
+            // otherwise closing and reopening the app would drop them onto
+            // the normal dashboard, which defeats the point of the lock.
+            try {
+              if (cc === 'joined' && safeLS.getItem(WS_PROLE_KEY) === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
+                setTimeout(function(){ window._enterSalesEngineerMode(); }, 400);
+              }
+            } catch(e2) {}
+          };
+          if (typeof _sb !== 'undefined' && _sb && _sb.auth) {
+            _sb.auth.getSession().then(function(res) {
+              var sess = res && res.data && res.data.session;
+              if (sess && sess.user) { _adminSBUser = sess.user; }
+              _finishResume();
+            }).catch(function() { _finishResume(); });
+          } else {
+            _finishResume();
+          }
           return;
         }
       }catch(e){}
