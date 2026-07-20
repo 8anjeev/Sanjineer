@@ -4007,6 +4007,18 @@ var WS_PROJECT_KEY  = 'sanj_project_id';
 var WS_PNAME_KEY     = 'sanj_project_name';
 var WS_PROLE_KEY     = 'sanj_project_role';
 
+// PLAN_PRICING — single source of truth for Razorpay checkout amounts.
+// amount is in paise (Razorpay's smallest currency unit for INR), so
+// 3000 = ₹30 and 9900 = ₹99, matching the prices shown throughout the
+// UI (workspace-creation screen, upgrade buttons, account panel).
+// NOTE: restored in Phase 3 fix — was deleted along with the dead
+// payment-landing cluster in Phase 2, but _wsOpenPayment/_wsUpgradeToPro/
+// _wsUpgradeToEnterprise (the live payment code) still depend on it.
+var PLAN_PRICING = {
+  pro:        { amount: 3000, desc: 'Sanjineer Cloud — Pro Plan (Monthly)' },
+  enterprise: { amount: 9900, desc: 'Sanjineer Cloud — Enterprise Plan (Monthly)' }
+};
+
 window._wsCompanyId = null;
 window._wsProjectId = null;
 
@@ -5129,18 +5141,6 @@ function _wsSelectProject(p) {
         </div>
       </div>
       <div class="tog-track" id="dark-mode-toggle"><div class="tog-thumb"></div></div>
-    </div>
-
-    <!-- Guide Toggle -->
-    <div class="sett-switch sett-row" onclick="toggleGuideFromSettings()" style="cursor:pointer;" id="sett-guide-row">
-      <div class="sett-switch-label">
-        <span style="font-size:15px;flex-shrink:0">📖</span>
-        <div style="display:flex;flex-direction:column;gap:1px">
-          <span style="color:#fff;font-size:11px">Tab Guide</span>
-          <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="guide-sett-sub">Floating guide active</span>
-        </div>
-      </div>
-      <div class="tog-track on" id="guide-sett-toggle"><div class="tog-thumb"></div></div>
     </div>
 
     <!-- Geo Tagging Toggle -->
