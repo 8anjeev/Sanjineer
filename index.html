@@ -809,6 +809,13 @@ self.addEventListener('fetch', function(e) {
     });
     window.projects = stored;
     if (changed) _saveProjects(); // heal storage so this stays fixed going forward
+    // BUGFIX: QDPR (and any other caller of _loadProjects) used to skip
+    // the duplicate-shell self-heal that _renderProjectDropdown ran, so a
+    // joined project that had somehow ended up with two local shells kept
+    // showing twice in QDPR's site list even after the header dropdown
+    // had already healed itself. Run the same self-heal here so every
+    // caller of _loadProjects sees the same de-duplicated list.
+    if (typeof _dedupJoinedProjectShells === 'function') { try { _dedupJoinedProjectShells(); } catch(e) {} }
   }
   function _saveProjects() {
     try { localStorage.setItem('sanj_projects', JSON.stringify(window.projects)); } catch(e) {}
@@ -1171,25 +1178,38 @@ self.addEventListener('fetch', function(e) {
   // format — now including role, so the switcher can show read/write
   // badges and switchProject() can restore the right permission set
   // without a network round-trip every time.
-  function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName) {
+  function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName) {
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
 
     // Already joined this exact cloud project before on this device? Reuse
-    // the same local shell instead of creating a duplicate.
+    // the same local shell instead of creating a duplicate. Collect EVERY
+    // matching entry (not just the first) — if earlier corrupted state left
+    // more than one local shell mapped to the same cloud project, prefer
+    // whichever shell still actually exists in window.projects, and clean
+    // any dangling duplicates out of the map while we're here so they don't
+    // keep coming back.
     var existingLocalId = null;
+    var danglingIds = [];
     Object.keys(map).forEach(function(localId) {
-      if (map[localId] && map[localId].projectId === cloudProjectId) existingLocalId = localId;
-    });
-    if (existingLocalId && window.projects.find(function(p){ return p.id === existingLocalId; })) {
-      // Keep the stored role fresh — it can change between joins/re-logins,
-      // and a stale role would show the wrong badge / restore the wrong
-      // permission set on switch.
-      if (roleName && map[existingLocalId].role !== roleName) {
-        map[existingLocalId].role = roleName;
-        try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+      if (map[localId] && map[localId].projectId === cloudProjectId) {
+        var stillExists = window.projects.find(function(p){ return p.id === localId; });
+        if (stillExists && !existingLocalId) existingLocalId = localId;
+        else if (localId !== existingLocalId) danglingIds.push(localId);
       }
+    });
+    if (existingLocalId) {
+      var mapDirty = false;
+      // Keep the stored role/company name fresh — they can change between
+      // joins/re-logins, and stale values would show the wrong badge or
+      // restore the wrong permission set on switch.
+      if (roleName && map[existingLocalId].role !== roleName) { map[existingLocalId].role = roleName; mapDirty = true; }
+      if (companyName && map[existingLocalId].companyName !== companyName) { map[existingLocalId].companyName = companyName; mapDirty = true; }
+      // Drop any dangling map rows for this same cloud project that point at
+      // a local shell which no longer exists.
+      danglingIds.forEach(function(dId){ delete map[dId]; mapDirty = true; });
+      if (mapDirty) { try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {} }
       return existingLocalId;
     }
 
@@ -1198,14 +1218,69 @@ self.addEventListener('fetch', function(e) {
     window.projects.push(proj);
     _saveProjects();
 
-    map[id] = { companyId: companyId, projectId: cloudProjectId, role: roleName || '' };
+    map[id] = { companyId: companyId, projectId: cloudProjectId, role: roleName || '', companyName: companyName || '' };
     try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
     return id;
   }
   window._resolveLocalShellForCloudProject = _resolveLocalShellForCloudProject;
 
-  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName, roleName) {
-    var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName);
+  // ── Self-heal already-duplicated joined-project shells ──────────────
+  // Earlier sessions (before the dedup check above existed / while it was
+  // buggy) could leave TWO local project shells in window.projects both
+  // pointing at the same underlying cloud project_id — the person then
+  // sees the same project listed twice everywhere (switcher, QDPR, etc).
+  // This scans sanj_sb_project_map, groups local shells by their real
+  // cloud project id, and collapses each group down to a single keeper:
+  // the currently-open project if it's in the group, otherwise whichever
+  // shell actually has saved report data, otherwise the oldest one. The
+  // rest are removed from window.projects and the map. Safe to call
+  // repeatedly — it's a no-op once there's nothing left to merge.
+  function _hasAnyProjectData(pid) {
+    try {
+      var v = safeLS.getItem('sanj_project_' + pid + '_cm_data');
+      return !!(v && v !== '[]' && v !== 'null');
+    } catch(e) { return false; }
+  }
+  function _dedupJoinedProjectShells() {
+    var mapKey = 'sanj_sb_project_map';
+    var map = {};
+    try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+    var byCloudId = {};
+    Object.keys(map).forEach(function(localId) {
+      var entry = map[localId];
+      if (!entry || !entry.projectId) return;
+      var proj = window.projects.find(function(p){ return p.id === localId; });
+      if (!proj) return; // already dangling — nothing to merge
+      (byCloudId[entry.projectId] = byCloudId[entry.projectId] || []).push({ localId: localId, proj: proj });
+    });
+    var changed = false;
+    Object.keys(byCloudId).forEach(function(cloudId) {
+      var group = byCloudId[cloudId];
+      if (group.length < 2) return;
+      changed = true;
+      var keeper = group.find(function(g){ return g.localId === window.currentProjectId; })
+        || group.filter(function(g){ return _hasAnyProjectData(g.localId); })[0]
+        || group.slice().sort(function(a,b){ return (a.proj.created_at||0) - (b.proj.created_at||0); })[0];
+      group.forEach(function(g) {
+        if (g.localId === keeper.localId) return;
+        window.projects = window.projects.filter(function(p){ return p.id !== g.localId; });
+        delete map[g.localId];
+        if (window.currentProjectId === g.localId) {
+          window.currentProjectId = keeper.localId;
+          try { localStorage.setItem('sanj_current_project', keeper.localId); } catch(e) {}
+        }
+      });
+    });
+    if (changed) {
+      try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+      if (typeof _saveProjects === 'function') _saveProjects();
+    }
+    return changed;
+  }
+  window._dedupJoinedProjectShells = _dedupJoinedProjectShells;
+
+  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName, roleName, companyName) {
+    var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName);
     window.currentProjectId = id;
     try { localStorage.setItem('sanj_current_project', id); } catch(e) {}
     _renderProjectDropdown();
@@ -1323,6 +1398,11 @@ self.addEventListener('fetch', function(e) {
   function _renderProjectDropdown() {
     var wrap = document.getElementById('project-dropdown-wrap');
     if (!wrap) return;
+
+    // Self-heal any duplicate joined-project shells before rendering, so a
+    // corrupted map from an older session never shows the same project
+    // twice in the switcher.
+    if (typeof _dedupJoinedProjectShells === 'function') { try { _dedupJoinedProjectShells(); } catch(e) {} }
 
     // Joined (non-owner) sessions get a lighter switcher: switch-only, with
     // a read/write badge per project, no rename/share/new-project actions
@@ -1470,27 +1550,40 @@ self.addEventListener('fetch', function(e) {
   function _renderEngineerProjectDropdown(wrap) {
     var map = {};
     try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+    // Fallback company name for entries that joined before companyName was
+    // recorded per-project — the currently-active company name (set at
+    // join time in sglobal()/safeLS) is the best single guess available.
+    var fallbackCompanyName = '';
+    try { fallbackCompanyName = safeLS.getItem('sanj_company_name') || ''; } catch(e) {}
     var joined = (window.projects || []).filter(function(p){ return p.joined; });
     var current = joined.find(function(p){ return p.id === window.currentProjectId; }) || joined[0];
     var name = current ? current.name : 'Project';
+    var currentCompany = current ? ((map[current.id] && map[current.id].companyName) || fallbackCompanyName) : '';
 
     if (joined.length <= 1) {
-      wrap.innerHTML = '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);padding:2px 8px;">' + _escHtml(name) + '</span>';
+      wrap.innerHTML = '<span style="display:inline-flex;flex-direction:column;line-height:1.15;padding:2px 8px;">'
+        + '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);">' + _escHtml(name) + '</span>'
+        + (currentCompany ? '<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.5);">' + _escHtml(currentCompany) + '</span>' : '')
+        + '</span>';
       return;
     }
 
     var items = joined.map(function(p) {
       var active = (p.id === window.currentProjectId);
       var role = (map[p.id] && map[p.id].role) || '';
-      // BUGFIX: real DB role name for read/write is 'site_engineer' (see
-      // Team panel's roles.name usage) — 'write' never matches anything,
-      // so every write-access engineer was shown the read-only badge here.
-      var badgeColor = role === 'site_engineer' ? '#6ee7b7' : role === 'sales_admin' ? '#93c5fd' : '#fde68a';
-      var badgeIcon = role === 'site_engineer' ? '✏️' : role === 'sales_admin' ? '🏢' : '👁️';
+      var companyName = (map[p.id] && map[p.id].companyName) || fallbackCompanyName;
+      // Join codes are always read/write now (the read-only/viewer role has
+      // been removed from the sharing system) — the only distinct badge
+      // left is Sales Admin, which is a separate restricted mode.
+      var badgeColor = role === 'sales_admin' ? '#93c5fd' : '#6ee7b7';
+      var badgeIcon = role === 'sales_admin' ? '🏢' : '✏️';
       var pid = _escHtml(p.id);
       return '<div data-eng-proj-switch="' + pid + '" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:' + (active ? 'rgba(99,102,241,0.2)' : 'transparent') + ';-webkit-tap-highlight-color:transparent;">'
         + '<span style="font-size:13px;flex-shrink:0">' + (active ? '✅' : '📁') + '</span>'
-        + '<span style="font-size:12px;font-weight:' + (active ? '700' : '500') + ';color:' + (active ? '#a5b4fc' : 'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(p.name) + '</span>'
+        + '<span style="min-width:0;flex:1;line-height:1.2;overflow:hidden;">'
+        + '<span style="display:block;font-size:12px;font-weight:' + (active ? '700' : '500') + ';color:' + (active ? '#a5b4fc' : 'rgba(255,255,255,0.85)') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _escHtml(p.name) + '</span>'
+        + (companyName ? '<span style="display:block;font-size:9px;font-weight:600;color:rgba(255,255,255,0.4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _escHtml(companyName) + '</span>' : '')
+        + '</span>'
         + '<span style="font-size:9px;color:' + badgeColor + ';flex-shrink:0">' + badgeIcon + '</span>'
         + '</div>';
     }).join('');
@@ -4189,7 +4282,7 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   // window.currentProjectId stays unset and every local read/write
   // (including SanjCloud's ensureContext) has nothing to scope to.
   if (typeof window._ensureLocalProjectForJoin === 'function') {
-    window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName, roleName);
+    window._joinedLocalIdForCompanySync = window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName, roleName, companyName);
   }
   try {
     var existing = lprof() || {};
@@ -4198,13 +4291,17 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   // FIX: joined members never got the company name synced into sglobal()
   // at all — only the owner path did this. Their header/print stayed
   // blank or wrong regardless of what the owner had named the company.
+  // Written to the same per-project-scoped key applyProfile() reads once
+  // _ENGINEER_MODE flips true below (see matching fix in _wsJoinRedeem).
   try {
-    if (companyName) {
-      var g = lglobal() || {};
+    if (companyName && window._joinedLocalIdForCompanySync) {
+      var g = lglobal(window._joinedLocalIdForCompanySync) || {};
       g.company = companyName;
-      sglobal(g);
+      sglobal(g, window._joinedLocalIdForCompanySync);
     }
   } catch(e) {}
+  // Pull the live company name/logo/gst/address from the cloud too.
+  if (typeof window._loadCompanySettings === 'function') window._loadCompanySettings();
   _applyPermState(roleName || 'viewer').then(function() {
     _wsHide();
     if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
@@ -21679,11 +21776,12 @@ window.openShareProjectModal = function(projectId) {
   modal.id = '_share-proj-modal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
   modal.innerHTML =
-    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:20px 18px;width:100%;max-width:340px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
-    + '<p style="font-size:14px;font-weight:900;color:#fff;margin:0 0 2px">🔗 Share "' + _jhtml(pname) + '"</p>'
-    + '<p style="font-size:10px;color:rgba(255,255,255,0.5);margin:0 0 14px">Give this code to an engineer so they can log in with read/write access to just this project.</p>'
+    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:18px;width:100%;max-width:320px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+    + '<p style="font-size:14px;font-weight:900;color:#fff;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🔗 ' + _jhtml(pname) + '</p>'
+    + '<button id="share-proj-close" style="flex-shrink:0;width:26px;height:26px;margin-left:8px;background:rgba(255,255,255,0.08);border:none;border-radius:8px;color:rgba(255,255,255,0.6);font-size:13px;cursor:pointer;line-height:1;">✕</button>'
+    + '</div>'
     + '<div id="share-proj-body"><p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Loading…</p></div>'
-    + '<button id="share-proj-close" style="width:100%;margin-top:12px;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;cursor:pointer;">Close</button>'
     + '</div>';
   document.body.appendChild(modal);
   document.getElementById('share-proj-close').onclick = function(){ modal.remove(); };
@@ -21764,19 +21862,20 @@ function _paintShareProjBody(projectId, cloudCtx, codeRow, members) {
 
   var codeBlock = codeRow
     ? (
-        '<div style="background:rgba(16,185,129,.1);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:14px;text-align:center;margin-bottom:10px;">'
-        + '<p id="share-code-text" style="font-size:28px;font-weight:900;letter-spacing:.2em;color:#a7f3d0;margin:0 0 8px;">' + _jhtml(codeRow.code) + '</p>'
-        + '<button onclick="_copyShareCode(\'' + codeRow.code + '\')" style="padding:7px 16px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📋 Copy Code</button>'
+        '<div style="background:rgba(16,185,129,.1);border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:12px;text-align:center;margin-bottom:8px;">'
+        + '<p id="share-code-text" style="font-size:24px;font-weight:900;letter-spacing:.18em;color:#a7f3d0;margin:0 0 6px;">' + _jhtml(codeRow.code) + '</p>'
+        + '<div style="display:flex;gap:6px;">'
+        + '<button onclick="_copyShareCode(\'' + codeRow.code + '\')" style="flex:1;padding:6px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:800;cursor:pointer;">📋 Copy</button>'
+        + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" title="Regenerate" style="width:32px;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:rgba(255,255,255,.6);font-size:12px;cursor:pointer;">🔄</button>'
         + '</div>'
-        + '<div style="display:flex;gap:6px;margin-bottom:12px;">'
-        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'read\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='viewer' ? 'rgba(251,191,36,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='viewer' ? 'rgba(251,191,36,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='viewer' ? '#fde68a' : 'rgba(255,255,255,.5)') + ';">👁️ Read-only</button>'
-        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'write\')" style="flex:1;padding:8px;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ' + (role==='site_engineer' ? 'rgba(52,211,153,.5)' : 'rgba(255,255,255,.12)') + ';background:' + (role==='site_engineer' ? 'rgba(52,211,153,.18)' : 'rgba(255,255,255,.06)') + ';color:' + (role==='site_engineer' ? '#a7f3d0' : 'rgba(255,255,255,.5)') + ';">✏️ Read &amp; Write</button>'
         + '</div>'
-        + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;margin-bottom:6px;">🔄 Regenerate Code (old code stops working)</button>'
+        + '<div style="display:flex;gap:5px;margin-bottom:12px;background:rgba(255,255,255,.04);border-radius:9px;padding:3px;">'
+        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'read\')" style="flex:1;padding:7px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:none;background:' + (role==='viewer' ? 'rgba(251,191,36,.2)' : 'transparent') + ';color:' + (role==='viewer' ? '#fde68a' : 'rgba(255,255,255,.45)') + ';">👁️ View</button>'
+        + '<button onclick="_setJoinCodeRole(\'' + projectId + '\',\'write\')" style="flex:1;padding:7px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:none;background:' + (role==='site_engineer' ? 'rgba(52,211,153,.2)' : 'transparent') + ';color:' + (role==='site_engineer' ? '#a7f3d0' : 'rgba(255,255,255,.45)') + ';">✏️ Edit</button>'
+        + '</div>'
       )
     : (
-        '<p style="font-size:10.5px;color:rgba(255,255,255,.45);margin:0 0 8px;">👷 Engineer code — read or read/write access to the whole project.</p>'
-        + '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:10px;">➕ Generate Engineer Join Code</button>'
+        '<button onclick="_regenerateJoinCode(\'' + projectId + '\')" style="width:100%;padding:13px;background:linear-gradient(135deg,#059669,#10b981);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;margin-bottom:12px;">➕ Generate Join Code</button>'
       );
 
   // BUGFIX: the owner is always the first, permanent member of their own
@@ -21788,40 +21887,30 @@ function _paintShareProjBody(projectId, cloudCtx, codeRow, members) {
     try { var p = lprof(); if (p && p.engineer) return p.engineer; } catch(e) {}
     return (_adminSBUser && _adminSBUser.email) ? _adminSBUser.email.split('@')[0] : 'You';
   })();
-  var ownerPlanLabel = window.isEnterpriseUser ? '👑 Enterprise' : window.isProUser ? '⭐ Pro' : '🆓 Free';
-  var ownerRow = '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
-    + '<div style="flex:1;min-width:0;">'
-    + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(ownerName) + ' <span style="font-size:9px;color:#a78bfa;font-weight:700;">👑 owner</span></p>'
-    + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Plan: <span style="color:#c4b5fd;font-weight:700;">' + ownerPlanLabel + '</span></p>'
-    + '</div></div>';
+  var ownerPlanLabel = window.isEnterpriseUser ? '👑' : window.isProUser ? '⭐' : '🆓';
+  var ownerRow = '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;">'
+    + '<span style="font-size:12px;font-weight:700;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _jhtml(ownerName) + '</span>'
+    + '<span style="font-size:9px;color:#a78bfa;font-weight:700;flex-shrink:0;">👑 Owner ' + ownerPlanLabel + '</span>'
+    + '</div>';
 
   var memberRows = members.length
     ? members.map(function(m) {
         var name = (m.profiles && m.profiles.full_name) || 'Unnamed';
         var roleName = m.roles ? m.roles.name : 'viewer';
-        var roleLabel = roleName === 'site_engineer' ? '✏️ write' : '👁️ read';
+        var roleLabel = roleName === 'site_engineer' ? '✏️' : '👁️';
         var roleColor = roleName === 'site_engineer' ? '#6ee7b7' : '#fde68a';
-        var joined = m.created_at ? new Date(m.created_at).toLocaleString() : '';
-        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
-          + '<div style="flex:1;min-width:0;">'
-          + '<p style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _jhtml(name) + ' <span style="font-size:9px;color:' + roleColor + ';font-weight:700;">' + roleLabel + '</span></p>'
-          // Joined members don't hold a subscription of their own — they
-          // ride on the owner's plan, so make that explicit here rather
-          // than leaving the column blank.
-          + '<p style="font-size:9px;color:rgba(255,255,255,0.4);">Plan: <span style="color:#93c5fd;">🤝 Member (' + ownerPlanLabel.replace(/^[^ ]+ /, '') + ' plan)</span> · Joined ' + _jhtml(joined) + '</p>'
-          + '</div>'
-          + '<button onclick="_revokeMember(\'' + m.id + '\',\'' + projectId + '\')" title="Revoke access" style="padding:5px 10px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:7px;color:#fca5a5;font-size:10px;font-weight:700;cursor:pointer;">Revoke</button>'
+        return '<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);">'
+          + '<span style="font-size:12px;font-weight:700;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _jhtml(name) + '</span>'
+          + '<span style="font-size:11px;color:' + roleColor + ';flex-shrink:0;">' + roleLabel + '</span>'
+          + '<button onclick="_revokeMember(\'' + m.id + '\',\'' + projectId + '\')" title="Revoke" style="flex-shrink:0;padding:3px 8px;background:rgba(239,68,68,.12);border:none;border-radius:6px;color:#fca5a5;font-size:9.5px;font-weight:700;cursor:pointer;">✕</button>'
           + '</div>';
       }).join('')
-    : '<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:10px">No one else has joined with this code yet</p>';
+    : '';
 
-  body.innerHTML = '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👷 Engineer Join Code</p>'
-    + codeBlock
-    + '<div style="margin-top:14px;">'
-    + '<p style="font-size:10px;font-weight:800;color:#a78bfa;margin-bottom:6px;">👥 People with access (' + (members.length + 1) + ')</p>'
+  body.innerHTML = codeBlock
+    + '<p style="font-size:9.5px;font-weight:800;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.04em;margin:4px 0 2px;">People (' + (members.length + 1) + ')</p>'
     + ownerRow
-    + memberRows
-    + '</div>';
+    + memberRows;
 }
 
 window._copyShareCode = function(code) {
@@ -23132,19 +23221,29 @@ window.doJoinProject = function() {
           var finish = function(roleName, projName) {
             safeLS.setItem(WS_PROLE_KEY, roleName || '');
             safeLS.setItem(WS_PNAME_KEY, projName || '');
+            var _joinedLocalId = null;
             if (typeof window._ensureLocalProjectForJoin === 'function') {
-              window._ensureLocalProjectForJoin(projectId, companyId, projName, roleName);
+              _joinedLocalId = window._ensureLocalProjectForJoin(projectId, companyId, projName, roleName, companyName);
             }
             // FIX: joined members never got the company name synced into
             // sglobal() — only the owner path did. Header/print stayed
             // blank or wrong regardless of what the owner had named it.
+            // Write to the SAME per-project-scoped key that lmergedProf()
+            // will read once _ENGINEER_MODE flips true below — writing
+            // unscoped here (before that flag exists) landed in a key
+            // nothing ever read back from, so the header stayed on the
+            // "Tap ⚙️ Edit Profile" placeholder forever.
             try {
-              if (companyName) {
-                var g = lglobal() || {};
+              if (companyName && _joinedLocalId) {
+                var g = lglobal(_joinedLocalId) || {};
                 g.company = companyName;
-                sglobal(g);
+                sglobal(g, _joinedLocalId);
               }
             } catch(e) {}
+            // Pull the live company name/logo/gst/address from the cloud too
+            // (more authoritative than the local copy above, and covers
+            // the case where the owner renames the company later).
+            if (typeof window._loadCompanySettings === 'function') window._loadCompanySettings();
             _applyPermState(roleName || 'viewer').then(function() {
               if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
