@@ -899,7 +899,7 @@ self.addEventListener('fetch', function(e) {
   // and writes that mapping so SanjCloud.ensureContext can resolve it.
   // Only meaningful for an owned (non-joined) project while signed in.
   function _repairOwnedProjectCloudLink(proj, cb) {
-    var companyId = (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId) || (typeof WS_COMPANY_KEY !== 'undefined' ? safeLS.getItem(WS_COMPANY_KEY) : null);
+    var companyId = (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId) || (typeof WS_COMPANY_KEY !== 'undefined' ? (function(){ try { return localStorage.getItem(WS_COMPANY_KEY); } catch(e) { return null; } })() : null);
     if (!companyId || typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) {
       if (cb) cb(false);
       return;
@@ -1033,6 +1033,7 @@ self.addEventListener('fetch', function(e) {
       try { _swMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
       var _swIds = _swMap[projectId];
       if (_swIds && _swIds.projectId) {
+        if (window._wsCompanyId !== _swIds.companyId) window._companySettingsCache = null;
         window._wsCompanyId = _swIds.companyId;
         window._wsProjectId = _swIds.projectId;
         try {
@@ -1047,6 +1048,13 @@ self.addEventListener('fetch', function(e) {
             _renderProjectDropdown();
           });
         }
+        // BUGFIX: switching between two joined projects that belong to
+        // DIFFERENT companies updates window._wsCompanyId above, but
+        // nothing previously re-pulled that company's shared branding —
+        // _loadCompanySettings() only ran at login/join time, so the
+        // logo/GST/company name shown here could silently stay on
+        // whichever company was active before this switch.
+        if (typeof window._loadCompanySettings === 'function') window._loadCompanySettings();
       }
     } else if (_swProj && !_swProj.joined) {
       // OWNED project switch. sanj_sb_project_map covers these too (every
@@ -1564,13 +1572,13 @@ self.addEventListener('fetch', function(e) {
     document.getElementById('_pro-cancel').onclick = function(){ modal.remove(); };
     document.getElementById('_pro-upgrade').onclick = function(){
       modal.remove();
-      if (typeof openPayLanding === 'function') {
-        openPayLanding();
-        // openPayLanding() defaults the pricing modal to the Pro tab —
-        // switch it to Enterprise when that's the tier this feature needs.
-        if (plan === 'enterprise') setTimeout(function(){ if (typeof _selectPlanTier === 'function') _selectPlanTier('enterprise'); }, 30);
+      if (plan === 'enterprise' && typeof _wsUpgradeToEnterprise === 'function') {
+        _wsUpgradeToEnterprise();
+      } else if (typeof _wsUpgradeToPro === 'function') {
+        _wsUpgradeToPro();
+      } else {
+        toast('Visit app.sanjineer.in to upgrade', 'info');
       }
-      else toast('Visit app.sanjineer.in to upgrade', 'info');
     };
     modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
   }
@@ -1594,42 +1602,13 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   window._sbSubChecked = false; // Set to true once DB check completes
 
   // ── Plan tier helper ──────────────────────────────────────────
-  // Single source of truth for turning an `admins` DB row into the
-  // three local flags the rest of the app reads: window.isProUser,
-  // window.isEnterpriseUser, window.userPlan ('free'|'pro'|'enterprise').
-  //
-  // IMPORTANT — grandfathering existing subscribers:
-  // Before Pro/Enterprise existed as separate tiers, there was only ONE
-  // paid plan at ₹30/month, and it already included everything Enterprise
-  // now offers (multi-project + cross-device sharing via join codes).
-  // Older paid rows were written before the `plan` column existed, so
-  // `data.plan` will be undefined for them — any such row is treated as
-  // 'enterprise' (full access, same ₹30 rate), never downgraded to the
-  // narrower new Pro tier and never asked to re-subscribe. Only brand-new
-  // subscriptions going forward explicitly choose Pro (₹30) or Enterprise
-  // (₹99, launch-priced ₹30) and get exactly what they picked.
-  window._applyPlanFromAdminRow = function(data) {
-    data = data || {};
-    var now = Date.now();
-    var endDate = data.subscription_end_date || 0;
-    var active = !!data.subscribed && endDate > now;
-    var plan = active ? (data.plan || 'enterprise') : 'free';
-    window.userPlan = plan;
-    window.isProUser = active; // pro AND enterprise both get everything "pro" already unlocks
-    window.isEnterpriseUser = active && plan === 'enterprise';
-    try {
-      localStorage.setItem('isProUser', active ? 'true' : 'false');
-      localStorage.setItem('cm_plan', plan);
-    } catch(e) {}
-    if (typeof _updateSalesNavTabVisibility === 'function') { try { _updateSalesNavTabVisibility(); } catch(e2) {} }
-    return plan;
-  };
-  // PHASE 3 FIX: new-schema equivalent — the new login flow (_wsStart)
-  // never touches the admins table, so _applyPlanFromAdminRow above never
-  // runs for anyone going through it. That silently left window.isEnterpriseUser
-  // permanently false, blocking Sales Manager / Share Project / Cross-Device
-  // Sharing / PO Approvals even for genuinely paid Enterprise owners. This
-  // derives the same three flags from a company's real plan_tier instead.
+  // The old `_applyPlanFromAdminRow` (derived plan from the legacy
+  // `admins` table) has been removed — it had zero remaining callers
+  // once onAdminLoginSuccess stopped reading that table (see Phase 2
+  // cleanup). Plan tier now comes entirely from companies.plan_tier /
+  // subscriptions.plan_tier via _applyPlanFromCompany below, set by the
+  // company/workspace flow (_wsStart/_reconcileMembershipFromServer).
+
   window._applyPlanFromCompany = function(planTier) {
     var plan = (planTier === 'enterprise') ? 'enterprise' : (planTier === 'pro' ? 'pro' : 'free');
     window.userPlan = plan;
@@ -1642,7 +1621,89 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     if (typeof _updateSalesNavTabVisibility === 'function') { try { _updateSalesNavTabVisibility(); } catch(e2) {} }
     if (typeof _settRefreshUpgradeBtn === 'function') { try { _settRefreshUpgradeBtn(); } catch(e3) {} }
     if (typeof _settRefreshLoginBtn === 'function') { try { _settRefreshLoginBtn(); } catch(e4) {} }
+    // Pull the shared company branding (logo/GST/address) whenever company
+    // context is (re)established — same point plan_tier itself gets applied,
+    // covering fresh login, project switch, and silent session restore.
+    if (typeof _loadCompanySettings === 'function') _loadCompanySettings();
     return plan;
+  };
+
+  // ── Shared company branding ──────────────────────────────────────
+  // Real schema (confirmed against the live DB, not assumed):
+  //   companies:        id, name, is_personal_workspace, owner_id, logo_url, ...
+  //   company_settings: company_id, timezone, currency, settings (jsonb), updated_at
+  // Company name + logo live directly on `companies` — NOT a separate
+  // table. GST/address have no dedicated columns anywhere, so they live
+  // inside company_settings.settings (jsonb), alongside timezone/currency.
+  // window._companySettingsCache holds the merged {name, logo_url, gst,
+  // address} for the current company; lmergedProf() prefers this over
+  // the per-device localStorage copy (lglobal()) whenever present, so
+  // every member of a real company sees the same values. Free/Pro
+  // "personal workspace" users have no row to share (single user, no
+  // company), so this cache just stays null for them and lmergedProf()
+  // falls back to the local copy exactly as before.
+  window._companySettingsCache = null;
+  window._loadCompanySettings = function() {
+    var companyId = (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId) || (typeof WS_COMPANY_KEY !== 'undefined' ? (function(){ try { return localStorage.getItem(WS_COMPANY_KEY); } catch(e) { return null; } })() : null);
+    if (!_sb || !companyId) { window._companySettingsCache = null; return; }
+    Promise.all([
+      _sb.from('companies').select('name,logo_url').eq('id', companyId).maybeSingle(),
+      _sb.from('company_settings').select('settings').eq('company_id', companyId).maybeSingle()
+    ]).then(function(results) {
+      var companyRes = results[0], settingsRes = results[1];
+      if (companyRes.error && settingsRes.error) { window._companySettingsCache = null; return; }
+      var co = (companyRes && companyRes.data) || {};
+      var extra = (settingsRes && settingsRes.data && settingsRes.data.settings) || {};
+      window._companySettingsCache = {
+        company_name: co.name || null,
+        logo_url: co.logo_url || null,
+        gst: extra.gst || null,
+        address: extra.address || null
+      };
+      if (typeof applyProfile === 'function') { try { applyProfile(); } catch(e) {} }
+      if (typeof applyHeaderColor === 'function') { try { applyHeaderColor(); } catch(e) {} }
+    }).catch(function(){ window._companySettingsCache = null; });
+  };
+  // Writes go to two places: name/logo_url on `companies` (owner-only —
+  // matches an RLS policy keyed off companies.owner_id), and gst/address
+  // merged into company_settings.settings (jsonb) so timezone/currency
+  // already stored there are never overwritten. Silently no-ops for
+  // Free/Pro personal workspaces (no companyId) — callers should keep
+  // writing to sglobal()/localStorage regardless, which stays the
+  // source of truth for those. Returns a Promise so callers can react to
+  // failure (e.g. RLS rejecting a non-owner's write) without this ever
+  // throwing.
+  window._saveCompanySettings = function(fields) {
+    var companyId = (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId) || (typeof WS_COMPANY_KEY !== 'undefined' ? (function(){ try { return localStorage.getItem(WS_COMPANY_KEY); } catch(e) { return null; } })() : null);
+    if (!_sb || !companyId || !_adminSBUser) return Promise.resolve(false);
+    var ops = [];
+    var companyFields = {};
+    if ('company_name' in fields) companyFields.name = fields.company_name;
+    if ('logo_url' in fields) companyFields.logo_url = fields.logo_url;
+    if (Object.keys(companyFields).length) {
+      ops.push(_sb.from('companies').update(companyFields).eq('id', companyId));
+    }
+    if ('gst' in fields || 'address' in fields) {
+      // Merge into the existing settings jsonb rather than overwrite —
+      // fetch-then-write since Postgres upsert can't do a partial jsonb
+      // merge in one round trip without an RPC.
+      ops.push(
+        _sb.from('company_settings').select('settings').eq('company_id', companyId).maybeSingle().then(function(r) {
+          var existing = (r && r.data && r.data.settings) || {};
+          var merged = Object.assign({}, existing);
+          if ('gst' in fields) merged.gst = fields.gst;
+          if ('address' in fields) merged.address = fields.address;
+          return _sb.from('company_settings').upsert({ company_id: companyId, settings: merged }, { onConflict: 'company_id' });
+        })
+      );
+    }
+    if (!ops.length) return Promise.resolve(true);
+    return Promise.all(ops).then(function(results) {
+      var failed = results.some(function(r) { return r && r.error; });
+      if (failed) { console.warn('[company_settings] save failed', results); return false; }
+      window._companySettingsCache = Object.assign({}, window._companySettingsCache, fields);
+      return true;
+    }).catch(function(e){ console.warn('[company_settings] save error', e); return false; });
   };
 
 
@@ -1706,6 +1767,15 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     var role = safeLS.getItem('cm_admin_role');
     var choice = (function(){ try { return localStorage.getItem('sanj_cloud_choice'); } catch(e) { return null; } })();
     if (role !== 'admin' && choice !== 'joined') return;
+    // A valid Supabase session + the app's own 'admin' role cache is
+    // enough to consider cloud active — plan tier (free/pro/enterprise)
+    // only gates individual features via isProUser/isEnterpriseUser
+    // below, not whether cloud sync itself is available (Free tier
+    // includes cloud sync per the current plan design). Mirrors what
+    // the interactive OTP-login flow (_handleOtpSuccess) already sets.
+    window._sbSubActive = true;
+    window._sbSubChecked = true;
+    if (typeof refreshCloudModalState === 'function') refreshCloudModalState();
     _reconcileInFlight = true;
     _sb.rpc('get_my_companies').then(function(r) {
       _reconcileInFlight = false;
@@ -2175,7 +2245,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     #att-modal > div, #ct-modal > div,
     #mat-purchase-modal > div, #mat-use-modal > div,
     #profile-modal > div, #dept-add-modal > div,
-    #cloud-modal > div, #viewer-modal > div,
+    #cloud-modal > div,
     #bill-view-modal > div, #apk-modal > div {
       padding: 12px 14px !important;
       border-radius: 18px !important;
@@ -2365,9 +2435,6 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     #cloud-modal.show{display:flex!important;}
     .cloud-feature-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.08);}
     .cloud-feature-row:last-child{border-bottom:none;}
-    /* VIEWER SHARE */
-    #viewer-modal{display:none;}
-    #viewer-modal.show{display:flex!important;}
     /* AUTH MODAL */
     #auth-modal{display:none;}
     #auth-modal.show{display:flex!important;}
@@ -2376,16 +2443,6 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     .auth-input{width:100%;padding:8px 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.5rem;color:white;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:6px;}
     .auth-input::placeholder{color:rgba(255,255,255,0.4);}
     .auth-input:focus{border-color:#818cf8;}
-    .perm-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.45);margin:3px 2px;transition:all .18s;box-shadow:0 2px 6px rgba(0,0,0,.2);}
-    .perm-chip.on{background:linear-gradient(135deg,rgba(99,102,241,0.35),rgba(139,92,246,0.25));border-color:#818cf8;color:#c7d2fe;box-shadow:0 3px 10px rgba(99,102,241,.35);}
-    /* VIEWER ACCOUNTS MODAL */
-    #viewer-mgmt-modal{display:none;}
-    #viewer-mgmt-modal.show{display:flex!important;}
-    .viewer-acc-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08);}
-    .viewer-acc-row:last-child{border-bottom:none;}
-    /* PAYMENT LANDING */
-    #pay-landing-modal{display:none;}
-    #pay-landing-modal.show{display:flex!important;}
 
 
     /* ══════════════════════════════════════════════════════════════════════
@@ -3601,8 +3658,8 @@ function _settOpenLogin() {
 // Login / Create Account buttons. One OTP flow serves both new and
 // returning users (signInWithOtp auto-creates an account if one doesn't
 // exist yet, and _handleOtpSuccess below sorts out where to route them
-// afterwards). Plan selection (Pro/Enterprise) now happens once, on the
-// payment screen itself (openPayLanding), instead of being duplicated here.
+// afterwards). Plan selection (Pro/Enterprise) now happens via the
+// workspace flow's own payment step, instead of being duplicated here.
 function obGoCloud(){
   var menuSec  = document.getElementById('ob-menu-section');
   var cloudSec = document.getElementById('ob-cloud-section');
@@ -5473,7 +5530,7 @@ function closeAllAndSettings() {
   // Close settings drawer first
   closeSettingsPanel();
   // Close every known modal
-  var ids = ['cloud-modal','viewer-modal','auth-modal','viewer-mgmt-modal','pay-landing-modal','apk-modal'];
+  var ids = ['cloud-modal','auth-modal','apk-modal'];
   ids.forEach(function(id){
     var el = document.getElementById(id);
     if (el) el.classList.remove('show');
@@ -8532,18 +8589,6 @@ service cloud.firestore {
             <button onclick="cloudBackupNow()" style="padding:.5rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:9px;font-weight:700;font-size:.72rem;cursor:pointer;height:auto;min-height:auto;">&#11014;&#65039; Backup Now</button>
             <button onclick="cloudRestoreNow()" style="padding:.5rem;background:linear-gradient(135deg,#0891b2,#0ea5e9);color:white;border:none;border-radius:9px;font-weight:700;font-size:.72rem;cursor:pointer;height:auto;min-height:auto;">&#11015;&#65039; Restore</button>
           </div>
-          <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-              <p style="font-size:10px;font-weight:800;color:#a78bfa;">&#128101; Viewer Accounts</p>
-              <div style="display:flex;gap:4px;">
-                <button onclick="loadViewerAccountsInline()" style="padding:2px 9px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#c4b5fd;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;height:auto;min-height:auto;">&#128260;</button>
-                <button onclick="openViewerMgmt()" style="padding:2px 9px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);color:#c7d2fe;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;height:auto;min-height:auto;">+ New</button>
-              </div>
-            </div>
-            <div id="viewer-accounts-inline">
-              <p style="font-size:9px;color:rgba(255,255,255,0.3);text-align:center;padding:8px;">Loading&hellip;</p>
-            </div>
-          </div>
           <!-- Unsubscribe at very bottom -->
           <div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);">
             <button onclick="doUnsubscribe()" style="width:100%;padding:.5rem;background:transparent;border:1px solid rgba(239,68,68,.3);color:rgba(239,68,68,.6);border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;height:auto;min-height:auto;">Unsubscribe &amp; Delete Account</button>
@@ -8649,157 +8694,7 @@ service cloud.firestore {
 </div>
 
 
-<!-- ====== VIEWER LINK MODAL ====== -->
-<div id="viewer-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('viewer-modal'))closeViewerModal()">
-  <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.15);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:380px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-      <p style="font-size:15px;font-weight:900;color:white;">🔗 Viewer Link</p>
-      <button onclick="closeViewerModal()" style="background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.6);font-size:20px;width:32px;height:32px;border-radius:8px;cursor:pointer;">✕</button>
-    </div>
-    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:.875rem;padding:.875rem;margin-bottom:.875rem;">
-      <p style="font-size:10px;color:#a78bfa;margin-bottom:.4rem;font-weight:600">VIEWER LINK (Read-only)</p>
-      <p id="viewer-link-text" style="font-size:11px;color:white;word-break:break-all;background:rgba(0,0,0,.3);padding:8px;border-radius:.5rem;line-height:1.5">—</p>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-      <button onclick="copyViewerLink()" style="padding:.65rem;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer;box-shadow:0 4px 10px rgba(79,70,229,.4);">📋 Copy Link</button>
-      <button onclick="shareViewerLink()" style="padding:.65rem;background:linear-gradient(135deg,#059669,#10b981);color:white;border:none;border-radius:.75rem;font-weight:700;font-size:.8rem;cursor:pointer;box-shadow:0 4px 10px rgba(5,150,105,.35);">📤 Share</button>
-    </div>
-    <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:.75rem;padding:.65rem;">
-      <p style="font-size:10px;color:#fbbf24;font-weight:600;margin-bottom:.25rem">ℹ️ How it works</p>
-      <p style="font-size:10px;color:#fde68a;line-height:1.45">Share this link with clients or team. They can view all permitted data without editing anything.</p>
-    </div>
-  </div>
-</div>
 
-<!-- ====== VIEWER ACCOUNT MANAGEMENT MODAL ====== -->
-<div id="viewer-mgmt-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('viewer-mgmt-modal'))closeViewerMgmt()">
-  <div style="background:linear-gradient(160deg,#0f0c29,#1a1740,#1e1b4b);border:1px solid rgba(255,255,255,.15);border-radius:1.75rem;padding:0;width:100%;max-width:420px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.7);">
-
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.2rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);flex-shrink:0;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:36px;height:36px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(217,119,6,.5);">👥</div>
-        <div>
-          <p style="font-size:14px;font-weight:900;color:#fff;line-height:1;">Viewer Accounts</p>
-          <p style="font-size:10px;color:#fbbf24;line-height:1.3;">Create & manage read-only users</p>
-        </div>
-      </div>
-      <button onclick="closeViewerMgmt()" style="padding:0 12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(255,255,255,.7);font-size:11px;font-weight:700;cursor:pointer;">← Back</button>
-    </div>
-
-    <!-- Scrollable body -->
-    <div style="overflow-y:auto;flex:1;padding:1rem 1.2rem 1.2rem;">
-
-      <!-- Create new viewer — token-based, no password needed -->
-      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:1.1rem;padding:.9rem;margin-bottom:1rem;">
-        <p style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:.7rem;">🔗 Create Viewer Link</p>
-        <p style="font-size:10px;color:#a78bfa;margin-bottom:.7rem;line-height:1.5;">Share the generated link — viewer opens it, sees only selected tabs. No login needed. Stays active until you delete it.</p>
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px">Viewer Name / Label</label>
-        <input id="vw-name" type="text" class="auth-input" placeholder="e.g. Client View, Rampur Site, Suresh">
-
-        <label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:6px;margin-top:.6rem;">Select Tabs to Show — tap to toggle:</label>
-        <div id="perm-chips-container" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.75rem;">
-          <span class="perm-chip on" data-tab="dashboard">📊 Dashboard</span>
-          <span class="perm-chip on" data-tab="daily">📋 Daily Report</span>
-          <span class="perm-chip on" data-tab="departmental">🏗️ Dept Work</span>
-          <span class="perm-chip on" data-tab="attendance">📅 Attendance</span>
-          <span class="perm-chip on" data-tab="boq">📋 BOQ DPR</span>
-          <span class="perm-chip on" data-tab="machinery">⚙️ Machinery</span>
-          <span class="perm-chip on" data-tab="expenses">💰 Expenses</span>
-          <span class="perm-chip on" data-tab="materials">🧱 Materials</span>
-          <span class="perm-chip on" data-tab="tools">🔧 Tools</span>
-          <span class="perm-chip on" data-tab="drawings">📐 Drawings</span>
-          <span class="perm-chip on" data-tab="rentals">🚜 Rentals</span>
-          <span class="perm-chip on" data-tab="contractors">👥 Teams</span>
-          <span class="perm-chip on" data-tab="budget">📊 Budget</span>
-          <span class="perm-chip on" data-tab="schedule">📅 Schedule</span>
-          <span class="perm-chip on" data-tab="punchlist">📋 Punch List</span>
-          <span class="perm-chip on" data-tab="bill">🧾 Bill</span>
-          <span class="perm-chip" data-tab="sales">🏢 Sales</span>
-        </div>
-        <p style="font-size:9px;color:rgba(255,255,255,.35);margin:-4px 0 .5rem;line-height:1.4;">🏢 Sales alone (no other tab ticked) creates a Sales Admin link — the viewer lands directly on the Sales Manager (buildings, floors, flats, pricing, status, remarks) with full edit rights, and sees nothing else. Ticked alongside other tabs, it's a limited link: view inventory totals + add client remarks only, no rate/floor edits. Requires your Enterprise plan.</p>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;">
-          <input type="checkbox" id="vw-can-print" style="accent-color:#818cf8;width:15px;height:15px;">
-          <label for="vw-can-print" style="font-size:11px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>
-        </div>
-        <button onclick="generateViewerLink()" id="create-viewer-btn" style="width:100%;padding:.78rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.875rem;cursor:pointer;box-shadow:0 4px 14px rgba(217,119,6,.45);">
-          🔗 Generate & Copy Link
-        </button>
-        <p id="vw-create-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.4rem;display:none"></p>
-        <!-- Generated link display -->
-        <div id="vw-link-result" style="display:none;margin-top:.75rem;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px;">
-          <p style="font-size:9px;color:#86efac;font-weight:700;margin-bottom:4px">✅ Link Generated — Share this:</p>
-          <p id="vw-link-text" style="font-size:10px;color:#c4b5fd;word-break:break-all;margin-bottom:6px;line-height:1.5"></p>
-          <button onclick="copyVwLink()" style="width:100%;padding:6px;background:rgba(99,102,241,.3);border:1px solid rgba(129,140,248,.4);color:#c7d2fe;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">📋 Copy Link</button>
-        </div>
-      </div>
-
-      <!-- Existing viewers list -->
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;">
-          <p style="font-size:11px;font-weight:800;color:#a78bfa;">Existing Viewers</p>
-          <button onclick="loadViewerAccounts()" style="font-size:10px;padding:0 12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#c4b5fd;border-radius:7px;cursor:pointer;">🔄 Refresh</button>
-        </div>
-        <div id="viewer-accounts-list" style="min-height:40px;">
-          <p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px;">Loading…</p>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-<!-- ====== PAYMENT LANDING MODAL ====== -->
-<div id="pay-landing-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] items-center justify-center p-3" style="display:none" onclick="if(event.target===this&&_modalGuardOk('pay-landing-modal')&&!_payLandingAfterAuth)closePayLanding()">
-  <div style="background:linear-gradient(135deg,#0f172a,#1e1b4b,#312e81);border:1px solid rgba(255,255,255,.18);border-radius:1.25rem;padding:1rem;width:100%;max-width:380px;max-height:92vh;overflow-y:auto;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div style="width:36px;height:36px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 3px 10px rgba(245,158,11,.4);">🏗️</div>
-        <div>
-          <p style="font-size:14px;font-weight:900;color:white;line-height:1;">Sanjineer Cloud</p>
-          <p style="font-size:9px;color:#c4b5fd;">Pro Subscription Required</p>
-        </div>
-      </div>
-      <button id="pay-close-btn" onclick="_safeClosePayLanding()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);font-size:16px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:auto;">✕</button>
-    </div>
-    <div style="display:flex;gap:6px;margin-bottom:.6rem;">
-      <button id="plan-tab-pro" onclick="_selectPlanTier('pro')" style="flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid #4f46e5;background:rgba(79,70,229,.25);color:#fff;font-weight:800;font-size:12px;cursor:pointer;">Pro</button>
-      <button id="plan-tab-ent" onclick="_selectPlanTier('enterprise')" style="flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:rgba(255,255,255,.65);font-weight:800;font-size:12px;cursor:pointer;">Enterprise <span style="background:#f59e0b;color:#1e1b4b;font-size:8px;padding:1px 5px;border-radius:6px;margin-left:2px;">NEW</span></button>
-    </div>
-    <div id="pay-locked-msg" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:9px;padding:6px 10px;margin-bottom:.6rem;display:none;">
-      <p style="font-size:10px;color:#fca5a5;font-weight:700;">🔒 Subscription required to use Cloud</p>
-      <p style="font-size:9px;color:#fca5a5;margin-top:1px;opacity:.8;">Pay to activate, or <button onclick="_cancelAndLogout()" style="background:none;border:none;color:#fbbf24;font-size:9px;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">cancel & logout</button></p>
-    </div>
-    <div id="plan-price-block" style="text-align:center;padding:.65rem 0;margin-bottom:.7rem;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);">
-      <p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>
-      <p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>
-    </div>
-    <div id="plan-features-block" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:.75rem;padding:.65rem;margin-bottom:.75rem;">
-      <div class="cloud-feature-row"><span style="font-size:14px">🔄</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Real-time Cloud Sync</p><p style="font-size:9px;color:#a78bfa">All devices stay in sync automatically</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">🗂️</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Multi-Project Creation</p><p style="font-size:9px;color:#a78bfa">Manage unlimited projects — switch instantly</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">🖼️</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Your Logo on All PDFs</p><p style="font-size:9px;color:#a78bfa">Company logo appears on every report &amp; bill PDF</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">👁️</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Viewer Accounts (Free)</p><p style="font-size:9px;color:#a78bfa">Create unlimited read-only users</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">🔒</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Tab-level Permissions</p><p style="font-size:9px;color:#a78bfa">Control what each viewer can see &amp; print</p></div></div>
-      <div class="cloud-feature-row"><span style="font-size:14px">💾</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Auto Backup</p><p style="font-size:9px;color:#a78bfa">Never lose a day's data</p></div></div>
-    </div>
-    <button onclick="startSubscriptionPayment(_selectedPlanTier)" id="sub-pay-btn" style="width:100%;padding:.8rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:.75rem;font-weight:800;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:.4rem;box-shadow:0 4px 16px rgba(79,70,229,.5);min-height:auto;height:auto;">
-      💳 Subscribe ₹30/month
-    </button>
-    <p style="text-align:center;font-size:9px;color:#7c3aed">🔒 Powered by Razorpay · UPI / Card / NetBanking accepted</p>
-    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:.35rem;">
-      <img src="https://razorpay.com/assets/razorpay-glyph.svg" onerror="this.style.display='none'" style="height:14px;opacity:0.6">
-      <span style="font-size:9px;color:rgba(255,255,255,0.4)">Secured payment · India's #1 payment gateway</span>
-    </div>
-    <p style="text-align:center;font-size:10px;color:rgba(255,255,255,0.45);margin-top:.55rem">
-      Need help? DM
-      <a href="https://ig.me/m/sanjineer" target="_blank" rel="noopener"
-         style="color:#f59e0b;font-weight:700;text-decoration:none">
-        @Sanjineer
-      </a>
-      on Instagram 📩
-    </p>
-  </div>
-</div>
 
 <!-- Toast -->
 
@@ -8949,12 +8844,17 @@ function sglobal(x, scopeId) {
 function lmergedProf() {
   var g = lglobal() || {};
   var p = lprof() || {};
+  // Shared company branding, when this device belongs to a real company
+  // that has synced settings (see _loadCompanySettings). Falls back to
+  // the per-device copy (g) for Free/Pro personal workspaces, or before
+  // the first server load completes.
+  var c = (typeof window._companySettingsCache !== 'undefined' && window._companySettingsCache) || {};
   return {
-    company:     g.company     || p.company     || '',
-    gst:         g.gst         || p.gst         || '',
-    logo:        g.logo        || p.logo        || null,
+    company:     c.company_name || g.company     || p.company     || '',
+    gst:         c.gst          || g.gst         || p.gst         || '',
+    logo:        c.logo_url     || g.logo        || p.logo        || null,
     engineer:    p.engineer    || '',
-    address:     p.address || g.address || '',
+    address:     c.address || p.address || g.address || '',
     headerColor: p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   };
 }
@@ -9833,13 +9733,32 @@ function saveProfile() {
     if (!co) { toast('Please enter a company name', 'err'); return; }
     var existingGlobal = lglobal() || {};
     var logoEl  = document.getElementById('edit-logo-img');
-    var logoSrc = (logoEl && logoEl.src && logoEl.src.indexOf('data:') === 0) ? logoEl.src : null;
+    // Accept either an inline data: URL (offline/legacy) or a real R2
+    // https:// URL (uploaded by loadProfileLogo) as a valid "user picked
+    // a new logo" signal.
+    var logoSrc = (logoEl && logoEl.src && (logoEl.src.indexOf('data:') === 0 || logoEl.src.indexOf('http') === 0)) ? logoEl.src : null;
+    var addressVal = document.getElementById('edit-address').value.trim();
+    var gstVal = document.getElementById('edit-gst').value.trim();
+    var finalLogo = logoSrc || existingGlobal.logo || null;
     sglobal({
       company: co,
-      address: document.getElementById('edit-address').value.trim(),
-      gst:     document.getElementById('edit-gst').value.trim(),
-      logo:    logoSrc || existingGlobal.logo || null
+      address: addressVal,
+      gst:     gstVal,
+      logo:    finalLogo
     });
+    // Also push to the shared company_settings table so every member of
+    // this company sees the same branding, not just this device. Silently
+    // no-ops for Free/Pro personal workspaces (no real company) or if the
+    // table hasn't been migrated in Supabase yet — the local sglobal()
+    // write above always succeeds regardless, so nothing is lost either way.
+    if (typeof window._saveCompanySettings === 'function') {
+      window._saveCompanySettings({
+        company_name: co,
+        address: addressVal,
+        gst: gstVal,
+        logo_url: (finalLogo && finalLogo.indexOf('data:') === 0) ? null : finalLogo
+      });
+    }
   }
 
   applyProfile();
@@ -9899,7 +9818,9 @@ function loadProfileLogo(evt) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
-    // Logo is GLOBAL — same across all projects
+    // Show the preview immediately (instant, works offline) using the
+    // local data: URL, and save it locally right away so nothing is lost
+    // if the upload below fails or the device goes offline.
     var g = lglobal() || {};
     g.logo = dataUrl;
     sglobal(g);
@@ -9913,6 +9834,26 @@ function loadProfileLogo(evt) {
     if (prev) prev.style.display = 'block';
     if (clr) clr.style.display = 'inline-block';
     toast('Logo saved!', 'ok');
+
+    // Upload to R2 in the background and swap the stored value over to
+    // the real URL once it lands — same pattern already used for site
+    // photos/bills/drawings, avoids storing a multi-hundred-KB base64
+    // blob in every project's localStorage/company_settings row.
+    if (typeof uploadFileToR2 === 'function') {
+      uploadFileToR2(file, 'logos', function(url, err) {
+        if (!url) { console.warn('[logo] R2 upload failed, kept as local data URL:', err); return; }
+        var g2 = lglobal() || {};
+        g2.logo = url;
+        sglobal(g2);
+        var p2 = lmergedProf();
+        p2.logo = url;
+        sprof(p2);
+        if (img && img.src === dataUrl) img.src = url;
+        if (typeof window._saveCompanySettings === 'function') {
+          window._saveCompanySettings({ logo_url: url });
+        }
+      });
+    }
   };
   reader.readAsDataURL(file);
 }
@@ -9932,6 +9873,9 @@ function clearProfileLogo() {
   if (prev) prev.style.display = 'none';
   if (clr) clr.style.display = 'none';
   if (fileEl) fileEl.value = '';
+  if (typeof window._saveCompanySettings === 'function') {
+    window._saveCompanySettings({ logo_url: null });
+  }
   toast('Logo removed', 'ok');
 }
 
@@ -10157,76 +10101,30 @@ function boot() {
   // ── Migrate existing profile data to global/per-project split ──
   // One-time migration: if old cm_profile has company/gst/logo, move to global
   _migrateProfileToGlobal();
-  checkViewerMode();
   // ── SUPABASE CONFIG (pre-configured, no manual setup needed) ──
   // Site ID is now auto-set from admin user ID on login — no hardcoded default needed
   if (!isCloudActivated()) {
     safeLS.setItem(CLOUD_KEY, '1');
   }
   autoInitCloud();
-  // Restore viewer session if they refreshed the page
-  var viewerEmail = safeLS.getItem('sj_viewer_email');
-  var viewerPerms = safeLS.getItem('sj_viewer_perms');
-  var viewerAdmin = safeLS.getItem('sj_viewer_admin'); // adminId — used to fetch data
-  // Only restore viewer session if no admin is logged in
+  // The standalone public viewer-link feature (password login + share
+  // tokens, backed by the legacy `viewers` table) has been removed.
+  // Clean up any stale sj_viewer_* keys left over from before this change
+  // so they can't interfere with anything.
+  safeLS.removeItem('sj_viewer_email');
+  safeLS.removeItem('sj_viewer_perms');
+  safeLS.removeItem('sj_viewer_admin');
+  safeLS.removeItem('sj_viewer_site');
+  safeLS.removeItem('sj_viewer_pid');
+  safeLS.removeItem('sj_viewer_print');
+  safeLS.removeItem('sj_viewer_token');
   var _adminRole = safeLS.getItem('cm_admin_role') || safeLS.getItem('cm_cloud') || '';
   var _adminLoggedIn = (_adminRole === 'admin' || _adminRole === '1') && !!safeLS.getItem('cm_admin_email');
-  if (_adminLoggedIn) {
-    // Admin is active — clear any stale viewer keys so they don't interfere
-    safeLS.removeItem('sj_viewer_email');
-    safeLS.removeItem('sj_viewer_perms');
-    safeLS.removeItem('sj_viewer_admin');
-    safeLS.removeItem('sj_viewer_site');
-    safeLS.removeItem('sj_viewer_pid');
-    safeLS.removeItem('sj_viewer_print');
-    safeLS.removeItem('sj_viewer_token');
-  }
-  if (!_adminLoggedIn && viewerEmail && viewerPerms && viewerAdmin) {
-    _IS_VIEWER = true;
-    window.projects = [];
-    // Restore project ID from saved session (set from &pid at link open time)
-    var _savedPid = safeLS.getItem('sj_viewer_pid') || '';
-    window.currentProjectId = _savedPid || null;
-    var perms = [];
-    try { perms = JSON.parse(viewerPerms); } catch(ex) {}
-    var canPrint = safeLS.getItem('sj_viewer_print') === '1';
-    if (!document.getElementById('viewer-top-bar')) {
-      _showViewerBar(viewerEmail);
-    }
-    // Hide ALL tabs first, then show only allowed ones
-    document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
-      var tabName = btn.getAttribute('data-tab');
-      btn.style.display = perms.indexOf(tabName) === -1 ? 'none' : '';
-    });
-    // Also hide all content panels not in perms
-    document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
-      var tabId = panel.id.replace(/^tab-/, '');
-      if (tabId && perms.indexOf(tabId) === -1) panel.style.display = 'none';
-    });
-    // Authoritative enforce before and after first tab switch
-    _enforceViewerTabs();
-    if (perms.length > 0) { switchTab(perms[0]); }
-    _enforceViewerTabs();
-    _disableViewerWrites();
-    if (canPrint) {
-      document.querySelectorAll('button').forEach(function(b) {
-        var t = b.textContent.trim();
-        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
-          b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
-        }
-      });
-    }
-    // Load data using adminId + correct backup_key (project-isolated)
-    setTimeout(function() { _viewerLoadData(viewerAdmin, ''); }, 1500);
-    return;
-  }
-  if (!viewerEmail) {
-    switchTab('dashboard');
-    // Guest/offline (no admin cloud session) — there's no pull coming to
-    // wait for, so reveal immediately. The admin-signed-in case is left
-    // alone here; its loader is hidden once autoInitCloud()'s pull settles.
-    if (!_adminLoggedIn && typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
-  }
+  switchTab('dashboard');
+  // Guest/offline (no admin cloud session) — there's no pull coming to
+  // wait for, so reveal immediately. The admin-signed-in case is left
+  // alone here; its loader is hidden once autoInitCloud()'s pull settles.
+  if (!_adminLoggedIn && typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
   // Safety net: if a broadcast notice is already cached locally from a
   // previous sync (e.g. app reopened offline, before any fresh cloud pull
   // lands) show it now rather than waiting on a pull that may not come.
@@ -16891,7 +16789,6 @@ function refreshCloudModalState() {
     if (prelogin)  prelogin.style.display  = 'none';
     if (postlogin) postlogin.style.display = 'block';
     if (adminPanel) adminPanel.style.display = 'block';
-    loadViewerAccountsInline();
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = 'none';
     var siteEl = document.getElementById('cloud-site-id-display');
@@ -16909,21 +16806,6 @@ function refreshCloudModalState() {
         expiryEl.textContent = '⚠️ Subscription expiring soon — renew!';
       }
     }
-  } else if (isAdmin && !window._sbSubActive && window._sbSubChecked) {
-    // Logged in but subscription expired/not paid — show renew screen
-    var adminPanel = document.getElementById('ctab-admin');
-    if (adminPanel) {
-      adminPanel.style.display = 'block';
-      adminPanel.innerHTML = '<div style="text-align:center;padding:2rem 1rem;">'
-        + '<p style="font-size:32px;margin-bottom:12px">🔒</p>'
-        + '<p style="font-size:16px;font-weight:800;color:#fca5a5;margin-bottom:6px">Subscription Required</p>'
-        + '<p style="font-size:12px;color:#a78bfa;margin-bottom:1.5rem">Pay ₹30/month to activate Cloud Backup, Sync & Viewers</p>'
-        + '<button onclick="openPayLanding(true)" style="width:100%;padding:.9rem;background:linear-gradient(135deg,#2563eb,#4f46e5);color:white;border:none;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;margin-bottom:.75rem;">💳 Subscribe — ₹30/month</button>'
-        + '<button onclick="doAdminLogout()" style="width:100%;padding:.65rem;background:transparent;border:1px solid rgba(239,68,68,.3);color:rgba(239,68,68,.7);border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;">Logout</button>'
-        + '</div>';
-    }
-    var tabSwitcher2 = document.getElementById('cloud-tab-switcher');
-    if (tabSwitcher2) tabSwitcher2.style.display = 'none';
   } else if (!isAdmin) {
     // Not logged in — show login/create tabs
     var prelogin  = document.getElementById('ctab-admin-prelogin');
@@ -16934,11 +16816,6 @@ function refreshCloudModalState() {
   }
   // else: admin logged in but DB check still pending — keep showing whatever is there
 }
-
-// -- Razorpay Payment --
-// startRazorpay → redirects to subscription payment flow
-function startRazorpay() { startSubscriptionPayment(); }
-
 
 // -- Supabase Init (replaces saveFirebaseConfig + initFirebase) --
 function saveFirebaseConfig() {
@@ -16953,7 +16830,6 @@ function initFirebase(cfg, cb) {
   // Supabase: always ready — just call cb(true)
   if (!_sb) { setTimeout(function(){ initFirebase(cfg, cb); }, 200); return; }
   if (cb) cb(true);
-  if (safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') { setTimeout(loadViewerAccountsInline, 300); }
 }
 
 function autoInitCloud() {
@@ -18017,36 +17893,6 @@ function disconnectCloudWithBackup() {
   setTimeout(function() { disconnectCloud(); }, 1500);
 }
 
-// -- Viewer Modal --
-function openViewerModal() {
-  var siteId = getSiteId();
-  if (!siteId) { toast('Cloud not configured', 'err'); return; }
-  var base = window.location.href.split('?')[0];
-  // Supabase: no credentials in URL — viewer logs in with email+password
-  var viewerUrl = base + '?vlogin=1';
-  document.getElementById('viewer-link-text').textContent = viewerUrl;
-  _armModalGuard('viewer-modal');
-  document.getElementById('viewer-modal').classList.add('show');
-}
-function closeViewerModal() { document.getElementById('viewer-modal').classList.remove('show'); }
-function copyViewerLink() {
-  var txt = document.getElementById('viewer-link-text').textContent;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt).then(function() { toast('Link copied!', 'ok'); });
-  } else {
-    var el = document.createElement('textarea');
-    el.value = txt; document.body.appendChild(el); el.select();
-    document.execCommand('copy'); document.body.removeChild(el);
-    toast('Link copied!', 'ok');
-  }
-}
-function shareViewerLink() {
-  var txt = document.getElementById('viewer-link-text').textContent;
-  if (navigator.share) {
-    navigator.share({ title: 'Sanjineer Site View', text: 'Live site data — view only', url: txt });
-  } else { copyViewerLink(); }
-}
-
 // -- Viewer Mode: load read-only data from cloud if ?view= param present --
 var _IS_VIEWER = false;
 
@@ -18054,6 +17900,9 @@ var _IS_VIEWER = false;
 // Reads allowed perms from localStorage and enforces visibility of every
 // tab button AND tab content panel. Called after every tab switch, data
 // reload, and page-restore so there is never a flash of forbidden tabs.
+// NOTE: kept after removing the standalone viewer-login feature because
+// switchTab() still calls this + _disableViewerWrites() for ANY _IS_VIEWER
+// session, including the new-schema project_team_members "viewer" role.
 function _enforceViewerTabs() {
   if (typeof _IS_VIEWER === 'undefined' || !_IS_VIEWER) return;
   var perms = [];
@@ -18083,398 +17932,6 @@ function _enforceViewerTabs() {
   }
 }
 
-function checkViewerMode() {
-  var params = new URLSearchParams(window.location.search);
-  var token = params.get('vt');
-
-  // Legacy ?view= support
-  if (!token) {
-    var viewSiteId = params.get('view');
-    if (viewSiteId) {
-      _IS_VIEWER = true;
-      // IMMEDIATELY hide all tabs — show only after perms loaded
-      document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.style.display = 'none'; });
-      _showViewerBar('Viewer');
-      _viewerLoadData(viewSiteId, '');
-    }
-    return;
-  }
-
-  // Set viewer flag immediately — before any async DB call
-  _IS_VIEWER = true;
-
-  // Read project ID embedded in link (&pid=PROJECTID)
-  var _urlProjId = params.get('pid') || '';
-  window.currentProjectId = _urlProjId || null;
-  window.projects = [];
-  // Save pid so _applyTokenViewer can use it after async fetch
-  try { safeLS.setItem('sj_viewer_pid', _urlProjId); } catch(e) {}
-
-  // IMMEDIATELY hide ALL nav tabs — zero flash of all tabs
-  document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.style.display = 'none'; });
-
-  // Token-based viewer — check localStorage first for cached session
-  var cached = null;
-  try { cached = JSON.parse(safeLS.getItem('sj_vt_' + token) || 'null'); } catch(e) {}
-
-  if (cached && cached.perms) {
-    // Restore from cache immediately — no network wait
-    _applyTokenViewer(cached, token);
-    // Silently refresh from DB in background
-    _fetchViewerByToken(token, true);
-  } else {
-    // First time — fetch from DB
-    _fetchViewerByToken(token, false);
-  }
-}
-
-function _fetchViewerByToken(token, silent) {
-  if (!silent) {
-    // Show loading bar
-    document.body.insertAdjacentHTML('afterbegin',
-      '<div id="viewer-loading-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#4f46e5,#7c3aed);height:3px;"></div>'
-    );
-  }
-  function doFetch() {
-    if (!_sb) { setTimeout(doFetch, 300); return; }
-    _sb.rpc('check_viewer_token', { p_token: token }).then(function(r) {
-      var bar = document.getElementById('viewer-loading-bar');
-      if (bar) bar.remove();
-      if (!r.error && r.data) { r.data = r.data[0] || null; }
-      if (r.error || !r.data) {
-        if (!silent) {
-          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a;font-family:sans-serif;flex-direction:column;gap:12px"><p style="font-size:24px">🔒</p><p style="color:#fca5a5;font-weight:700;font-size:16px">Link expired or revoked</p><p style="color:#64748b;font-size:13px">Contact the admin for a new link</p></div>';
-        } else {
-          // Cached session invalidated — clear and reload
-          safeLS.removeItem('sj_vt_' + token);
-          window.location.reload();
-        }
-        return;
-      }
-      var vData = r.data;
-      // Cache to localStorage for offline/instant load
-      safeLS.setItem('sj_vt_' + token, JSON.stringify({
-        perms: vData.permissions || [],
-        canPrint: vData.can_print,
-        siteId: vData.site_id || '',
-        adminId: vData.admin_id,
-        email: vData.email
-      }));
-      if (!silent) _applyTokenViewer(vData, token);
-    }).catch(function() {
-      var bar = document.getElementById('viewer-loading-bar');
-      if (bar) bar.remove();
-    });
-  }
-  doFetch();
-}
-
-function _applyTokenViewer(vData, token) {
-  var perms    = vData.perms || vData.permissions || [];
-  var canPrint = vData.canPrint || vData.can_print || false;
-  var adminId  = vData.adminId || vData.admin_id || '';
-  var label    = vData.email ? vData.email.split('-').slice(0,-1).join(' ') : 'Viewer';
-  var siteId   = vData.siteId || vData.site_id || '';
-
-  // Get project ID — from URL param (&pid=) embedded at link creation
-  var _pid = '';
-  try {
-    _pid = new URLSearchParams(window.location.search).get('pid')
-        || safeLS.getItem('sj_viewer_pid') || '';
-  } catch(e) {}
-
-  // Set currentProjectId so getSiteId() returns project-specific backup_key
-  window.currentProjectId = _pid || null;
-
-  // Derive siteId if not stored in DB row (handles older viewer records)
-  if (!siteId && adminId) {
-    var _base = 'user-' + adminId.replace(/-/g,'').slice(0,12);
-    siteId = _pid
-      ? _base + '_p' + _pid.replace(/[^a-zA-Z0-9]/g,'').slice(0,8)
-      : _base;
-  }
-
-  // Persist session so page reload works
-  safeLS.setItem('sj_viewer_perms',  JSON.stringify(perms));
-  safeLS.setItem('sj_viewer_print',  canPrint ? '1' : '0');
-  safeLS.setItem('sj_viewer_admin',  adminId);
-  safeLS.setItem('sj_viewer_site',   siteId);
-  safeLS.setItem('sj_viewer_pid',    _pid);
-  safeLS.setItem('sj_viewer_email',  label);
-  safeLS.setItem('sj_viewer_token',  token);
-
-  _IS_VIEWER = true;
-  _showViewerBar(label);
-  _applyViewerPermissions(perms, canPrint, adminId);
-  if (adminId) _viewerLoadData(adminId, '');
-  else toast('⚠️ Could not find admin data — invalid link?', 'err');
-}
-
-function _viewerRefresh() {
-  var adminId = safeLS.getItem('sj_viewer_admin') || '';
-  if (adminId) {
-    _viewerLoadData(adminId, '');
-    toast('🔄 Refreshing data…', 'ok');
-  } else {
-    // Fallback: re-fetch token from DB
-    var token = safeLS.getItem('sj_viewer_token') || '';
-    if (token) { _fetchViewerByToken(token, false); }
-    else toast('Session expired — open the viewer link again', 'err');
-  }
-}
-
-function _viewerLogout() {
-  // Stop realtime channel
-  if (_viewerRealtimeChannel) {
-    try { _sb && _sb.removeChannel(_viewerRealtimeChannel); } catch(e) {}
-    _viewerRealtimeChannel = null;
-  }
-  // Stop safety-net poll
-  try { if (window._viewerPollTimer) { clearInterval(window._viewerPollTimer); window._viewerPollTimer = null; } } catch(e) {}
-  try { if (typeof _viewerPollTimer !== 'undefined' && _viewerPollTimer) { clearInterval(_viewerPollTimer); } } catch(e) {}
-  safeLS.removeItem('sj_viewer_perms');
-  safeLS.removeItem('sj_viewer_print');
-  safeLS.removeItem('sj_viewer_site');
-  safeLS.removeItem('sj_viewer_pid');
-  safeLS.removeItem('sj_viewer_admin');
-  safeLS.removeItem('sj_viewer_email');
-  safeLS.removeItem('sj_viewer_token');
-  window.currentProjectId = null;
-  _IS_VIEWER = false;
-  _viewerApp = null;
-  var bar = document.getElementById('viewer-top-bar');
-  if (bar) bar.remove();
-  var main = document.getElementById('main-app');
-  if (main) main.style.marginTop = '';
-  // ── Restore settings gear and project dropdown ───────────────
-  var settBtn = document.getElementById('settings-hdr-btn');
-  if (settBtn) settBtn.style.display = '';
-  var projWrap = document.getElementById('project-dropdown-wrap');
-  if (projWrap) projWrap.style.display = '';
-  // Re-enable all write buttons
-  document.querySelectorAll('button[disabled]').forEach(function(b) {
-    b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
-  });
-  toast('Viewer logged out', 'ok');
-  openCloudModal();
-  switchCloudTab('admin');
-}
-
-var _viewerRealtimeChannel = null;  // singleton channel reference
-
-function _viewerLoadData(adminId, projId) {
-  if (typeof window._sanjShowLoader === 'function') window._sanjShowLoader('Loading shared project…');
-  if (!_sb) { setTimeout(function() { _viewerLoadData(adminId, projId); }, 600); return; }
-  if (!adminId) { toast('⚠️ Admin ID missing — open the viewer link again', 'err'); if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader(); return; }
-
-  // sj_viewer_site = the getSiteId() value at the moment viewer was created
-  // This matches exactly the backup_key in cloud_backups for that project
-  // Format: user-<uid12>  (no project) OR user-<uid12>_p<projId8> (with project)
-  var _viewerBackupKey = safeLS.getItem('sj_viewer_site') || '';
-  if (!_viewerBackupKey && adminId) {
-    // Fallback: base key without project (covers legacy single-project admins)
-    _viewerBackupKey = 'user-' + adminId.replace(/-/g,'').slice(0,12);
-  }
-
-  function applyViewerData(d, silent) {
-    var hasData = d && (d.db || d.mats || d.machinery || d.budget || d.milestones || d.punchlist || d.cm_all);
-    if (!hasData) {
-      if (!silent) toast('No backup data found. Ask admin to run Backup Now.', 'err');
-      return;
-    }
-
-    // ── Viewer data isolation: apply WITHOUT touching project prefix ──
-    // Temporarily null out currentProjectId so _pk() returns plain keys
-    // Viewer data lives in viewer-specific plain localStorage keys (no project mix-up)
-    var _savedProjId = window.currentProjectId;
-    window.currentProjectId = null;
-    _applyFullBackup(d);
-    if (typeof _checkBroadcastNotice === 'function') _checkBroadcastNotice();
-    window.currentProjectId = _savedProjId;
-
-    applyProfile();
-    var rawPerms = safeLS.getItem('sj_viewer_perms');
-    var perms = []; var canPrint = safeLS.getItem('sj_viewer_print') === '1';
-    if (rawPerms) { try { perms = JSON.parse(rawPerms); } catch(ex) {} }
-
-    // ── Show ONLY allowed tabs (hide everything else strictly) ────
-    document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
-      var tabName = btn.getAttribute('data-tab');
-      btn.style.display = perms.indexOf(tabName) === -1 ? 'none' : '';
-    });
-    // Hide ALL tab content panels that are NOT in perms
-    document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
-      var tabId = panel.id.replace(/^tab-/, '');
-      if (tabId && perms.indexOf(tabId) === -1) {
-        panel.style.display = 'none';
-      }
-    });
-    // Authoritative re-enforce (catches any style resets from prior renders)
-    _enforceViewerTabs();
-    // Update 🔒 project badge with real site name from backup data
-    try {
-      var _meta = d.meta || {};
-      var _siteName = (_meta.site && _meta.site.trim()) ? _meta.site.trim() : '';
-      if (!_siteName && d.prof) {
-        var _p = (typeof d.prof === 'string') ? JSON.parse(d.prof) : d.prof;
-        _siteName = (_p && _p.site) ? _p.site : '';
-      }
-      if (_siteName) {
-        var _lbl = document.getElementById('viewer-proj-label');
-        if (_lbl) _lbl.textContent = _siteName;
-      }
-    } catch(e) {}
-
-    if (!silent) {
-      var firstTab = perms.length > 0 ? perms[0] : 'dashboard';
-      switchTab(firstTab);
-    } else {
-      // Silent refresh: only re-render if current tab is in allowed perms
-      var curTabEl = document.querySelector('.tab-btn.active');
-      var curTabName = curTabEl ? curTabEl.getAttribute('data-tab') : '';
-      if (curTabName && perms.indexOf(curTabName) !== -1) {
-        try { switchTab(curTabName); } catch(ex) {}
-      } else if (perms.length > 0) {
-        try { switchTab(perms[0]); } catch(ex) {}
-      }
-    }
-
-    _disableViewerWrites();
-    if (canPrint) {
-      document.querySelectorAll('button').forEach(function(b) {
-        var t = b.textContent.trim();
-        if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
-          b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
-        }
-      });
-    }
-    updateDash();
-    if (!silent) toast('✅ Cloud data loaded', 'ok');
-  }
-
-  // ── Pull latest backup once ────────────────────────────────
-  if (typeof window._viewerPollTimer !== 'undefined' && window._viewerPollTimer) {
-    clearInterval(window._viewerPollTimer);
-    window._viewerPollTimer = null;
-  }
-  var _viewerPollTimer = null;
-
-  function fetchLatest(silent) {
-    // Always fetch the specific backup_key this viewer was created for
-    var query = _sb.from('cloud_backups')
-      .select('data,backup_key,updated_at')
-      .eq('admin_id', adminId);
-    // Filter by the stored backup_key (project-specific)
-    if (_viewerBackupKey) {
-      query = query.eq('backup_key', _viewerBackupKey);
-    }
-    query.order('updated_at', { ascending: false })
-      .limit(1)
-      .then(function(r) {
-        if (r.error) {
-          if (!silent) {
-            console.error('Viewer backup fetch error:', r.error);
-            toast('⚠️ Load error: ' + (r.error.message || r.error.code || 'Check RLS'), 'err');
-          }
-          _showViewerSyncDot('red');
-          if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
-          return;
-        }
-        if (!r.data || r.data.length === 0) {
-          if (!silent) toast('No backup found. Admin needs to click Backup Now first.', 'err');
-          if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
-          return;
-        }
-        applyViewerData(r.data[0].data, !!silent);
-        _showViewerSyncDot('green');
-        if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
-      }).catch(function(e) {
-        if (!silent) {
-          console.error('Viewer load catch:', e);
-          toast('Data load error: ' + (e.message || 'unknown'), 'err');
-        }
-        _showViewerSyncDot('red');
-        if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
-      });
-  }
-
-  // Initial load
-  fetchLatest(false);
-
-  // Safety-net polling every 25s (true cloud sync — ≤30s as required)
-  if (_viewerPollTimer) clearInterval(_viewerPollTimer);
-  _viewerPollTimer = setInterval(function() { fetchLatest(true); }, 25000);
-  window._viewerPollTimer = _viewerPollTimer; // expose for logout cleanup
-
-  // ── Realtime subscription — auto-refresh when admin saves ─────
-  // Only create one channel; tear down old one if re-called
-  if (_viewerRealtimeChannel) {
-    try { _sb.removeChannel(_viewerRealtimeChannel); } catch(ex) {}
-    _viewerRealtimeChannel = null;
-  }
-
-  try {
-    _viewerRealtimeChannel = _sb
-      .channel('viewer-data-' + adminId)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'cloud_backups',
-        filter: 'admin_id=eq.' + adminId
-      }, function(payload) {
-        try {
-          // Same bug class as the admin-side subscription: filtered only by
-          // admin_id, so without this check a viewer scoped to ONE project
-          // would have a DIFFERENT project's data applied here whenever the
-          // admin updates that other project from any device.
-          if (_viewerBackupKey && payload && payload.new && payload.new.backup_key !== _viewerBackupKey) return;
-          if (payload && payload.new && payload.new.data) {
-            applyViewerData(payload.new.data, true);
-            _showViewerSyncDot('pulse');
-            setTimeout(function() { _showViewerSyncDot('green'); }, 2000);
-          } else {
-            fetchLatest();
-          }
-        } catch(payloadErr) {
-          console.warn('Viewer realtime payload error:', payloadErr);
-          fetchLatest();
-        }
-      })
-      .subscribe(function(status) {
-        try {
-          if (status === 'SUBSCRIBED') {
-            _showViewerSyncDot('green');
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            _showViewerSyncDot('red');
-          }
-        } catch(e) {}
-      });
-  } catch(rtErr) {
-    console.warn('Viewer realtime subscription failed (ok in offline mode):', rtErr);
-  }
-}
-
-// ── Viewer sync status dot ─────────────────────────────────────
-function _showViewerSyncDot(state) {
-  var bar = document.getElementById('viewer-top-bar');
-  if (!bar) return;
-  var dot = document.getElementById('viewer-sync-dot');
-  if (!dot) {
-    dot = document.createElement('span');
-    dot.id = 'viewer-sync-dot';
-    dot.style.cssText = 'display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:6px;vertical-align:middle;transition:background .4s';
-    bar.insertBefore(dot, bar.firstChild.nextSibling || null);
-  }
-  if (state === 'green')  { dot.style.background = '#22c55e'; dot.title = 'Live — receiving updates'; }
-  if (state === 'red')    { dot.style.background = '#ef4444'; dot.title = 'Disconnected'; }
-  if (state === 'pulse')  {
-    dot.style.background = '#f59e0b';
-    dot.title = 'Updating…';
-    // flash amber then back to green
-    setTimeout(function() { dot.style.background = '#22c55e'; }, 1500);
-  }
-}
-
 function _disableViewerWrites() {
   // Sales-permission viewers are the one exception: they're meant to update
   // flat status, pricing, and remarks, so anything inside the Sales module
@@ -18492,12 +17949,8 @@ function _disableViewerWrites() {
     }
   });
   // Hide write-only inputs (those inside forms/add sections) but NOT filter selects
-  // Strategy: disable inputs that have placeholder suggesting data entry
-  // but leave month-selectors, date-pickers, and filter dropdowns functional
   document.querySelectorAll('input[placeholder], textarea').forEach(function(el) {
     if (_inSalesModule(el)) return;
-    var ph = (el.getAttribute('placeholder') || '').toLowerCase();
-    // Only disable inputs that are clearly for entering new data
     el.disabled = true;
     el.style.opacity = '0.5';
     el.style.cursor = 'not-allowed';
@@ -18505,6 +17958,7 @@ function _disableViewerWrites() {
   // DO NOT disable select elements - they are needed for tab navigation & filtering
   // DO NOT disable date/month inputs used as filters
 }
+
 
 
 // ── BULLETPROOF BOOT for GitHub Pages ──────────────────────
@@ -18650,88 +18104,15 @@ function switchAuthTab(tab) {
   document.getElementById('auth-tab-signup').classList.toggle('active', tab === 'signup');
 }
 
-// ── Smart Login (Supabase) — detects admin vs viewer automatically ──
-function doSmartLogin() {
-  var email = document.getElementById('auth-login-email').value.trim();
-  var pass  = document.getElementById('auth-login-pass').value;
-  var errEl = document.getElementById('auth-login-err');
-  var btn   = document.getElementById('auth-login-btn');
-  errEl.style.display = 'none';
-  if (!email || !pass) { errEl.textContent = '⚠️ Email aur password dono bharo'; errEl.style.display = 'block'; return; }
-
-  // If Supabase not ready yet, wait and retry automatically
-  if (!_sb) {
-    btn.textContent = '⏳ Loading…'; btn.disabled = true;
-    var tries = 0;
-    var wait = setInterval(function() {
-      tries++;
-      if (_sb) { clearInterval(wait); btn.textContent = '🔑 Login'; btn.disabled = false; doSmartLogin(); }
-      else if (tries > 30) { clearInterval(wait); btn.textContent = '🔑 Login'; btn.disabled = false; errEl.textContent = '⚠️ Network slow — reload karo'; errEl.style.display = 'block'; }
-    }, 200);
-    return;
-  }
-
-  btn.textContent = '⏳ Logging in…'; btn.disabled = true;
-
-  // First try viewer login (server-side credential check via RPC)
-  _sb.rpc('check_viewer_credentials', { p_email: email.toLowerCase(), p_password: pass }).then(function(vRes) {
-    if (!vRes.error && vRes.data) { vRes.data = vRes.data[0] || null; }
-    if (!vRes.error && vRes.data) {
-      // ── VIEWER LOGIN ──
-      var vData = vRes.data;
-      safeLS.setItem('sj_viewer_perms', JSON.stringify(vData.permissions || []));
-      safeLS.setItem('sj_viewer_print', vData.can_print ? '1' : '0');
-      safeLS.setItem('sj_viewer_site',  vData.site_id  || '');
-      safeLS.setItem('sj_viewer_email', email);
-      closeAuthModal();
-      _IS_VIEWER = true;
-      _applyViewerPermissions(vData.permissions || [], vData.can_print, vData.site_id);
-      var siteId = vData.site_id || getSiteId();
-      if (siteId) { _viewerLoadData(siteId, ''); _showViewerBar(email); }
-      toast('✅ Welcome, ' + email, 'ok');
-      btn.textContent = '🔑 Login'; btn.disabled = false;
-      return;
-    }
-    // Try admin login via Supabase Auth
-    return _sb.auth.signInWithPassword({ email: email, password: pass }).then(function(r) {
-      if (r.error) throw r.error;
-      var user = r.data.user;
-      // Check subscription in admins table
-      return _sb.from('admins').select('*').eq('id', user.id).single().then(function(aRes) {
-        var data = aRes.data || {};
-        var now = Date.now();
-        var endDate = data.subscription_end_date || 0;
-        // ONLY trust Supabase DB — no localStorage fallback
-        var isActive = data.subscribed && endDate > now;
-        window._applyPlanFromAdminRow(data);
-        safeLS.setItem(ADMIN_ROLE_KEY, 'admin');
-        safeLS.setItem(ADMIN_EMAIL_KEY, email);
-        _adminSBUser = user;
-        if (isActive) {
-          window._sbSubActive = true;
-          safeLS.setItem('cm_sub_end', String(endDate)); // cache for display only, not for auth
-          onAdminLoginSuccess(email, user, null);
-        } else {
-          window._sbSubActive = false;
-          closeAuthModal();
-          _pendingAuthUser = user; _pendingAuthEmail = email; _pendingAuthApp = null;
-          if (data.subscribed && endDate <= now) toast('⚠️ Subscription expired! Renew karo.', 'err');
-          openPayLanding(true);
-        }
-        btn.textContent = '🔑 Login'; btn.disabled = false;
-      });
-    });
-  }).catch(function(e) {
-    btn.textContent = '🔑 Login'; btn.disabled = false;
-    var msg = (e.message || 'Login failed');
-    if (msg.includes('Invalid login') || msg.includes('invalid_credentials') || msg.includes('invalid credentials')) {
-      msg = 'Account nahi mila — pehle Create Account karo, fir login karo';
-    }
-    errEl.textContent = '⚠️ ' + msg; errEl.style.display = 'block';
-  });
-}
-
-function doAdminLogin() { doSmartLogin(); }
+// ── doSmartLogin / doAdminLogin — REMOVED (dead legacy code) ──
+// This used to be a password-based login: check_viewer_credentials RPC,
+// then _sb.auth.signInWithPassword() + a direct admins-table subscription
+// check. Nothing in the UI called doSmartLogin()/doAdminLogin() anymore —
+// the live login button calls cmSendOtp() directly, and the real
+// doSmartLogin() (a thin stub calling cmSendOtp()) is defined earlier in
+// this file. Deleted as part of legacy-architecture cleanup: no
+// signInWithPassword or direct admins-table reads remain in the owner/admin
+// auth path — Supabase Auth OTP + auth.uid() is the only path now.
 
 // Shared cloud-restore routine — pulls the newest backup for this admin
 // and hydrates the app state from it. Used both on fresh login
@@ -18780,31 +18161,22 @@ function onAdminLoginSuccess(email, user, app) {
   window._sbSubChecked = true; // DB already verified during login
   safeLS.setItem(ADMIN_ROLE_KEY,  'admin');
   safeLS.setItem(ADMIN_EMAIL_KEY, email);
-  // Always ensure admin row exists — prevents foreign key issues when creating viewers
+  // Always ensure admin row exists — cloud_backups.admin_id has a FK
+  // constraint against this table, so the project-list cross-device
+  // backup (_pushProjectListToCloud/_pullProjectListFromCloud) would
+  // fail without it. The subscription columns on this row are no
+  // longer read: plan tier now comes entirely from
+  // companies.plan_tier / subscriptions.plan_tier via _applyPlanFromCompany,
+  // set by the company/workspace flow. Reading this row here used to
+  // race with that and could silently downgrade the displayed plan back
+  // to 'free' whenever this admins row (never populated with real
+  // subscription data for a new-schema signup) resolved after the real
+  // company-based check.
   Promise.resolve(_sb.from('admins').upsert({ id: user.id, email: email }, { onConflict: 'id' })).catch(function(){});
   closeAuthModal();
   var emailEl = document.getElementById('cloud-admin-email');
   if (emailEl) emailEl.textContent = email;
-  // Fetch subscription expiry from Supabase
-  _sb.from('admins').select('*').eq('id', user.id).single().then(function(r) {
-    if (!r.error && r.data) {
-      window._applyPlanFromAdminRow(r.data);
-      var endDate = r.data.subscription_end_date;
-      var expiryEl = document.getElementById('cloud-sub-expiry');
-      if (expiryEl && endDate) {
-        var ddmmyyyy = istDDMonYYYY(endDate);
-        expiryEl.textContent = '✅ Valid till ' + ddmmyyyy;
-        expiryEl.style.color = '#86efac';
-        if (endDate - Date.now() < 5 * 24 * 60 * 60 * 1000) {
-          expiryEl.style.color = '#fbbf24';
-          expiryEl.textContent = '⚠️ Expires ' + ddmmyyyy + ' — Renew soon!';
-        }
-        safeLS.setItem('cm_sub_end', endDate);
-      }
-    }
-  }).catch(function(){});
   toast('✅ Welcome! Fetching cloud data…', 'ok');
-  loadViewerAccountsInline();
   if (!isCloudActivated()) safeLS.setItem(CLOUD_KEY, '1');
   updateCloudBtn();
   startAutoSync();
@@ -18847,7 +18219,14 @@ function doUnsubscribe() {
   }).catch(function(){}) : Promise.resolve();
 
   fetchProm.then(function() {
-    return _sb.from('admins').update({ subscribed: false }).eq('id', _adminSBUser.id);
+    // NOTE: this signs out of the app and clears local device data — it
+    // does NOT cancel the company's actual paid subscription in the new
+    // schema (that lives in `subscriptions`, tied to company_id, not to
+    // this user's admins row, and cancellation/proration there is a
+    // separate flow that doesn't exist yet — see the Phase 2 summary).
+    // The old `_sb.from('admins').update({subscribed:false})` write here
+    // was removed since nothing reads that column anymore.
+    return Promise.resolve();
   }).then(function() {
     return _sb.auth.signOut();
   }).then(function() {
@@ -18927,6 +18306,17 @@ function doAdminLogout() {
 }
 
 // Restore admin session on page load (Supabase)
+// Shows cached login UI immediately on page load (before the async
+// company/plan reconcile below finishes) so there's no flash of a
+// logged-out state. Real plan/subscription truth now comes entirely
+// from _reconcileMembershipFromServer() (companies.plan_tier /
+// subscriptions.plan_tier via get_my_companies()), which _onSBAuthReady
+// already runs on every session restore — this used to also re-verify
+// against the legacy `admins` table and could flip window._sbSubActive
+// to false for a genuinely active new-schema subscriber whenever their
+// `admins` row was stale/missing, incorrectly showing a "Subscription
+// Required" screen. Removed that entirely rather than duplicate/race
+// with the real check.
 function restoreAdminSession() {
   var role  = safeLS.getItem(ADMIN_ROLE_KEY);
   var email = safeLS.getItem(ADMIN_EMAIL_KEY);
@@ -18947,51 +18337,6 @@ function restoreAdminSession() {
         expiryEl.style.color = '#86efac';
         expiryEl.textContent = '✅ Valid till ' + ddmmyyyy;
       }
-    }
-    // Supabase persists session — get and verify subscription
-    if (_sb) {
-      _sb.auth.getSession().then(function(r) {
-        if (r.data && r.data.session) {
-          var user = r.data.session.user;
-          _adminSBUser = user; _adminUser = user;
-          // Verify subscription from DB — ONLY source of truth
-          _sb.from('admins').select('*')
-            .eq('id', user.id).single().then(function(aRes) {
-            if (!aRes.error && aRes.data) {
-              var d = aRes.data;
-              var endDate = d.subscription_end_date || 0;
-              var isActive = d.subscribed && endDate > Date.now();
-              window._sbSubActive = isActive;
-              window._applyPlanFromAdminRow(d);
-              if (isActive) {
-                safeLS.setItem('cm_sub_end', String(endDate)); // for display only
-                // Returning Pro/Enterprise user — pull their latest cloud
-                // backup right away instead of leaving them on whatever
-                // (possibly stale/empty) data is already in localStorage.
-                window._pullLatestCloudBackup(user, { silent: true });
-              } else {
-                window._sbSubActive = false;
-              }
-            } else {
-              window._sbSubActive = false;
-            }
-            window._sbSubChecked = true;
-            // Refresh UI after DB check
-            updateCloudBtn && updateCloudBtn();
-            refreshCloudModalState && refreshCloudModalState();
-            setTimeout(loadViewerAccountsInline, 200);
-          }).catch(function(){
-            // Network error — deny access rather than allow
-            window._sbSubActive = false;
-            window._sbSubChecked = true;
-            updateCloudBtn && updateCloudBtn();
-            refreshCloudModalState && refreshCloudModalState();
-          });
-        }
-      }).catch(function(){});
-    } else {
-      setTimeout(restoreAdminSession, 400);
-      return;
     }
   }
   updateCloudBtn();
@@ -19014,804 +18359,19 @@ var _pendingAuthApp = null, _pendingAuthUser = null, _pendingAuthEmail = null;
 // up on re-login). Keep this a no-op for that variable.
 var _fbApp = null, _fbDb = null, _fbAuth = null, _fbUid = null;
 
-// ================================================================
-// ── VIEWER ACCOUNT MANAGEMENT ─────────────────────────────────
-// ================================================================
-
-// Toggle permission chip
-(function() {
-  document.addEventListener('click', function(e) {
-    if (e.target && e.target.classList.contains('perm-chip')) {
-      e.target.classList.toggle('on');
-    }
-  });
-})();
-
-function openViewerMgmt() {
-  loadViewerAccounts();
-  _armModalGuard('viewer-mgmt-modal');
-  document.getElementById('viewer-mgmt-modal').classList.add('show');
-}
-function closeViewerMgmt() {
-  document.getElementById('viewer-mgmt-modal').classList.remove('show');
-  // Refresh inline list when returning to cloud modal
-  loadViewerAccountsInline();
-}
-
-function getSelectedPerms() {
-  var chips = document.querySelectorAll('#perm-chips-container .perm-chip.on');
-  return Array.prototype.map.call(chips, function(c) { return c.getAttribute('data-tab'); });
-}
-
-// ── TOKEN-BASED VIEWER SYSTEM ─────────────────────────────────────
-function _genToken() {
-  var arr = new Uint8Array(18);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map(function(b){ return b.toString(36).padStart(2,'0'); }).join('').slice(0,24);
-}
-
-function generateViewerLink() {
-  var name     = document.getElementById('vw-name') ? document.getElementById('vw-name').value.trim() : '';
-  var canPrint = document.getElementById('vw-can-print').checked;
-  var perms    = getSelectedPerms();
-  var errEl    = document.getElementById('vw-create-err');
-  var btn      = document.getElementById('create-viewer-btn');
-  errEl.style.display = 'none';
-
-  if (!name) { errEl.textContent = '⚠️ Viewer ka naam dalo'; errEl.style.display='block'; return; }
-  if (perms.length === 0) { errEl.textContent = '⚠️ Kam se kam ek tab select karo'; errEl.style.display='block'; return; }
-  if (!_sb || !_adminSBUser) { errEl.textContent = '⚠️ Admin login required'; errEl.style.display='block'; return; }
-
-  btn.textContent = '⏳ Generating…'; btn.disabled = true;
-  // getSiteId() is project-aware: user-<uid12>_p<projId8> when project active
-  // viewer's site_id matches exactly the cloud_backups backup_key for active project
-  var siteId = getSiteId();
-  var token  = _genToken();
-  var slug   = name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,20) + '-' + token.slice(0,4);
-
-  // Resolve active project name for the viewer list badge
-  var _activePid  = window.currentProjectId || null;
-  var _activePname = '';
-  try {
-    var _ap = (_activePid && window.projects) ? window.projects.find(function(p){ return p.id === _activePid; }) : null;
-    _activePname = _ap ? (_ap.name || '') : '';
-  } catch(e) {}
-
-  Promise.resolve(_sb.from('admins').upsert({
-    id: _adminSBUser.id,
-    email: _adminSBUser.email || safeLS.getItem(ADMIN_EMAIL_KEY) || ''
-  }, { onConflict: 'id' })).then(function() {
-    return _sb.rpc('create_viewer', {
-      p_email:         slug,
-      p_password_hash: token,
-      p_permissions:   perms,
-      p_can_print:     canPrint,
-      p_site_id:       siteId,
-      p_project_id:    _activePid,
-      p_project_name:  _activePname || null
-    });
-  }).then(function(r) {
-    if (r.error) throw r.error;
-    btn.textContent = '🔗 Generate & Copy Link'; btn.disabled = false;
-    var base = window.location.href.split('?')[0];
-    var link = base + '?vt=' + encodeURIComponent(token);
-    var resEl = document.getElementById('vw-link-result');
-    var txtEl = document.getElementById('vw-link-text');
-    // Embed active project ID so viewer always loads this exact project
-    if (window.currentProjectId) link += '&pid=' + encodeURIComponent(window.currentProjectId);
-    if (txtEl) txtEl.textContent = link;
-    if (resEl) resEl.style.display = 'block';
-    if (navigator.clipboard) navigator.clipboard.writeText(link).catch(function(){});
-    toast('✅ Link generated for: ' + name + ' — copied!', 'ok');
-    if (document.getElementById('vw-name')) document.getElementById('vw-name').value = '';
-    loadViewerAccounts();
-    loadViewerAccountsInline();
-  }).catch(function(e) {
-    btn.textContent = '🔗 Generate & Copy Link'; btn.disabled = false;
-    errEl.textContent = '⚠️ ' + e.message; errEl.style.display = 'block';
-  });
-}
-
-function createViewerAccount() { generateViewerLink(); }
-
-function copyVwLink() {
-  var txt = document.getElementById('vw-link-text') ? document.getElementById('vw-link-text').textContent : '';
-  if (!txt) return;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt).then(function(){ toast('Link copied!','ok'); });
-  } else {
-    var el = document.createElement('textarea');
-    el.value = txt; document.body.appendChild(el); el.select();
-    document.execCommand('copy'); document.body.removeChild(el);
-    toast('Link copied!','ok');
-  }
-}
-
-function loadViewerAccountsInline() {
-  var listEl = document.getElementById('viewer-accounts-inline');
-  if (!listEl) return;
-  if (!_sb || !_adminSBUser) { setTimeout(loadViewerAccountsInline, 600); return; }
-  listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:8px">Loading…</p>';
-  _sb.rpc('list_my_viewers').then(function(r) {
-    var list = r.data || [];
-    if (!list.length) {
-      listEl.innerHTML='<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;padding:12px">No viewers yet — click + New to create one</p>';
-      return;
-    }
-    var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ',sales:'🏢 Sales'};
-    var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq','sales'];
-    listEl.innerHTML = list.map(function(v,i) {
-      var perms = v.permissions||[];
-      var chips = perms.map(function(p){
-        return '<span style="padding:2px 7px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:10px;font-size:9px;font-weight:700;color:#c7d2fe;margin:2px;">'+(te[p]||'📌')+' '+p+'</span>';
-      }).join('');
-      var editChips = allTabs.map(function(tab){
-        var isOn = perms.indexOf(tab)!==-1;
-        return '<span onclick="toggleInlineChip(this)" data-tab="'+tab+'" data-on="'+(isOn?'1':'0')+'" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:14px;font-size:9px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:2px;transition:all .15s;">'+(te[tab]||'')+' '+tab+'</span>';
-      }).join('');
-      return '<div id="inline-viewer-card-'+i+'" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.6rem;margin-bottom:.5rem;">'
-        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">'
-        +'<div style="display:flex;align-items:center;gap:7px;">'
-        +'<div style="width:26px;height:26px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">👁️</div>'
-        +'<div><p style="font-size:11px;font-weight:700;color:white;line-height:1;">'+v.email.replace(/-[a-z0-9]{4}$/,'').replace(/-/g,' ')+'</p>'
-        +'<p style="font-size:9px;color:#a78bfa;margin-top:1px;">'+(v.can_print?'✅ Print on':'🚫 No print')+' · '+perms.length+' tabs'+(v.project_name?' · <span style=\'padding:1px 5px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:7px;font-size:8px;font-weight:700;color:#c7d2fe;\'>'+v.project_name+'</span>':'')+'</p></div>'
-        +'</div>'
-        +'<div style="display:flex;gap:5px;">'
-        +'<button onclick="_copyViewerToken(\''+v.password_hash+'\')" style="padding:0 12px;background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🔗 Link</button>'
-        +'<button onclick="toggleInlineEdit(this,'+i+')" style="padding:0 12px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">✏️ Edit</button>'
-        +'<button onclick="deleteViewerAccount(\''+( v.id || v.email )+'\','+i+')" style="padding:0 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;">🗑</button>'
-        +'</div></div>'
-        +'<div id="inline-chips-view-'+i+'" style="display:flex;flex-wrap:wrap;">'+(chips||'<span style="font-size:9px;color:rgba(255,255,255,.3)">No tabs</span>')+'</div>'
-        +'<div id="inline-edit-panel-'+i+'" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px;">'
-        +'<p style="font-size:9px;font-weight:700;color:#a78bfa;margin-bottom:5px;">Tabs — tap to toggle:</p>'
-        +'<div style="display:flex;flex-wrap:wrap;" id="inline-edit-chips-'+i+'">'+editChips+'</div>'
-        +'<div style="display:flex;align-items:center;gap:6px;margin:6px 0 8px;">'
-        +'<input type="checkbox" id="inline-print-'+i+'" '+(v.can_print?'checked':'')+' style="accent-color:#818cf8;width:13px;height:13px;">'
-        +'<label for="inline-print-'+i+'" style="font-size:10px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
-        +'</div>'
-        +'<button onclick="saveInlineViewerPerms('+i+',\''+v.email+'\')" style="width:100%;padding:6px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:8px;font-weight:800;font-size:10px;cursor:pointer;">💾 Save Permissions</button>'
-        +'</div>'
-        +'</div>';
-    }).join('');
-  }).catch(function(e) {
-    listEl.innerHTML='<p style="font-size:10px;color:#fca5a5;text-align:center;padding:8px">Load failed: '+e.message+'</p>';
-  });
-}
-
-function toggleInlineChip(el) {
-  var isOn = el.getAttribute('data-on') === '1';
-  isOn = !isOn;
-  el.setAttribute('data-on', isOn ? '1' : '0');
-  el.style.background = isOn ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.05)';
-  el.style.borderColor = isOn ? '#818cf8' : 'rgba(255,255,255,0.15)';
-  el.style.color = isOn ? '#c7d2fe' : 'rgba(255,255,255,0.4)';
-}
-
-function toggleInlineEdit(btn, idx) {
-  var panel = document.getElementById('inline-edit-panel-'+idx);
-  var view  = document.getElementById('inline-chips-view-'+idx);
-  if (!panel) return;
-  var isOpen = panel.style.display!=='none';
-  panel.style.display = isOpen?'none':'block';
-  view.style.display  = isOpen?'flex':'none';
-  btn.textContent = isOpen?'✏️ Edit':'✕ Cancel';
-}
-
-function saveInlineViewerPerms(idx, rowId) {
-  var chipsEl = document.getElementById('inline-edit-chips-'+idx);
-  if (!chipsEl) return;
-  var newPerms=[];
-  chipsEl.querySelectorAll('span[data-tab]').forEach(function(c){
-    if(c.getAttribute('data-on') === '1') newPerms.push(c.getAttribute('data-tab'));
-  });
-  var canPrint = document.getElementById('inline-print-'+idx) ? document.getElementById('inline-print-'+idx).checked : false;
-  if(!_sb||!_adminSBUser){toast('Not logged in','err');return;}
-  if(!_adminSBUser.id){toast('Session expired — please login again','err');return;}
-  if(!rowId){toast('Cannot identify viewer row','err');return;}
-  // Always update by email (safest — avoids UUID issues); server scopes to auth.uid()
-  _sb.rpc('update_viewer_permissions', {
-    p_viewer_id: null, p_email: rowId, p_permissions: newPerms, p_can_print: canPrint
-  })
-    .then(function(r){
-      if(r.error){toast('Save failed: '+r.error.message,'err');return;}
-      toast('✅ Permissions saved!','ok');
-      loadViewerAccountsInline();
-    }).catch(function(e){toast('Save error: '+(e.message||'unknown'),'err');});
-}
-
-function loadViewerAccounts() {
-  var listEl = document.getElementById('viewer-accounts-list');
-  if (!listEl) return;
-  listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">Loading…</p>';
-  if (!_sb || !_adminSBUser) {
-    listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Please login as admin first</p>';
-    return;
-  }
-  _sb.rpc('list_my_viewers').then(function(r) {
-    if (r.error) { listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">Load failed: '+r.error.message+'</p>'; return; }
-    if (!r.data || !r.data.length) {
-      listEl.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:12px">No viewers created yet</p>';
-    } else {
-      renderViewerList(r.data);
-    }
-  }).catch(function(e) {
-    listEl.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + e.message + '</p>';
-  });
-}
 
 
-function renderViewerList(list) {
-  var listEl = document.getElementById('viewer-accounts-list');
-  if (!list || !list.length) {
-    listEl.innerHTML = '<div style="text-align:center;padding:20px 0;"><div style="font-size:28px;margin-bottom:6px">\u{1F465}</div><p style="font-size:11px;color:rgba(255,255,255,0.35);">No viewers created yet</p></div>';
-    return;
-  }
-  var te = {dashboard:'📊',daily:'📋',departmental:'🏗️',attendance:'📅',machinery:'⚙️',expenses:'💰',materials:'🧱',tools:'🔧',drawings:'📐',rentals:'🚜',contractors:'👥',budget:'📊',schedule:'📅',punchlist:'📋',bill:'🧾',quotation:'💼',visits:'🏛️',boq:'📋 BOQ',sales:'🏢 Sales'};
-  var allTabs = ['dashboard','daily','departmental','attendance','machinery','expenses','materials','tools','drawings','rentals','contractors','budget','schedule','punchlist','bill','quotation','visits','boq','sales'];
-  listEl.innerHTML = list.map(function(v, i) {
-    var perms = v.permissions || [];
-    var chips = perms.map(function(p){
-      return '<span style="padding:3px 8px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:12px;font-size:9px;font-weight:700;color:#c7d2fe;margin:2px;">' + (te[p]||'\u{1F4CC}') + ' ' + p + '</span>';
-    }).join('');
-    // Build editable permission chips for edit panel
-    var editChips = allTabs.map(function(tab){
-      var isOn = perms.indexOf(tab) !== -1;
-      return '<span onclick="toggleEditChip(this)" data-tab="'+tab+'" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;cursor:pointer;border:1.5px solid '+(isOn?'#818cf8':'rgba(255,255,255,0.15)')+';background:'+(isOn?'rgba(99,102,241,0.3)':'rgba(255,255,255,0.05)')+';color:'+(isOn?'#c7d2fe':'rgba(255,255,255,0.4)')+';margin:3px 2px;transition:all .15s;">'+(te[tab]||'')+ ' '+tab+'</span>';
-    }).join('');
-    return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:1rem;padding:.75rem;margin-bottom:.6rem;">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      + '<div style="display:flex;align-items:center;gap:8px;">'
-      + '<div style="width:30px;height:30px;background:linear-gradient(135deg,#d97706,#f59e0b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">\u{1F441}\uFE0F</div>'
-      + '<div><p style="font-size:12px;font-weight:700;color:white;line-height:1;">' + v.email.replace(/-[a-z0-9]{4}$/,'').replace(/-/g,' ') + '</p>'
-      + '<p style="font-size:9px;color:#a78bfa;margin-top:2px;">' + (v.can_print ? '\u2705 Print allowed' : '\u{1F6AB} No print')
-      + (v.project_name ? ' &middot; <span style=\'padding:1px 6px;background:rgba(99,102,241,.25);border:1px solid rgba(129,140,248,.4);border-radius:8px;font-size:8px;font-weight:700;color:#c7d2fe;vertical-align:middle;\'>' + v.project_name + '</span>' : '')
-      + '</p></div>'
-      + '</div>'
-      + '<div style="display:flex;gap:6px;align-items:center;">'
-      + '<button onclick="toggleViewerEdit(this,'+i+')" style="padding:0 12px;background:rgba(99,102,241,.2);border:1px solid rgba(129,140,248,.35);color:#c7d2fe;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u270F Edit</button>'
-      + '<button onclick="deleteViewerAccount(\''+ v.uid +'\','+ i +')" style="padding:0 12px;background:rgba(239,68,68,.18);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:9px;font-size:10px;font-weight:700;cursor:pointer;">\u{1F5D1} Delete</button>'
-      + '</div></div>'
-      + '<div style="display:flex;flex-wrap:wrap;" id="vchips-view-'+i+'">' + (chips || '<span style="font-size:10px;color:rgba(255,255,255,.3)">No tabs assigned</span>') + '</div>'
-      // Edit panel (hidden by default)
-      + '<div id="vedit-panel-'+i+'" style="display:none;margin-top:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;">'
-      + '<p style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px;">Tab Permissions — tap to toggle:</p>'
-      + '<div style="display:flex;flex-wrap:wrap;" id="vedit-chips-'+i+'">' + editChips + '</div>'
-      + '<div style="display:flex;align-items:center;gap:8px;margin:8px 0 10px;">'
-      + '<input type="checkbox" id="vedit-print-'+i+'" '+(v.can_print?'checked':'')+' style="accent-color:#818cf8;width:14px;height:14px;">'
-      + '<label for="vedit-print-'+i+'" style="font-size:11px;color:#c4b5fd;font-weight:600;">Allow Print / Export</label>'
-      + '</div>'
-      + '<button onclick="saveViewerPerms('+i+',\''+v.uid+'\')" style="width:100%;padding:7px;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:10px;font-weight:800;font-size:11px;cursor:pointer;">💾 Save Permissions</button>'
-      + '</div>'
-      + '</div>';
-  }).join('');
-}
-
-function toggleEditChip(el) {
-  var isOn = el.style.background.indexOf('99,102,241') !== -1;
-  if (isOn) {
-    el.style.background = 'rgba(255,255,255,0.05)';
-    el.style.borderColor = 'rgba(255,255,255,0.15)';
-    el.style.color = 'rgba(255,255,255,0.4)';
-  } else {
-    el.style.background = 'rgba(99,102,241,0.3)';
-    el.style.borderColor = '#818cf8';
-    el.style.color = '#c7d2fe';
-  }
-}
-
-function toggleViewerEdit(btn, idx) {
-  var panel = document.getElementById('vedit-panel-'+idx);
-  var viewChips = document.getElementById('vchips-view-'+idx);
-  if (!panel) return;
-  var isOpen = panel.style.display !== 'none';
-  panel.style.display = isOpen ? 'none' : 'block';
-  viewChips.style.display = isOpen ? 'flex' : 'none';
-  btn.textContent = isOpen ? '\u270F Edit' : '✕ Cancel';
-}
-
-function saveViewerPerms(idx, rowId) {
-  var chipsContainer = document.getElementById('vedit-chips-'+idx);
-  if (!chipsContainer) return;
-  var newPerms = [];
-  chipsContainer.querySelectorAll('span[data-tab]').forEach(function(c){
-    if (c.style.background.indexOf('99,102,241') !== -1) newPerms.push(c.getAttribute('data-tab'));
-  });
-  var canPrint = document.getElementById('vedit-print-'+idx) ? document.getElementById('vedit-print-'+idx).checked : false;
-  if (!_sb || !_adminSBUser) { toast('Not logged in','err'); return; }
-  _sb.rpc('update_viewer_permissions', {
-    p_viewer_id: rowId, p_email: null, p_permissions: newPerms, p_can_print: canPrint
-  })
-    .then(function(r) {
-      if (r.error) { toast('Save failed: ' + r.error.message, 'err'); return; }
-      toast('✅ Permissions updated!', 'ok');
-      loadViewerAccounts();
-    }).catch(function(e){ toast('Save failed: ' + e.message, 'err'); });
-}
-
-function _copyViewerToken(token) {
-  var base = window.location.href.split('?')[0];
-  var link = base + '?vt=' + encodeURIComponent(token);
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(link).then(function(){ toast('🔗 Link copied!', 'ok'); });
-  } else {
-    var el = document.createElement('textarea');
-    el.value = link; document.body.appendChild(el); el.select();
-    document.execCommand('copy'); document.body.removeChild(el);
-    toast('🔗 Link copied!', 'ok');
-  }
-}
-
-function deleteViewerAccount(rowId, idx) {
-  if (!confirm('Delete this viewer account?')) return;
-  if (!_sb || !_adminSBUser) { toast('Not logged in', 'err'); return; }
-  // If rowId is a UUID (36 chars with dashes), delete by id; otherwise by email
-  var isUuid = rowId && rowId.length === 36 && rowId.split('-').length === 5;
-  var delPromise = isUuid
-    ? _sb.rpc('revoke_viewer', { p_viewer_id: rowId })
-    : _sb.rpc('revoke_viewer_by_email', { p_email: rowId });
-  delPromise
-    .then(function(r) {
-      if (r.error) { toast('Delete failed: ' + r.error.message, 'err'); return; }
-      toast('Viewer account deleted', 'ok');
-      loadViewerAccounts();
-      loadViewerAccountsInline();
-    }).catch(function(e) { toast('Delete failed: ' + e.message, 'err'); });
-}
-
-// ── Viewer account management complete ──
-
-// ================================================================
-// ── VIEWER LOGIN (from URL param ?vlogin=1) ────────────────────
-// ── Viewers login with email+pass, no payment needed ──────────
-// ================================================================
-
-function checkViewerLoginMode() {
-  var params = new URLSearchParams(window.location.search);
-  if (!params.get('vlogin')) return;
-  // Show a viewer login overlay
-  document.body.insertAdjacentHTML('afterbegin',
-    '<div id="viewer-login-overlay" style="position:fixed;inset:0;background:linear-gradient(135deg,#0f172a,#1e1b4b);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">'
-    +'<div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18);border-radius:1.5rem;padding:1.5rem;width:100%;max-width:360px">'
-    +'<div style="text-align:center;margin-bottom:1.25rem">'
-    +'<div style="font-size:40px;margin-bottom:6px">👁️</div>'
-    +'<p style="font-size:18px;font-weight:900;color:white;line-height:1">Sanjineer Viewer</p>'
-    +'<p style="font-size:11px;color:#a78bfa;margin-top:4px">Site data — read only access</p>'
-    +'</div>'
-    +'<label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Email</label>'
-    +'<input id="vl-email" type="email" placeholder="viewer@example.com" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:8px">'
-    +'<label style="font-size:10px;font-weight:700;color:#a78bfa;display:block;margin-bottom:4px">Password</label>'
-    +'<input id="vl-pass" type="password" placeholder="Your password" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:.625rem;color:white;font-size:13px;outline:none;box-sizing:border-box;margin-bottom:12px">'
-    +'<button onclick="doViewerLogin()" id="vl-btn" style="width:100%;padding:.85rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:white;border:none;border-radius:.875rem;font-weight:800;font-size:.95rem;cursor:pointer">👁️ View Site Data</button>'
-    +'<p id="vl-err" style="font-size:11px;color:#fca5a5;text-align:center;margin-top:.5rem;display:none"></p>'
-    +'<p style="font-size:10px;color:rgba(255,255,255,0.3);text-align:center;margin-top:.75rem">No subscription needed — viewer access is free</p>'
-    +'<p style="font-size:10px;color:rgba(255,255,255,0.35);text-align:center;margin-top:.4rem">Need help? DM <a href="https://ig.me/m/sanjineer" target="_blank" style="color:#f59e0b;font-weight:700;text-decoration:none">@Sanjineer</a> on Instagram 📩</p>'
-    +'</div></div>'
-  );
-}
-
-function doViewerLoginInline() {
-  var email = document.getElementById('vl-inline-email').value.trim();
-  var pass  = document.getElementById('vl-inline-pass').value;
-  var btn   = document.getElementById('vl-inline-btn');
-  var errEl = document.getElementById('vl-inline-err');
-  if (errEl) errEl.style.display = 'none';
-  if (!email || !pass) {
-    if (errEl) { errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; }
-    return;
-  }
-  if (!_sb) { if (errEl) { errEl.textContent='⚠️ App load ho raha hai, reload karo'; errEl.style.display='block'; } return; }
-  btn.textContent='⏳ Logging in…'; btn.disabled=true;
-  _sb.rpc('check_viewer_credentials', { p_email: email.toLowerCase(), p_password: pass }).then(function(r) {
-    if (!r.error && r.data) { r.data = r.data[0] || null; }
-    if (r.error || !r.data) { throw new Error('Galat email ya password'); }
-    var data = r.data;
-    var adminId = data.admin_id || data.site_id || '';
-    safeLS.setItem('sj_viewer_perms',  JSON.stringify(data.permissions || []));
-    safeLS.setItem('sj_viewer_print',  data.can_print ? '1' : '0');
-    safeLS.setItem('sj_viewer_site',   data.site_id  || '');
-    safeLS.setItem('sj_viewer_admin',  adminId);
-    safeLS.setItem('sj_viewer_email',  email);
-    closeAuthModal();
-    _IS_VIEWER = true;
-    _applyViewerPermissions(data.permissions || [], data.can_print, adminId);
-    if (adminId) {
-      if (!document.getElementById('viewer-top-bar')) { _showViewerBar(email); }
-      _viewerLoadData(adminId, '');
-    } else {
-      toast('⚠️ Viewer account has no linked admin — contact admin.', 'err');
-    }
-    toast('✅ Welcome, '+email,'ok');
-    btn.textContent='👁️ View Site Data'; btn.disabled=false;
-  }).catch(function(e) {
-    btn.textContent='👁️ View Site Data'; btn.disabled=false;
-    if (errEl) { errEl.textContent='⚠️ '+(e.message||'Login failed'); errEl.style.display='block'; }
-  });
-}
-
-
-function doViewerLogin() {
-  var email = document.getElementById('vl-email').value.trim();
-  var pass  = document.getElementById('vl-pass').value;
-  var btn   = document.getElementById('vl-btn');
-  var errEl = document.getElementById('vl-err');
-  if (!email || !pass) { errEl.textContent='⚠️ Email aur password dono bharo'; errEl.style.display='block'; return; }
-  if (!_sb) { errEl.textContent='⚠️ App load ho raha hai, reload karo'; errEl.style.display='block'; return; }
-  btn.textContent='⏳ Logging in…'; btn.disabled=true;
-  _sb.rpc('check_viewer_credentials', { p_email: email.toLowerCase(), p_password: pass }).then(function(r) {
-    if (!r.error && r.data) { r.data = r.data[0] || null; }
-    if (r.error || !r.data) { throw new Error('Galat email ya password'); }
-    var data = r.data;
-    var adminId = data.admin_id || data.site_id || '';
-    safeLS.setItem('sj_viewer_perms',  JSON.stringify(data.permissions || []));
-    safeLS.setItem('sj_viewer_print',  data.can_print ? '1' : '0');
-    safeLS.setItem('sj_viewer_site',   data.site_id  || '');
-    safeLS.setItem('sj_viewer_admin',  adminId);
-    safeLS.setItem('sj_viewer_email',  email);
-    var ov = document.getElementById('viewer-login-overlay');
-    if (ov) ov.remove();
-    _IS_VIEWER = true;
-    _applyViewerPermissions(data.permissions || [], data.can_print, adminId);
-    if (adminId) {
-      if (!document.getElementById('viewer-top-bar')) { _showViewerBar(email); }
-      _viewerLoadData(adminId, '');
-    } else {
-      toast('⚠️ Viewer account has no linked admin — contact admin.', 'err');
-    }
-    toast('✅ Welcome, '+email,'ok');
-    btn.textContent='👁️ View Site Data'; btn.disabled=false;
-  }).catch(function(e) {
-    btn.textContent='👁️ View Site Data'; btn.disabled=false;
-    errEl.textContent='⚠️ '+(e.message||'Login failed'); errEl.style.display='block';
-  });
-}
-
-// ── Viewer top bar helper ────────────────────────────────────
-function _showViewerBar(email) {
-  // Replace project dropdown with locked badge showing active project name
-  var projWrap = document.getElementById('project-dropdown-wrap');
-  if (projWrap) {
-    // Get admin's active project name from viewer site info (or fallback label)
-    var _vSite = safeLS.getItem('sj_viewer_site') || '';
-    var _projLabel = 'Project';
-    // Try to get project name from localStorage profile or viewer site id
-    try {
-      var _profRaw = localStorage.getItem('cm_prof') || localStorage.getItem('cm_meta') || '{}';
-      var _prof = JSON.parse(_profRaw);
-      if (_prof && _prof.site) _projLabel = _prof.site;
-    } catch(e) {}
-    projWrap.innerHTML = '<div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:4px 9px;max-width:148px;overflow:hidden;">'
-      + '<span style="font-size:11px;flex-shrink:0">🔒</span>'
-      + '<span id="viewer-proj-label" style="font-size:11px;font-weight:700;color:#fbbf24;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _projLabel + '</span>'
-      + '</div>';
-  }
-  // Hide Settings tab nav button
-  var settingsBtn = document.querySelector('.tab-btn[data-tab="settings"]');
-  if (settingsBtn) settingsBtn.style.display = 'none';
-  if (document.getElementById('viewer-top-bar')) return;
-  document.body.insertAdjacentHTML('afterbegin',
-    '<div id="viewer-top-bar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#d97706,#f59e0b);padding:6px 14px;display:flex;align-items:center;gap:8px;">'
-    +'<span style="font-size:13px;font-weight:800;color:white;flex:1">👁️ '+email+' <span id=\"viewer-sync-dot\" style=\"display:inline-block;width:7px;height:7px;border-radius:50%;background:#fef9c3;margin-left:6px;vertical-align:middle\" title=\"Connecting…\"></span></span>'
-    +'<button onclick="_viewerRefresh()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;">🔄</button>'
-    +'<button onclick="_viewerLogout()" style="background:rgba(239,68,68,0.3);border:1px solid rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;">Logout</button>'
-    +'</div>');
-  var main = document.getElementById('main-app');
-  if (main) main.style.marginTop = '32px';
-  // ── Viewer: hide settings gear and project switcher ──────────
-  var settBtn = document.getElementById('settings-hdr-btn');
-  if (settBtn) settBtn.style.display = 'none';
-  var projWrap = document.getElementById('project-dropdown-wrap');
-  if (projWrap) projWrap.style.display = 'none';
-  // Also close settings panel if open
-  if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
-}
-
-function _applyViewerPermissions(perms, canPrint, siteId) {
-  // Hide ALL tab buttons first, then show only allowed ones
-  document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
-    var tabId = btn.getAttribute('data-tab');
-    btn.style.display = perms.indexOf(tabId) === -1 ? 'none' : '';
-  });
-  // Also hide tab content panels for non-allowed tabs (belt+suspenders)
-  document.querySelectorAll('[id^="tab-"]').forEach(function(panel) {
-    var tabId = panel.id.replace(/^tab-/, '');
-    if (tabId && perms.indexOf(tabId) === -1) {
-      panel.style.display = 'none';
-    }
-  });
-  // Authoritative enforce so first render is always clean
-  _enforceViewerTabs();
-  // Disable all write actions
-  _disableViewerWrites();
-  // Re-enable print/export buttons if viewer has print permission
-  if (canPrint) {
-    document.querySelectorAll('button').forEach(function(b) {
-      var t = b.textContent.trim();
-      if (t.includes('Print') || t.includes('Export') || t.includes('Save PDF') || t.includes('PDF')) {
-        b.disabled = false; b.style.opacity = ''; b.style.cursor = '';
-      }
-    });
-  }
-  // Navigate to first permitted tab
-  if (perms.length > 0) {
-    setTimeout(function() { switchTab(perms[0]); }, 500);
-  }
-}
-
-// ================================================================
-// ── PAYMENT LANDING PAGE ───────────────────────────────────────
-// ================================================================
-
-var _payLandingAfterAuth = false;
-
-function openPayLanding(afterAuth) {
-  _payLandingAfterAuth = !!afterAuth;
-  var modal = document.getElementById('pay-landing-modal');
-  _armModalGuard('pay-landing-modal');
-  modal.classList.add('show');
-  // If afterAuth=true: hide X button, show locked message
-  var closeBtn = document.getElementById('pay-close-btn');
-  var lockedMsg = document.getElementById('pay-locked-msg');
-  if (closeBtn) closeBtn.style.display = afterAuth ? 'none' : 'flex';
-  if (lockedMsg) lockedMsg.style.display = afterAuth ? 'flex' : 'none';
-  if (typeof _selectPlanTier === 'function') _selectPlanTier(window._obSelectedPlan || 'pro');
-  window._obSelectedPlan = 'pro'; // consume-once: only the signup toggle right before this call should influence it
-}
-function closePayLanding() {
-  document.getElementById('pay-landing-modal').classList.remove('show');
-  var lockedMsg = document.getElementById('pay-locked-msg');
-  if (lockedMsg) lockedMsg.style.display = 'none';
-}
-function _safeClosePayLanding() {
-  // Only allow close if NOT in afterAuth gate
-  if (_payLandingAfterAuth) {
-    toast('Subscription zaroori hai — pehle pay karo ya logout karo', 'err');
-    return;
-  }
-  closePayLanding();
-}
-function _cancelAndLogout() {
-  // User chose to cancel — clear pending and logout
-  _pendingAuthUser = null; _pendingAuthEmail = null; _pendingAuthApp = null;
-  _adminSBUser = null; _adminUser = null;
-  safeLS.removeItem(ADMIN_ROLE_KEY); safeLS.removeItem(ADMIN_EMAIL_KEY);
-  safeLS.removeItem(CLOUD_KEY);
-  if (_sb) _sb.auth.signOut().catch(function(){});
-  closePayLanding();
-  openCloudModal();
-  switchCloudTab('admin');
-  toast('Logged out — create account again when ready to subscribe', 'ok');
-}
-
-// Open viewer login as inline modal (no URL param needed)
-// PLAN_PRICING: single source of truth for both tiers' amounts (in paise)
-// and display strings, so the modal, the Razorpay call, and the DB write
-// can never disagree with each other.
-var PLAN_PRICING = {
-  pro:        { amount: 3000, rupees: 30, label: 'Pro',        desc: 'Admin Subscription — ₹30/month' },
-  enterprise: { amount: 9900, rupees: 99, label: 'Enterprise', desc: 'Enterprise Subscription — ₹99/month' }
-};
-
-var _selectedPlanTier = 'pro';
-
-// Toggles the pricing modal between Pro and Enterprise views. Purely a
-// display/selection concern — the actual charge only happens when the
-// person taps Subscribe, via startSubscriptionPayment(_selectedPlanTier).
-function _selectPlanTier(plan) {
-  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
-  _selectedPlanTier = plan;
-  var proTab = document.getElementById('plan-tab-pro');
-  var entTab = document.getElementById('plan-tab-ent');
-  if (proTab && entTab) {
-    var onStyle  = 'flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid #4f46e5;background:rgba(79,70,229,.25);color:#fff;font-weight:800;font-size:12px;cursor:pointer;';
-    var offStyle = 'flex:1;padding:8px 4px;border-radius:.6rem;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:rgba(255,255,255,.65);font-weight:800;font-size:12px;cursor:pointer;';
-    proTab.setAttribute('style', plan === 'pro' ? onStyle : offStyle);
-    entTab.setAttribute('style', (plan === 'enterprise' ? onStyle : offStyle) + ' display:flex; align-items:center; justify-content:center; gap:4px;');
-  }
-  var priceBlock = document.getElementById('plan-price-block');
-  if (priceBlock) {
-    if (plan === 'enterprise') {
-      priceBlock.innerHTML =
-        '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹99<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
-        + '<p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>';
-    } else {
-      priceBlock.innerHTML =
-        '<p style="color:white;font-size:28px;font-weight:900;line-height:1;">₹30<span style="font-size:12px;font-weight:400;color:#a78bfa">/month</span></p>'
-        + '<p style="font-size:10px;color:#7c3aed;margin-top:3px">Cancel anytime · Secured by Razorpay</p>';
-    }
-  }
-  // Enterprise gets one extra row on top of everything Pro already has —
-  // cross-device project sharing (join-code invites for engineers).
-  var entRow = document.getElementById('plan-feature-sharing-row');
-  if (plan === 'enterprise' && !entRow) {
-    var featBlock = document.getElementById('plan-features-block');
-    if (featBlock) {
-      var row = document.createElement('div');
-      row.id = 'plan-feature-sharing-row';
-      row.className = 'cloud-feature-row';
-      row.innerHTML = '<span style="font-size:14px">🔗</span><div><p class="text-white font-semibold" style="font-size:11px;line-height:1">Share Projects Across Devices <span style="background:#f59e0b;color:#1e1b4b;font-size:8px;padding:1px 5px;border-radius:6px;">ENTERPRISE</span></p><p style="font-size:9px;color:#a78bfa">Invite engineers with a join code, per project</p></div>';
-      featBlock.appendChild(row);
-    }
-  } else if (plan !== 'enterprise' && entRow) {
-    entRow.remove();
-  }
-  var btn = document.getElementById('sub-pay-btn');
-  if (btn && !btn.disabled) btn.textContent = _planBtnLabel(plan);
-}
-
-// Feature → which plan unlocks it, shown when a gated action is attempted.
-// 'Logo Upload' / 'Multiple Projects' → Pro already covers these.
-// 'Project Sharing' / cross-device invite → needs Enterprise.
-var _UPGRADE_FEATURE_PLAN = {
-  'Logo Upload': 'pro',
-  'Multiple Projects': 'pro',
-  'Project Sharing': 'enterprise',
-  'Cross-Device Sharing': 'enterprise',
-  'Purchase Order Approvals': 'enterprise',
-  'Sales Manager': 'enterprise'
-};
-
-function startSubscriptionPayment(plan) {
-  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
-  if (typeof Razorpay === 'undefined') {
-    toast('Payment gateway load ho raha hai…', 'ok');
-    var s = document.createElement('script');
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    s.onload = function() { _openSubscriptionRazorpay(plan); };
-    s.onerror = function() { toast('Payment load failed. Internet check karo.', 'err'); };
-    document.head.appendChild(s);
-    return;
-  }
-  _openSubscriptionRazorpay(plan);
-}
-
-function _planBtnId(plan) { return 'sub-pay-btn'; }
-function _planBtnLabel(plan) {
-  var p = PLAN_PRICING[plan];
-  return '💳 Subscribe ₹' + p.rupees + '/month';
-}
-
-function _openSubscriptionRazorpay(plan) {
-  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
-  var p = PLAN_PRICING[plan];
-  var btn = document.getElementById(_planBtnId(plan));
-  if (btn) { btn.textContent = '⏳ Opening payment…'; btn.disabled = true; }
-  var userEmail = (_pendingAuthEmail) || (safeLS.getItem(ADMIN_EMAIL_KEY)) || '';
-  var options = {
-    key: 'rzp_live_SRrnyG5XusYMpE',
-    amount: p.amount,
-    currency: 'INR',
-    name: 'Sanjineer Cloud',
-    description: p.desc,
-    image: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="%234f46e5"/><text x="40" y="55" font-size="36" text-anchor="middle">%F0%9F%8F%97</text></svg>',
-    prefill: { name: '', email: userEmail, contact: '' },
-    notes: { purpose: 'sanjineer_cloud_subscription', plan: plan },
-    theme: { color: '#4f46e5' },
-    handler: function(response) {
-      onSubscriptionPaymentSuccess(response, plan);
-    },
-    modal: {
-      ondismiss: function() {
-        if (btn) { btn.textContent = _planBtnLabel(plan); btn.disabled = false; }
-      }
-    }
-  };
-  try {
-    var rzp = new Razorpay(options);
-    rzp.on('payment.failed', function(resp) {
-      toast('Payment failed: ' + (resp.error.description || 'Try again'), 'err');
-      if (btn) { btn.textContent = _planBtnLabel(plan); btn.disabled = false; }
-    });
-    rzp.open();
-  } catch(e) {
-    toast('Payment error: ' + e.message, 'err');
-    if (btn) { btn.textContent = _planBtnLabel(plan); btn.disabled = false; }
-  }
-}
-
-function onSubscriptionPaymentSuccess(response, plan) {
-  plan = plan === 'enterprise' ? 'enterprise' : 'pro';
-  var p = PLAN_PRICING[plan];
-  var payId = response.razorpay_payment_id || ('LIVE_' + Date.now());
-  var THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-  // Store payment ID locally for display/reference only (NOT for auth decisions)
-  safeLS.setItem(CLOUD_KEY, '1');
-  safeLS.setItem('cm_rzp_payment_id', payId); // display only
-  safeLS.setItem('cm_plan', plan); // display only — real auth/plan is from DB
-  window.userPlan = plan;
-  window.isProUser = true;
-  window.isEnterpriseUser = plan === 'enterprise';
-
-  var user = _pendingAuthUser || _adminSBUser;
-
-  if (!user) {
-    // Edge case: no user object — try getting from Supabase session
-    if (_sb) {
-      _sb.auth.getUser().then(function(r) {
-        if (r.data && r.data.user) {
-          _adminSBUser = r.data.user;
-          onSubscriptionPaymentSuccess(response, plan); // retry with user
-        } else {
-          toast('✅ Payment done! Please login again to activate.', 'ok');
-          closePayLanding(); openCloudModal();
-        }
-      });
-    } else {
-      toast('✅ Payment saved! Open Cloud → Login to activate.', 'ok');
-      closePayLanding(); openCloudModal();
-    }
-    return;
-  }
-
-  // Carry over unused time: if the user still has an active subscription
-  // (e.g. 15 days left on Pro) and buys/upgrades a plan, the new 30 days
-  // are added on TOP of the remaining time rather than overwriting it.
-  // Someone with 15 days left who upgrades to Enterprise ends up with
-  // 15 + 30 = 45 days of Enterprise, not just a flat 30.
-  var _finish = function(subEnd) {
-    safeLS.setItem('cm_sub_end', String(subEnd)); // display only — real auth is from DB
-    if (_sb) {
-      // Write to DB — retried 3 times to ensure it lands
-      var _writeSubscription = function(tries, includePlan) {
-        var payload = {
-          id: user.id,
-          email: user.email || safeLS.getItem(ADMIN_EMAIL_KEY) || '',
-          subscribed: true,
-          subscribed_at: Date.now(),
-          subscription_end_date: subEnd,
-          last_payment_id: payId
-        };
-        if (includePlan) payload.plan = plan;
-        _sb.from('admins').upsert(payload, { onConflict: 'id' }).then(function(r) {
-          if (r.error) {
-            // If the DB doesn't have a `plan` column yet (older schema), retry
-            // WITHOUT it so the core subscription (subscribed/dates/payment id)
-            // still lands — a missing optional column must never drop the
-            // whole payment confirmation and leave someone who paid locked out.
-            if (includePlan) { _writeSubscription(tries, false); return; }
-            if (tries > 0) setTimeout(function(){ _writeSubscription(tries-1, false); }, 2000);
-          }
-        });
-        _sb.from('payments').insert({
-          admin_id: user.id, razorpay_id: payId, amount: p.amount, purpose: 'sanjineer_cloud_subscription_' + plan
-        }).catch(function(){});
-      };
-      _writeSubscription(3, true);
-    }
-    _finishSubscriptionSuccess(user, plan);
-  };
-
-  if (_sb) {
-    _sb.from('admins').select('subscription_end_date,subscribed').eq('id', user.id).maybeSingle().then(function(r) {
-      var existingEnd = (r && !r.error && r.data && r.data.subscribed) ? (r.data.subscription_end_date || 0) : 0;
-      var base = existingEnd > Date.now() ? existingEnd : Date.now();
-      _finish(base + THIRTY_DAYS);
-    }).catch(function() { _finish(Date.now() + THIRTY_DAYS); });
-  } else {
-    _finish(Date.now() + THIRTY_DAYS);
-  }
-}
-
-function _finishSubscriptionSuccess(user, plan) {
-  var _email = _pendingAuthEmail || (user && user.email) || safeLS.getItem(ADMIN_EMAIL_KEY) || '';
-  _pendingAuthApp = null; _pendingAuthUser = null; _pendingAuthEmail = null;
-  closePayLanding();
-  onAdminLoginSuccess(_email, user, null);
-  toast('✅ Subscription activated! Welcome to Sanjineer Cloud.', 'ok');
-}
-
-// ── Patch boot to also check viewer login mode ──
+// ── Patch boot to also restore an admin session ──
 (function() {
   var _origBoot = window.boot;
   if (_origBoot) {
     window.boot = function() {
       _origBoot.apply(this, arguments);
       restoreAdminSession();
-      checkViewerLoginMode();
     };
   } else {
     document.addEventListener('DOMContentLoaded', function() {
       restoreAdminSession();
-      checkViewerLoginMode();
     });
   }
 })();
