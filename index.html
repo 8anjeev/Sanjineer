@@ -1894,7 +1894,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           // already exists for this cloud project, only creates one if
           // genuinely missing — never duplicates window.projects.
           var localId = (typeof window._resolveLocalShellForCloudProject === 'function')
-            ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name)
+            ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name, company.company_name)
             : null;
           if (localId && p.project_id === storedProject) restoredId = localId;
         });
@@ -17819,16 +17819,20 @@ function _adminCloudPull(silent, doneCb) {
 }
 
 var _adminRealtimeSiteId = null; // which project's siteId the current channel is scoped to
+var _adminRealtimeRetryTimer = null;
+var _adminRealtimeRetryAttempt = 0;
 function _startAdminRealtime() {
   if (!_sb || !_adminSBUser) return;
   var siteId = getSiteId();
   if (!siteId) return;
   if (_adminRealtimeChannel && _adminRealtimeSiteId === siteId) return; // already subscribed to this project
+  if (_adminRealtimeRetryTimer) { clearTimeout(_adminRealtimeRetryTimer); _adminRealtimeRetryTimer = null; }
   if (_adminRealtimeChannel) {
     try { _sb.removeChannel(_adminRealtimeChannel); } catch(e) {}
     _adminRealtimeChannel = null;
   }
   _adminRealtimeSiteId = siteId;
+  _adminRealtimeRetryAttempt = 0;
   // Resolve the real project_id first — the subscription filter needs the
   // actual UUID, not the legacy siteId, since it's now watching
   // project_backups (see pushBlob/pullBlob) instead of cloud_backups.
@@ -17863,6 +17867,29 @@ function _startAdminRealtime() {
         .subscribe(function(status) {
           var dot = document.getElementById('cloud-sync-dot');
           if (dot) dot.style.background = (status === 'SUBSCRIBED') ? '#22c55e' : '#fbbf24';
+          // BUGFIX: a dropped realtime connection (mobile tab backgrounded,
+          // brief signal loss on site, server-side reset) used to just sit
+          // there — nothing ever re-subscribed it until the person happened
+          // to switch projects. That silently demoted this device to the
+          // 10s poll (or, if the drop coincided with the poll also being
+          // gated shut, to nothing at all) with no visible sign anything
+          // was wrong. Retry with short backoff on any non-SUBSCRIBED
+          // terminal status, capped so a genuinely offline device doesn't
+          // spin forever.
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            if (_adminRealtimeChannel) { try { _sb.removeChannel(_adminRealtimeChannel); } catch(e) {} _adminRealtimeChannel = null; }
+            if (_adminRealtimeRetryAttempt < 8) {
+              _adminRealtimeRetryAttempt++;
+              var delay = Math.min(1000 * Math.pow(1.6, _adminRealtimeRetryAttempt), 15000);
+              if (_adminRealtimeRetryTimer) clearTimeout(_adminRealtimeRetryTimer);
+              _adminRealtimeRetryTimer = setTimeout(function() {
+                _adminRealtimeRetryTimer = null;
+                if (_adminRealtimeSiteId === siteId) _startAdminRealtime();
+              }, delay);
+            }
+          } else if (status === 'SUBSCRIBED') {
+            _adminRealtimeRetryAttempt = 0;
+          }
         });
     } catch(e) {
       console.warn('Admin realtime subscription failed (ok in offline):', e);
@@ -17908,10 +17935,39 @@ function startAutoSync() {
       _adminCloudPull(true);
     });
   }
+
+  // BUGFIX: mobile browsers routinely throttle/suspend timers and drop
+  // websockets for a backgrounded tab (switching apps to take a call,
+  // snap a site photo, answer WhatsApp, etc. — exactly the normal
+  // workflow here). Neither the 10s poll nor the realtime socket can be
+  // trusted to have kept ticking while backgrounded, so the moment the
+  // tab becomes visible again, force an immediate pull and make sure
+  // realtime is actually still subscribed (re-subscribes if it silently
+  // died) rather than waiting up to another 10s for the next poll tick.
+  if (!window._sanjVisibilityHandlerAttached) {
+    window._sanjVisibilityHandlerAttached = true;
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState !== 'visible') return;
+      if (!_syncGateOpen()) return;
+      _adminCloudPull(true);
+      if (typeof _startAdminRealtime === 'function') {
+        // Force a fresh subscribe check even if _adminRealtimeSiteId already
+        // matches — the channel object itself may be dead even though our
+        // bookkeeping still thinks it's live, so drop it first.
+        if (_adminRealtimeChannel) {
+          try {
+            _adminRealtimeChannel.state !== 'joined' && (function(){ try { _sb.removeChannel(_adminRealtimeChannel); } catch(e) {} _adminRealtimeChannel = null; _adminRealtimeSiteId = null; })();
+          } catch(e) {}
+        }
+        _startAdminRealtime();
+      }
+    });
+  }
 }
 
 // ── Debounced push: fires 3s after the last save, prevents rapid overwrites ──
 var _cloudPushTimer = null;
+var _cloudPushBurstStart = null;
 function _scheduleCloudPush() {
   // PHASE 4 REBUILD: engineer/collaborator sessions (joined via project code)
   // used to push through a separate device-token RPC channel
@@ -17939,15 +17995,28 @@ function _scheduleCloudPush() {
   }
   var _epoch = window._projectEpoch;
   if (_cloudPushTimer) clearTimeout(_cloudPushTimer);
+  // BUGFIX: this debounce used to reset on every single edit with no cap —
+  // someone actively filling in a form (several fields in quick succession)
+  // could keep pushing the actual write out well past 3s, and combined with
+  // the receiving device's 10s poll, other devices could go noticeably
+  // longer than the "syncs within ~10s" the app promises. Track when the
+  // current burst of edits started and force a flush once it's been
+  // running for 6s, regardless of whether edits are still coming in.
+  var _nowTs = Date.now();
+  if (!_cloudPushBurstStart) _cloudPushBurstStart = _nowTs;
+  var _burstMaxWaitMs = 6000;
+  var _dueToBurstCap = (_nowTs - _cloudPushBurstStart) >= _burstMaxWaitMs;
+  var _delay = _dueToBurstCap ? 0 : 3000;
   _cloudPushTimer = setTimeout(function() {
     _cloudPushTimer = null;
+    _cloudPushBurstStart = null;
     // If the project changed since this save was made, drop this push —
     // switchProject() already cancels the timer on switch, but this is a
     // second line of defense against any code path that schedules a push
     // without going through switchProject's cleanup.
     if (window._projectEpoch !== _epoch) { _sanjLog('scheduled push dropped (project switched)'); return; }
     cloudBackupNow(true); // silent push after user finishes editing
-  }, 3000); // 3s debounce — waits until user stops making changes
+  }, _delay); // 3s debounce (waits until user stops making changes), capped at 6s per burst
 }
 
 // -- Supabase credential viewer --
