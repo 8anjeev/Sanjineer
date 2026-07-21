@@ -1022,6 +1022,18 @@ self.addEventListener('fetch', function(e) {
     // Cancel any pending debounced cloud push — it was scheduled for the
     // OLD project's edits and must not fire against the new project.
     if (typeof _cloudPushTimer !== 'undefined' && _cloudPushTimer) { clearTimeout(_cloudPushTimer); _cloudPushTimer = null; }
+    // BUGFIX: _lastCloudTimestamp (in _adminCloudPull/_applyCloudData) is a
+    // single global "have we already applied this remote update" gate. It
+    // was never reset on project switch, so it carried over the OLD
+    // project's lastSync value. If the newly active project's own lastSync
+    // happens to be numerically lower (a completely normal situation —
+    // different projects have unrelated activity timelines), every pull
+    // for it was silently treated as "nothing new" and discarded forever,
+    // even though the cloud copy genuinely had data this device never saw
+    // (e.g. records another user/device added). Resetting via the exported
+    // helper (see its declaration near _lastCloudTimestamp) makes the very
+    // next pull for the new project always apply, like a first-ever open.
+    if (typeof window._resetCloudPullGate === 'function') { try { window._resetCloudPullGate(); } catch(e) {} }
 
     window.currentProjectId = projectId;
     try { localStorage.setItem('sanj_current_project', projectId); } catch(e) {}
@@ -3302,6 +3314,24 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     text-overflow: ellipsis;
   }
   #sidebar-profile-chip .spc-plan.spc-plan-warn { color: #fde68a; }
+  #sidebar-profile-chip .spc-logout-btn {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    background: rgba(239,68,68,0.28);
+    border: 1px solid rgba(252,165,165,0.45);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+  }
+  #sidebar-profile-chip .spc-logout-btn:hover { background: rgba(239,68,68,0.45); }
 
   /* ══════════════════════════════════════════
      2) INDEPENDENT PER-COLUMN SCROLLING
@@ -4374,6 +4404,7 @@ function _wsSubmitProForm() {
     if (r.error) { _wsShowProForm(); _wsSetErr(r.error.message); return; }
     var companyId = r.data;
     var row = { company_id: companyId, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: 'pro' };
+    if (typeof _wsMarkOwnedCompany === 'function') _wsMarkOwnedCompany(companyId);
     // Create the first project now too, so after payment confirms there's
     // already exactly one project and the person lands straight on it
     // instead of hitting an empty "create your first project" screen.
@@ -4393,6 +4424,7 @@ function _wsCreatePersonal(tier) {
   _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: tier }).then(function(r) {
     if (r.error) { _wsShowCreateWorkspace(); _wsSetErr(r.error.message); return; }
     var row = { company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier };
+    if (typeof _wsMarkOwnedCompany === 'function') _wsMarkOwnedCompany(r.data);
     _wsSelectCompany(row);
   }).catch(function(e) { _wsShowCreateWorkspace(); _wsSetErr(e.message); });
 }
@@ -4738,6 +4770,7 @@ function _wsCreateEnterprise() {
   _wsLoading('Creating your company…');
   _sb.rpc('create_enterprise_company', { p_company_name: name }).then(function(r) {
     if (r.error) { _wsShowEnterpriseForm(); _wsSetErr(r.error.message); return; }
+    if (typeof _wsMarkOwnedCompany === 'function') _wsMarkOwnedCompany(r.data);
     _wsLaunchPayment('enterprise', { company_id: r.data, company_name: name, is_personal_workspace: false, role_name: 'owner', plan_tier: 'enterprise' });
   }).catch(function(e) { _wsShowEnterpriseForm(); _wsSetErr(e.message); });
 }
@@ -4839,7 +4872,20 @@ function _wsSelectCompanyConfirmed(c) {
     var storedProjectId = safeLS.getItem(WS_PROJECT_KEY);
     var resume = storedProjectId && rows.find(function(p){ return p.project_id === storedProjectId; });
     if (resume) { _wsSelectProject(resume); return; }
-    _wsShowProjectList(rows);
+    // BUGFIX: no stored resume point (first-ever login landing on >1
+    // projects at once, or the last active one was deleted) used to fall
+    // back to a "choose a project" picker — auto-land on the first one
+    // instead, exactly like the single-project case above, so nobody has
+    // to make that choice manually. "First" = earliest created, using
+    // whichever creation-timestamp field the RPC actually returned; if
+    // none is present, fall back to the server's own row order.
+    var _firstRow = rows.slice().sort(function(a, b) {
+      var ta = Date.parse(a.created_at || a.project_created_at || a.createdAt || 0) || 0;
+      var tb = Date.parse(b.created_at || b.project_created_at || b.createdAt || 0) || 0;
+      return ta - tb;
+    })[0];
+    _wsSelectProject(_firstRow || rows[0]);
+    return;
   }).catch(function(e) { _wsShowError('Could not load projects', e.message); });
 }
 
@@ -4944,6 +4990,27 @@ function _blockIfReadOnlyData() {
 // object. roleName is whatever get_my_projects()/get_my_companies()
 // returned for the current context.
 function _applyPermState(roleName) {
+  // BUGFIX: get_my_projects() has been observed returning a project-level
+  // role_name that ISN'T literally 'owner' for the actual company owner
+  // (e.g. 'project_manager') — every permission check in this app keys
+  // off the exact string 'owner', so that mismatch silently demoted the
+  // real owner into the same restricted "joined member" mode as someone
+  // who redeemed a join code: _ENGINEER_MODE became true, which (a) hides
+  // the 👑 Owner Dashboard button, (b) swaps the owner's project dropdown
+  // (with 🔗 Share and ✏️ Rename) for the lightweight joined-only one that
+  // has neither — just a switch action and a company-name subtitle under
+  // every project (which is what actually made the company name look like
+  // it was showing up as a duplicate "project"). We already have an
+  // independent, reliable source of truth for company ownership — the
+  // COMPANY-level role_name from get_my_companies(), cached in WS_CROLE_KEY
+  // the moment login/reconcile establishes it (see _wsSelectCompanyConfirmed
+  // and _reconcileMembershipFromServer). Trust that over a possibly
+  // mislabeled per-project role. This never affects a genuine joined
+  // engineer/sales_admin — WS_CROLE_KEY is only ever 'owner' on a device
+  // that actually went through the owner login flow.
+  if (roleName !== 'owner' && typeof _ownsAnyCompany === 'function' && _ownsAnyCompany()) {
+    roleName = 'owner';
+  }
   return _permLoadForRole(roleName).then(function(keys) {
     window._permSet = new Set(keys);
     window._ENGINEER_READONLY = (roleName !== 'owner') && !hasPerm('files.manage');
@@ -6415,6 +6482,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <span class="spc-name" id="sidebar-user-name">Guest User</span>
       <span class="spc-plan" id="sidebar-plan-status">Free Plan</span>
     </div>
+    <button class="spc-logout-btn" title="Log out" onclick="event.stopPropagation();if(confirm('Log out of this device? You will need to log in again with OTP.'))doAdminLogout();">⎋</button>
   </div>
   <div class="flex overflow-x-auto" style="scrollbar-width:none;overflow-y:hidden;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;">
     <button class="tab-btn text-white/70" data-tab="dashboard" onclick="switchTab('dashboard')"><span class="tab-btn-ico">📊</span><span class="tab-btn-label">Dashboard</span></button>
@@ -8226,6 +8294,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
 
       <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Profile</button>
+      <button onclick="if(confirm('Log out of this device? You will need to log in again with OTP.')) doAdminLogout();" style="width:100%;padding:8px 0;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;margin-top:6px">🚪 Log Out</button>
     </div>
   </div>
 </div>
@@ -13604,7 +13673,7 @@ return '<div style="background:white;border-radius:16px;padding:14px;box-shadow:
 +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
 +'<div style="display:flex;align-items:center;gap:8px">'
 +'<div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px;box-shadow:0 4px 12px rgba(99,102,241,0.38)">'+(c.contractor_name&&c.contractor_name.length?c.contractor_name[0].toUpperCase():'?')+'</div>'
-+'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+c.contractor_name+'</p>'
++'<div><p style="font-weight:700;color:#1f2937;font-size:13px">'+_esc(c.contractor_name)+'</p>'
 +'<p style="font-size:10px;color:#6b7280">'+(c.contractor_type||'Team')+'  |  Bal: <span style="font-weight:700;color:'+(bal>=0?'#059669':'#dc2626')+'">'+fc(bal)+'</span></p></div></div>'
 +'<div style="display:flex;gap:6px">'
 +'<button onclick="openCTModal(\''+c.__id+'\')" style="padding:0 12px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 3px 8px rgba(99,102,241,0.32)">+Advance</button>'
@@ -13631,17 +13700,17 @@ function changeViewMonth(d){ VM=new Date(VM.getFullYear(),VM.getMonth()+d,1); vi
 // ============================================================
 function updateDropdowns(){
 var at=document.getElementById('as-tool');
-if(at) at.innerHTML='<option value="">Select Tool</option>'+AD.filter(function(d){ return d.type==='tool'; }).map(function(t){ return '<option value="'+t.__id+'">'+t.tool_name+'</option>'; }).join('');
+if(at) at.innerHTML='<option value="">Select Tool</option>'+AD.filter(function(d){ return d.type==='tool'; }).map(function(t){ return '<option value="'+t.__id+'">'+_esc(t.tool_name)+'</option>'; }).join('');
 var aw=document.getElementById('as-worker');
-if(aw) aw.innerHTML='<option value="">Select Worker</option>'+AD.filter(function(d){ return d.type==='worker'&&d.active!==false; }).map(function(w){ return '<option value="'+w.__id+'">'+w.name+' ('+w.category+')</option>'; }).join('');
+if(aw) aw.innerHTML='<option value="">Select Worker</option>'+AD.filter(function(d){ return d.type==='worker'&&d.active!==false; }).map(function(w){ return '<option value="'+w.__id+'">'+_esc(w.name)+' ('+_esc(w.category)+')</option>'; }).join('');
 var wt=document.getElementById('w-team');
-if(wt) wt.innerHTML='<option value="">Select Team</option>'+AD.filter(function(d){ return d.type==='contractor'; }).map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join('');
+if(wt) wt.innerHTML='<option value="">Select Team</option>'+AD.filter(function(d){ return d.type==='contractor'; }).map(function(t){ return '<option value="'+_esc(t.contractor_name)+'">'+_esc(t.contractor_name)+'</option>'; }).join('');
 // Attendance print worker dropdown — show all (active + inactive) for record access
 var apw=document.getElementById('att-print-worker');
-if(apw){ var workers=AD.filter(function(d){ return d.type==='worker'; }); apw.innerHTML='<option value="">– Select Worker –</option>'+workers.map(function(w){ return '<option value="'+w.__id+'">'+w.name+' — '+w.category+(w.team_name?' ('+w.team_name+')':'')+(w.active===false?' [Inactive]':'')+'</option>'; }).join(''); }
+if(apw){ var workers=AD.filter(function(d){ return d.type==='worker'; }); apw.innerHTML='<option value="">– Select Worker –</option>'+workers.map(function(w){ return '<option value="'+w.__id+'">'+_esc(w.name)+' — '+_esc(w.category)+(w.team_name?' ('+_esc(w.team_name)+')':'')+(w.active===false?' [Inactive]':'')+'</option>'; }).join(''); }
 // Teams print filter dropdown
 var tpf=document.getElementById('teams-print-filter');
-if(tpf){ var teams=AD.filter(function(d){ return d.type==='contractor'; }); tpf.innerHTML='<option value="all">All Teams</option>'+teams.map(function(t){ return '<option value="'+t.contractor_name+'">'+t.contractor_name+'</option>'; }).join(''); }
+if(tpf){ var teams=AD.filter(function(d){ return d.type==='contractor'; }); tpf.innerHTML='<option value="all">All Teams</option>'+teams.map(function(t){ return '<option value="'+_esc(t.contractor_name)+'">'+_esc(t.contractor_name)+'</option>'; }).join(''); }
 }
 function getLowStock(){ return lmat().filter(function(i){ return i.minQty>0&&getbal(i)<=i.minQty; }); }
 function renderDashboard(){
@@ -13704,7 +13773,7 @@ if(sBar)sBar.style.width=msPct+'%';if(sPct)sPct.textContent=msPct+'%';
 // Live clock
 _updateDashClock();
 var low=getLowStock(), lsDiv=document.getElementById('dash-low-stock');
-if (low.length) { lsDiv.classList.remove('hidden'); document.getElementById('dash-low-list').innerHTML=low.map(function(i){ return '<span style="background:rgba(0,0,0,0.2);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;white-space:nowrap">'+i.name+' <span style="color:#fde68a">'+getbal(i)+' '+i.unit+'</span></span>'; }).join(''); }
+if (low.length) { lsDiv.classList.remove('hidden'); document.getElementById('dash-low-list').innerHTML=low.map(function(i){ return '<span style="background:rgba(0,0,0,0.2);border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;white-space:nowrap">'+_esc(i.name)+' <span style="color:#fde68a">'+getbal(i)+' '+_esc(i.unit)+'</span></span>'; }).join(''); }
 else lsDiv.classList.add('hidden');
 var ctrs=AD.filter(function(d){ return d.type==='contractor'; });
 var td=document.getElementById('team-details');
@@ -17676,6 +17745,14 @@ var _lastCloudTimestamp = 0;  // track remote lastSync for the admin's own activ
 // Each joined project now gets its own independent gate, keyed by pid.
 var _lastCloudTimestampByScope = {};
 
+// Exported so switchProject() (defined in a different <script> block, and
+// therefore not guaranteed to share this exact closure) can reset these
+// gates safely — see the call site in switchProject for why this matters.
+window._resetCloudPullGate = function() {
+  _lastCloudTimestamp = 0;
+  _lastCloudTimestampByScope = {};
+};
+
 function _applyCloudData(d, silent, scopeKey, visible) {
   if (!d) return;
   // visible: is the project this data belongs to the one currently on
@@ -20961,8 +21038,8 @@ function placeSig(targetId, sigIdx) {
   if (!sig) return;
   var wrapper = document.createElement('div');
   wrapper.style.cssText = 'display:inline-block;cursor:move;user-select:none;';
-  wrapper.innerHTML = '<img src="'+sig.img+'" style="max-width:120px;height:40px;object-fit:contain" title="'+sig.name+'" />'
-    +'<div style="font-size:9px;color:#374151;font-weight:700;text-align:center">'+sig.name+'</div>';
+  wrapper.innerHTML = '<img src="'+sig.img+'" style="max-width:120px;height:40px;object-fit:contain" title="'+_esc(sig.name)+'" />'
+    +'<div style="font-size:9px;color:#374151;font-weight:700;text-align:center">'+_esc(sig.name)+'</div>';
   target.appendChild(wrapper);
   // Make draggable for repositioning
   wrapper.style.position = 'relative';
@@ -23264,9 +23341,28 @@ function _ownsAnyCompany() {
   try {
     if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner') return true;
     if (typeof ADMIN_ROLE_KEY !== 'undefined' && safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') return true;
+    // BUGFIX (owner demoted right after signup): WS_CROLE_KEY above is
+    // itself populated FROM a server RPC (get_my_companies/get_my_projects)
+    // — if that RPC is queried again immediately after this device just
+    // created the company (bootstrap_personal_workspace /
+    // create_enterprise_company), a DB replication race can make it come
+    // back with the wrong/empty role for the very account that just
+    // created it, so WS_CROLE_KEY can ALSO be wrong at that exact moment.
+    // _wsMarkOwnedCompany() below is set locally, at the instant of
+    // creation, by the same device that made the RPC call that created
+    // the company — no server round-trip involved, so it can't race.
+    if (window._wsCompanyId && safeLS.getItem('sanj_owned_company_' + window._wsCompanyId) === '1') return true;
   } catch(e) {}
   return false;
 }
+// Call the moment THIS device creates a company as its owner (free/pro
+// personal workspace or enterprise company) — persists proof of ownership
+// that survives reloads and can't be undone by a stale/racy role_name
+// read from the server later. See _ownsAnyCompany() above.
+function _wsMarkOwnedCompany(companyId) {
+  try { if (companyId) safeLS.setItem('sanj_owned_company_' + companyId, '1'); } catch(e) {}
+}
+window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
 window._ownsAnyCompany = _ownsAnyCompany;
 
 window.doJoinProject = function() {
