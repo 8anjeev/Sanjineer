@@ -4218,7 +4218,42 @@ function _wsStart(user, email, onDone) {
     console.log('[_wsStart] get_my_companies for', email, '→', r.error ? ('ERROR: ' + r.error.message) : (r.data || []));
     if (r.error) { _wsShowError('Could not load your workspaces', r.error.message); return; }
     var rows = r.data || [];
-    if (rows.length === 0) { _wsShowCreateWorkspace(); return; }
+    if (rows.length === 0) {
+      // BUGFIX (engineers losing their joined project on every re-login):
+      // get_my_companies() returning 0 rows here doesn't necessarily mean
+      // this account has never joined anything — if it only enumerates
+      // companies this user OWNS (not ones they were merely added to as a
+      // member), a joined engineer/sales_admin would hit this branch on
+      // EVERY login and be sent back to "Get Started", forcing them to
+      // re-enter their project code every single time instead of landing
+      // straight back on the project they already joined. Before giving up
+      // and showing that screen, check whether THIS device already
+      // remembers a specific company+project from a previous successful
+      // join, and try resuming it directly via get_my_projects (which is
+      // known to correctly return membership rows) rather than trusting
+      // get_my_companies' (possibly owner-only) view of the world.
+      var storedCompanyId = safeLS.getItem(WS_COMPANY_KEY);
+      var storedProjectId = safeLS.getItem(WS_PROJECT_KEY);
+      if (storedCompanyId && storedProjectId) {
+        _sb.rpc('get_my_projects', { p_company_id: storedCompanyId }).then(function(pr) {
+          var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === storedProjectId; });
+          if (proj) {
+            // Still a real, active membership — resume it directly instead
+            // of making them re-enter the join code.
+            window._wsCompanyId = storedCompanyId;
+            safeLS.setItem(WS_CROLE_KEY, proj.role_name || safeLS.getItem(WS_CROLE_KEY) || '');
+            _wsSelectProject(proj);
+          } else {
+            // Genuinely no longer a member (removed, project deleted, or
+            // this really is a first-time account) — fall back normally.
+            _wsShowCreateWorkspace();
+          }
+        }).catch(function() { _wsShowCreateWorkspace(); });
+        return;
+      }
+      _wsShowCreateWorkspace();
+      return;
+    }
     // Never show a "choose a workspace" picker — a returning or existing
     // user should land straight past this into their project/dashboard.
     // Prefer whichever company they used last (if still present), else
