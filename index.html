@@ -1714,6 +1714,17 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     if (typeof _updateSalesNavTabVisibility === 'function') { try { _updateSalesNavTabVisibility(); } catch(e2) {} }
     if (typeof _settRefreshUpgradeBtn === 'function') { try { _settRefreshUpgradeBtn(); } catch(e3) {} }
     if (typeof _settRefreshLoginBtn === 'function') { try { _settRefreshLoginBtn(); } catch(e4) {} }
+    // BUGFIX: the header "👑 Owner Dashboard" button (updateOwnerBtn) gates on
+    // window.userPlan being 'pro'/'enterprise' — but nothing ever re-ran that
+    // check after THIS function (the only place that actually sets userPlan)
+    // finished. updateCloudBtn()/updateOwnerBtn() only ever got called earlier
+    // in the same login/boot sequence, before userPlan was known yet — so on
+    // a silent session restore, a project switch, or right after a Pro/
+    // Enterprise upgrade, the button stayed hidden even though the owner is
+    // fully paid. Refreshing it here, every time plan state is (re)applied,
+    // closes that gap for both Pro and Enterprise.
+    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e5) {} }
+    else if (typeof updateCloudBtn === 'function') { try { updateCloudBtn(); } catch(e5) {} }
     // Pull the shared company branding (logo/GST/address) whenever company
     // context is (re)established — same point plan_tier itself gets applied,
     // covering fresh login, project switch, and silent session restore.
@@ -16869,6 +16880,31 @@ function refreshCloudModalState() {
   var tabSwitcher = document.getElementById('cloud-tab-switcher');
   if (tabSwitcher) tabSwitcher.style.display = isFullyActive ? 'none' : 'flex';
 
+  // BUGFIX: an owner's account must map to exactly ONE company forever —
+  // doJoinProject() already refuses the redeem itself, but the "Join
+  // Project" tab was still sitting there in the tab strip for any owner
+  // whose subscription hasn't been marked "fully active" yet (e.g. Free
+  // plan, or the few seconds right after login before the subscription
+  // check resolves), inviting them to try something that's always going
+  // to be rejected. Hide the tab outright for anyone who already owns a
+  // company (Pro or Enterprise), whether or not onboarding has it hidden
+  // for its own separate reason — owners switch between their own
+  // projects via the project selector, not by redeeming a code.
+  var joinTabBtn = document.getElementById('ctab-join-btn');
+  if (joinTabBtn && !window._obOnboardingPending) {
+    var _hideJoinForOwner = (typeof _ownsAnyCompany === 'function') && _ownsAnyCompany();
+    joinTabBtn.style.display = _hideJoinForOwner ? 'none' : '';
+    // If Join happened to be the active tab (e.g. left open from a
+    // previous engineer/joined session on this device) and this is now
+    // an owner, fall back to the Admin tab instead of showing a dead end.
+    if (_hideJoinForOwner) {
+      var joinPanel = document.getElementById('ctab-join');
+      if (joinPanel && joinPanel.style.display === 'block' && typeof switchCloudTab === 'function') {
+        switchCloudTab('admin');
+      }
+    }
+  }
+
   if (isFullyActive) {
     var adminPanel = document.getElementById('ctab-admin');
     // If panel was overwritten by expired-screen, restore original structure
@@ -23215,7 +23251,41 @@ window._ENGINEER_READONLY = false;
 // exists.
 var _joinOtpEmail = '';
 
+// BUGFIX (see doJoinProject/​_wsSubmitJoin below): an owner's account must
+// map to exactly ONE company forever. This is the fast, local-only half of
+// that guard — checked immediately, before any network round trip, using
+// signals that are only ever set once a real owner session has been
+// confirmed (never for a brand-new engineer with no company of their own
+// yet). The authoritative check against the server (get_my_companies)
+// happens right before the actual redeem_join_code call, since local
+// storage can't be fully trusted — this just avoids a network round trip
+// for the common case and gives instant feedback.
+function _ownsAnyCompany() {
+  try {
+    if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner') return true;
+    if (typeof ADMIN_ROLE_KEY !== 'undefined' && safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') return true;
+  } catch(e) {}
+  return false;
+}
+window._ownsAnyCompany = _ownsAnyCompany;
+
 window.doJoinProject = function() {
+  // BUGFIX: an owner's account must map to exactly ONE company, forever —
+  // Join Project (redeem_join_code) was only ever designed for someone
+  // with NO company of their own (a fresh engineer). Nothing stopped an
+  // existing owner from redeeming a code too, which silently added a
+  // second, unrelated company's project into their own dashboard
+  // (labelled "Joined" alongside their real projects) and, worse, the
+  // post-join company-context resolution just took get_my_companies()[0]
+  // as "the" active company — sometimes clobbering the owner's own
+  // company name/branding with the one they joined. Owners work only
+  // within their own company; Join Project is for engineers/sales admins
+  // only, so block it outright before it ever reaches redeem_join_code.
+  if (_ownsAnyCompany()) {
+    var errEl0 = document.getElementById('join-code-err');
+    if (errEl0) { errEl0.textContent = '⚠️ You already own a company — Join Project is only for joining someone else\'s project as an engineer, not for account owners. Switch between your own projects using the project selector instead.'; errEl0.style.display = 'block'; }
+    return;
+  }
   var nameEl = document.getElementById('join-member-name');
   var codeEl = document.getElementById('join-code-input');
   var errEl  = document.getElementById('join-code-err');
@@ -23242,6 +23312,32 @@ window.doJoinProject = function() {
       if (errEl) { errEl.textContent = '📧 Verify your email below to finish joining — this is required so your uploads actually reach the cloud.'; errEl.style.display = 'block'; }
       return;
     }
+    // BACKSTOP: the local-flag check at the top of this function catches
+    // the common case instantly, but local storage can be stale or
+    // cleared — confirm against the server too before actually redeeming,
+    // since letting an owner slip through here is exactly the bug being
+    // fixed (see comment at top of this function).
+    _sb.rpc('get_my_companies').then(function(ownCheck) {
+      var ownedAlready = ((ownCheck && ownCheck.data) || []).some(function(c) { return c.role_name === 'owner'; });
+      if (ownedAlready) {
+        if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+        if (errEl) { errEl.textContent = '⚠️ You already own a company — Join Project is only for joining someone else\'s project as an engineer, not for account owners.'; errEl.style.display = 'block'; }
+        return;
+      }
+      _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session);
+    }).catch(function() {
+      // Couldn't confirm either way — fail safe by still attempting the
+      // join rather than blocking a legitimate engineer over a network
+      // hiccup; redeem_join_code's own server-side checks are the real
+      // backstop if this client-side guard couldn't run.
+      _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session);
+    });
+  }).catch(function() {
+    if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
+    if (errEl) { errEl.textContent = '⚠️ Could not check sign-in status — try again'; errEl.style.display = 'block'; }
+  });
+};
+function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
     // PHASE 2: single-arg redeem_join_code — auth.uid()-based, writes to
     // join_codes/memberships/project_team_members (not the legacy
     // device-token project_members table). Returns the project_id the
