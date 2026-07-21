@@ -1222,11 +1222,32 @@ self.addEventListener('fetch', function(e) {
       // a local shell which no longer exists.
       danglingIds.forEach(function(dId){ delete map[dId]; mapDirty = true; });
       if (mapDirty) { try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {} }
+      // BUGFIX (owner's own other projects showing as "🔗 Joined" +
+      // read-only in the switcher/QDPR): every project this function ever
+      // creates a shell for gets stamped joined:true unconditionally below
+      // — correct for an engineer joining someone else's project, wrong
+      // for the OWNER's own additional projects being pulled in by
+      // cross-device sync (_reconcileMembershipFromServer calls this for
+      // EVERY project in the company, including ones the caller owns).
+      // Self-heal here too, not just on creation, so an already-mislabeled
+      // shell from before this fix corrects itself on the next sync
+      // instead of staying wrong until the local project list is wiped.
+      if (roleName) {
+        var shouldBeJoined = (roleName !== 'owner');
+        var shellObj = window.projects.find(function(p){ return p.id === existingLocalId; });
+        if (shellObj && shellObj.joined !== shouldBeJoined) {
+          shellObj.joined = shouldBeJoined;
+          _saveProjects();
+        }
+      }
       return existingLocalId;
     }
 
     var id = _genProjectId();
-    var proj = { id: id, name: projectName || 'Joined Project', created_at: Date.now(), joined: true };
+    // BUGFIX: only mark this shell "joined" (read-only badge, no
+    // rename/delete) when the role for it genuinely isn't 'owner' — see
+    // the matching note in the existingLocalId branch above for why.
+    var proj = { id: id, name: projectName || 'Joined Project', created_at: Date.now(), joined: (roleName !== 'owner') };
     window.projects.push(proj);
     _saveProjects();
 
@@ -23569,11 +23590,7 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
         if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
         if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
       });
-  }).catch(function() {
-    if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
-    if (errEl) { errEl.textContent = '⚠️ Could not check sign-in status — try again'; errEl.style.display = 'block'; }
-  });
-};
+}
 
 // FIX: this whole module runs inside an IIFE (see comment above at
 // _engLoadMemberships), so a plain `function joinSendOtp(){...}` declaration
