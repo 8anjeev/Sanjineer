@@ -5188,6 +5188,36 @@ function _wsSelectProject(p) {
   safeLS.setItem(WS_PNAME_KEY, p.project_name || '');
   safeLS.setItem(WS_PROLE_KEY, p.role_name || '');
   try { localStorage.setItem('sanj_cloud_choice', 'cloud'); } catch(e) {}
+  // BUGFIX: this function used to only set tracking variables and leave it
+  // to a LATER background reconcile (_reconcileMembershipFromServer) to
+  // actually build the local project entry. That reconcile re-fetches
+  // role_name from the server, which can race right after this exact
+  // project was just created (the same class of race documented
+  // elsewhere in this file) — the RPC can briefly return a role that
+  // isn't literally 'owner' for the very account that just created it,
+  // causing the project to get mislabeled "joined"/read-only instead of
+  // fully owned, AND leaving window.currentProjectId unset in the
+  // meantime (nothing to point at until reconcile finishes), which is
+  // what caused "Backup failed: no project context" right after signup.
+  // Build the shell here instead, using the role we already know for
+  // certain client-side — _wsSelectProject is only ever reached through
+  // the owner's own workspace flow, so if the caller didn't say
+  // otherwise, 'owner' is not a guess, it's a known fact.
+  if (typeof window._resolveLocalShellForCloudProject === 'function' && window._wsCompanyId) {
+    var _localId = window._resolveLocalShellForCloudProject(
+      p.project_id,
+      window._wsCompanyId,
+      p.project_name,
+      p.role_name || 'owner',
+      safeLS.getItem(WS_CNAME_KEY) || '',
+      p.project_address || ''
+    );
+    if (_localId) {
+      window.currentProjectId = _localId;
+      try { localStorage.setItem('sanj_current_project', _localId); } catch(e) {}
+      if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
+    }
+  }
   // Sync the name typed at login into the app's own per-project profile
   // (sprof → 'engineer' field) — only if that field is still empty, so we
   // never clobber a name someone already set via Settings.
@@ -12094,8 +12124,6 @@ function qdprReportCard(site, report){
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
     +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
-    +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
-    +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
     +(site.joined?('<button onclick="leaveProject(\''+site.__id+'\')" title="Leave Project" style="background:rgba(239,68,68,.25);border:1px solid rgba(252,165,165,.4);border-radius:10px;padding:8px;cursor:pointer;color:#fecaca;font-size:9px;font-weight:800;display:flex;align-items:center">🚪</button>'):'')
     +'</div></div></div>'
     +'<div style="padding:13px 14px">'
@@ -12124,7 +12152,7 @@ function qdprEmptyCard(site){
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
-    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'+'<button onclick="deleteQdprProject(\''+site.__id+'\')" title="Delete Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">🗑</button>'):(site.joined?('<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>'+'<button onclick="leaveProject(\''+site.__id+'\')" title="Leave Project" style="background:rgba(239,68,68,.25);border:1px solid rgba(252,165,165,.4);border-radius:8px;padding:5px 8px;cursor:pointer;color:#fecaca;font-size:9px;font-weight:800;display:flex;align-items:center">🚪 Leave</button>'):''))
+    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'):(site.joined?('<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>'+'<button onclick="leaveProject(\''+site.__id+'\')" title="Leave Project" style="background:rgba(239,68,68,.25);border:1px solid rgba(252,165,165,.4);border-radius:8px;padding:5px 8px;cursor:pointer;color:#fecaca;font-size:9px;font-weight:800;display:flex;align-items:center">🚪 Leave</button>'):''))
     +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
