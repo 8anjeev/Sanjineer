@@ -1215,7 +1215,7 @@ self.addEventListener('fetch', function(e) {
   // format — now including role, so the switcher can show read/write
   // badges and switchProject() can restore the right permission set
   // without a network round-trip every time.
-  function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName) {
+  function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName, projectAddress) {
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
@@ -1264,6 +1264,16 @@ self.addEventListener('fetch', function(e) {
           shellObj.joined = shouldBeJoined;
           _saveProjects();
         }
+        // BUGFIX (joined projects showing no address in QDPR/switcher):
+        // the join pipeline never carried the project's address through at
+        // all — only the name. Keep it in sync here too, so if the owner
+        // sets/changes the address after someone has already joined, it
+        // shows up on their device on the next sync rather than staying
+        // permanently blank.
+        if (shellObj && typeof projectAddress === 'string' && shellObj.address !== projectAddress) {
+          shellObj.address = projectAddress;
+          _saveProjects();
+        }
       }
       return existingLocalId;
     }
@@ -1272,7 +1282,7 @@ self.addEventListener('fetch', function(e) {
     // BUGFIX: only mark this shell "joined" (read-only badge, no
     // rename/delete) when the role for it genuinely isn't 'owner' — see
     // the matching note in the existingLocalId branch above for why.
-    var proj = { id: id, name: projectName || 'Joined Project', created_at: Date.now(), joined: (roleName !== 'owner') };
+    var proj = { id: id, name: projectName || 'Joined Project', address: projectAddress || '', created_at: Date.now(), joined: (roleName !== 'owner') };
     window.projects.push(proj);
     _saveProjects();
 
@@ -1337,27 +1347,10 @@ self.addEventListener('fetch', function(e) {
   }
   window._dedupJoinedProjectShells = _dedupJoinedProjectShells;
 
-  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName, roleName, companyName) {
-    var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName);
+  function _ensureLocalProjectForJoin(cloudProjectId, companyId, projectName, roleName, companyName, projectAddress) {
+    var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName, projectAddress);
     window.currentProjectId = id;
     try { localStorage.setItem('sanj_current_project', id); } catch(e) {}
-    // BUGFIX (same root cause as switchProject's _resetCloudPullGate call):
-    // _lastCloudTimestamp/_lastCloudTimestampByScope are a single
-    // "already applied this remote update" gate carried over from
-    // whatever project/session activity happened earlier on this device
-    // this session (an owner's own project, or a previously-joined
-    // project). Joining a NEW project activates a completely different
-    // project with its own unrelated lastSync timeline — if that
-    // project's cloud row happens to have an older lastSync than
-    // whatever this device already applied, _applyCloudData() silently
-    // discarded the newly-joined project's entire pull (report data,
-    // materials, expenses, profile/address — everything) and the app
-    // was left showing an empty/placeholder project even though the
-    // join itself succeeded. Resetting the gate here makes the very
-    // first pull for the newly joined project always apply, exactly
-    // like switching between two of the user's own projects already
-    // does.
-    if (typeof window._resetCloudPullGate === 'function') { try { window._resetCloudPullGate(); } catch(e) {} }
     _renderProjectDropdown();
     // BUGFIX: if the real project name wasn't available yet at join time
     // (e.g. get_my_projects raced ahead of the membership row becoming
@@ -1980,7 +1973,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           // already exists for this cloud project, only creates one if
           // genuinely missing — never duplicates window.projects.
           var localId = (typeof window._resolveLocalShellForCloudProject === 'function')
-            ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name, company.company_name)
+            ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name, company.company_name, p.project_address)
             : null;
           if (localId && p.project_id === storedProject) restoredId = localId;
         });
@@ -4407,19 +4400,19 @@ function _wsSubmitJoin() {
         safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
         if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
       }
-      if (!companyId) { _wsFinishJoin(projectId, null, name, null, null); return; }
+      if (!companyId) { _wsFinishJoin(projectId, null, name, null, null, null); return; }
       var companyName = companies.length ? companies[0].company_name : null;
       _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
         var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
-        _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null, companyName);
-      }).catch(function() { _wsFinishJoin(projectId, null, name, null, companyName); });
-    }).catch(function() { _wsFinishJoin(projectId, null, name, null, null); });
+        _wsFinishJoin(projectId, proj ? proj.role_name : null, name, proj ? proj.project_name : null, companyName, proj ? proj.project_address : null);
+      }).catch(function() { _wsFinishJoin(projectId, null, name, null, companyName, null); });
+    }).catch(function() { _wsFinishJoin(projectId, null, name, null, null, null); });
   }).catch(function(e) {
     if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
     _wsSetErr(/could not find the table|schema cache/i.test(e.message || '') ? 'App not fully set up yet — ask your admin to finish setup.' : '⚠️ ' + (e.message || 'Invalid code'));
   });
 }
-function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName) {
+function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName, projectAddress) {
   // Activates SanjCloud's write-mirroring for joined members — it gates on
   // isSignedIn(), which checks _adminSBUser. That was only ever set on
   // owner login, so joined engineers/sales_admins silently no-op'd even
@@ -4434,7 +4427,7 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
   // window.currentProjectId stays unset and every local read/write
   // (including SanjCloud's ensureContext) has nothing to scope to.
   if (typeof window._ensureLocalProjectForJoin === 'function') {
-    window._joinedLocalIdForCompanySync = window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName, roleName, companyName);
+    window._joinedLocalIdForCompanySync = window._ensureLocalProjectForJoin(projectId, window._wsCompanyId, projectName, roleName, companyName, projectAddress);
   }
   try {
     var existing = lprof() || {};
@@ -23643,12 +23636,12 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
           window._wsProjectId = projectId;
           safeLS.setItem(WS_PROJECT_KEY, projectId);
           if (session && session.user) _adminSBUser = session.user;
-          var finish = function(roleName, projName) {
+          var finish = function(roleName, projName, projAddress) {
             safeLS.setItem(WS_PROLE_KEY, roleName || '');
             safeLS.setItem(WS_PNAME_KEY, projName || '');
             var _joinedLocalId = null;
             if (typeof window._ensureLocalProjectForJoin === 'function') {
-              _joinedLocalId = window._ensureLocalProjectForJoin(projectId, companyId, projName, roleName, companyName);
+              _joinedLocalId = window._ensureLocalProjectForJoin(projectId, companyId, projName, roleName, companyName, projAddress);
             }
             // FIX: joined members never got the company name synced into
             // sglobal() — only the owner path did. Header/print stayed
@@ -23679,10 +23672,10 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
               }
             });
           };
-          if (!companyId) { finish(null, null); return; }
+          if (!companyId) { finish(null, null, null); return; }
           _sb.rpc('get_my_projects', { p_company_id: companyId }).then(function(pr) {
             var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
-            finish(proj ? proj.role_name : null, proj ? proj.project_name : null);
+            finish(proj ? proj.role_name : null, proj ? proj.project_name : null, proj ? proj.project_address : null);
           }).catch(function() { finish(null); });
         }).catch(function() {
           window._wsProjectId = projectId;
