@@ -22460,6 +22460,13 @@ window._revokeMember = function(memberRowId, projectId) {
 // of the app hidden (see window._enterSalesEngineerMode).
 window._regenerateSalesJoinCode = function(projectId) {
   if (!_sb || !_adminSBUser) return;
+  // Same ownership check as _salesMgrCodeClick — this function has no
+  // caller wired up in the UI today, but if it ever is, it must not rely
+  // solely on a hidden button.
+  if (typeof _isSalesRealOwner === 'function' && !_isSalesRealOwner()) {
+    toast('Only the owner can generate the Sales Manager join code', 'err');
+    return;
+  }
   if (!window.isEnterpriseUser) { if (typeof _showUpgradePopup==='function') _showUpgradePopup('Sales Manager'); return; }
   var body = document.getElementById('share-proj-body');
   if (body) body.innerHTML = '<p style="font-size:11px;color:rgba(255,255,255,0.4);text-align:center;padding:16px">Generating…</p>';
@@ -25401,6 +25408,18 @@ function _salesCodeErrMsg(e) {
   return '⚠️ ' + (msg || 'Could not generate code');
 }
 function _salesMgrCodeClick() {
+  // BUGFIX: this only ever relied on the button being hidden
+  // (display:none, set in _renderSalesMgrActions via _isSalesRealOwner())
+  // to keep non-owners from generating a Sales Admin join code. Hiding a
+  // button is a UI convenience, not a security boundary — anyone who
+  // called this function directly (e.g. from devtools) with the button
+  // hidden could still mint a working Sales Admin code for themselves.
+  // Check ownership here too, so the function itself refuses regardless
+  // of how it's invoked.
+  if (typeof _isSalesRealOwner === 'function' && !_isSalesRealOwner()) {
+    toast('Only the owner can generate the Sales Manager join code', 'err');
+    return;
+  }
   var btn = document.getElementById('sales-mgr-code-btn');
   var strip = document.getElementById('sales-code-strip');
   var stripText = document.getElementById('sales-code-strip-text');
