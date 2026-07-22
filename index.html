@@ -23590,7 +23590,7 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
         if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
         if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
       });
-}
+};
 
 // FIX: this whole module runs inside an IIFE (see comment above at
 // _engLoadMemberships), so a plain `function joinSendOtp(){...}` declaration
