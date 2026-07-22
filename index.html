@@ -1981,30 +1981,6 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           if (p.project_id === storedProject) restoredId = localId;
           if (!firstResolvedId) firstResolvedId = localId;
           if (!firstOwnedId && p.role_name === 'owner') firstOwnedId = localId;
-          // BUGFIX: only the live "enter join code" flow (_wsFinishJoin /
-          // the redeem_join_code handler) ever wrote the company name into
-          // this project's own scoped profile (the key lmergedProf()'s
-          // header lookup actually reads for a joined member). A silent
-          // restore on an already-joined device — reopening the app,
-          // a fresh browser session, another device — went through THIS
-          // reconcile path instead and skipped that write entirely, so the
-          // header depended completely on _loadCompanySettings()'s async
-          // fetch of company_settings/companies succeeding for a non-owner
-          // (which some RLS setups block). The project switcher still
-          // showed the right company name (it reads sanj_sb_project_map
-          // directly), so this looked specifically like "the header/print
-          // company name is missing after joining" while everything else
-          // looked fine. Write it here too, every reconcile, so it's never
-          // solely dependent on that one live fetch.
-          if (company.company_name && p.role_name !== 'owner') {
-            try {
-              var _rg = lglobal(localId) || {};
-              if (_rg.company !== company.company_name) {
-                _rg.company = company.company_name;
-                sglobal(_rg, localId);
-              }
-            } catch(e) {}
-          }
         });
         if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
         // Only auto-restore the active project if none is currently set —
@@ -9203,21 +9179,28 @@ function lmergedProf() {
   // the per-device copy (g) for Free/Pro personal workspaces, or before
   // the first server load completes.
   var c = (typeof window._companySettingsCache !== 'undefined' && window._companySettingsCache) || {};
+  // BUGFIX (company address vs project/site address getting mixed up):
+  // `p` here is lprof() — the CURRENT PROJECT's per-project cm_profile —
+  // and that exact same storage object is also where
+  // _qdprSyncAddressToProfile() writes a project's own SITE address (the
+  // construction site location entered in Add/Edit Project), so joined
+  // engineers can see it. Those are two entirely different addresses: a
+  // company has ONE office address shared by every project, while each
+  // project/site has its OWN, different location. p.address must never
+  // be used as a fallback for the company's letterhead address below —
+  // doing so caused whatever project's site address was last edited to
+  // "leak" into the Company Address field and onto every generated
+  // report/PDF header whenever the real company address (c.address /
+  // g.address) hadn't loaded yet or was left blank. Company address only
+  // ever comes from real company-level sources: the synced cloud copy
+  // (c) or this device's own company-level cache (g) — never the
+  // per-project profile (p).
   return {
     company:     c.company_name || g.company     || p.company     || '',
     gst:         c.gst          || g.gst         || p.gst         || '',
     logo:        c.logo_url     || g.logo        || p.logo        || null,
     engineer:    p.engineer    || '',
-    // BUGFIX: this used to check c.address (the ONE shared company-wide
-    // office address) FIRST — so the instant a company address was set,
-    // it silently overwrote every project's own distinct site address
-    // everywhere (header, invoices, drawing geo-stamps, PDFs). A company
-    // has one office address but can have many projects at many different
-    // site locations — each project's own p.address (kept in sync by
-    // _qdprSyncAddressToProfile et al) must win. Company address is only
-    // a fallback for a brand-new project that hasn't had its own site
-    // address entered yet, not an override for ones that already have one.
-    address:     p.address || c.address || g.address || '',
+    address:     c.address || g.address || '',
     headerColor: p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   };
 }
@@ -11927,7 +11910,12 @@ function _qdprSyncAddressToProfile(pid, address) {
   var prof = null;
   try { prof = JSON.parse(safeLS.getItem(key) || 'null'); } catch(e) { prof = null; }
   if (!prof || typeof prof !== 'object') prof = {};
-  prof.address = address;
+  // Stored as siteAddress (NOT "address") — "address" in this same object
+  // is reserved for the company/letterhead address that lmergedProf()
+  // reads (see the BUGFIX comment there). Using a distinct key means a
+  // project's own site address can never again be picked up as a
+  // fallback for the company's address on reports/PDFs.
+  prof.siteAddress = address;
   try { safeLS.setItem(key, JSON.stringify(prof)); } catch(e) {}
   if (pid === window.currentProjectId) {
     // This IS the active project — the normal debounced cloud push
@@ -18029,6 +18017,20 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   // pulls for OTHER joined projects from flickering the tab someone is
   // actually looking at (see _engApplyCloudDataToPid).
   if (visible === undefined) visible = true;
+  // BUGFIX (background sync blinking the whole screen every ~10s): the
+  // auto-sync poll calls this on a timer regardless of whether the cloud
+  // actually has anything new for THIS device to see — very often it's
+  // just this same device's own last push landing back with a newer
+  // lastSync stamp. Previously every one of those ticks still tore down
+  // and rebuilt the entire visible tab (renderDashboard + switchTab)
+  // wrapped in a fade, which reads as the whole interface blinking every
+  // few seconds instead of a quiet background sync. Snapshotting what's
+  // already on this device (in the exact shape the merge below produces)
+  // lets us compare before vs. after and skip the visual refresh
+  // entirely when nothing actually changed — storage/gates below still
+  // always run correctly either way, only the DOM refresh is skipped.
+  var _preMergeSnapshot = null;
+  try { if (visible && typeof _buildLocalPayload === 'function') _preMergeSnapshot = _buildLocalPayload(); } catch(e) {}
   var remoteTs = d.lastSync || 0;
   if (scopeKey) {
     var _lastForScope = _lastCloudTimestampByScope[scopeKey] || 0;
@@ -18112,6 +18114,23 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   if (mergedBgt) dMerged.budget = mergedBgt;
   _applyFullBackup(dMerged);
   applyProfile();
+
+  // Did this pull actually change anything the visible tab would show?
+  // Compare the merged result against the snapshot of what was already
+  // on this device (captured before the merge, above). Defaults to
+  // "changed" (true) whenever the comparison can't be done, so a real
+  // update is never accidentally suppressed — this only ever SKIPS a
+  // refresh when we're confident nothing visible actually moved.
+  var _dataChanged = true;
+  try {
+    if (_preMergeSnapshot) {
+      var _cmpKeys = ['db','machinery','mats','milestones','punchlist','dept','drawings','prof','global_prof','budget','settings','cm_all'];
+      _dataChanged = _cmpKeys.some(function(k) {
+        return JSON.stringify(_preMergeSnapshot[k] || null) !== JSON.stringify(dMerged[k] || null);
+      });
+    }
+  } catch(e) { _dataChanged = true; }
+
   var _doRerender = function() {
     try { renderDashboard(); } catch(e) {}
     // FIX: re-render the currently visible tab so changes appear instantly without tab-switch
@@ -18125,18 +18144,25 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   };
   // Smooth cross-fade instead of an instant hard swap (fixes the
   // "blink"/"data teleports" complaint when cloud data lands mid-view) —
-  // but only when this pull is actually for what's on screen right now.
-  // A background pull for a project the person isn't currently viewing
-  // has nothing to show, so skip the DOM entirely and let it stay a true
-  // background sync.
-  if (visible) {
+  // but only when this pull is actually for what's on screen right now,
+  // AND only when something actually changed. Background polling ticks
+  // every ~10s regardless of whether the cloud has anything new (often
+  // it's just this device's own last push echoing back with a newer
+  // timestamp) — without the _dataChanged guard, every one of those
+  // ticks still tore down and rebuilt the whole visible tab, which is
+  // what read as the interface "blinking" on a timer instead of syncing
+  // quietly in the background.
+  if (visible && _dataChanged) {
     if (typeof window._fadeRefresh === 'function') window._fadeRefresh(_doRerender); else _doRerender();
+  }
+  if (visible) {
     var el = document.getElementById('cloud-sync-time');
     var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
     if (el) el.textContent = 'Pulled: ' + now;
   }
-  if (!visible) {
-    // merged silently into storage; nothing else to do for this pull
+  if (!visible || !_dataChanged) {
+    // Either not on screen, or on screen but nothing actually changed —
+    // merged silently into storage either way; no toast/dot needed.
   } else if (!silent) {
     toast('🔄 Cloud data updated from another device!', 'ok');
   } else {
