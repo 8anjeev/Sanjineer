@@ -1981,6 +1981,30 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           if (p.project_id === storedProject) restoredId = localId;
           if (!firstResolvedId) firstResolvedId = localId;
           if (!firstOwnedId && p.role_name === 'owner') firstOwnedId = localId;
+          // BUGFIX: only the live "enter join code" flow (_wsFinishJoin /
+          // the redeem_join_code handler) ever wrote the company name into
+          // this project's own scoped profile (the key lmergedProf()'s
+          // header lookup actually reads for a joined member). A silent
+          // restore on an already-joined device — reopening the app,
+          // a fresh browser session, another device — went through THIS
+          // reconcile path instead and skipped that write entirely, so the
+          // header depended completely on _loadCompanySettings()'s async
+          // fetch of company_settings/companies succeeding for a non-owner
+          // (which some RLS setups block). The project switcher still
+          // showed the right company name (it reads sanj_sb_project_map
+          // directly), so this looked specifically like "the header/print
+          // company name is missing after joining" while everything else
+          // looked fine. Write it here too, every reconcile, so it's never
+          // solely dependent on that one live fetch.
+          if (company.company_name && p.role_name !== 'owner') {
+            try {
+              var _rg = lglobal(localId) || {};
+              if (_rg.company !== company.company_name) {
+                _rg.company = company.company_name;
+                sglobal(_rg, localId);
+              }
+            } catch(e) {}
+          }
         });
         if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
         // Only auto-restore the active project if none is currently set —
@@ -9184,7 +9208,16 @@ function lmergedProf() {
     gst:         c.gst          || g.gst         || p.gst         || '',
     logo:        c.logo_url     || g.logo        || p.logo        || null,
     engineer:    p.engineer    || '',
-    address:     c.address || p.address || g.address || '',
+    // BUGFIX: this used to check c.address (the ONE shared company-wide
+    // office address) FIRST — so the instant a company address was set,
+    // it silently overwrote every project's own distinct site address
+    // everywhere (header, invoices, drawing geo-stamps, PDFs). A company
+    // has one office address but can have many projects at many different
+    // site locations — each project's own p.address (kept in sync by
+    // _qdprSyncAddressToProfile et al) must win. Company address is only
+    // a fallback for a brand-new project that hasn't had its own site
+    // address entered yet, not an override for ones that already have one.
+    address:     p.address || c.address || g.address || '',
     headerColor: p.headerColor || 'linear-gradient(135deg,#4f46e5,#7c3aed,#ec4899)'
   };
 }
@@ -17334,22 +17367,52 @@ function _applyFullBackup(d, forceOverwrite) {
   // sd() here meant every pull silently queued another push 3s later,
   // which could race with a genuinely new local edit and needlessly
   // widen the window for the ID-collision bug described above near gid().
+  // BUGFIX: this used to call the s*() save wrappers (sm/smat/sdept/sprof/
+  // smach/sdrw/sbgt/sms/spl) for every field except db. Every one of those
+  // wrappers ends in _scheduleCloudPush() — so applying data just PULLED
+  // from the cloud immediately queued another PUSH of it 3s later, an
+  // "echo" that races the other device's own next pull/push. Most of them
+  // also open with `if (_blockIfReadOnlyData()) return;`, which silently
+  // no-ops the entire write for a viewer/read-only session — meaning a
+  // read-only join never actually received Materials/Machinery/Dept/
+  // Drawings/Budget/Milestones/Punchlist from the cloud at all, ever.
+  // db already got this direct-write treatment; every other store now
+  // gets the same fix — write straight to storage, no wrapper, no re-push,
+  // no read-only gate (pulling and applying cloud data is not a user edit
+  // and must never be blocked by a write permission check).
   if (d.db)         { try { safeLS.setItem(_pk(DB), JSON.stringify(d.db)); } catch(e) {} AD = ld(); }
-  if (d.meta)       sm(d.meta);
-  if (d.mats)       smat(d.mats);
-  if (d.dept)       sdept(d.dept);
-  if (d.prof)       sprof(d.prof);
+  if (d.meta)       { try { safeLS.setItem(_pk(META), JSON.stringify(d.meta)); } catch(e) {} }
+  if (d.mats)       { try { safeLS.setItem(_pk(MATS), JSON.stringify(d.mats)); } catch(e) {} }
+  if (d.dept)       { try { safeLS.setItem(_pk(DEPT), JSON.stringify(d.dept)); } catch(e) {} }
+  if (d.prof) {
+    try {
+      safeLS.setItem(_pk(PROF), JSON.stringify(d.prof));
+      // Preserve the per-field merge timestamps from the cloud payload
+      // instead of letting sprof() recompute them against "now" — that
+      // recompute step is what the field-level merge in _applyCloudData
+      // (_mergeFieldBagStore) already did correctly before this ran.
+      if (d.prof_fts) safeLS.setItem(_pk(PROF) + '_fts', JSON.stringify(d.prof_fts));
+    } catch(e) {}
+  }
   if (d.global_prof) {
     // Restore company profile (company, address, gst, logo) — scoped so a
     // joined project's company info never clobbers the device's own, or
     // another joined project's.
-    try { localStorage.setItem(_globalProfKey(), JSON.stringify(d.global_prof)); } catch(e) {}
+    try {
+      localStorage.setItem(_globalProfKey(), JSON.stringify(d.global_prof));
+      if (d.global_prof_fts) localStorage.setItem(_globalProfKey() + '_fts', JSON.stringify(d.global_prof_fts));
+    } catch(e) {}
   }
-  if (d.machinery)  smach(d.machinery);
-  if (d.drawings)   sdrw(d.drawings);
-  if (d.budget)     sbgt(d.budget);
-  if (d.milestones) sms(d.milestones);
-  if (d.punchlist)  spl(d.punchlist);
+  if (d.machinery)  { try { safeLS.setItem(_pk(MACH_KEY), JSON.stringify(d.machinery)); } catch(e) {} }
+  if (d.drawings)   { try { safeLS.setItem(_pk(DRW_KEY), JSON.stringify(d.drawings)); } catch(e) {} }
+  if (d.budget) {
+    try {
+      safeLS.setItem(_pk(BGT_KEY), JSON.stringify(d.budget));
+      if (d.budget_fts) safeLS.setItem(_pk(BGT_KEY) + '_fts', JSON.stringify(d.budget_fts));
+    } catch(e) {}
+  }
+  if (d.milestones) { try { safeLS.setItem(_pk(MS_KEY), JSON.stringify(d.milestones)); } catch(e) {} }
+  if (d.punchlist)  { try { safeLS.setItem(_pk(PL_KEY), JSON.stringify(d.punchlist)); } catch(e) {} }
   if (d.nid)        safeLS.setItem('cm_nid', String(d.nid));
   // All cm_ keys (BOQ schedule, BOQ today data per date, BOQ project info,
   //   visits, quotations, subcon bills, PO, suppliers, invoices, tools, rentals, etc.)
