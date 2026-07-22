@@ -982,6 +982,16 @@ self.addEventListener('fetch', function(e) {
       // debounced save, in case the owner switches to this project and
       // starts entering data before the RPC above resolved.
       if (ok && window.currentProjectId === id && typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch(e) {} }
+      // BUGFIX: this used to fail completely silently — the local project
+      // would sit there forever, never able to sync, with no indication
+      // to the owner of why (e.g. the server rejected it as a duplicate
+      // name once the DB-level uniqueness constraint is in place, or the
+      // device was offline at the wrong moment). Surface it clearly so
+      // they know to rename or retry rather than quietly losing data
+      // entered into a project that can never leave this one device.
+      if (!ok && typeof toast === 'function') {
+        toast('⚠️ "' + proj.name + '" couldn\'t be saved online — check your connection or try a different name, then reopen this project to retry', 'err');
+      }
     });
     return proj;
   }
@@ -11925,6 +11935,58 @@ function deleteQdprProject(pid) {
   renderQdprSites();
   toast('"' + proj.name + '" deleted', 'ok');
 }
+// Lets a joined engineer/sales_admin/etc. voluntarily remove THEIR OWN
+// access to a project they joined via code — previously there was no way
+// to do this at all (see the old comment that used to sit above
+// deleteQdprProject). Deletes their own project_team_members row
+// server-side (matched on project_id + their own user_id, not a row id,
+// since a joined member's device never tracked that row's PK — only the
+// OWNER's revoke-member UI does that, via a table only the owner can
+// query under RLS), then cleans up the local shell so it doesn't linger
+// or get re-created by the next sync.
+function leaveProject(pid) {
+  var proj = (window.projects || []).find(function(p) { return p.id === pid; });
+  if (!proj) { toast('Project not found', 'err'); return; }
+  if (!proj.joined) {
+    toast('You own this project — use Delete Project instead of Leave.', 'err');
+    return;
+  }
+  var typed = (typeof prompt === 'function') ? prompt('You are about to leave "' + proj.name + '" and lose access immediately — you\'ll need a new join code from the owner to rejoin.\n\nType the project name to confirm:') : null;
+  if (typed === null) return; // cancelled
+  if (typed.trim().toLowerCase() !== (proj.name || '').trim().toLowerCase()) {
+    toast('Name didn\'t match — you\'re still in this project', 'err');
+    return;
+  }
+  if (!_sb || !window._adminSBUser || !window._adminSBUser.id) { toast('⚠️ Not signed in', 'err'); return; }
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch (e) {}
+  var cloudProjectId = map[pid] && map[pid].projectId;
+  function _removeLocalShell() {
+    window.projects = (window.projects || []).filter(function(p) { return p.id !== pid; });
+    if (map[pid]) { delete map[pid]; try { localStorage.setItem('sanj_sb_project_map', JSON.stringify(map)); } catch (e) {} }
+    if (typeof _saveProjects === 'function') _saveProjects();
+    if (typeof _wipeProjectLocalStorage === 'function') _wipeProjectLocalStorage(pid);
+    if (window.currentProjectId === pid) {
+      if (window.projects.length) { if (typeof switchProject === 'function') switchProject(window.projects[0].id); }
+      else { window.currentProjectId = null; try { localStorage.removeItem('sanj_current_project'); } catch (e) {} }
+    }
+    if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    renderQdprSites();
+  }
+  if (!cloudProjectId) {
+    // No cloud link on record for this shell — nothing server-side to
+    // revoke, just drop it from this device.
+    _removeLocalShell();
+    toast('Removed from this device', 'ok');
+    return;
+  }
+  _sb.from('project_team_members').delete().eq('project_id', cloudProjectId).eq('user_id', window._adminSBUser.id).then(function(r) {
+    if (r.error) { toast('⚠️ ' + r.error.message, 'err'); return; }
+    _removeLocalShell();
+    toast('You left "' + proj.name + '"', 'ok');
+  }).catch(function(e) { toast('⚠️ ' + (e.message || 'Could not leave project'), 'err'); });
+}
+window.leaveProject = leaveProject;
 function delQdprReport(pid, reportId){
   askDel('Delete this daily progress report?', function(){
     var _rpt = qdprLoadProjAD(pid).find(function(d){ return d.__id===reportId; });
@@ -11977,6 +12039,7 @@ function qdprReportCard(site, report){
     +(site.canWrite!==false?('<button onclick="openQdprForm(\''+site.__id+'\',\''+report.__id+'\')" title="Edit" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">✏️</button>'):'')
     +'<button onclick="printQdprSite(\''+site.__id+'\')" title="Print" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🖨️</button>'
     +(site.canWrite!==false?('<button onclick="delQdprReport(\''+site.__id+'\',\''+report.__id+'\')" title="Delete Report" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:8px;cursor:pointer;color:white;display:flex">🗑</button>'):'')
+    +(site.joined?('<button onclick="leaveProject(\''+site.__id+'\')" title="Leave Project" style="background:rgba(239,68,68,.25);border:1px solid rgba(252,165,165,.4);border-radius:10px;padding:8px;cursor:pointer;color:#fecaca;font-size:9px;font-weight:800;display:flex;align-items:center">🚪</button>'):'')
     +'</div></div></div>'
     +'<div style="padding:13px 14px">'
     +((report.weather||report.siteNote)?('<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 12px;margin-bottom:13px;display:flex;gap:8px;align-items:flex-start"><span>'+_qdprWeatherEmoji(report.weather)+'</span><div style="font-size:12.5px"><span style="font-weight:700;color:#92400E">'+esc(report.weather||'')+'</span>'+(report.siteNote?('<span style="color:#78350F"> — '+esc(report.siteNote)+'</span>'):'')+'</div></div>'):'')
@@ -12004,7 +12067,7 @@ function qdprEmptyCard(site){
     +(site.address?'<div style="color:rgba(255,255,255,.72);font-size:11.5px;margin-top:1px">'+esc(site.address)+'</div>':'')
     +'</div></div>'
     +'<div style="display:flex;gap:5px;flex-shrink:0;margin-left:8px">'
-    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'+'<button onclick="deleteQdprProject(\''+site.__id+'\')" title="Delete Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">🗑</button>'):(site.joined?'<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>':''))
+    +(site.editable!==false?('<button onclick="openQdprProjectModal(\''+site.__id+'\')" title="Edit Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">✏️</button>'+'<button onclick="deleteQdprProject(\''+site.__id+'\')" title="Delete Project" style="background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:7px;cursor:pointer;color:white;display:flex">🗑</button>'):(site.joined?('<span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.8);background:rgba(255,255,255,.15);padding:5px 8px;border-radius:8px">🔗 Joined</span>'+'<button onclick="leaveProject(\''+site.__id+'\')" title="Leave Project" style="background:rgba(239,68,68,.25);border:1px solid rgba(252,165,165,.4);border-radius:8px;padding:5px 8px;cursor:pointer;color:#fecaca;font-size:9px;font-weight:800;display:flex;align-items:center">🚪 Leave</button>'):''))
     +'</div>'
     +'</div></div>'
     +'<div style="padding:16px 14px">'
