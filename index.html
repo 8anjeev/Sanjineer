@@ -1966,6 +1966,8 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
         var serverProjects = pr.data || [];
         var hadCurrent = !!window.currentProjectId;
         var restoredId = null;
+        var firstResolvedId = null;
+        var firstOwnedId = null;
         var storedProject = (typeof WS_PROJECT_KEY !== 'undefined') ? safeLS.getItem(WS_PROJECT_KEY) : null;
         serverProjects.forEach(function(p) {
           if (!p || !p.project_id) return;
@@ -1975,14 +1977,31 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           var localId = (typeof window._resolveLocalShellForCloudProject === 'function')
             ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name, company.company_name, p.project_address)
             : null;
-          if (localId && p.project_id === storedProject) restoredId = localId;
+          if (!localId) return;
+          if (p.project_id === storedProject) restoredId = localId;
+          if (!firstResolvedId) firstResolvedId = localId;
+          if (!firstOwnedId && p.role_name === 'owner') firstOwnedId = localId;
         });
         if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
         // Only auto-restore the active project if none is currently set —
         // never override a project the person is actively viewing.
-        if (!hadCurrent && restoredId) {
-          window.currentProjectId = restoredId;
-          try { localStorage.setItem('sanj_current_project', restoredId); } catch(e) {}
+        //
+        // BUGFIX: this used to ONLY restore when the exact previously-
+        // remembered project (WS_PROJECT_KEY) matched one of the projects
+        // just fetched. If that memory was empty (first-ever reconcile on
+        // this device) or stale (e.g. pointed at a project that was since
+        // renamed/removed/left), restoredId stayed null FOREVER — even
+        // though serverProjects clearly had valid projects in it — leaving
+        // the header permanently stuck on "Select Project" and every
+        // cloud operation failing with "no project context", for an
+        // otherwise completely normal, established owner. Fall back to a
+        // sensible default: prefer a project this person actually owns,
+        // else just the first one resolved, rather than picking nothing.
+        var pickId = restoredId || firstOwnedId || firstResolvedId;
+        if (!hadCurrent && pickId) {
+          window.currentProjectId = pickId;
+          try { localStorage.setItem('sanj_current_project', pickId); } catch(e) {}
+          if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
         }
       }).catch(function(e) { console.warn('[reconcile] get_my_projects error', e); });
     }).catch(function(e) { _reconcileInFlight = false; console.warn('[reconcile] get_my_companies error', e); });
