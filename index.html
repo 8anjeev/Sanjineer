@@ -966,6 +966,21 @@ self.addEventListener('fetch', function(e) {
     var id = _genProjectId();
     var proj = { id: id, name: trimmedName || ('Project ' + (window.projects.length + 1)), created_at: Date.now() };
     window.projects.push(proj);
+    // BUGFIX: previously this never touched currentProjectId at all. That's
+    // fine when you already have an active project and are just adding
+    // another — but if there was NO active project (e.g. right after
+    // deleting or leaving your last one), the app stayed stuck showing
+    // "Select Project" / every cloud operation failing with "no project
+    // context" even though a brand-new project now genuinely exists, until
+    // a full reload let _initProjects() self-heal it. Only auto-switch when
+    // nothing was already active, so this doesn't yank someone away from
+    // whatever project they were actively working in.
+    var hadNoActiveProject = !window.currentProjectId || !(window.projects.some(function(p) { return p.id === window.currentProjectId && p.id !== id; }));
+    if (hadNoActiveProject) {
+      window.currentProjectId = id;
+      try { localStorage.setItem('sanj_current_project', id); } catch (e) {}
+      if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown();
+    }
     _saveProjects();
     // BUGFIX: this used to only ever create a LOCAL shell — fine for the
     // very first offline-first bootstrap project, but for an already
@@ -1326,6 +1341,23 @@ self.addEventListener('fetch', function(e) {
     var id = _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName);
     window.currentProjectId = id;
     try { localStorage.setItem('sanj_current_project', id); } catch(e) {}
+    // BUGFIX (same root cause as switchProject's _resetCloudPullGate call):
+    // _lastCloudTimestamp/_lastCloudTimestampByScope are a single
+    // "already applied this remote update" gate carried over from
+    // whatever project/session activity happened earlier on this device
+    // this session (an owner's own project, or a previously-joined
+    // project). Joining a NEW project activates a completely different
+    // project with its own unrelated lastSync timeline — if that
+    // project's cloud row happens to have an older lastSync than
+    // whatever this device already applied, _applyCloudData() silently
+    // discarded the newly-joined project's entire pull (report data,
+    // materials, expenses, profile/address — everything) and the app
+    // was left showing an empty/placeholder project even though the
+    // join itself succeeded. Resetting the gate here makes the very
+    // first pull for the newly joined project always apply, exactly
+    // like switching between two of the user's own projects already
+    // does.
+    if (typeof window._resetCloudPullGate === 'function') { try { window._resetCloudPullGate(); } catch(e) {} }
     _renderProjectDropdown();
     // BUGFIX: if the real project name wasn't available yet at join time
     // (e.g. get_my_projects raced ahead of the membership row becoming
@@ -2040,19 +2072,32 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     // set up — producing duplicate companies/projects with the same name
     // that kept multiplying every time it ran again for a still-unmapped
     // local project.
-    function ensureContext(cb) {
-      if (!isSignedIn() || !window.currentProjectId) { cb(null); return; }
-      if (ctx.ready && ctx.legacyProjectId === window.currentProjectId) { cb(ctx); return; }
+    function ensureContext(cb, overrideLocalPid) {
+      // BUGFIX: this used to only ever resolve for window.currentProjectId —
+      // fine for the normal in-app save/pull flow, but wrong for anything
+      // invoked from a specific project's card in a list (e.g. tapping
+      // "Share" on a project that ISN'T the currently active one). Two
+      // separate bugs came from that: (1) if nothing was active at all
+      // (currentProjectId null), EVERY such action failed with "could not
+      // resolve cloud identity" regardless of which project was tapped;
+      // (2) more subtly, if a DIFFERENT project genuinely was active, the
+      // action would silently operate on THAT project's data while the
+      // person believed they were managing the one they tapped. Passing an
+      // explicit overrideLocalPid fixes both.
+      var targetPid = overrideLocalPid || window.currentProjectId;
+      if (!isSignedIn() || !targetPid) { cb(null); return; }
+      if (!overrideLocalPid && ctx.ready && ctx.legacyProjectId === targetPid) { cb(ctx); return; }
 
       var mapKey = 'sanj_sb_project_map';
       var map = {};
       try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
-      var legacyPid = window.currentProjectId;
+      var legacyPid = targetPid;
       var cached = map[legacyPid];
 
       if (cached && cached.companyId && cached.projectId) {
-        ctx = { companyId: cached.companyId, projectId: cached.projectId, legacyProjectId: legacyPid, ready: true, inFlight: false };
-        cb(ctx);
+        var resolved = { companyId: cached.companyId, projectId: cached.projectId, legacyProjectId: legacyPid, ready: true, inFlight: false };
+        if (!overrideLocalPid) ctx = resolved; // only cache as the global ctx when resolving the actual active project
+        cb(resolved);
         return;
       }
 
@@ -22053,9 +22098,9 @@ function _getRoleId(roleName, cb) {
     cb(r.data.id);
   }).catch(function(){ cb(null); });
 }
-function _resolveCloudCtx(cb) {
+function _resolveCloudCtx(cb, localPid) {
   if (typeof window.SanjCloud === 'undefined' || !window.SanjCloud.resolveContext) { cb(null); return; }
-  window.SanjCloud.resolveContext(cb);
+  window.SanjCloud.resolveContext(cb, localPid);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -22134,7 +22179,7 @@ function _renderShareProjBody(projectId) {
     }).catch(function(e) {
       body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
     });
-  });
+  }, projectId);
 }
 // BUGFIX (future-proofing): writes a project_team_members row for the
 // current owner so they exist in the same table joiners are recorded in —
@@ -22250,7 +22295,7 @@ window._regenerateJoinCode = function(projectId) {
           });
       });
     });
-  });
+  }, projectId);
 };
 
 window._setJoinCodeRole = function(projectId, oldRole) {
@@ -22267,7 +22312,7 @@ window._setJoinCodeRole = function(projectId, oldRole) {
           _renderShareProjBody(projectId);
         });
     });
-  });
+  }, projectId);
 };
 
 window._revokeMember = function(memberRowId, projectId) {
@@ -22311,7 +22356,7 @@ window._regenerateSalesJoinCode = function(projectId) {
           if (body) body.innerHTML = '<p style="font-size:11px;color:#fca5a5;text-align:center;padding:12px">' + _ownerMissingTableMsg(e) + '</p>';
         });
     });
-  });
+  }, projectId);
 };
 
 // NOTE: window._revokeMember is defined earlier (project_team_members-based,
