@@ -3806,15 +3806,18 @@ function _launchApp(){
       </div>
       <div>
         <p style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;color:#fff;margin:0;line-height:1;">Sanj<span style="background:linear-gradient(90deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">ineer</span></p>
-        <p style="font-size:10px;color:rgba(255,255,255,0.4);margin:2px 0 0;font-weight:400;">Construction Management</p>
+        <p ondblclick="obChooseLocal()" style="font-size:10px;color:rgba(255,255,255,0.4);margin:2px 0 0;font-weight:400;">Construction Management</p>
       </div>
     </div>
 
     <!-- ── CLOUD MODE: login / create — the only entry screen now. ── -->
     <div id="ob-cloud-section" style="display:block;width:100%;">
-      <!-- TEMP — testing only, remove before final launch. Hidden when
-           this screen is reopened from Settings (already inside the app). -->
-      <button id="ob-cloud-temp-offline" class="ob-ghost-btn ob-card ob-fx2" onclick="obChooseLocal()" style="width:100%;padding:9px 6px;background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.25);border-radius:11px;color:rgba(255,255,255,0.55);font-weight:700;font-size:11.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;">
+      <!-- Continue Offline is intentionally hidden now — same button,
+           same obChooseLocal() action, just no visible entry point. The
+           only way in is a double-click/double-tap on the small
+           "Construction Management" text just above, right under the
+           Sanjineer name. Nothing else on this screen changed. -->
+      <button id="ob-cloud-temp-offline" class="ob-ghost-btn ob-card ob-fx2" onclick="obChooseLocal()" style="display:none;width:100%;padding:9px 6px;background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.25);border-radius:11px;color:rgba(255,255,255,0.55);font-weight:700;font-size:11.5px;cursor:pointer;align-items:center;justify-content:center;gap:6px;margin-bottom:14px;">
         <span style="font-size:13px;">💾</span> Continue Offline <span style="opacity:.6;font-weight:500;">(testing only)</span>
       </button>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -4772,9 +4775,10 @@ function _settShowPlanManage() {
           '<p style="margin:0;font-size:10px;color:rgba(199,210,254,.75);">Account · Plan · Sync</p>' +
         '</div>' +
       '</div>' +
-      '<div style="' + _wsCardStyle + 'cursor:default;background:rgba(255,255,255,.05);"><b>' + _wsEsc(email) + '</b><br>' +
+      '<div style="' + _wsCardStyle + 'cursor:default;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:space-between;gap:10px;"><div style="min-width:0;"><b>' + _wsEsc(email) + '</b><br>' +
       '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + roleTag + '</span><br>' +
-      '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + validityText + '</span></div>';
+      '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + validityText + '</span></div>' +
+      '<button onclick="event.stopPropagation();if(confirm(\'Log out of this device? You will need to log in again with OTP.\'))doAdminLogout();" style="flex-shrink:0;padding:5px 11px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;">🚪 Logout</button></div>';
     // Joined members (not the owner) only ever see email + validity —
     // they don't own the company, so there's nothing for them to upgrade.
     if (isOwner && plan !== 'enterprise') {
@@ -5456,11 +5460,11 @@ function _wsSelectProject(p) {
       </div>
     </button>
 
-    <!-- Small Logout — sits directly under Login/Cloud, only shown while
-         signed in (toggled in _settRefreshLoginBtn). Deliberately compact
-         (not full-width like the old profile-modal button) since it's a
-         secondary action right next to the account row it affects. -->
-    <button class="sett-row" id="sett-logout-btn" onclick="event.stopPropagation();if(confirm('Log out of this device? You will need to log in again with OTP.'))doAdminLogout();" style="display:none;margin:-4px 0 8px 34px;padding:3px 10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:#fca5a5;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;">🚪 Logout</button>
+    <!-- Logout button removed from here — it now lives only on the email
+         chip inside the Sanjineer Cloud account panel (_settShowPlanManage /
+         "Login / Cloud" button above opens that panel). The JS that used to
+         toggle #sett-logout-btn (_settRefreshLoginBtn) is null-safe and
+         simply no-ops now that the element is gone. -->
 
     <!-- Upgrade to Enterprise — hidden by default, shown via JS (see
          _settRefreshUpgradeBtn) only for a Pro-plan company owner. This is
@@ -6046,27 +6050,6 @@ function _syncDarkModeUI() {
 
 function toggleDarkMode() { _applyDarkMode(!_darkMode); }
 
-// Guide toggle from Settings — controls FAB visibility
-var _guideEnabled = true;
-try { _guideEnabled = localStorage.getItem('sanj_guide_enabled') !== '0'; } catch(e) {}
-
-function _applyGuideEnabled(on) {
-  _guideEnabled = on;
-  try { localStorage.setItem('sanj_guide_enabled', on ? '1' : '0'); } catch(e) {}
-  var fab   = document.getElementById('tour-fab');
-  var panel = document.getElementById('tour-panel');
-  var track = document.getElementById('guide-sett-toggle');
-  var sub   = document.getElementById('guide-sett-sub');
-  if (fab)   { on ? fab.classList.remove('guide-hidden') : fab.classList.add('guide-hidden'); }
-  if (!on && panel) { panel.classList.remove('show'); _tourOpen = false; }
-  if (track) { on ? track.classList.add('on') : track.classList.remove('on'); }
-  if (sub)   { sub.textContent = on ? 'Floating guide active' : 'Tab guide hidden'; }
-}
-
-function toggleGuideFromSettings() {
-  _applyGuideEnabled(!_guideEnabled);
-}
-
 // Geo Tagging toggle from Settings — controls whether captured photos get
 // the location/address/date stamp burned onto them.
 var _geoTagEnabled = true;
@@ -6207,8 +6190,6 @@ function _toggleManageTabs() {
 
 document.addEventListener('DOMContentLoaded', function() {
   if (_darkMode) _applyDarkMode(true);
-  // Restore guide FAB state (on by default)
-  _applyGuideEnabled(_guideEnabled);
   // Restore hidden tabs
   _applyHiddenTabs();
 });
@@ -6659,7 +6640,9 @@ document.addEventListener('DOMContentLoaded', function() {
       <span class="spc-name" id="sidebar-user-name">Guest User</span>
       <span class="spc-plan" id="sidebar-plan-status">Free Plan</span>
     </div>
-    <button class="spc-logout-btn" title="Log out" onclick="event.stopPropagation();if(confirm('Log out of this device? You will need to log in again with OTP.'))doAdminLogout();">⎋</button>
+    <!-- Logout button removed from here — see the email chip inside the
+         Sanjineer Cloud account panel (opened via the Login/Cloud entry in
+         Settings) for the single remaining Logout control. -->
   </div>
   <div class="flex overflow-x-auto" style="scrollbar-width:none;overflow-y:hidden;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;">
     <button class="tab-btn text-white/70" data-tab="dashboard" onclick="switchTab('dashboard')"><span class="tab-btn-ico">📊</span><span class="tab-btn-label">Dashboard</span></button>
@@ -8846,7 +8829,6 @@ document.addEventListener('DOMContentLoaded', function() {
           <div style="display:flex;align-items:center;gap:5px;">
             <span id="cloud-sync-dot" style="width:5px;height:5px;background:#22c55e;border-radius:50%;display:inline-block;"></span>
             <p id="cloud-sync-time" style="font-size:8px;color:#86efac;">Syncing</p>
-            <button onclick="doAdminLogout()" style="padding:2px 10px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.35);color:#fca5a5;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;height:auto;min-height:auto;">Logout</button>
           </div>
         </div>
         <p id="cloud-sub-expiry" style="font-size:8px;color:#86efac;font-weight:600;">&mdash;</p>
@@ -14526,6 +14508,31 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
       }).join('')
       +'</tbody></table></div>';
   } catch(e) { return ''; }
+})()
++(function(){
+  // Machinery Today — same data source (lmach(), keyed by date) as the
+  // live "Machinery Today" table on the Report tab itself, in the exact
+  // same header/table/tfoot style as every other section here.
+  var sessions = (lmach()[d] || []);
+  if (!sessions.length) return '';
+  var totalHours = 0, totalAmt = 0;
+  var rows = sessions.map(function(s){
+    var hrs = parseFloat(s.hours || 0);
+    var rate = parseFloat(s.rate || 0);
+    var amt = hrs * rate;
+    totalHours += hrs; totalAmt += amt;
+    return '<tr><td style="font-weight:700;padding:6px 10px">'+(s.name||'—')+'</td>'
+      +'<td style="text-align:center;padding:6px 10px">'+(s.operator||'—')+'</td>'
+      +'<td style="text-align:center;padding:6px 10px">'+(s.start||'—')+'</td>'
+      +'<td style="text-align:center;padding:6px 10px">'+(s.end||'—')+'</td>'
+      +'<td style="text-align:center;padding:6px 10px;font-weight:700;color:#7c3aed">'+hrs.toFixed(1)+'h</td>'
+      +'<td style="text-align:right;padding:6px 10px;font-weight:700;color:#059669">'+(rate>0?fc(amt):'—')+'</td></tr>';
+  }).join('');
+  return '<div class="sec"><div class="st" style="border-left-color:#7c3aed;background:#f5f3ff;color:#5b21b6">⚙️ Machinery Today</div>'
+    +'<table><thead><tr><th>Machine</th><th style="text-align:center">Operator</th><th style="text-align:center">Start</th><th style="text-align:center">End</th><th style="text-align:center">Hours</th><th style="text-align:right">Amount</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'<tfoot><tr><td colspan="4" style="padding:7px 10px;font-weight:900">TOTAL</td><td style="text-align:center;padding:7px 10px;font-weight:900">'+totalHours.toFixed(1)+'h</td><td style="text-align:right;padding:7px 10px;font-weight:900">'+(totalAmt>0?fc(totalAmt):'—')+'</td></tr></tfoot>'
+    +'</table></div>';
 })()
 +pftr()+'</div></body></html>';
 opw(html);
@@ -21070,20 +21077,6 @@ document.addEventListener('DOMContentLoaded', function() {
 .sig-drop-item{padding:8px 14px;cursor:pointer;font-size:11px;font-weight:700;color:#374151;display:flex;align-items:center;gap:8px;transition:background .12s;}
 .sig-drop-item:hover{background:#eef2ff;}
 
-/* ── 7. ONBOARDING TOUR ─────────────────────────────────────── */
-#tour-fab{position:fixed;bottom:80px;right:12px;z-index:90;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;color:#fff;font-size:16px;font-weight:900;cursor:pointer;box-shadow:0 4px 14px rgba(79,70,229,.5);transition:transform .18s,box-shadow .18s;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;}
-#tour-fab:active{transform:scale(.90);}
-#tour-fab.guide-hidden{display:none!important;}
-#tour-panel{display:none;position:fixed;bottom:125px;right:10px;z-index:91;width:260px;max-height:65vh;overflow-y:auto;background:linear-gradient(160deg,#1a1740,#2d2a6e);border-radius:18px;box-shadow:0 10px 40px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07);padding:14px 13px;animation:sett-pop .22s ease;}
-#tour-panel.show{display:block;}
-.tour-step{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:10px 12px;margin-bottom:7px;cursor:pointer;transition:background .15s;}
-.tour-step:hover{background:rgba(255,255,255,.13);}
-.tour-step-hd{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;font-weight:800;color:#c7d2fe;}
-.tour-step-body{font-size:10px;color:rgba(255,255,255,.5);line-height:1.55;margin-top:6px;display:none;}
-.tour-step.open .tour-step-body{display:block;}
-.tour-step.open .tour-chevron{transform:rotate(180deg);}
-.tour-chevron{font-size:9px;transition:transform .2s;color:rgba(255,255,255,.4);}
-
 /* ── 8. SWIPE HINT ──────────────────────────────────────────── */
 @keyframes swipe-hint{0%,100%{transform:translateX(0)}30%{transform:translateX(-18px)}60%{transform:translateX(14px)}}
 .swipe-hint-bar{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);z-index:95;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.3);border-radius:99px;padding:3px 14px;font-size:9px;color:rgba(255,255,255,.6);pointer-events:none;animation:swipe-hint 1.8s ease 2s forwards;opacity:0;}
@@ -21507,170 +21500,16 @@ document.addEventListener('DOMContentLoaded', function(){
   } catch(e) {}
 })();
 
-// ══════════════════════════════════════════════════════════════
-// 7. ONBOARDING TOUR — per-tab expandable tips
-// ══════════════════════════════════════════════════════════════
-var TOUR_DATA = {
-  dashboard: [
-    {t:'📊 Dashboard Overview', b:'See all your site financials at a glance. Tap any stat card to jump directly to that section.'},
-    {t:'💰 Advances Given', b:'View the total money advanced to workers this month. Tracks all worker advances in one place.'},
-    {t:'💳 Remaining Balance', b:'Check the remaining funds available after deducting all advances given.'},
-    {t:'🧱 Material Cost', b:"Track today's spending on construction materials. Updated as you log purchases."},
-    {t:'🏦 Cash In / Cash Left', b:'Cash In shows total petty cash received. Cash Left is your current available cash on hand.'},
-    {t:'🚜 Rental Overview', b:'View both Rental Expenses (equipment hired from outside) and Rental Income (tools rented out).'},
-    {t:'📋 Punch List Summary', b:'Quick count of open issues and tasks in progress. Tap to jump to the full Punch List.'},
-    {t:'🕐 Live Site Clock', b:'Real-time display of current date, day, and time — always showing IST.'},
-    {t:'👷 Workers Listed', b:'Total registered workers vs. those present today. Tap to open Attendance tab.'},
-    {t:'📈 Project Progress', b:'Visual bars for Budget Used % and Schedule Completion %. Always visible even in Chart view.'},
-    {t:'⚠️ Low Stock Alert', b:'Automated warning when any material drops below its set minimum quantity.'}
-  ],
-  daily: [
-    {t:'📋 Daily Report', b:'Select any date and tap Load to pull up the complete day record for that date.'},
-    {t:'🖨️ Print / Export', b:'Generate a printable PDF of the daily summary with all workers, materials, and costs.'},
-    {t:'🌤️ Site Status', b:'Log weather conditions (Sunny, Cloudy, Rainy) and add notes or instructions for the day.'},
-    {t:'💰 Daily Costs', b:'Quick view of today\'s Advances, Material cost, and total Labour cost at a glance.'},
-    {t:'👷 Labour Summary', b:'Detailed table of worker categories, headcount, total hours worked, and tasks completed.'},
-    {t:'🏗️ Dept Work & Materials', b:'Summaries of departmental tasks done today and all materials purchased during the day.'}
-  ],
-  attendance: [
-    {t:'👷 Worker Registry', b:'Add all your workers here with their trade category and daily/hourly wage rate before logging attendance.'},
-    {t:'📅 Daily Attendance Log', b:'Mark each worker as Present or Absent with a single tap. Auto-fills today\'s date.'},
-    {t:'⏱️ Overtime Tracker', b:'Log extra OT hours and the OT rate separately for each worker per day.'},
-    {t:'🏷️ Skill Categorization', b:'Group workers by trade — Mason, Labour, Electrician, Carpenter, Plumber, etc.'}
-  ],
-  boq: [
-    {t:'📋 Bill of Quantities', b:'List all project work items with estimated quantities, units, and rates for the full project scope.'},
-    {t:'📅 Daily Progress Tracking', b:'Each day, update the "Quantity Done Today" for active items to track cumulative progress.'},
-    {t:'🔨 Work In Progress', b:'See a live list of all BOQ items that had activity today — feeds directly into Daily Report.'}
-  ],
-  machinery: [
-    {t:'⚙️ Asset List', b:'Manage all heavy equipment active on site — JCB, Concrete Mixer, Tower Crane, Transit Mixer, etc.'},
-    {t:'📊 Usage Log', b:'Record working hours or fuel consumption for each machine per day. Calculates cost automatically.'},
-    {t:'🔧 Maintenance Alerts', b:'Monitor machine health status and flag any service requirements or breakdowns.'}
-  ],
-  expenses: [
-    {t:'💰 Petty Cash Log', b:'Record all small miscellaneous site expenses — tea, stationary, transport, safety items.'},
-    {t:'🗂️ Expense Categories', b:'Sort spending into categories: Food, Travel, Safety, Fuel, Misc for clean reporting.'},
-    {t:'🧾 Digital Receipts', b:'Upload photos of bills and vouchers directly from camera for paperless record keeping.'}
-  ],
-  materials: [
-    {t:'🛒 Purchase Orders', b:'Create and manage new material purchase entries with vendor, quantity, and rate.'},
-    {t:'📦 Inventory Level', b:'Real-time stock tracking for every material. See current balance at any time.'},
-    {t:'📏 Unit Management', b:'Handle materials in Bags, CFT, Cubic Meter, KG, Nos, RMT — flexible for all trades.'}
-  ],
-  tools: [
-    {t:'🔧 Tool Inventory', b:'List all hand tools and power tools available on site with quantity and condition.'},
-    {t:'🔄 Issue / Return', b:'Track which worker or team has borrowed a tool and when it was returned.'},
-    {t:'✅ Condition Check', b:'Mark tools as Working, Damaged, or Lost to keep an accurate tool register.'}
-  ],
-  drawings: [
-    {t:'📐 Digital Blueprint Store', b:'Upload and view architectural, structural, and MEP drawings directly from your phone.'},
-    {t:'🔄 Revision History', b:'Always know which drawing version is current — prevents mistakes from outdated plans.'},
-    {t:'☁️ Cloud Access', b:'With cloud sync enabled, drawings are accessible to all authorized team members remotely.'}
-  ],
-  rentals: [
-    {t:'📥 Inward Rentals', b:'Track all equipment rented IN from external vendors — log start date, rate, and return.'},
-    {t:'📤 Outward Rentals', b:'Manage tools or machinery rented OUT to other sites — track income from rentals.'},
-    {t:'🧾 Rental Billing', b:'Automatically calculate rental cost based on days used or hours logged.'}
-  ],
-  departmental: [
-    {t:'🏗️ Internal Task Management', b:'Log all work handled directly by your company team — not outsourced to contractors.'},
-    {t:'💰 Task Costing', b:'Calculate the specific labour and material cost for each internal departmental activity.'}
-  ],
-  contractors: [
-    {t:'👥 Team / Contractor List', b:'Manage different contractor groups — RCC, Plumbing, Electrical, Finishing, etc.'},
-    {t:'👨‍👩‍👧‍👦 Headcount', b:'Track the number of workers provided by each contractor team daily.'},
-    {t:'📒 Contractor Ledger', b:'Monitor total payments made vs. work completed. Know exactly what you owe each team.'}
-  ],
-  budget: [
-    {t:'📊 Master Budget Setup', b:'Set the total estimated cost for the entire project broken into work categories.'},
-    {t:'📉 Variance Analysis', b:'Compare actual site spending against the planned budget to spot overruns early.'},
-    {t:'🗂️ Category Breakdown', b:'See exactly where the money is going — Material vs Labour vs Machinery vs Overhead.'}
-  ],
-  schedule: [
-    {t:'📅 Timeline / Gantt View', b:'Visualize all project milestones, phases, and task deadlines on a timeline.'},
-    {t:'✅ Completion % Tracking', b:'Update the percentage of completion for every project phase as work progresses.'},
-    {t:'⏰ Delay Identification', b:'Tasks shown in red are behind schedule. Use this to take corrective action early.'}
-  ],
-  punchlist: [
-    {t:'📋 Snag / Issue Tracking', b:'Log finishing defects, quality issues, and incomplete items that need attention.'},
-    {t:'👤 Task Assignment', b:'Assign each punch item to a specific contractor, team, or worker for accountability.'},
-    {t:'🔄 Status Updates', b:'Move items through Open → In Progress → Completed. Overdue items show a red badge.'}
-  ],
-  bill: [
-    {t:'🧾 Client Billing', b:'Generate professional bills and invoices to send to the project owner or client.'},
-    {t:'📏 Measurement Sheet', b:'Include detailed item-wise measurements for transparent billing of work done.'},
-    {t:'💳 Payment History', b:'Track payments received against bills raised. Know your outstanding receivables.'},
-    {t:'📦 PO → Auto Stock', b:'Mark a Purchase Order as "Received" and all its line items are automatically added to your Materials Stock ledger — no double entry!'},
-    {t:'📊 GST Report', b:'Tap "GST Report" to see a month-wise tax summary: Input GST on purchases vs Output GST on invoices, with net payable calculated for your accountant.'}
-  ],
-  quotation: [
-    {t:'💼 Quotation / Proposal Maker', b:'Create professional cost estimates and proposals for new clients or extra scope of work.'},
-    {t:'📋 Itemized Pricing', b:'List item-wise rates for materials and labour for clear client understanding.'},
-    {t:'🧮 GST Calculation', b:'Automatically calculate GST on the total amount for official tax-compliant quotations.'}
-  ],
-  visits: [
-    {t:'🏛️ Client & Consultant Visits', b:'Log dates and details of all architect, client, or consultant site visits.'},
-    {t:'📝 Observation Log', b:'Record instructions, feedback, and site observations given during each visit.'},
-    {t:'📷 Photo Evidence', b:'Attach site inspection photos to each visit record for future reference and dispute resolution.'}
-  ]
-};
-
-var _tourOpen = false;
-
-var _tourOpen = false;
-function toggleTour() {
-  var panel = document.getElementById('tour-panel');
-  if (!panel) return;
-  _tourOpen = !_tourOpen;
-  panel.classList.toggle('show', _tourOpen);
-  if (_tourOpen) _renderTour();
-}
-function _renderTour() {
-  var panel = document.getElementById('tour-panel');
-  if (!panel) return;
-  // Detect active tab
-  var activeTab = 'dashboard';
-  document.querySelectorAll('.tab-btn').forEach(function(b){ if(b.classList.contains('active')) activeTab = b.dataset.tab || activeTab; });
-  var steps = TOUR_DATA[activeTab] || [{t:'ℹ️ Tips', b:'Interact with the current tab to explore features.'}];
-  var tabLabel = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
-  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-    +'<p style="font-size:13px;font-weight:900;color:#fff;margin:0">📖 '+tabLabel+' Guide</p>'
-    +'<button onclick="toggleTour()" style="width:24px;height:24px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:12px">✕</button>'
-    +'</div>'
-    + steps.map(function(s,i){
-      return '<div class="tour-step" onclick="this.classList.toggle(\'open\')">'
-        +'<div class="tour-step-hd"><span>'+s.t+'</span><span class="tour-chevron">▾</span></div>'
-        +'<div class="tour-step-body">'+s.b+'</div>'
-        +'</div>';
-    }).join('')
-    + '</div>'; // swipe toggle moved to Settings
-}
-
-// FAB + Panel HTML injection
+// Floating "?" Guide button, its per-tab tips panel, and the Settings
+// toggle that used to control it have all been removed per request.
 document.addEventListener('DOMContentLoaded', function(){
-  var fab = document.createElement('button');
-  fab.id = 'tour-fab';
-  fab.title = 'Help & Tour';
-  fab.innerHTML = '?';
-  fab.onclick = toggleTour;
-  document.body.appendChild(fab);
-
-  var panel = document.createElement('div');
-  panel.id = 'tour-panel';
-  document.body.appendChild(panel);
-
-  // Update tour when tab changes — use event delegation instead of wrapping
-  document.addEventListener('sanjineer-tab-changed', function(e) {
-    if (_tourOpen) setTimeout(_renderTour, 150);
-  });
-
   // BOQ Auto Daily Reset — check immediately on load then every minute
   setTimeout(function() {
     boqCheckAndRunDailyReset();
     setInterval(boqCheckAndRunDailyReset, 60000); // every 60 seconds
   }, 3000); // small delay to let app fully initialise
 });
+
 
 // ══════════════════════════════════════════════════════════════
 // 8. SWIPE LEFT/RIGHT TO CHANGE TABS
@@ -24276,6 +24115,11 @@ document.addEventListener('click', function(e) {
         <div id="fd-misc-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px;"></div>
         <button id="fd-misc-add-btn" onclick="_fdAddMiscRow()" style="width:100%;padding:5px 0;background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.2);border-radius:7px;color:#a5f3fc;font-size:9px;font-weight:700;cursor:pointer;">+ Add Charge Line</button>
 
+        <div id="fd-floorrise-row" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.15);align-items:center;justify-content:space-between;">
+          <span style="font-size:9.5px;font-weight:700;color:#a78bfa;">🏗️ Floor Rise Charge <span id="fd-floorrise-detail" style="color:#6b7280;font-weight:600;"></span></span>
+          <span id="fd-floorrise-amt" style="font-size:11px;font-weight:800;color:#a78bfa;">₹0</span>
+        </div>
+
         <div style="margin-top:10px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.15);display:flex;align-items:center;justify-content:space-between;">
           <span style="font-size:11px;font-weight:800;color:#fff;">Final Price</span>
           <span id="fd-final-price" style="font-size:16px;font-weight:900;color:#6ee7b7;">₹0</span>
@@ -24508,6 +24352,21 @@ function _inr(n) {
   n = Math.round(n || 0);
   try { return '₹' + n.toLocaleString('en-IN'); } catch (e) { return '₹' + n; }
 }
+// Sets one of the 2 Floor Rise Charge inputs on a building. Goes through
+// ssales() exactly like every other Sales Manager edit (add building/
+// floor/flat, rate, status, etc.) — so it's saved locally AND synced /
+// backed up to the cloud the same way, no separate storage path.
+window._setFloorRise = function (buildingId, field, value) {
+  if (!isSalesFullAdmin()) { toast('Only the owner or Sales Manager can set floor rise charges', 'err'); return; }
+  var data = lsales();
+  var b = (data.buildings || []).find(function (x) { return x.id === buildingId; });
+  if (!b) return;
+  var num = parseFloat(value) || 0;
+  if (field === 'start') b.floorRiseStart = Math.max(0, Math.round(num));
+  else if (field === 'rate') b.floorRiseRate = Math.max(0, num);
+  ssales(data);
+  renderSalesManager();
+};
 
 // ── Dashboard summary card ───────────────────────────────────
 function _updateSalesNavTabVisibility() {
@@ -24893,6 +24752,19 @@ function renderSalesManager() {
         ? '<button onclick="event.stopPropagation();deleteSalesBuilding(\'' + b.id + '\')" style="background:none;border:none;color:rgba(248,113,113,.7);font-size:12px;cursor:pointer;padding:2px 6px;">🗑</button>'
         : '';
 
+      var floorRiseBlock = admin
+        ? ('<div style="margin-bottom:.6rem;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:10px;padding:.5rem .65rem;">'
+            + '<div style="font-size:9.5px;font-weight:800;color:#c4b5fd;margin-bottom:5px;">🏗️ Floor Rise Charge <span style="font-weight:600;color:rgba(255,255,255,.4);">(auto-applies to every flat, per floor — no manual entry needed)</span></div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Starts at floor #</label>'
+            + '<input type="number" min="1" value="' + (b.floorRiseStart || '') + '" placeholder="e.g. 3" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setFloorRise(\'' + b.id + '\',\'start\',this.value)"></div>'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">₹ per sqft, per floor</label>'
+            + '<input type="number" min="0" value="' + (b.floorRiseRate || '') + '" placeholder="e.g. 50" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setFloorRise(\'' + b.id + '\',\'rate\',this.value)"></div>'
+            + '</div></div>')
+        : ((parseInt(b.floorRiseStart, 10) > 0 && parseFloat(b.floorRiseRate) > 0)
+            ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#c4b5fd;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:5px 9px;">🏗️ Floor rise charge active from floor ' + b.floorRiseStart + ': +' + _inr(b.floorRiseRate) + '/sqft per floor above that</div>')
+            : '');
+
       return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;margin-bottom:10px;overflow:hidden;">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem .85rem;cursor:pointer;background:rgba(8,145,178,.1);" onclick="_toggleBuildingOpen(\'' + b.id + '\')">'
         + '<div style="min-width:0;display:flex;align-items:center;gap:7px;"><span style="font-size:15px;">🏢</span><div><span style="font-size:13px;font-weight:900;color:#fff;">' + esc(b.name || 'Building') + '</span>'
@@ -24900,6 +24772,7 @@ function renderSalesManager() {
         + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">' + delBuildingBtn + '<span style="font-size:12px;color:rgba(255,255,255,.5);display:inline-block;transform:rotate(' + (open ? '180' : '0') + 'deg);transition:transform .2s;">▾</span></div>'
         + '</div>'
         + '<div style="display:' + (open ? 'block' : 'none') + ';padding:.7rem .85rem .85rem;">'
+        + floorRiseBlock
         + (floors.length ? floorsHtml : '<p style="font-size:10px;color:rgba(255,255,255,.35);text-align:center;padding:.5rem 0;">No floors in this building yet.</p>')
         + addFloorBtn
         + '</div>'
@@ -25181,10 +25054,21 @@ function _fdRecalc() {
   var dev = parseFloat(document.getElementById('fd-dev').value) || 0;
   var misc = 0;
   var ctx = _fdCurrentFlat();
-  var riseExtra = 0;
+  var riseExtraRate = 0, riseExtra = 0;
   if (ctx && ctx.f) {
     (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
-    riseExtra = area * _floorRiseExtraRate(ctx.b, ctx.fl);
+    riseExtraRate = _floorRiseExtraRate(ctx.b, ctx.fl);
+    riseExtra = area * riseExtraRate;
+  }
+  var riseRow = document.getElementById('fd-floorrise-row');
+  if (riseRow) {
+    if (riseExtraRate > 0) {
+      riseRow.style.display = 'flex';
+      document.getElementById('fd-floorrise-detail').textContent = '(+' + _inr(riseExtraRate) + '/sqft)';
+      document.getElementById('fd-floorrise-amt').textContent = _inr(riseExtra);
+    } else {
+      riseRow.style.display = 'none';
+    }
   }
   var total = area * rate + soc + dev + misc + riseExtra;
   document.getElementById('fd-final-price').textContent = _inr(total);
@@ -25192,7 +25076,7 @@ function _fdRecalc() {
 function saveFlatFields() {
   if (!isSalesFullAdmin()) { toast('Only Sales Admin can edit flat details', 'err'); return; }
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
-  var _priceBefore = _flatFinalPrice(ctx.f);
+  var _priceBefore = _flatFinalPrice(ctx.f, ctx.b, ctx.fl);
   ctx.f.flatNo = document.getElementById('fd-flatno').value.trim();
   ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
@@ -25201,7 +25085,7 @@ function saveFlatFields() {
   ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
-  var _priceAfter = _flatFinalPrice(ctx.f);
+  var _priceAfter = _flatFinalPrice(ctx.f, ctx.b, ctx.fl);
   var _flatLabel = (ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '');
   if (_priceAfter !== _priceBefore) {
     _smLogActivity('price_change', _flatLabel + ': ' + _inr(_priceBefore) + ' → ' + _inr(_priceAfter));
