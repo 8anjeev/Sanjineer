@@ -52,6 +52,7 @@ jobs:
         run: |
           cd twa-project
           chmod +x gradlew
+          sed -i 's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-all.zip#' gradle/wrapper/gradle-wrapper.properties
           ./gradlew --version
 
       - name: Build APK
