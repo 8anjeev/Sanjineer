@@ -1089,6 +1089,12 @@ self.addEventListener('fetch', function(e) {
         if (typeof _applyPermState === 'function') {
           _applyPermState(_swIds.role || null).then(function() {
             if (typeof _settRefreshLoginBtn === 'function') _settRefreshLoginBtn();
+            // BUGFIX: the "👑 Owner" header button reflects _ENGINEER_MODE,
+            // which _applyPermState just (re)computed for this project —
+            // without refreshing it here, switching into a joined project
+            // left the Owner button showing/hiding based on the PREVIOUS
+            // project's role instead of this one's.
+            if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
             _renderProjectDropdown();
           });
         }
@@ -3669,7 +3675,11 @@ function dismissWelcome(){
             var _rPlan = safeLS.getItem(WS_CPLAN_KEY);
             var _rRole = safeLS.getItem(WS_CROLE_KEY);
             if (_rPlan && typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(_rPlan);
-            if (_rRole && typeof _applyPermState === 'function') _applyPermState(_rRole);
+            if (_rRole && typeof _applyPermState === 'function') {
+              _applyPermState(_rRole).then(function() {
+                if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
+              });
+            }
           } catch(eRestore) {}
           // Already chose before — skip straight to app
           _launchApp();
@@ -4478,6 +4488,10 @@ function _wsFinishJoin(projectId, roleName, memberName, projectName, companyName
     // everything else.
     if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
+    // BUGFIX: a joined engineer/member should never see the "👑 Owner"
+    // header button — refresh it now that _ENGINEER_MODE reflects this
+    // (non-owner) join.
+    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
     // Sales Admin join code → locked full-screen Sales Manager only, no
     // way back to the rest of the app. Fires right after entering the
     // app so the main dashboard DOM exists for the Sales modal to
@@ -4670,6 +4684,7 @@ function _settRefreshLoginBtn() {
   var titleEl = document.getElementById('sett-login-title');
   var subEl = document.getElementById('sett-login-sub');
   var iconEl = document.getElementById('sett-login-icon');
+  var logoutEl = document.getElementById('sett-logout-btn');
   if (!titleEl || !subEl) return;
   var email = safeLS.getItem(ADMIN_EMAIL_KEY);
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
@@ -4683,10 +4698,12 @@ function _settRefreshLoginBtn() {
     titleEl.textContent = email;
     subEl.textContent = planLabel + (isMember ? ' · tap to manage' : ' plan · tap to manage');
     if (iconEl) iconEl.textContent = '👤';
+    if (logoutEl) logoutEl.style.display = 'inline-block';
   } else {
     titleEl.textContent = 'Login / Cloud';
     subEl.textContent = 'Sign in for backup & sync';
     if (iconEl) iconEl.textContent = '🔒';
+    if (logoutEl) logoutEl.style.display = 'none';
   }
 }
 // Dispatcher for the Settings login button — logged in → plan management,
@@ -5231,6 +5248,7 @@ function _wsSelectProject(p) {
     _wsHide();
     toast('✅ ' + (p.project_name || 'Project') + ' ready', 'ok');
     if (typeof window._wsOnDone === 'function') window._wsOnDone();
+    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
   });
 }
 
@@ -5437,6 +5455,12 @@ function _wsSelectProject(p) {
         <span style="font-size:9px;font-weight:500;color:rgba(255,255,255,0.45)" id="sett-login-sub">Sign in for backup &amp; sync</span>
       </div>
     </button>
+
+    <!-- Small Logout — sits directly under Login/Cloud, only shown while
+         signed in (toggled in _settRefreshLoginBtn). Deliberately compact
+         (not full-width like the old profile-modal button) since it's a
+         secondary action right next to the account row it affects. -->
+    <button class="sett-row" id="sett-logout-btn" onclick="event.stopPropagation();if(confirm('Log out of this device? You will need to log in again with OTP.'))doAdminLogout();" style="display:none;margin:-4px 0 8px 34px;padding:3px 10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);color:#fca5a5;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;">🚪 Logout</button>
 
     <!-- Upgrade to Enterprise — hidden by default, shown via JS (see
          _settRefreshUpgradeBtn) only for a Pro-plan company owner. This is
@@ -7014,7 +7038,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">📝 Quick Entry <span class="font-normal text-gray-400">— material, tool or other site expense</span></p>
     <div class="grid grid-cols-2 gap-3">
-      <input type="text" id="exp-mat-name" placeholder="Item / Description" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
+      <input type="text" id="exp-mat-name" placeholder="Item / Description" oninput="expAutoFillSupplier()" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
       <input type="date" id="exp-mat-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
       <input type="number" id="exp-mat-qty" placeholder="Quantity (optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
       <input type="number" id="exp-mat-cost" placeholder="Amount (₹)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
@@ -8447,7 +8471,6 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
 
       <button onclick="saveProfile()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-semibold text-sm active:scale-95">💾 Save Profile</button>
-      <button onclick="if(confirm('Log out of this device? You will need to log in again with OTP.')) doAdminLogout();" style="width:100%;padding:8px 0;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:12px;font-weight:700;font-size:13px;cursor:pointer;margin-top:6px">🚪 Log Out</button>
     </div>
   </div>
 </div>
@@ -12778,6 +12801,30 @@ function delExpense(id){
   var m=AD.find(function(d){ return d.__id===id; });
   askDel('Delete '+m.material_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewExpenses(); updateDash(); });
 }
+/* ── Quick Entry: auto-suggest supplier when the item/material name
+   matches a previously used one. Checks the Materials-stock item's own
+   last purchase first (most authoritative — Materials & Expenses share
+   the same underlying transactions once cross-posted), then falls back
+   to the most recent Expenses entry with that name (covers tools/others,
+   which never land in Materials stock). Never overwrites text already
+   typed into the Supplier field. ── */
+function expAutoFillSupplier(){
+  var nameEl=document.getElementById('exp-mat-name');
+  var supEl=document.getElementById('exp-mat-supplier');
+  if(!nameEl||!supEl) return;
+  var name=nameEl.value.trim().toLowerCase();
+  if(!name||supEl.value.trim()) return;
+  var mats=(typeof lmat==='function')?lmat():[];
+  var item=mats.find(function(m){ return (m.name||'').trim().toLowerCase()===name; });
+  if(item){
+    var purchases=(item.transactions||[]).filter(function(t){ return t.type==='purchase'; });
+    var last=purchases.length?purchases[purchases.length-1]:null;
+    if(last&&last.supplier){ supEl.value=last.supplier; return; }
+  }
+  var list=(typeof AD!=='undefined'&&AD)?AD:[];
+  var matches=list.filter(function(d){ return d&&d.material_name&&d.supplier&&d.material_name.trim().toLowerCase()===name; });
+  if(matches.length){ supEl.value=matches[matches.length-1].supplier; }
+}
 function addExpenseMaterial(){
   var name     = document.getElementById('exp-mat-name').value.trim();
   var date     = document.getElementById('exp-mat-date').value;
@@ -13105,8 +13152,15 @@ function openMatPurchaseModal(id){
   document.getElementById('mat-modal-title').textContent='Material Received — '+item.name;
   document.getElementById('mp-date').value=ist(); document.getElementById('mp-qty').value='';
   document.getElementById('mp-unit').value=item.unit||''; document.getElementById('mp-cost').value='';
-  document.getElementById('mp-supplier').value='';
-  var mpRemarkEl=document.getElementById('mp-remark'); if (mpRemarkEl) mpRemarkEl.value='';
+  // Auto-suggest supplier + remark from THIS material's last purchase entry
+  // instead of always starting blank — a supplier rarely changes between
+  // deliveries, and the remark commonly carries vehicle no. & size, which
+  // is otherwise retyped every single time. Both fields stay fully
+  // editable, this is only a starting suggestion.
+  var _mpPurchases=(item.transactions||[]).filter(function(t){ return t.type==='purchase'; });
+  var _mpLast=_mpPurchases.length ? _mpPurchases[_mpPurchases.length-1] : null;
+  document.getElementById('mp-supplier').value=(_mpLast&&_mpLast.supplier)||'';
+  var mpRemarkEl=document.getElementById('mp-remark'); if (mpRemarkEl) mpRemarkEl.value=(_mpLast&&_mpLast.remark)||'';
   var mpCatEl=document.getElementById('mp-category');
   if (mpCatEl) mpCatEl.innerHTML=_matCatOptionsHTML(item.category||'', false);
   clearBill('mp');
@@ -14939,13 +14993,20 @@ function loadMachinery(){
 /* ── Populate datalists from all saved machinery history ── */
 function machPopulateDataLists(){
   var store=lmach();
-  var names={}, ops={}, rateByName={};
+  var names={}, ops={}, rateByName={}, opByName={}, tsByName={};
   Object.keys(store).forEach(function(d){
     (store[d]||[]).forEach(function(s){
       if(s.name){ names[s.name]=1; }
       if(s.operator){ ops[s.operator]=1; }
-      // Remember last known rate per machine name
-      if(s.name&&s.rate>0) rateByName[s.name]=s.rate;
+      // Remember rate/operator from the MOST RECENT session for this
+      // machine name (not just any match) — a machine's operator/rate can
+      // change over time, so the latest entry is the best suggestion.
+      var ts=s.__ts||0;
+      if(s.name&&(tsByName[s.name]===undefined||ts>=tsByName[s.name])){
+        tsByName[s.name]=ts;
+        if(s.rate>0) rateByName[s.name]=s.rate;
+        if(s.operator) opByName[s.name]=s.operator;
+      }
     });
   });
   var nl=document.getElementById('mach-name-list');
@@ -14954,17 +15015,25 @@ function machPopulateDataLists(){
   if(ol) ol.innerHTML=Object.keys(ops).map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'; }).join('');
   // Store for auto-fill
   window._machRateMap=rateByName;
+  window._machOperatorMap=opByName;
 }
 
-/* ── Auto-fill rate when machine name matches a known entry ── */
+/* ── Auto-fill operator + rate when machine name matches a known entry.
+     Both fields stay fully editable afterwards — this only pre-fills an
+     empty field, it never overwrites something the user already typed. ── */
 function machAutoFillRate(){
   var nameEl=document.getElementById('mach-name');
   var rateEl=document.getElementById('mach-rate');
-  if(!nameEl||!rateEl) return;
+  var opEl=document.getElementById('mach-operator');
+  if(!nameEl) return;
   var name=nameEl.value.trim();
-  var map=window._machRateMap||{};
-  if(map[name]&&!parseFloat(rateEl.value)){
-    rateEl.value=map[name];
+  var rateMap=window._machRateMap||{};
+  var opMap=window._machOperatorMap||{};
+  if(rateEl && rateMap[name]!==undefined && !parseFloat(rateEl.value)){
+    rateEl.value=rateMap[name];
+  }
+  if(opEl && opMap[name] && !opEl.value.trim()){
+    opEl.value=opMap[name];
   }
 }
 
@@ -22831,35 +22900,19 @@ window._ownerOpenReport = function(pid, reportId) {
   var m = document.getElementById('_owner-overview-modal'); if (m) m.remove();
   if (typeof openQdprForm === 'function') openQdprForm(pid, reportId);
 };
-// Buildings list in the Sales tab is one entry per project — tapping one
-// switches into that project (if not already active) and opens its own
-// full Sales Manager (buildings → floors → flats) so details can be added.
+// NOTE: the Owner Sales tab used to also show a "Buildings" list built by
+// treating each PROJECT as a "building" — tapping a row silently switched
+// your active project and creating a new "building" actually created a
+// whole new project. That was confusing and is gone. Buildings are only
+// ever added/edited manually, one at a time, inside a project's own real
+// Sales Manager (buildings → floors → flats) — see _addSalesBuilding().
+// The Owner Sales tab below stays a read-only cross-project summary
+// (totals, today's bookings, interested clients, recent activity).
 function _ownerCloseOverviewModals() {
   var m1 = document.getElementById('_owner-overview-modal'); if (m1) m1.remove();
   var m2 = document.getElementById('_owner-desktop-modal'); if (m2) m2.remove();
   try { if (typeof _ownerStopViewportWatch === 'function') _ownerStopViewportWatch(); } catch (e) {}
 }
-window._ownerOpenProjectSales = function(pid) {
-  if (!pid) return;
-  _ownerCloseOverviewModals();
-  if (pid !== window.currentProjectId && typeof switchProject === 'function') {
-    switchProject(pid);
-    setTimeout(function () { if (typeof openSalesManager === 'function') openSalesManager(); }, 350);
-  } else if (typeof openSalesManager === 'function') {
-    openSalesManager();
-  }
-};
-// "+ Add New" in the Buildings list — a building IS a project here, so
-// adding a new building just creates a new project and jumps straight
-// into its Sales Manager to start adding floors/flats.
-window._ownerAddNewSalesProject = function () {
-  var name = (typeof prompt === 'function') ? prompt('Building / Project name:') : '';
-  if (!name || !name.trim()) return;
-  if (typeof createProject !== 'function') { if (typeof toast === 'function') toast('Could not create project', 'err'); return; }
-  var proj = createProject(name.trim());
-  if (!proj) return; // project limit hit — upgrade popup already shown by createProject
-  window._ownerOpenProjectSales(proj.id);
-};
 
 var _ownerTabRenderers = {
 
@@ -23020,10 +23073,9 @@ var _ownerTabRenderers = {
 
   // Sales — cumulative Sold/Booked/Remaining totals across every project,
   // today's bookings, an aggregated interested-clients (leads) list, and
-  // a Buildings list — one entry per added project (named after the
-  // project/company) plus manually-added building names — that drills
-  // into that project's own full Sales Manager (buildings → floors →
-  // flats) to add/edit details.
+  // recent booking/sale activity. Buildings themselves are NOT listed or
+  // managed here — that's deliberately manual-only, one at a time, inside
+  // each project's own Sales Manager (see _addSalesBuilding()).
   sales: function(projects) {
     if (!window.isEnterpriseUser) return _ownerEmpty('Sales Manager is an Enterprise feature');
     var todayStr = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
@@ -23084,35 +23136,8 @@ var _ownerTabRenderers = {
           return _ownerRow(title, meta, c.building || c.site);
         }).join('') : _ownerEmpty('No interested clients / remarks yet')) + '</div>';
 
-    // Grand total across every project — the "complete list" the owner
-    // needs at a glance, computed from the very same per-project loads
-    // already looped above, without any extra data fetch.
-    var _bldTotalB = 0, _bldTotalF = 0;
-    var _bldPerProj = projects.map(function(p) {
-      var d = _ownerLoadProject(p.id);
-      var bCount = 0, flCount = 0;
-      if (d.sales && d.sales.buildings) {
-        bCount = d.sales.buildings.length;
-        d.sales.buildings.forEach(function(b){ (b.floors||[]).forEach(function(fl){ flCount += (fl.flats||[]).length; }); });
-      }
-      _bldTotalB += bCount; _bldTotalF += flCount;
-      return { p: p, bCount: bCount, flCount: flCount };
-    });
-    var buildingsHtml = '<div style="margin:14px 0 6px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-      + '<p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0;">🏢 Buildings <span style="font-weight:600;color:#6b7280;">(' + _bldTotalB + ' building' + (_bldTotalB!==1?'s':'') + ' · ' + _bldTotalF + ' flat' + (_bldTotalF!==1?'s':'') + ' across all projects)</span></p>'
-      + '<button onclick="_ownerAddNewSalesProject()" style="font-size:9.5px;font-weight:800;color:#4f46e5;background:#EEF2FF;border:1px solid #c7d2fe;border-radius:7px;padding:3px 8px;cursor:pointer;">+ Add New</button>'
-      + '</div>'
-      + (_bldPerProj.length ? _bldPerProj.map(function(x) {
-          var p = x.p, bCount = x.bCount, flCount = x.flCount;
-          return '<div onclick="_ownerOpenProjectSales(\'' + p.id + '\')" style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:9px 11px;margin-bottom:7px;box-shadow:0 1px 4px rgba(0,0,0,.04);cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;">'
-            + '<div style="min-width:0;"><p style="font-size:11.5px;font-weight:700;color:#1e1b4b;margin:0;">🏢 ' + _jhtml(p.name) + '</p>'
-            + '<p style="font-size:9.5px;color:#6b7280;margin:2px 0 0;">' + bCount + ' building' + (bCount!==1?'s':'') + ' · ' + flCount + ' flat' + (flCount!==1?'s':'') + '</p></div>'
-            + '<span style="font-size:13px;color:#9ca3af;flex-shrink:0;">›</span></div>';
-        }).join('') : _ownerEmpty('No projects yet — tap + Add New to create one'))
-      + '</div>';
-
     return _ownerTotalsBar([['Sold', totSold], ['Booked', totBook], ['Remaining', totAvail]])
-      + todayBookingsHtml + clientsHtml + buildingsHtml
+      + todayBookingsHtml + clientsHtml
       + '<div style="margin:14px 0 6px;"><p style="font-size:11px;font-weight:800;color:#1e1b4b;margin:0 0 6px;">Recent Booking / Sale Activity</p>'
       + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No recent booking/sale activity in this period')) + '</div>';
   },
@@ -23810,6 +23835,7 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
               if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
               if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
+              if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
               if (roleName === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
                 setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
               }
@@ -23828,6 +23854,7 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
           _applyPermState(null).then(function() {
             if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
             toast('✅ Joined project', 'ok');
+            if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
           });
         });
       }).catch(function(e) {
@@ -24408,10 +24435,17 @@ function canAccessSales() {
   if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) {
     return _salesViewerPerms().indexOf('sales') !== -1;
   }
-  // Every joined engineer — sales-admin or a regular teammate — can at
-  // least reach Sales in some form (full for sales-admin, limited for
-  // everyone else). The real owner always can too.
-  return true;
+  // FIX: this used to blanket-allow ANY joined engineer role — meaning an
+  // accountant, HR, purchase, store-keeper, supervisor, or project-manager
+  // join code could all see Sales and add "interested client" remarks,
+  // none of which were ever granted sales.view/sales.manage in the real
+  // role_permissions table. Now this actually reflects what that role was
+  // granted (sales_admin has both; only site_engineer needs sales.view
+  // added via SQL for the "engineers can view + add remarks" behavior).
+  if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
+    return hasPerm('sales.view') || hasPerm('sales.manage');
+  }
+  return true; // the real project owner, on their own device
 }
 function isSalesFullAdmin() {
   if (typeof _IS_VIEWER !== 'undefined' && _IS_VIEWER) {
@@ -24419,7 +24453,10 @@ function isSalesFullAdmin() {
     return p.indexOf('sales') !== -1 && p.length === 1;
   }
   if (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) {
-    return isEngineerSalesOnly();
+    // DB-driven now instead of the role-name string check — same result
+    // today (only sales_admin has sales.manage) but correct if that ever
+    // changes, and consistent with canAccessSales() above.
+    return hasPerm('sales.manage');
   }
   return true; // the real project owner, on their own device
 }
@@ -25048,7 +25085,13 @@ function openFlatDetail(buildingId, floorId, flatId) {
   _fdRenderRemarks(f.remarks || []);
   document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-status') === f.status);
-    btn.disabled = !canAccessSales();
+    // Only the real owner or a full Sales Manager (join-code) admin may
+    // change a flat's Available/Booked/Sold status. A regular engineer or
+    // limited viewer only ever gets read access + the ability to add an
+    // interested-client remark below — never a write action like this.
+    btn.disabled = !isSalesFullAdmin();
+    btn.style.opacity = isSalesFullAdmin() ? '1' : '.45';
+    btn.style.cursor = isSalesFullAdmin() ? 'pointer' : 'not-allowed';
   });
 
   _armModalGuard('flat-detail-modal');
@@ -25127,7 +25170,7 @@ function saveFlatFields() {
   toast('Saved', 'ok');
 }
 function setFlatStatus(status) {
-  if (!canAccessSales()) return;
+  if (!isSalesFullAdmin()) { toast('Only the owner or Sales Manager can change flat status', 'err'); return; }
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
   var _statusBefore = ctx.f.status;
   ctx.f.status = status;
