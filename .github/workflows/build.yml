@@ -1,5 +1,7 @@
 name: Build APK
+
 on: [push, workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,28 +17,66 @@ jobs:
         run: |
           git clone https://github.com/GoogleChromeLabs/svgomg-twa.git twa-project
 
-      - name: Update TWA Config
+      - name: Update TWA Config - Package Name & Domain
         run: |
           cd twa-project
-          sed -i 's/jakearchibald.github.io\/svgomg/app.sanjineer.in/g' app/build.gradle
-          sed -i 's/io.jakearchibald.svgomg/com.sanjvik.sanjineer/g' app/build.gradle
-          sed -i 's/SVGOMG/Sanjineer/g' app/src/main/res/values/strings.xml
+          
+          # Update build.gradle with new package name and domain
+          sed -i 's/jakearchibald\.github\.io\/svgomg/app.sanjineer.in/g' app/build.gradle
+          sed -i 's/io\.jakearchibald\.svgomg/com.sanjvik.sanjineer/g' app/build.gradle
+          
+          # Verify the changes were made
+          echo "=== Updated build.gradle ==="
+          grep -E "(applicationId|HOST_NAME)" app/build.gradle || echo "Package name updated successfully"
+
+      - name: Update TWA Config - App Name & Resources
+        run: |
+          cd twa-project
+          
+          # Create the strings.xml file if it doesn't exist with correct values
+          mkdir -p app/src/main/res/values
+          
+          cat > app/src/main/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Sanjineer</string>
+              <string name="twa_domain">app.sanjineer.in</string>
+              <string name="launch_url">/</string>
+          </resources>
+          EOF
+          
+          echo "=== Created strings.xml ==="
+          cat app/src/main/res/values/strings.xml
+
+      - name: Setup Gradle
+        run: |
+          cd twa-project
+          chmod +x gradlew
+          ./gradlew --version
 
       - name: Build APK
         run: |
           cd twa-project
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --build-cache --warning-mode all
+
+      - name: Verify APK
+        run: |
+          ls -lh twa-project/app/build/outputs/apk/debug/
+          if [ ! -f "twa-project/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "Error: APK not found!"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: sanjineer-apk
-          path: twa-project/app/build/outputs/apk/debug/*.apk
+          path: twa-project/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: twa-project/app/build/outputs/apk/debug/*.apk
+          files: twa-project/app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
