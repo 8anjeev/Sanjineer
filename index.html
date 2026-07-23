@@ -5043,21 +5043,38 @@ function _wsShowCreateProject() {
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
 }
+// BUGFIX (duplicate projects): the dupe-check (get_my_projects) and the
+// actual create_project call are two sequential network round-trips with
+// no button-disable in between — a double-tap/double-click (easy to do on
+// mobile, especially on a slow connection where the "Checking project
+// name…" loading state doesn't visually register as "already submitted")
+// could fire this function twice before either call resolves, so both
+// calls pass the client-side dupe-check and both land as separate
+// create_project RPC calls. create_project() itself only guards against
+// duplicates with a plain SELECT-then-INSERT (no unique constraint, no
+// locking) so that race wasn't closed server-side either. This flag closes
+// the window on the client; the matching server-side fix is a
+// pg_advisory_xact_lock at the top of create_project().
+var _wsCreateProjectInFlight = false;
 function _wsCreateProject() {
+  if (_wsCreateProjectInFlight) return;
   var name = ((document.getElementById('ws-proj-name') || {}).value || '').trim();
   var addr = ((document.getElementById('ws-proj-address') || {}).value || '').trim();
   if (!name) { _wsSetErr('⚠️ Enter a project name'); return; }
+  _wsCreateProjectInFlight = true;
+  function _release() { _wsCreateProjectInFlight = false; }
   _wsLoading('Checking project name…');
   _sb.rpc('get_my_projects', { p_company_id: window._wsCompanyId }).then(function(pr) {
     var existing = (pr && pr.data) || [];
     var dupe = existing.some(function(p) { return p.project_name && p.project_name.trim().toLowerCase() === name.toLowerCase(); });
-    if (dupe) { _wsShowCreateProject(); _wsSetErr('⚠️ A project named "' + name + '" already exists'); return; }
+    if (dupe) { _release(); _wsShowCreateProject(); _wsSetErr('⚠️ A project named "' + name + '" already exists'); return; }
     _wsLoading('Creating project…');
     _sb.rpc('create_project', { p_company_id: window._wsCompanyId, p_name: name, p_code: null, p_address: addr || null, p_start_date: null, p_end_date: null }).then(function(r) {
+      _release();
       if (r.error) { _wsShowCreateProject(); _wsSetErr(r.error.message); return; }
       _wsSelectProject({ project_id: r.data, project_name: name, role_name: safeLS.getItem(WS_CROLE_KEY) || 'owner' });
-    }).catch(function(e) { _wsShowCreateProject(); _wsSetErr(e.message); });
-  }).catch(function(e) { _wsShowCreateProject(); _wsSetErr(e.message); });
+    }).catch(function(e) { _release(); _wsShowCreateProject(); _wsSetErr(e.message); });
+  }).catch(function(e) { _release(); _wsShowCreateProject(); _wsSetErr(e.message); });
 }
 
 // ── Multiple projects — let the user pick ──
@@ -10286,7 +10303,20 @@ function switchTab(name) {
 
   try {
     AD = ld();
-    if      (name === 'dashboard')    updateDash();
+    // BUGFIX: this used to call updateDash() only, which never refreshes
+    // the Sales dashboard chip (_updateSalesDashCard() only lived inside
+    // renderDashboard(), which itself was only ever called at initial page
+    // load — never on a tab switch). That meant the Sales chip (and the
+    // Workers/Contractors/Tools portions renderDashboard also bundles)
+    // went stale or stayed hidden the moment you left the Dashboard tab
+    // and came back, or switched/created a project (switchProject()'s own
+    // reload step calls switchTab('dashboard') exactly like this). Calling
+    // the full renderDashboard() wrapper here fixes it for every path that
+    // lands back on Dashboard, not just the one-off case this was
+    // previously patched for. Safe to call repeatedly — the same
+    // viewWorkers()/viewContractors()/viewTools() calls it bundles already
+    // run again every time their own dedicated tab is opened below.
+    if      (name === 'dashboard')    { if (typeof renderDashboard === 'function') renderDashboard(); else updateDash(); }
     else if (name === 'daily')        { loadMeta(); loadPhotos(); viewDaily(); viewDeptSummary(); viewDailyBoqProgress(); viewDailyMachinery(); }
     else if (name === 'departmental') loadDeptTab();
     else if (name === 'attendance')   viewWorkers();
@@ -18930,16 +18960,33 @@ function doAdminLogout() {
     'cm_cloud','cm_cloud_activated','cm_cloud_site',
     'cm_sub_end','cm_rzp_payment_id',
     'sanj_projects','sanj_current_project',
-    ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, CLOUD_KEY
+    ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, CLOUD_KEY,
+    // BUGFIX (owner button / full Sales edit rights leaking to joined
+    // users): WS_CROLE_KEY ('sanj_company_role') and the per-company
+    // 'sanj_owned_company_<id>' flag (set once by _wsMarkOwnedCompany()
+    // the moment a device creates/owns a company) were never cleared on
+    // logout. _ownsAnyCompany() trusts both indefinitely, so any device
+    // that ever owned a company kept silently promoting the NEXT signed-in
+    // account on that device to 'owner' too — even a genuinely joined
+    // engineer/sales_admin — which is what showed the 👑 Owner Dashboard
+    // button and granted full add/edit rights in Sales Manager to accounts
+    // that only redeemed a join code. Clearing WS_CROLE_KEY here is enough
+    // on its own to fix _ownsAnyCompany()'s first check; the wildcard scan
+    // below (alongside the sb-/supabase. cleanup) removes every
+    // sanj_owned_company_* flag too, since those are keyed per-company-id
+    // and unknown ahead of time.
+    (typeof WS_CROLE_KEY !== 'undefined' ? WS_CROLE_KEY : 'sanj_company_role')
   );
   // deduplicate and remove
   var _seen = {};
   _allKeys.forEach(function(k){ if(k && !_seen[k]){ _seen[k]=1; safeLS.removeItem(k); } });
-  // Also wipe any supabase auth tokens stored by gotrue
+  // Also wipe any supabase auth tokens stored by gotrue, and any lingering
+  // per-company "I own this" flags (see BUGFIX note above) — these are
+  // keyed by company id so they can't be listed ahead of time.
   try {
     var _lsKeys = Object.keys(localStorage);
     _lsKeys.forEach(function(k){
-      if(k.indexOf('sb-')===0 || k.indexOf('supabase.')===0){ localStorage.removeItem(k); }
+      if(k.indexOf('sb-')===0 || k.indexOf('supabase.')===0 || k.indexOf('sanj_owned_company_')===0){ localStorage.removeItem(k); }
     });
   } catch(e){}
   // Reset in-memory data
@@ -23675,6 +23722,19 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
               if (roleName !== 'sales_admin' && typeof window.startAutoSync === 'function') window.startAutoSync();
               toast('✅ Joined project', 'ok');
               if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
+              // BUGFIX: nothing here ever refreshed the dashboard's Sales
+              // summary chip (dash-sales-card). _obEnterAppAfterJoin() only
+              // runs the onboarding overlay's fade-out + _launchApp() (a
+              // pure CSS animation trigger, no data render) and only fires
+              // at all when the onboarding overlay is on screen — a
+              // same-session "Join Project" from inside the app (not
+              // onboarding) hit neither path. So even a site_engineer who
+              // genuinely has sales.view granted (per role_permissions)
+              // never saw the chip until some unrelated reload happened to
+              // trigger renderDashboard() later. Refresh it directly, now
+              // that _applyPermState() has resolved and window._permSet /
+              // _ENGINEER_MODE actually reflect the real joined role.
+              if (typeof _updateSalesDashCard === 'function') { try { _updateSalesDashCard(); } catch(e) {} }
               if (roleName === 'sales_admin' && typeof window._enterSalesEngineerMode === 'function') {
                 setTimeout(function(){ window._enterSalesEngineerMode(); }, 250);
               }
