@@ -23091,7 +23091,7 @@ var _ownerTabRenderers = {
             else if (f.status === 'sold') totSold++;
             else totAvail++;
             var dateStr = f.updatedAt ? istFromTs(f.updatedAt) : '';
-            var val = (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f) : (parseFloat(f.price)||0);
+            var val = (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0);
             if ((f.status === 'book' || f.status === 'sold')) {
               var statusLbl = f.status === 'sold' ? 'Sold' : 'Booked';
               var statusClr = f.status === 'sold' ? '#dc2626' : '#d97706';
@@ -23292,8 +23292,8 @@ function _ownerAggregate(projects) {
       d.sales.buildings.forEach(function(b) {
         (b.floors || []).forEach(function(fl) {
           (fl.flats || []).forEach(function(f) {
-            if (f.status === 'book') { sBook++; sVal += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f) : (parseFloat(f.price)||0); }
-            else if (f.status === 'sold') { sSold++; sVal += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f) : (parseFloat(f.price)||0); }
+            if (f.status === 'book') { sBook++; sVal += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0); }
+            else if (f.status === 'sold') { sSold++; sVal += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0); }
             else sAvail++;
           });
         });
@@ -24232,6 +24232,8 @@ document.addEventListener('click', function(e) {
     </div>
     <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
 
+      <p id="fd-preview-note" style="display:none;font-size:9.5px;color:#fcd34d;background:rgba(245,158,11,.12);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:6px 9px;margin:0 0 .7rem;">👁️ View only — you can try different numbers below to see the total, but nothing here is saved. Only the owner or Sales Manager can actually update this flat.</p>
+
       <!-- Status buttons -->
       <div style="display:flex;gap:6px;margin-bottom:.8rem;">
         <button class="fd-status-btn" data-status="avail" onclick="setFlatStatus('avail')" style="flex:1;padding:.5rem 0;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid rgba(52,211,153,.4);background:rgba(16,185,129,.12);color:#6ee7b7;">✅ Available</button>
@@ -24470,12 +24472,37 @@ function _isSalesRealOwner() {
 }
 
 // ── Pricing helpers ──────────────────────────────────────────
-function _flatFinalPrice(f) {
+// Floor Rise Charge: a per-building setting (b.floorRiseStart,
+// b.floorRiseRate) that auto-adds a per-sqft premium to every flat from
+// a chosen floor upward, increasing one more "level" each floor higher —
+// e.g. start=3, rate=₹50/sqft → floor 3 gets +₹50/sqft, floor 4 gets
+// +₹100/sqft, floor 5 +₹150/sqft, and so on. Floor "number" is a floor's
+// 1-based position in b.floors (the order floors were added in — there's
+// no separate numeric floor field in this app), so floors should be added
+// bottom-to-top for this to line up with real floor numbers.
+function _floorRiseExtraRate(b, fl) {
+  if (!b || !fl) return 0;
+  var start = parseInt(b.floorRiseStart, 10) || 0;
+  var rate = parseFloat(b.floorRiseRate) || 0;
+  if (!start || !rate) return 0;
+  var idx = (b.floors || []).indexOf(fl);
+  if (idx === -1) return 0;
+  var floorNum = idx + 1;
+  if (floorNum < start) return 0;
+  var level = floorNum - start + 1; // 1 at the start floor, 2 the floor above it, etc.
+  return level * rate;
+}
+// b and fl are optional — pass them whenever available (every call site
+// that's already looping buildings/floors has them right there) so the
+// Floor Rise Charge factors into the total. Omitting them just skips that
+// addon rather than erroring, so old call sites still work unmodified.
+function _flatFinalPrice(f, b, fl) {
   var area = parseFloat(f.area) || 0, rate = parseFloat(f.rate) || 0;
   var soc = parseFloat(f.society) || 0, dev = parseFloat(f.dev) || 0;
   var misc = 0;
   (f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
-  return area * rate + soc + dev + misc;
+  var riseExtra = area * _floorRiseExtraRate(b, fl);
+  return area * rate + soc + dev + misc + riseExtra;
 }
 function _inr(n) {
   n = Math.round(n || 0);
@@ -24502,8 +24529,8 @@ function _updateSalesDashCard() {
     (b.floors || []).forEach(function (fl) {
       (fl.flats || []).forEach(function (f) {
         total++;
-        if (f.status === 'book') { book++; val += _flatFinalPrice(f); }
-        else if (f.status === 'sold') { sold++; val += _flatFinalPrice(f); }
+        if (f.status === 'book') { book++; val += _flatFinalPrice(f, b, fl); }
+        else if (f.status === 'sold') { sold++; val += _flatFinalPrice(f, b, fl); }
         else avail++;
       });
     });
@@ -24753,7 +24780,7 @@ function _salesFlatMatches(f, b, fl) {
   var q = _salesSearchQuery.trim();
   var qLower = q.toLowerCase();
   var area = parseFloat(f.area) || 0;
-  var price = _flatFinalPrice(f);
+  var price = _flatFinalPrice(f, b, fl);
   var text = [f.flatNo || '', b.name || '', fl.label || ''].join(' ').toLowerCase();
   if (text.indexOf(qLower) !== -1) return true;
   var qNum = parseFloat(q.replace(/[^\d.]/g, ''));
@@ -24792,7 +24819,7 @@ function renderSalesManager() {
           if (f.status === 'book') fb++;
           else if (f.status === 'sold') fs++;
           else fa++;
-          if (f.status === 'book' || f.status === 'sold') totVal += _flatFinalPrice(f);
+          if (f.status === 'book' || f.status === 'sold') totVal += _flatFinalPrice(f, b, fl);
         });
         ba += fa; bb += fb; bs += fs;
         totAvail += fa; totBook += fb; totSold += fs;
@@ -25073,25 +25100,36 @@ function openFlatDetail(buildingId, floorId, flatId) {
   document.getElementById('fd-rate').value = f.rate || '';
   document.getElementById('fd-society').value = f.society || '';
   document.getElementById('fd-dev').value = f.dev || '';
+  // FIX: these used to be `disabled` for anyone but the Sales Manager/owner,
+  // which blocked engineers from even trying out numbers. They're editable
+  // for everyone now — typing here only ever feeds the live total-price
+  // recalculation below (_fdRecalc reads straight from these inputs), and
+  // saveFlatFields() itself still hard-blocks any non-admin from actually
+  // persisting a change. So a regular engineer can play with rate/area/etc.
+  // to show a client an estimate, but nothing they type is ever written to
+  // the flat or synced to the cloud unless they're the owner/Sales Manager.
   ['fd-flatno', 'fd-type', 'fd-area', 'fd-rate', 'fd-society', 'fd-dev'].forEach(function (id) {
-    document.getElementById(id).disabled = !admin;
+    document.getElementById(id).disabled = false;
   });
   document.getElementById('fd-save-btn').style.display = admin ? 'block' : 'none';
   document.getElementById('fd-misc-add-btn').style.display = admin ? 'block' : 'none';
   document.getElementById('fd-del-btn').style.display = admin ? 'inline-block' : 'none';
+  var _fdNote = document.getElementById('fd-preview-note');
+  if (_fdNote) _fdNote.style.display = admin ? 'none' : 'block';
 
   _fdRenderMisc(f.misc || [], admin);
   _fdRecalc();
   _fdRenderRemarks(f.remarks || []);
   document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-status') === f.status);
-    // Only the real owner or a full Sales Manager (join-code) admin may
-    // change a flat's Available/Booked/Sold status. A regular engineer or
-    // limited viewer only ever gets read access + the ability to add an
-    // interested-client remark below — never a write action like this.
-    btn.disabled = !isSalesFullAdmin();
-    btn.style.opacity = isSalesFullAdmin() ? '1' : '.45';
-    btn.style.cursor = isSalesFullAdmin() ? 'pointer' : 'not-allowed';
+    // FIX: status buttons are clickable for everyone now, same reasoning
+    // as the fields above — a non-admin tap only flips the button's own
+    // visual "active" state for this open modal session (see setFlatStatus)
+    // and is never written to the flat or synced. Reopening the modal
+    // always reloads the REAL saved status from data, so nothing sticks.
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
   });
 
   _armModalGuard('flat-detail-modal');
@@ -25143,8 +25181,12 @@ function _fdRecalc() {
   var dev = parseFloat(document.getElementById('fd-dev').value) || 0;
   var misc = 0;
   var ctx = _fdCurrentFlat();
-  if (ctx && ctx.f) (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
-  var total = area * rate + soc + dev + misc;
+  var riseExtra = 0;
+  if (ctx && ctx.f) {
+    (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
+    riseExtra = area * _floorRiseExtraRate(ctx.b, ctx.fl);
+  }
+  var total = area * rate + soc + dev + misc + riseExtra;
   document.getElementById('fd-final-price').textContent = _inr(total);
 }
 function saveFlatFields() {
@@ -25170,7 +25212,15 @@ function saveFlatFields() {
   toast('Saved', 'ok');
 }
 function setFlatStatus(status) {
-  if (!isSalesFullAdmin()) { toast('Only the owner or Sales Manager can change flat status', 'err'); return; }
+  if (!isSalesFullAdmin()) {
+    // Preview-only: just flip which button looks "active" in this open
+    // modal. No ctx mutation, no ssales() call, no cloud sync, no activity
+    // log — reopening the flat always shows the real saved status again.
+    document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-status') === status);
+    });
+    return;
+  }
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
   var _statusBefore = ctx.f.status;
   ctx.f.status = status;
