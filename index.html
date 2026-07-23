@@ -915,6 +915,44 @@ self.addEventListener('fetch', function(e) {
       try {
         var map = {};
         try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+        // BUGFIX (duplicate projects with the same name): if the local
+        // project list was ever reset (doAdminLogout() wipes 'sanj_projects'
+        // on every logout, but never touches the actual cloud project) and
+        // this same-named project gets created again locally, the lookup
+        // above finds the pre-existing CLOUD project and links to it — no
+        // duplicate cloud row is ever created, which is why a DB query for
+        // duplicate rows comes back empty. But without this check, a SECOND
+        // local shell (proj.id, just pushed to window.projects by
+        // createProject()) would still get its own permanent map entry
+        // pointing at the exact same cloudProjectId as whatever local shell
+        // already existed for it — two local rows, one real cloud project,
+        // both showing in the switcher and both showing the same reports in
+        // Owner Overview (which iterates window.projects). Detect that and
+        // merge into the pre-existing shell instead, exactly like
+        // _resolveLocalShellForCloudProject() already does for the join path.
+        var existingLocalId = null;
+        Object.keys(map).forEach(function(lid) {
+          if (existingLocalId) return;
+          if (lid !== proj.id && map[lid] && map[lid].projectId === cloudProjectId) {
+            var stillExists = (window.projects || []).some(function(p){ return p.id === lid; });
+            if (stillExists) existingLocalId = lid;
+          }
+        });
+        if (existingLocalId) {
+          // Drop the just-created duplicate shell entirely rather than
+          // leaving it sitting in the switcher pointing at the same project.
+          window.projects = (window.projects || []).filter(function(p){ return p.id !== proj.id; });
+          if (window.currentProjectId === proj.id) {
+            window.currentProjectId = existingLocalId;
+            try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
+          }
+          delete map[proj.id];
+          try { if (typeof _saveProjects === 'function') _saveProjects(); } catch(e) {}
+          try { if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown(); } catch(e) {}
+          localStorage.setItem('sanj_sb_project_map', JSON.stringify(map));
+          if (cb) cb(true, existingLocalId);
+          return;
+        }
         map[proj.id] = { companyId: companyId, projectId: cloudProjectId, role: 'owner' };
         localStorage.setItem('sanj_sb_project_map', JSON.stringify(map));
       } catch(e) {}
@@ -1230,28 +1268,60 @@ self.addEventListener('fetch', function(e) {
     // the same local shell instead of creating a duplicate. Collect EVERY
     // matching entry (not just the first) — if earlier corrupted state left
     // more than one local shell mapped to the same cloud project, prefer
-    // whichever shell still actually exists in window.projects, and clean
-    // any dangling duplicates out of the map while we're here so they don't
-    // keep coming back.
-    var existingLocalId = null;
-    var danglingIds = [];
+    // whichever shell is currently active (so this doesn't yank someone
+    // away from what they're looking at), otherwise the first one found,
+    // and actually REMOVE every other duplicate — both its map entry and
+    // its entry in window.projects itself. (Previously this only cleaned
+    // up "dangling" map rows whose local shell no longer existed, but left
+    // a genuine duplicate shell — one that DOES still exist in
+    // window.projects, e.g. from the createProject()/
+    // _repairOwnedProjectCloudLink duplication bug — sitting there
+    // orphaned with its map entry deleted but the shell itself untouched,
+    // which just re-triggers the same duplication again the next time
+    // something tries to cloud-link it.)
+    var matchingIds = [];
     Object.keys(map).forEach(function(localId) {
-      if (map[localId] && map[localId].projectId === cloudProjectId) {
-        var stillExists = window.projects.find(function(p){ return p.id === localId; });
-        if (stillExists && !existingLocalId) existingLocalId = localId;
-        else if (localId !== existingLocalId) danglingIds.push(localId);
-      }
+      if (map[localId] && map[localId].projectId === cloudProjectId) matchingIds.push(localId);
     });
+    // A shell can exist in window.projects without (yet) having a map
+    // entry re-scanned above only in edge cases, but to be thorough also
+    // catch any window.projects row that isn't in matchingIds at all —
+    // not expected in practice since every shell for a cloud project goes
+    // through this function or _repairOwnedProjectCloudLink, both of
+    // which always write a map entry, but cheap to guard regardless.
+    var existingLocalId = null;
+    if (matchingIds.length) {
+      var live = matchingIds.filter(function(lid){ return (window.projects || []).some(function(p){ return p.id === lid; }); });
+      existingLocalId = (window.currentProjectId && live.indexOf(window.currentProjectId) !== -1)
+        ? window.currentProjectId
+        : (live[0] || null);
+    }
     if (existingLocalId) {
       var mapDirty = false;
+      var removedAny = false;
+      matchingIds.forEach(function(dId) {
+        if (dId === existingLocalId) return;
+        delete map[dId];
+        mapDirty = true;
+        var hadShell = (window.projects || []).some(function(p){ return p.id === dId; });
+        if (hadShell) {
+          window.projects = window.projects.filter(function(p){ return p.id !== dId; });
+          removedAny = true;
+        }
+        if (window.currentProjectId === dId) {
+          window.currentProjectId = existingLocalId;
+          try { localStorage.setItem('sanj_current_project', existingLocalId); } catch(e) {}
+        }
+      });
+      if (removedAny) {
+        try { if (typeof _saveProjects === 'function') _saveProjects(); } catch(e) {}
+        try { if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown(); } catch(e) {}
+      }
       // Keep the stored role/company name fresh — they can change between
       // joins/re-logins, and stale values would show the wrong badge or
       // restore the wrong permission set on switch.
-      if (roleName && map[existingLocalId].role !== roleName) { map[existingLocalId].role = roleName; mapDirty = true; }
-      if (companyName && map[existingLocalId].companyName !== companyName) { map[existingLocalId].companyName = companyName; mapDirty = true; }
-      // Drop any dangling map rows for this same cloud project that point at
-      // a local shell which no longer exists.
-      danglingIds.forEach(function(dId){ delete map[dId]; mapDirty = true; });
+      if (roleName && map[existingLocalId] && map[existingLocalId].role !== roleName) { map[existingLocalId].role = roleName; mapDirty = true; }
+      if (companyName && map[existingLocalId] && map[existingLocalId].companyName !== companyName) { map[existingLocalId].companyName = companyName; mapDirty = true; }
       if (mapDirty) { try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {} }
       // BUGFIX (owner's own other projects showing as "🔗 Joined" +
       // read-only in the switcher/QDPR): every project this function ever
@@ -24462,7 +24532,20 @@ function _updateSalesDashCard() {
   if (a2) a2.textContent = book;
   if (a3) a3.textContent = sold;
   if (a4) a4.textContent = _inr(val);
-  card.style.display = (total > 0 && canAccessSales()) ? 'block' : 'none';
+  // BUGFIX (per product decision): Sales is a universal, always-available
+  // entry point for anyone permitted to use it — owner on every project,
+  // and any joiner with sales.view/sales.manage — not something gated
+  // behind "this specific project already has flats entered." Previously
+  // this required total > 0 for the CURRENTLY ACTIVE project's own Sales
+  // data, so a brand-new project (or simply any project nobody had gotten
+  // around to adding buildings/flats to yet) never showed the chip at all,
+  // for the owner OR a joiner — even though tapping in to add the first
+  // building is exactly what the chip is for. The permission check
+  // (canAccessSales()) is unchanged and still fully applies; only the
+  // "must already contain data" requirement is removed. (A later,
+  // explicit "only show Sales on these specific projects" allow-list is a
+  // separate feature to build on top of this, not implemented here.)
+  card.style.display = canAccessSales() ? 'block' : 'none';
 }
 
 // Keep the Settings row honest about whether Sales is unlocked, every
