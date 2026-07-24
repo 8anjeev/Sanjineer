@@ -895,6 +895,27 @@ self.addEventListener('fetch', function(e) {
     return baseKey;
   }
 
+  // ── Company-scoped key ──────────────────────────────────────────
+  // Same idea as _pk(), but keyed off the COMPANY instead of the
+  // currently-open project — used for anything that should be one
+  // shared list across every project/user in the company (e.g. Sales
+  // Manager) instead of duplicated per project. Falls back to the
+  // legacy project-scoped key only if no company id is known yet
+  // (e.g. very first load before login resolves _wsCompanyId), so
+  // nothing breaks for a signed-out/offline session.
+  function _currentCompanyId() {
+    try {
+      return (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId)
+        || (typeof WS_COMPANY_KEY !== 'undefined' ? safeLS.getItem(WS_COMPANY_KEY) : null)
+        || null;
+    } catch (e) { return null; }
+  }
+  function _cpk(baseKey) {
+    var cid = _currentCompanyId();
+    if (cid) return 'sanj_company_' + cid + '_' + baseKey;
+    return _pk(baseKey); // no company resolved yet — safe fallback, not the final storage location
+  }
+
   // ── CRUD ──────────────────────────────────────────────────────
   // Free tier: max 1 own project. Pro/Enterprise: unlimited.
   function _ownProjectLimit() {
@@ -1174,26 +1195,23 @@ self.addEventListener('fetch', function(e) {
     // already final — capped short by _sanjShowLoader's own safety timer.
     if (typeof window._sanjShowLoader === 'function') window._sanjShowLoader('Switching project…');
     var _swPullDone = false, _swLocalDone = false;
-    function _swMaybeHideLoader() {
-      if (_swPullDone && _swLocalDone && typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
-    }
-
-    // Pull this project's cloud backup first (getSiteId now returns project-specific key).
-    // _adminCloudPull captures this epoch internally and will no-op if the
-    // user switches again before the response arrives.
-    if (typeof _adminCloudPull === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
-      _adminCloudPull(true, function() { _swPullDone = true; _swMaybeHideLoader(); });
-    } else {
-      _swPullDone = true; // no cloud session for this project — nothing to wait for
-    }
-    // Re-scope the realtime subscription to the new project (tears down
-    // the old project's channel and opens one filtered to this project only).
-    if (typeof _startAdminRealtime === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
-      _startAdminRealtime();
-    }
-    // Reload the currently active tab with the new project's data
-    _switchProjectReloadTimer = setTimeout(function() {
-      _switchProjectReloadTimer = null;
+    // BUGFIX: this used to render (AD = ld(); switchTab(...)) exactly ONCE,
+    // from a fixed 200ms timer, regardless of whether the cloud pull for
+    // the new project had actually finished by then. The loader correctly
+    // waited for BOTH signals before hiding, but nothing ever re-rendered
+    // with the pull's freshly-written local data if the pull landed AFTER
+    // that 200ms mark (very plausible on a slow connection) — so the
+    // loader would fade out over screen content still reflecting the local
+    // read from before the pull completed (in practice: numbers left over
+    // from whichever project was open before the switch), and it would
+    // only self-correct whenever something else incidentally triggered
+    // another render later. Centralizing the actual render into this one
+    // function, called only once BOTH flags are true, guarantees whatever
+    // is on screen when the loader disappears reflects local storage AS OF
+    // right now — which, by the time the pull's own callback has fired, is
+    // guaranteed to include whatever that pull just wrote.
+    function _swRenderAndHideLoader() {
+      if (!(_swPullDone && _swLocalDone)) return;
       if (window._projectEpoch !== _epoch) return; // superseded by another switch
       try {
         AD = ld();
@@ -1202,8 +1220,30 @@ self.addEventListener('fetch', function(e) {
         var tabName = activeBtn ? activeBtn.getAttribute('data-tab') : 'dashboard';
         if (typeof switchTab === 'function') switchTab(tabName || 'dashboard');
       } catch(e) {}
+      if (typeof window._sanjHideLoader === 'function') window._sanjHideLoader();
+    }
+
+    // Pull this project's cloud backup first (getSiteId now returns project-specific key).
+    // _adminCloudPull captures this epoch internally and will no-op if the
+    // user switches again before the response arrives.
+    if (typeof _adminCloudPull === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
+      _adminCloudPull(true, function() { _swPullDone = true; _swRenderAndHideLoader(); });
+    } else {
+      _swPullDone = true; // no cloud session for this project — nothing to wait for
+    }
+    // Re-scope the realtime subscription to the new project (tears down
+    // the old project's channel and opens one filtered to this project only).
+    if (typeof _startAdminRealtime === 'function' && typeof _adminSBUser !== 'undefined' && _adminSBUser) {
+      _startAdminRealtime();
+    }
+    // This timer's job is now just "don't wait forever for the local-side
+    // signal" (project-settings load, DOM readiness, etc.) — the actual
+    // render happens in _swRenderAndHideLoader above, gated on both signals,
+    // not here.
+    _switchProjectReloadTimer = setTimeout(function() {
+      _switchProjectReloadTimer = null;
       _swLocalDone = true;
-      _swMaybeHideLoader();
+      _swRenderAndHideLoader();
     }, 200);
   }
 
@@ -11595,7 +11635,7 @@ function _qdprSyncOtherProjectToCloud(pid) {
     var localDb   = qdprLoadProjAD(pid);
     var mergedDb  = (typeof _mergeRecordArrays === 'function') ? _mergeRecordArrays(localDb, cloudData.db || [], tombs) : localDb;
     var localMats = qdprLoadProjMats(pid);
-    var mergedMats = (typeof _mergeArrayStore === 'function') ? _mergeArrayStore(localMats, cloudData.mats || [], tombs, 'id', '__ts', 'mat__') : localMats;
+    var mergedMats = (typeof _mergeMaterials === 'function') ? _mergeMaterials(localMats, cloudData.mats || [], tombs) : localMats;
     cloudData.db = mergedDb;
     cloudData.mats = mergedMats;
     // meta (site note/photos) is a single object, not a record array — this
@@ -11674,8 +11714,8 @@ function _qdprMergeCloudIntoProject(pid, d) {
   if (pid === window.currentProjectId) AD = mergedDb;
 
   var localMats = qdprLoadProjMats(pid);
-  var mergedMats = (typeof _mergeArrayStore === 'function')
-    ? _mergeArrayStore(localMats, d.mats || [], tombs, 'id', '__ts', 'mat__')
+  var mergedMats = (typeof _mergeMaterials === 'function')
+    ? _mergeMaterials(localMats, d.mats || [], tombs)
     : (d.mats && d.mats.length ? d.mats : localMats);
   try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mergedMats)); } catch(e) {}
 
@@ -11787,11 +11827,11 @@ function _qdprSyncMaterials(pid, report){
       item.category = m.matCategory;
     }
     item.transactions = (item.transactions||[]).filter(function(t){ return !(t.qdpr_report_id===reportId && t.qdpr_material_row===m.id); });
-    item.transactions.push({
+    item.transactions.push(Object.assign({
       type:'purchase', qty: parseFloat(m.qty)||0, date: report.date, unit: m.unit||item.unit,
       cost: parseFloat(m.amount)||0, supplier: m.supplier||'QDPR Entry', category: m.matCategory||item.category||'',
       qdpr_report_id: reportId, qdpr_material_row: m.id
-    });
+    }, (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
   });
   // Drop any auto-synced transactions for rows that were removed from the report
   var liveRowIds = (report.matBought||[]).filter(function(m){ return m.material && parseFloat(m.qty)>0; }).map(function(m){ return m.id; });
@@ -12969,8 +13009,9 @@ function addExpenseMaterial(){
     // stays only in Expenses, so Materials and Expenses can't get mixed up.
     if (type === 'material' && _existingMatForSync) {
       _existingMatForSync.transactions = _existingMatForSync.transactions || [];
-      _existingMatForSync.transactions.push({ type:'purchase', qty:qty||1, date:date,
-        note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:_existingMatForSync.unit||'' });
+      _existingMatForSync.transactions.push(Object.assign({ type:'purchase', qty:qty||1, date:date,
+        note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:_existingMatForSync.unit||'' },
+        (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
       smat(_matsForSync);
       if (typeof viewMaterials === 'function') viewMaterials();
     }
@@ -13259,7 +13300,8 @@ function saveMatPurchase(){
   if(!date||!qty){ toast('Enter date and quantity','err'); return; }
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
   if (category && !item.category) item.category = category;
-  var txn={type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,category:category||item.category||'',remark:remark};
+  var txn=Object.assign({type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,category:category||item.category||'',remark:remark},
+    (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {});
   _saveBill('mp', function(key){
     txn.bill_id = key;
     item.transactions.push(txn); smat(mats);
@@ -13280,7 +13322,7 @@ function saveMatUse(){
   if(!date||!qty){ toast('Enter date and quantity','err'); return; }
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
   if(qty>getbal(item)){ toast('Only '+getbal(item)+' '+item.unit+' in stock!','err'); return; }
-  item.transactions.push({type:'use',qty:qty,date:date,note:note}); smat(mats);
+  item.transactions.push(Object.assign({type:'use',qty:qty,date:date,note:note}, (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {})); smat(mats);
   closeMatUseModal(); toast('Usage recorded','ok'); viewMaterials(); updateDash();
 }
 
@@ -17486,7 +17528,13 @@ function _mergeCmAllBucket(remoteCmAll, remoteCmAllTs, forceOverwrite) {
   var _dedicatedKeys = {
     'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
     'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
-    'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+    'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1,
+    // PHASE 5: Sales Manager moved from per-project (cm_all) to company-
+    // wide storage — see company_sales table / _pushCompanySales /
+    // _pullCompanySales. Skip these here entirely so a stray older
+    // per-project blob (from a device that hasn't refreshed yet) can
+    // never overwrite the shared company copy through this path.
+    'cm_sales':1,'cm_sm_activity':1
   };
   var _localTs  = _loadCmModTs();
   var _remoteTs = (remoteCmAllTs && typeof remoteCmAllTs === 'object') ? remoteCmAllTs : {};
@@ -17495,21 +17543,6 @@ function _mergeCmAllBucket(remoteCmAll, remoteCmAllTs, forceOverwrite) {
     if (_dedicatedKeys[k]) return;
     var v = remoteCmAll[k];
     if (v === null || v === undefined) return;
-    // Sales Manager data (buildings -> floors -> flats) gets a real nested
-    // merge instead of "whole blob, one timestamp wins" — see
-    // _mergeSalesData for why that matters here specifically.
-    if (k === 'cm_sales' && !forceOverwrite) {
-      try {
-        var _localSales = JSON.parse(safeLS.getItem(_pk(k)) || 'null') || { buildings: [] };
-        var _remoteSales = (typeof v === 'string') ? JSON.parse(v) : v;
-        var _salesTombs = _mergeTombstones(_loadTombstones(), remoteCmAll.tombstones || {});
-        var _mergedSales = _mergeSalesData(_localSales, _remoteSales, _salesTombs);
-        safeLS.setItem(_pk(k), JSON.stringify(_mergedSales));
-        var _rt = _remoteTs[k] || 0;
-        if (_rt) _newTsMap[k] = _rt;
-      } catch (e) {}
-      return;
-    }
     var lt = _localTs[k] || 0;
     var rt = _remoteTs[k] || 0;
     if (!forceOverwrite && lt && rt && rt <= lt) {
@@ -17713,6 +17746,15 @@ function _mergeRecordArrays(localArr, remoteArr, tombstones) {
   return _mergeArrayStore(localArr, remoteArr, tombstones, '__id', '__ts', '');
 }
 
+// BUGFIX (materials merge silently dropping transactions): every material
+// transaction pushed from now on gets its own stable __id/__ts so the new
+// _mergeMaterials() below can merge each material's transactions array
+// item-by-item, the same way _mergeSalesData/_mergeFloors already merge
+// buildings/floors/flats. See _mergeMaterials() for the full explanation.
+function _newTxnStamp() {
+  return { __id: 'txn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), __ts: Date.now() };
+}
+
 function _mergeMachinery(local, remote, tombstones) {
   return _mergeKeyedStore(local, remote, tombstones, 'id', '__ts', 'mach__');
 }
@@ -17768,6 +17810,50 @@ function _mergeSalesData(local, remote, tombstones) {
     mergedBuildings.push(merged);
   });
   return { buildings: mergedBuildings };
+}
+
+// BUGFIX (materials merge silently dropping transactions): mats used to
+// go through the flat _mergeArrayStore(..., 'id', '__ts', 'mat__') — that
+// treats each MATERIAL record as one atomic item, so it picks whichever
+// side's material record has the newer top-level __ts and takes it
+// WHOLESALE, transactions array included. __ts on a material is bumped by
+// _autoStampArray() the moment ANYTHING about it changes, including
+// pushing a new transaction — so if the owner logs a purchase on their
+// phone while an engineer logs a "use" entry against the SAME material on
+// theirs, before either has synced with the other, whichever push happens
+// to land with the (even slightly) newer material-level timestamp wins
+// entirely, and the other device's transaction is silently discarded —
+// never merged, never shown, gone. This mirrors _mergeSalesData/
+// _mergeFloors exactly: pick a base for the material's own fields (name/
+// unit/category/minQty/remark/supplierPhone/etc.) the same way as before,
+// but then merge the transactions array item-by-item using each
+// transaction's own __id/__ts (added at every push site — see
+// _newTxnStamp()). Legacy transactions from before this fix have no __id
+// and fall into _mergeArrayStore's "idless" bucket, which unions them
+// safely (exact-duplicate detection only) exactly as it already did for
+// every other idless-item case in this codebase — no backfill needed.
+function _mergeMaterials(localMats, remoteMats, tombstones) {
+  var byId = {};
+  (localMats || []).forEach(function(m) { if (m && m.id) byId[m.id] = { local: m }; });
+  (remoteMats || []).forEach(function(m) {
+    if (!m || !m.id) return;
+    byId[m.id] = byId[m.id] || {};
+    byId[m.id].remote = m;
+  });
+  var out = [];
+  Object.keys(byId).forEach(function(id) {
+    var entry = byId[id];
+    var lm = entry.local, rm = entry.remote;
+    var lts = (lm && lm.__ts) || 0, rts = (rm && rm.__ts) || 0;
+    var tomb = tombstones['mat__' + id] || 0;
+    if (tomb && tomb >= Math.max(lts, rts)) return; // deleted, and the delete is the newest thing that happened to it
+    var base = (!lm) ? rm : (!rm) ? lm : (rts > lts ? rm : lm);
+    if (!base) return;
+    var merged = Object.assign({}, base);
+    merged.transactions = _mergeArrayStore(lm ? lm.transactions : [], rm ? rm.transactions : [], tombstones, '__id', '__ts', 'mattxn__');
+    out.push(merged);
+  });
+  return out;
 }
 
 // Per-field merge for single-object stores. `localFts`/`remoteFts` are
@@ -17900,7 +17986,8 @@ function cloudBackupNow(silent) {
     var _dedicatedKeys = {
       'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
       'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
-      'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+      'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1,
+      'cm_sales':1,'cm_sm_activity':1 // company-wide now — see company_sales table
     };
     var _prefix = window.currentProjectId ? ('sanj_project_' + window.currentProjectId + '_') : '';
     try {
@@ -18241,7 +18328,7 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   // its own actual timestamps instead of one device's copy just winning.
 
   // Materials (array of items; id + __ts)
-  var mergedMats = _mergeArrayStore(lmat(), d.mats || [], mergedTombs, 'id', '__ts', 'mat__');
+  var mergedMats = (typeof _mergeMaterials === 'function') ? _mergeMaterials(lmat(), d.mats || [], mergedTombs) : _mergeArrayStore(lmat(), d.mats || [], mergedTombs, 'id', '__ts', 'mat__');
   try { safeLS.setItem(_pk(MATS), JSON.stringify(mergedMats)); } catch(e) {}
 
   // Milestones (array; id + __ts)
@@ -19846,7 +19933,7 @@ function markPOReceived(id) {
 
       if (existing) {
         existing.transactions = existing.transactions || [];
-        existing.transactions.push({
+        existing.transactions.push(Object.assign({
           type: 'purchase',
           qty:  qty || 1,
           date: today,
@@ -19854,7 +19941,7 @@ function markPOReceived(id) {
           cost: amt,
           supplier: supplierName,
           unit: unit || existing.unit || ''
-        });
+        }, (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
         matched++;
       } else {
         mats.push({
@@ -22703,8 +22790,7 @@ function _ownerLoadProject(pid) {
     bgt:  j(pk(BGT_KEY), 'null'),
     ms:   j(pk(MS_KEY), '[]'),
     pl:   j(pk(PL_KEY), '[]'),
-    mach: j(pk(MACH_KEY), '{}'),
-    sales: j(pk(SALES_KEY), 'null')
+    mach: j(pk(MACH_KEY), '{}')
   };
 }
 
@@ -23027,43 +23113,41 @@ var _ownerTabRenderers = {
       + (rows.length ? rows.map(function(r){return r.html;}).join('') : _ownerEmpty('No site visits in this period'));
   },
 
-  // Sales — cumulative Sold/Booked/Remaining totals across every project,
-  // today's bookings, an aggregated interested-clients (leads) list, and
-  // recent booking/sale activity. Buildings themselves are NOT listed or
-  // managed here — that's deliberately manual-only, one at a time, inside
-  // each project's own Sales Manager (see _addSalesBuilding()).
+  // Sales — cumulative Sold/Booked/Remaining totals, today's bookings, an
+  // aggregated interested-clients (leads) list, and recent booking/sale
+  // activity. PHASE 5: Sales Manager is one shared company-wide list now
+  // (see company_sales table) rather than per-project, so this reads it
+  // ONCE instead of looping every project — looping would show the same
+  // buildings once per project and multiply every total.
   sales: function(projects) {
     if (!window.isEnterpriseUser) return _ownerEmpty('Sales Manager is an Enterprise feature');
     var todayStr = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
     var rows = [], todayRows = [], clients = [];
     var totAvail = 0, totBook = 0, totSold = 0;
-    projects.forEach(function(p) {
-      var d = _ownerLoadProject(p.id);
-      if (!d.sales || !d.sales.buildings) return;
-      d.sales.buildings.forEach(function(b) {
-        (b.floors || []).forEach(function(fl) {
-          (fl.flats || []).forEach(function(f) {
-            if (f.status === 'book') totBook++;
-            else if (f.status === 'sold') totSold++;
-            else totAvail++;
-            var dateStr = f.updatedAt ? istFromTs(f.updatedAt) : '';
-            var val = (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0);
-            if ((f.status === 'book' || f.status === 'sold')) {
-              var statusLbl = f.status === 'sold' ? 'Sold' : 'Booked';
-              var statusClr = f.status === 'sold' ? '#dc2626' : '#d97706';
-              var title = _jhtml(f.flatNo || 'Flat') + (f.type ? ' <span style="opacity:.55">(' + _jhtml(f.type) + ')</span>' : '') + (b.name ? ' — ' + _jhtml(b.name) : '') + (fl.label ? ' · ' + _jhtml(fl.label) : '')
-                + ' <span style="color:' + statusClr + '">· ' + statusLbl + '</span>';
-              var meta = (val ? '₹' + _ownerFmt(val) + ' · ' : '') + (dateStr ? fd(dateStr) : '');
-              if (dateStr === todayStr) todayRows.push(_ownerRow(title, meta, p.name));
-              if (_ownerInRange(dateStr)) rows.push({ date: dateStr, html: _ownerRow(title, meta, p.name) });
-            }
-            (f.remarks || []).forEach(function(r) {
-              var rDate = r.ts ? istFromTs(r.ts) : '';
-              clients.push({
-                ts: r.ts || 0, isToday: rDate === todayStr,
-                name: r.name, phone: r.phone, budget: r.budget, note: r.note,
-                flat: f.flatNo, building: b.name, floor: fl.label, site: p.name
-              });
+    var salesData = (typeof lsales === 'function') ? lsales() : { buildings: [] };
+    (salesData.buildings || []).forEach(function(b) {
+      (b.floors || []).forEach(function(fl) {
+        (fl.flats || []).forEach(function(f) {
+          if (f.status === 'book') totBook++;
+          else if (f.status === 'sold') totSold++;
+          else totAvail++;
+          var dateStr = f.updatedAt ? istFromTs(f.updatedAt) : '';
+          var val = (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0);
+          if ((f.status === 'book' || f.status === 'sold')) {
+            var statusLbl = f.status === 'sold' ? 'Sold' : 'Booked';
+            var statusClr = f.status === 'sold' ? '#dc2626' : '#d97706';
+            var title = _jhtml(f.flatNo || 'Flat') + (f.type ? ' <span style="opacity:.55">(' + _jhtml(f.type) + ')</span>' : '') + (b.name ? ' — ' + _jhtml(b.name) : '') + (fl.label ? ' · ' + _jhtml(fl.label) : '')
+              + ' <span style="color:' + statusClr + '">· ' + statusLbl + '</span>';
+            var meta = (val ? '₹' + _ownerFmt(val) + ' · ' : '') + (dateStr ? fd(dateStr) : '');
+            if (dateStr === todayStr) todayRows.push(_ownerRow(title, meta, b.name));
+            if (_ownerInRange(dateStr)) rows.push({ date: dateStr, html: _ownerRow(title, meta, b.name) });
+          }
+          (f.remarks || []).forEach(function(r) {
+            var rDate = r.ts ? istFromTs(r.ts) : '';
+            clients.push({
+              ts: r.ts || 0, isToday: rDate === todayStr,
+              name: r.name, phone: r.phone, budget: r.budget, note: r.note,
+              flat: f.flatNo, building: b.name, floor: fl.label
             });
           });
         });
@@ -23238,27 +23322,26 @@ function _ownerAggregate(projects) {
     punchOpen: 0, punchProgress: 0, punchResolved: 0, punchTotal: 0,
     visits: 0,
     poByStatus: {}, poTotal: 0,
+    // PHASE 5: Sales Manager is one shared company-wide list now (not
+    // per-project), so it's computed ONCE below, outside the per-project
+    // loop — looping it per project would count the same shared buildings
+    // once for every project and wildly inflate the totals.
     salesByProject: {}, salesAll: { avail: 0, book: 0, sold: 0, val: 0 }
   };
-  projects.forEach(function(p) {
-    var d = _ownerLoadProject(p.id);
-    // Sales: Available / Booked / Sold, per project + combined across all
-    var sAvail = 0, sBook = 0, sSold = 0, sVal = 0;
-    if (d.sales && d.sales.buildings) {
-      d.sales.buildings.forEach(function(b) {
-        (b.floors || []).forEach(function(fl) {
-          (fl.flats || []).forEach(function(f) {
-            if (f.status === 'book') { sBook++; sVal += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0); }
-            else if (f.status === 'sold') { sSold++; sVal += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0); }
-            else sAvail++;
-          });
+  (function() {
+    var salesData = (typeof lsales === 'function') ? lsales() : { buildings: [] };
+    (salesData.buildings || []).forEach(function(b) {
+      (b.floors || []).forEach(function(fl) {
+        (fl.flats || []).forEach(function(f) {
+          if (f.status === 'book') { stats.salesAll.book++; stats.salesAll.val += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0); }
+          else if (f.status === 'sold') { stats.salesAll.sold++; stats.salesAll.val += (typeof _flatFinalPrice === 'function') ? _flatFinalPrice(f, b, fl) : (parseFloat(f.price)||0); }
+          else stats.salesAll.avail++;
         });
       });
-    }
-    if (sAvail + sBook + sSold > 0) {
-      stats.salesByProject[p.id] = { pname: p.name || 'Project', avail: sAvail, book: sBook, sold: sSold, val: sVal };
-      stats.salesAll.avail += sAvail; stats.salesAll.book += sBook; stats.salesAll.sold += sSold; stats.salesAll.val += sVal;
-    }
+    });
+  })();
+  projects.forEach(function(p) {
+    var d = _ownerLoadProject(p.id);
     d.AD.forEach(function(x) {
       if (x.type === 'qdpr_entry' && _ownerInRange(x.date)) stats.reportsCount++;
       if (x.type === 'attendance' && x.status !== 'A' && _ownerInRange(x.date)) {
@@ -23413,14 +23496,8 @@ window._ownerSalesChartFilter = function(sel) {
   if (body) body.innerHTML = _ownerDonut(_ownerSalesSegsFor(stats, sel.value), 128);
 };
 function _ownerSalesChartCard(stats) {
-  var opts = '<option value="all">All Projects</option>' + Object.keys(stats.salesByProject).map(function(pid) {
-    return '<option value="' + pid + '">' + _jhtml(stats.salesByProject[pid].pname) + '</option>';
-  }).join('');
   var header = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
     + '<div style="font-size:11.5px;font-weight:800;color:#1e1b4b;">🏢 Sales — Available/Booked/Sold</div>'
-    + '<select onchange="_ownerSalesChartFilter(this)" style="font-size:10px;font-weight:700;color:#4f46e5;background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:8px;padding:3px 20px 3px 8px;outline:none;cursor:pointer;">'
-      + opts
-    + '</select>'
     + '</div>';
   return '<div style="background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(30,20,90,.06);border:1px solid #eef0f5;">'
     + header
@@ -23453,7 +23530,7 @@ function _ownerDesktopChartsHtml(stats) {
   // dropdown filter (right inside the chart card) to switch between "All
   // Projects combined" and any single project's sales, without needing to
   // leave the dashboard or open the full Sales Manager.
-  if (window.isEnterpriseUser && Object.keys(stats.salesByProject).length) {
+  if (window.isEnterpriseUser && (stats.salesAll.avail + stats.salesAll.book + stats.salesAll.sold) > 0) {
     window._ownerSalesStats = stats; // stashed so the dropdown's onchange can re-render without a full refresh
     cards.push(_ownerSalesChartCard(stats));
   }
@@ -24315,9 +24392,46 @@ document.addEventListener('click', function(e) {
 // ══════════════════════════════════════════════════════════════
 var SALES_KEY = 'cm_sales';
 
+// PHASE 5 — COMPANY-WIDE SALES MANAGER: this store used to be project-
+// scoped (_pk) — a separate building list per project, requiring a
+// project switch to see/edit another project's buildings (see the old
+// "Other Projects" read-only section below, now retired). It now lives
+// under a company-scoped key (_cpk) instead, so every project and every
+// user under the same company reads/writes the exact same list, with no
+// need to switch projects. One-time migration below folds in whatever
+// was already sitting under this device's OLD per-project key(s) the
+// first time this runs after the update, so nothing already entered is
+// lost.
+function _salesMigrateProjectScopedIfNeeded() {
+  try {
+    var cKey = _cpk(SALES_KEY);
+    var already = safeLS.getItem(cKey);
+    var flagKey = cKey + '_migrated_v1';
+    if (safeLS.getItem(flagKey)) return; // already migrated on this device
+    var merged = already ? (JSON.parse(already) || { buildings: [] }) : { buildings: [] };
+    if (!Array.isArray(merged.buildings)) merged.buildings = [];
+    var byId = {};
+    merged.buildings.forEach(function (b) { if (b && b.id) byId[b.id] = true; });
+    (window.projects || []).forEach(function (p) {
+      if (!p || !p.id) return;
+      var legacyKey = 'sanj_project_' + p.id + '_' + SALES_KEY;
+      try {
+        var legacy = JSON.parse(safeLS.getItem(legacyKey) || 'null');
+        if (legacy && Array.isArray(legacy.buildings)) {
+          legacy.buildings.forEach(function (b) {
+            if (b && b.id && !byId[b.id]) { merged.buildings.push(b); byId[b.id] = true; }
+          });
+        }
+      } catch (e) {}
+    });
+    safeLS.setItem(cKey, JSON.stringify(merged));
+    safeLS.setItem(flagKey, '1');
+  } catch (e) {}
+}
 function lsales() {
   try {
-    var v = JSON.parse(safeLS.getItem(_pk(SALES_KEY)) || 'null');
+    _salesMigrateProjectScopedIfNeeded();
+    var v = JSON.parse(safeLS.getItem(_cpk(SALES_KEY)) || 'null');
     if (!v || typeof v !== 'object') v = {};
     if (!Array.isArray(v.buildings)) v.buildings = [];
     // One-time migration from the pre-Building version, which stored
@@ -24331,9 +24445,96 @@ function lsales() {
   } catch (e) { return { buildings: [] }; }
 }
 function ssales(x) {
-  safeLS.setItem(_pk(SALES_KEY), JSON.stringify(x));
-  if (typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch (e) {} }
+  safeLS.setItem(_cpk(SALES_KEY), JSON.stringify(x));
+  // Sales is company-wide now, so it pushes straight to the company_sales
+  // table (see _pushCompanySales) instead of riding the per-project
+  // cm_all/project_backups blob — that generic sweep still runs for
+  // everything else via _scheduleCloudPush, harmlessly, since cm_sales is
+  // excluded from it now (see _dedicatedKeys in _buildLocalPayload).
+  if (typeof _scheduleCompanySalesPush === 'function') { try { _scheduleCompanySalesPush(); } catch (e) {} }
   try { _updateSalesDashCard(); } catch (e) {}
+}
+
+// ── Sales Manager deletes: company-scoped tombstones ──────────────
+// Building/floor/flat deletes used to record into the generic, PROJECT-
+// scoped tombstone store (_addTombstone → _pk(TOMB_KEY)). Now that the
+// buildings list itself is company-scoped, a delete made while "in"
+// Project A must still be respected when the list is later viewed/synced
+// from Project B — a project-scoped tombstone store can't guarantee
+// that. This is its own small store, keyed by company, used only for
+// bld__/flr__/flt__ ids.
+var SALES_TOMB_KEY = 'cm_sales_tombstones';
+function _loadSalesTombstones() {
+  try { return JSON.parse(safeLS.getItem(_cpk(SALES_TOMB_KEY)) || '{}'); } catch (e) { return {}; }
+}
+function _addSalesTombstone(id, ts) {
+  try {
+    var t = _loadSalesTombstones();
+    if (!t[id] || ts > t[id]) { t[id] = ts; safeLS.setItem(_cpk(SALES_TOMB_KEY), JSON.stringify(t)); }
+  } catch (e) {}
+}
+function _mergeSalesTombstones(localT, remoteT) {
+  var merged = JSON.parse(JSON.stringify(localT || {}));
+  Object.keys(remoteT || {}).forEach(function (id) {
+    if (!merged[id] || remoteT[id] > merged[id]) merged[id] = remoteT[id];
+  });
+  return merged;
+}
+
+// ── Company-wide sync: company_sales table ─────────────────────────
+// Replaces the old per-project piggyback (cm_sales inside cm_all →
+// project_backups) and the old read-only cross-project pull
+// (_pullAllProjectsSalesFromCloud). One row per company, RLS-gated to
+// anyone who belongs to that company (owner, or a member of any project
+// under it) — see the company_sales SQL migration.
+var _salesPushTimer = null;
+function _scheduleCompanySalesPush() {
+  if (_salesPushTimer) clearTimeout(_salesPushTimer);
+  _salesPushTimer = setTimeout(function () { _pushCompanySales(); }, 1500);
+}
+function _pushCompanySales(cb) {
+  var cid = _currentCompanyId();
+  if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !cid) { if (cb) cb({ error: 'not ready' }); return; }
+  var payload = {
+    company_id: cid,
+    data: lsales(),
+    activity: _smActivityLoad(),
+    tombstones: _loadSalesTombstones(),
+    updated_by: _adminSBUser.id
+  };
+  _sb.from('company_sales').upsert(payload, { onConflict: 'company_id' }).then(function (res) {
+    if (cb) cb(res);
+  }).catch(function (e) { if (cb) cb({ error: e }); });
+}
+// Pulls the shared company row and merges it into this device's local
+// copy (nested by building/floor/flat id, deletes respected via the
+// company-scoped tombstone store above) — same merge shape as every
+// other list-store in the app, just scoped to company instead of project.
+function _pullCompanySales(cb) {
+  var cid = _currentCompanyId();
+  if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !cid) { if (cb) cb(); return; }
+  _sb.from('company_sales').select('data,activity,tombstones,updated_at').eq('company_id', cid).maybeSingle().then(function (r) {
+    if (!r || r.error || !r.data) { if (cb) cb(); return; }
+    try {
+      var remoteSales = r.data.data || { buildings: [] };
+      var remoteTombs = r.data.tombstones || {};
+      var mergedTombs = _mergeSalesTombstones(_loadSalesTombstones(), remoteTombs);
+      safeLS.setItem(_cpk(SALES_TOMB_KEY), JSON.stringify(mergedTombs));
+      var localSales = lsales();
+      var merged = _mergeSalesData(localSales, remoteSales, mergedTombs);
+      safeLS.setItem(_cpk(SALES_KEY), JSON.stringify(merged));
+      // Activity log: simple append-only union by (ts, by, action), newest 200.
+      if (Array.isArray(r.data.activity)) {
+        var localActivity = _smActivityLoad();
+        var seen = {};
+        localActivity.concat(r.data.activity).forEach(function (a) { seen[a.ts + '|' + a.by + '|' + a.action] = a; });
+        var mergedActivity = Object.keys(seen).map(function (k) { return seen[k]; }).sort(function (a, b) { return a.ts - b.ts; });
+        if (mergedActivity.length > 200) mergedActivity = mergedActivity.slice(mergedActivity.length - 200);
+        safeLS.setItem(_cpk(SM_ACTIVITY_KEY), JSON.stringify(mergedActivity));
+      }
+    } catch (e) {}
+    if (cb) cb();
+  }).catch(function () { if (cb) cb(); });
 }
 
 // ── Recent activity log (clock 🕐 button) ──────────────────────
@@ -24347,7 +24548,7 @@ function ssales(x) {
 var SM_ACTIVITY_KEY = 'cm_sm_activity';
 function _smActivityLoad() {
   try {
-    var v = JSON.parse(safeLS.getItem(_pk(SM_ACTIVITY_KEY)) || '[]');
+    var v = JSON.parse(safeLS.getItem(_cpk(SM_ACTIVITY_KEY)) || '[]');
     return Array.isArray(v) ? v : [];
   } catch (e) { return []; }
 }
@@ -24370,7 +24571,7 @@ function _smLogActivity(action, detail) {
     var list = _smActivityLoad();
     list.push({ ts: Date.now(), action: action, detail: detail || '', by: _smActorName() });
     if (list.length > 200) list = list.slice(list.length - 200); // keep it bounded — "recent" activity only
-    safeLS.setItem(_pk(SM_ACTIVITY_KEY), JSON.stringify(list));
+    safeLS.setItem(_cpk(SM_ACTIVITY_KEY), JSON.stringify(list));
   } catch (e) {}
 }
 
@@ -24634,81 +24835,18 @@ function _unmountSalesPanelFromTab() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  CROSS-PROJECT SALES AGGREGATION — every saved project (pulled
-//  fresh from cloud, not just whatever's already on this device)
-//  shows its own buildings in Sales Manager, not only the buildings
-//  belonging to whichever project happens to be "active" right now.
-//  Mirrors the exact same per-project key pattern Owner Overview
-//  already uses (_ownerLoadProject) so nothing about how projects
-//  or their cloud backups are stored needs to change.
+//  PHASE 5 — RETIRED: Sales Manager is one shared company-wide list
+//  now (see company_sales table / _pushCompanySales / _pullCompanySales
+//  above), so there is no more per-project "Other Projects" grouping to
+//  pull, merge, or switch into — every project already sees the same
+//  buildings. _salesOtherProjectsGroups() is kept as a stub (always
+//  empty) purely so the render call below stays a no-op instead of
+//  needing every call site touched; _switchToProjectForSales is kept
+//  as a harmless no-op in case anything still references it (e.g. a
+//  cached/older render of the panel mid-transition).
 // ══════════════════════════════════════════════════════════════
-function _salesPkFor(pid, base) { return 'sanj_project_' + pid + '_' + base; }
-
-// Same backup_key formula as getSiteId(), just for an arbitrary
-// (possibly non-active) project id instead of window.currentProjectId.
-function _salesCloudKeyFor(pid) {
-  if (typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) return null;
-  var base = 'user-' + _adminSBUser.id.replace(/-/g, '').slice(0, 12);
-  if (!pid) return base;
-  return base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
-}
-
-function _salesReadLocal(pid) {
-  try {
-    var v = JSON.parse(safeLS.getItem(_salesPkFor(pid, SALES_KEY)) || 'null');
-    if (!v || typeof v !== 'object' || !Array.isArray(v.buildings)) return [];
-    return v.buildings;
-  } catch (e) { return []; }
-}
-
-// Pulls every OTHER project's sales data down from cloud_backups (if it
-// isn't already sitting in this device's localStorage) so buildings that
-// only ever existed on another device still show up here. Silent no-op
-// for anyone not signed in as the owner/admin (nothing to pull).
-function _pullAllProjectsSalesFromCloud(cb) {
-  if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser) { if (cb) cb(); return; }
-  var others = (window.projects || []).filter(function (p) { return p && p.id && p.id !== window.currentProjectId; });
-  if (!others.length) { if (cb) cb(); return; }
-  var remaining = others.length;
-  var done = function () { remaining--; if (remaining <= 0 && cb) cb(); };
-  others.forEach(function (p) {
-    var key = _salesCloudKeyFor(p.id);
-    if (!key) { done(); return; }
-    _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function (r) {
-      if (!r || r.error || !r.data || !r.data.data || !r.data.data.sales) { done(); return; }
-      var remoteBuildings = r.data.data.sales.buildings;
-      if (!Array.isArray(remoteBuildings) || !remoteBuildings.length) { done(); return; }
-      // Merge by building id — union of local + remote, remote fills in
-      // anything missing locally rather than overwriting local edits.
-      var localKey = _salesPkFor(p.id, SALES_KEY);
-      var local = { buildings: [] };
-      try { local = JSON.parse(safeLS.getItem(localKey) || 'null') || { buildings: [] }; } catch (e) {}
-      if (!Array.isArray(local.buildings)) local.buildings = [];
-      var byId = {};
-      local.buildings.forEach(function (b) { if (b && b.id) byId[b.id] = true; });
-      var changed = false;
-      remoteBuildings.forEach(function (b) { if (b && b.id && !byId[b.id]) { local.buildings.push(b); byId[b.id] = true; changed = true; } });
-      if (changed) { try { safeLS.setItem(localKey, JSON.stringify(local)); } catch (e) {} }
-      done();
-    }).catch(function () { done(); });
-  });
-}
-
-// Every other saved project's buildings, tagged with which project they
-// belong to, for the read-only "Other Projects" section of Sales Manager.
-function _salesOtherProjectsGroups() {
-  var others = (window.projects || []).filter(function (p) { return p && p.id && p.id !== window.currentProjectId; });
-  return others.map(function (p) {
-    return { pid: p.id, pname: p.name || 'Project', buildings: _salesReadLocal(p.id) };
-  }).filter(function (g) { return g.buildings.length; });
-}
-
-function _switchToProjectForSales(pid) {
-  if (typeof switchProject !== 'function') return;
-  closeSalesManager();
-  switchProject(pid);
-  setTimeout(function () { openSalesManager(); }, 400);
-}
+function _salesOtherProjectsGroups() { return []; }
+function _switchToProjectForSales(pid) { /* no-op — Sales Manager is company-wide now */ }
 
 function openSalesManager() {
   _refreshSalesSettRow();
@@ -24733,10 +24871,10 @@ function openSalesManager() {
     if (addWrap) addWrap.style.display = isSalesFullAdmin() ? 'block' : 'none';
     renderSalesManager();
     _renderSalesMgrActions();
-    // Pull every other saved project's buildings from cloud, then
-    // re-render once they land so they appear as their own group below
-    // the active project's buildings.
-    _pullAllProjectsSalesFromCloud(function () { renderSalesManager(); });
+    // Pull the shared company-wide sales data from the cloud, then
+    // re-render once it lands — every project/user under this company
+    // sees the exact same buildings, no project switch required.
+    _pullCompanySales(function () { renderSalesManager(); });
   }, 220);
 }
 function closeSalesManager() {
@@ -24998,7 +25136,7 @@ function deleteSalesBuilding(buildingId) {
   var _bDel = data.buildings.find(function (b) { return b.id === buildingId; });
   data.buildings = data.buildings.filter(function (b) { return b.id !== buildingId; });
   ssales(data);
-  if (typeof _addTombstone === 'function') _addTombstone('bld__' + buildingId, Date.now());
+  _addSalesTombstone('bld__' + buildingId, Date.now());
   _smLogActivity('building_delete', _bDel ? _bDel.name : '');
   renderSalesManager();
   toast('Building deleted', 'ok');
@@ -25041,7 +25179,7 @@ function deleteSalesFloor(buildingId, floorId) {
   var _flDel = (b.floors || []).find(function (fl) { return fl.id === floorId; });
   b.floors = (b.floors || []).filter(function (fl) { return fl.id !== floorId; });
   ssales(data);
-  if (typeof _addTombstone === 'function') _addTombstone('flr__' + floorId, Date.now());
+  _addSalesTombstone('flr__' + floorId, Date.now());
   _smLogActivity('floor_delete', (b.name || 'Building') + ' — ' + (_flDel ? _flDel.label : ''));
   renderSalesManager();
   toast('Floor deleted', 'ok');
@@ -25271,7 +25409,7 @@ function deleteSalesFlat() {
   var _flatLabel3 = ctx.f ? ((ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '')) : '';
   ctx.fl.flats = ctx.fl.flats.filter(function (x) { return x.id !== _fdCtx.flatId; });
   ssales(ctx.data);
-  if (typeof _addTombstone === 'function') _addTombstone('flt__' + _fdCtx.flatId, Date.now());
+  _addSalesTombstone('flt__' + _fdCtx.flatId, Date.now());
   _smLogActivity('flat_delete', _flatLabel3);
   closeFlatDetail();
   toast('Flat deleted', 'ok');
@@ -25473,6 +25611,12 @@ function _salesEngineerExit() {
 // Initial paint of the dashboard sales card once app data has loaded.
 document.addEventListener('DOMContentLoaded', function () {
   setTimeout(function () { try { _updateSalesDashCard(); } catch (e) {} }, 1200);
+  // Pull the shared company-wide Sales Manager data too, so it's fresh
+  // even if the person never opens the Sales Manager panel this session
+  // (e.g. just glances at the dashboard card or Owner Overview).
+  setTimeout(function () {
+    try { if (typeof _pullCompanySales === 'function') _pullCompanySales(function () { try { _updateSalesDashCard(); } catch (e) {} }); } catch (e) {}
+  }, 2500);
 });
 
 // ══════════════════════════════════════════════════════════════
