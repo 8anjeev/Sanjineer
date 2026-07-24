@@ -5295,6 +5295,8 @@ function _applyPermState(roleName) {
     // session (whether they came in as site_engineer, viewer, or
     // sales_admin — sales_admin is still not the company owner).
     window._ENGINEER_MODE = (roleName !== 'owner');
+    window._roleVerified = true;
+    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
     // PHASE 4 REBUILD: isCloudActivated() (localStorage 'cm_cloud_activated')
     // used to only ever get set by the owner's manual "Activate Cloud"
     // toggle. A joined engineer never sees that screen and has no way to
@@ -5327,6 +5329,8 @@ function _applyPermState(roleName) {
     window._IS_VIEWER = false;
     window._SALES_ADMIN_MODE = false;
     window._ENGINEER_MODE = (roleName !== 'owner');
+    window._roleVerified = true;
+    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
   });
 }
 
@@ -5422,9 +5426,12 @@ function _wsSelectProject(p) {
       <!-- Hidden kept for JS compat -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
       <!-- LEFT slot (mirrors QDPR slot on the right so center stays centered) -->
-      <div style="display:flex;align-items:center;justify-content:flex-start;min-width:0">
+      <div style="display:flex;align-items:center;justify-content:flex-start;min-width:0;gap:4px">
         <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
           <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
+        </button>
+        <button id="partner-hdr-btn" onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:26px;height:26px;flex-shrink:0;cursor:pointer;-webkit-tap-highlight-color:transparent;">
+          <span style="font-size:13px;line-height:1;">💰</span>
         </button>
       </div>
       <!-- Stacked: company above, project dropdown below -->
@@ -7590,17 +7597,24 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="toggleSubconBillPanel()" class="bg-indigo-100 text-indigo-600 text-xs font-bold rounded-lg px-3 py-1">+ Add Bill</button>
     </div>
     <div id="subcon-bill-panel" style="display:none;margin-bottom:10px;padding:10px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <p id="scb-panel-title" style="font-size:11px;font-weight:800;color:#4338ca">➕ New Bill</p>
+        <p style="font-size:9px;color:#9ca3af">Tip: leave Bill Amount as 0 to log a part-payment only</p>
+      </div>
       <div class="grid grid-cols-2 gap-2 mb-2">
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Contractor</label>
           <select id="scb-contractor" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400"><option value="">Select Contractor</option></select>
         </div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="scb-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill No.</label><input type="text" id="scb-no" placeholder="Bill / RA No." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill Amount (₹)</label><input type="number" id="scb-amount" placeholder="0" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Paid (₹)</label><input type="number" id="scb-paid" placeholder="0" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill Amount (₹) — 0 if payment-only</label><input type="number" id="scb-amount" placeholder="0" step="any" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Paid (₹)</label><input type="number" id="scb-paid" placeholder="0" step="any" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Description</label><input type="text" id="scb-desc" placeholder="Brickwork, Plaster..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
       </div>
-      <button onclick="saveSubconBill()" class="g-tor-indigo500-purple500 w-full text-white py-2 rounded-xl font-bold text-sm active:scale-95">💾 Save Bill</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="saveSubconBill()" id="scb-save-btn" class="g-tor-indigo500-purple500 flex-1 text-white py-2 rounded-xl font-bold text-sm active:scale-95">💾 Save Bill</button>
+        <button onclick="cancelSubconBillEdit()" class="flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm bg-gray-200 text-gray-600 active:scale-95">Cancel</button>
+      </div>
     </div>
     <div id="subcon-bill-list"><p class="text-gray-400 text-xs text-center py-2">No bills tracked yet</p></div>
   </div>
@@ -12921,7 +12935,25 @@ function addPettyCash(){
 }
 function delExpense(id){
   var m=AD.find(function(d){ return d.__id===id; });
-  askDel('Delete '+m.material_name+'?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewExpenses(); updateDash(); });
+  askDel('Delete '+m.material_name+'?', function(){
+    del(id); AD=ld();
+    // FIX: if this ledger entry was cross-posted from a Materials-tab
+    // purchase (stock_synced), the item still has a transaction pointing
+    // to this now-deleted entry via stock_log_id. Leaving it there shows
+    // a stale purchase (with a bill/cost) in the Materials tab even
+    // though the expense side was removed. Strip that transaction too.
+    if (m && m.stock_synced) {
+      var mats=lmat(), changed=false;
+      mats.forEach(function(item){
+        if (!item.transactions) return;
+        var before=item.transactions.length;
+        item.transactions = item.transactions.filter(function(t){ return t.stock_log_id!==id; });
+        if (item.transactions.length!==before) changed=true;
+      });
+      if (changed) smat(mats);
+    }
+    toast('Deleted','ok'); viewMaterials(); viewExpenses(); updateDash();
+  });
 }
 /* ── Quick Entry: auto-suggest supplier when the item/material name
    matches a previously used one. Checks the Materials-stock item's own
@@ -13205,7 +13237,24 @@ function quickPickMaterial(id){
   var pickEl = document.getElementById('mat-name-select'); if (pickEl) pickEl.value = '';
 }
 function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
-function delMaterialItem(id){ askDel('Delete material?', function(){ if (typeof _addTombstone === 'function') _addTombstone('mat__'+id, Date.now()); smat(lmat().filter(function(m){ return m.id!==id; })); toast('Deleted','ok'); viewMaterials(); updateDash(); }); }
+function delMaterialItem(id){
+  askDel('Delete material?', function(){
+    if (typeof _addTombstone === 'function') _addTombstone('mat__'+id, Date.now());
+    // FIX: every purchase transaction on this item may have a linked
+    // AD ledger entry (stock_log_id) that feeds the dashboard "Material"
+    // chip and the header "Total Expenses" chip. Deleting the item
+    // alone left those ledger entries behind, so the chips kept
+    // counting a cost that no longer existed anywhere in the UI.
+    // Clean up every linked ledger entry first, then remove the item.
+    var mats=lmat(), item=mats.find(function(m){ return m.id===id; });
+    if (item && item.transactions && item.transactions.length) {
+      item.transactions.forEach(function(t){ if (t.stock_log_id) del(t.stock_log_id); });
+      AD = ld();
+    }
+    smat(lmat().filter(function(m){ return m.id!==id; }));
+    toast('Deleted','ok'); viewMaterials(); if (typeof viewExpenses==='function') viewExpenses(); updateDash();
+  });
+}
 // ── BILL / RECEIPT — unified handler (image + PDF, all contexts) ──────────────
 // ctx = 'mp' (mat purchase modal), 'exp' (expenses tab), 'rb' (rental borrow), 'rg' (rental given)
 var BILLS = {};
@@ -13388,7 +13437,18 @@ function downloadBillFile(){
   var a=document.createElement('a'); a.href=_billViewDataUrl; a.download=_billViewFilename||'bill'; a.click();
 }
 function delMatTxn(matId,idx){
-  askDel('Delete transaction?', function(){ var mats=lmat(), item=mats.find(function(m){ return m.id===matId; }); if(!item) return; item.transactions.splice(idx,1); smat(mats); toast('Deleted','ok'); viewMaterials(); });
+  askDel('Delete transaction?', function(){
+    var mats=lmat(), item=mats.find(function(m){ return m.id===matId; }); if(!item) return;
+    var txn=item.transactions[idx];
+    // FIX: a purchase transaction's cost is mirrored into a separate AD
+    // ledger entry (txn.stock_log_id) which is what the dashboard
+    // "Material" chip and header "Total Expenses" chip actually total.
+    // Removing only the transaction left that ledger entry counted
+    // forever. Remove the linked entry too, and refresh dash/expenses.
+    if (txn && txn.stock_log_id) { del(txn.stock_log_id); AD = ld(); }
+    item.transactions.splice(idx,1); smat(mats);
+    toast('Deleted','ok'); viewMaterials(); if (typeof viewExpenses==='function') viewExpenses(); updateDash();
+  });
 }
 function viewMaterials(){
   var mats=lmat(), div=document.getElementById('materials-list');
@@ -17311,10 +17371,34 @@ function updateCloudBtn() {
 
 function updateOwnerBtn() {
   var btn = document.getElementById('owner-hdr-btn');
-  if (!btn) return;
+  var pbtn = document.getElementById('partner-hdr-btn');
+  if (!btn && !pbtn) return;
+  // Fail closed: until _applyPermState() has actually resolved a real,
+  // server-verified role for this session, never show owner-only UI —
+  // ADMIN_ROLE_KEY/userPlan alone can be stale/cached from a previous
+  // login and aren't proof of owning THIS company (see _ownsAnyCompany()
+  // fix + _applyPermState notes).
+  if (!window._roleVerified) {
+    if (btn) btn.style.display = 'none';
+    if (pbtn) pbtn.style.display = 'none';
+    return;
+  }
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   var hasPaidPlan = (window.userPlan === 'pro' || window.userPlan === 'enterprise');
-  btn.style.display = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE) ? 'flex' : 'none';
+  // Require the actual company-level role from get_my_companies() (cached
+  // in WS_CROLE_KEY the moment login/reconcile establishes it) to
+  // literally be 'owner' — this is the one signal that's tied to the
+  // specific email that created/owns THIS company, not just "signed in
+  // somehow". !window._ENGINEER_MODE is the same fact expressed as a
+  // boolean; checking WS_CROLE_KEY too is belt-and-braces since it's the
+  // more direct, auditable source.
+  var realOwner = (typeof WS_CROLE_KEY !== 'undefined' ? safeLS.getItem(WS_CROLE_KEY) === 'owner' : true);
+  var isOwner = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE && realOwner);
+  if (btn) btn.style.display = isOwner ? 'flex' : 'none';
+  // Partner/Investment tracker is strictly owner-only, on both mobile and
+  // desktop — never shown to a joined engineer/staff device (_ENGINEER_MODE)
+  // even if that device happens to carry an admin flag locally.
+  if (pbtn) pbtn.style.display = isOwner ? 'flex' : 'none';
 }
 
 // -- Open / Close Cloud Modal --
@@ -19253,8 +19337,28 @@ function lvisits(){ try{return JSON.parse(safeLS.getItem(VISITS_KEY)||'[]');}cat
 function svisits(x){ safeLS.setItem(VISITS_KEY, JSON.stringify(x)); }
 function lqt(){ try{return JSON.parse(safeLS.getItem(QT_KEY)||'[]');}catch(e){return[];} }
 function sqt(x){ safeLS.setItem(QT_KEY, JSON.stringify(x)); }
-function lscb(){ try{return JSON.parse(safeLS.getItem(SCB_KEY)||'[]');}catch(e){return[];} }
-function sscb(x){ safeLS.setItem(SCB_KEY, JSON.stringify(x)); }
+// BUGFIX: this used to read/write the raw, unprefixed SCB_KEY directly.
+// cloudBackupNow()'s generic cm_all sweep only ever picks up keys under
+// the ACTIVE project's _pk() prefix (or truly-legacy unprefixed keys when
+// no project is selected, which is never the normal case) — so every
+// subcontractor bill ever entered was silently local-only and never
+// reached Supabase. Switching to _pk(SCB_KEY) makes bills project-scoped
+// (consistent with doAdminLogout's cleanup list, which already expected
+// this) and lets them ride the same automatic cloud backup/restore as
+// every other generic module. One-time migration below folds in whatever
+// was already sitting under the old unscoped key so nothing is lost.
+function lscb(){
+  try{
+    var k = _pk(SCB_KEY);
+    var v = safeLS.getItem(k);
+    if (v === null) {
+      var legacy = safeLS.getItem(SCB_KEY);
+      if (legacy !== null) { safeLS.setItem(k, legacy); v = legacy; }
+    }
+    return JSON.parse(v||'[]');
+  }catch(e){return[];}
+}
+function sscb(x){ safeLS.setItem(_pk(SCB_KEY), JSON.stringify(x)); }
 
 // Dashboard always shows current month (month buttons removed)
 function _dashMonthKey() {
@@ -20533,11 +20637,17 @@ function renderGantt() {
 // Gantt rendered via _postSwitchTab
 
 // ── Subcontractor Bill Tracker ────────────────────────────────────
+var _scbEditId = null; // set when the panel is editing an existing bill instead of adding a new one
+
 function toggleSubconBillPanel() {
   var p = document.getElementById('subcon-bill-panel');
   if (!p) return;
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
-  if (p.style.display === 'block') {
+  var opening = p.style.display === 'none';
+  p.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    // Fresh "+ Add Bill" click — make sure we're not left in edit mode from before
+    _scbEditId = null;
+    _scbResetPanelChrome();
     // Populate contractor dropdown
     var sel = document.getElementById('scb-contractor');
     if (sel) {
@@ -20552,6 +20662,53 @@ function toggleSubconBillPanel() {
   }
 }
 
+function _scbResetPanelChrome() {
+  var title = document.getElementById('scb-panel-title'); if (title) title.textContent = '➕ New Bill';
+  var btn = document.getElementById('scb-save-btn'); if (btn) btn.textContent = '💾 Save Bill';
+}
+
+function _scbClearFields() {
+  ['scb-no','scb-amount','scb-paid','scb-desc'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+}
+
+// Open the panel pre-filled with an existing bill so its total (revised
+// contract amount) or paid amount can be corrected — e.g. when a
+// contractor's payment is later increased, or more is paid in the same bill.
+function editSubconBill(id) {
+  var bills = lscb(), b = bills.find(function(x){ return x.id===id; });
+  if (!b) return;
+  _scbEditId = id;
+  var p = document.getElementById('subcon-bill-panel');
+  if (p) p.style.display = 'block';
+  var title = document.getElementById('scb-panel-title'); if (title) title.textContent = '✏️ Edit Bill — '+b.contractor;
+  var btn = document.getElementById('scb-save-btn'); if (btn) btn.textContent = '💾 Update Bill';
+  var sel = document.getElementById('scb-contractor');
+  if (sel) {
+    var contractors = AD.filter(function(a){return a.type==='contractor';});
+    sel.innerHTML = '<option value="">Select Contractor</option>' + contractors.map(function(c){
+      var n = c.contractor_name || c.name || '';
+      return '<option value="'+n+'"'+(n===b.contractor?' selected':'')+'>'+n+'</option>';
+    }).join('');
+    if (![].some.call(sel.options, function(o){return o.value===b.contractor;})) {
+      sel.innerHTML += '<option value="'+b.contractor+'" selected>'+b.contractor+'</option>';
+    }
+  }
+  document.getElementById('scb-date').value = b.date || ist();
+  document.getElementById('scb-no').value = b.billNo || '';
+  document.getElementById('scb-amount').value = b.amount || 0;
+  document.getElementById('scb-paid').value = b.paid || 0;
+  document.getElementById('scb-desc').value = b.desc || '';
+  var panel = document.getElementById('subcon-bill-panel');
+  if (panel && panel.scrollIntoView) panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function cancelSubconBillEdit() {
+  _scbEditId = null;
+  _scbResetPanelChrome();
+  _scbClearFields();
+  document.getElementById('subcon-bill-panel').style.display = 'none';
+}
+
 function saveSubconBill() {
   var contractor = document.getElementById('scb-contractor').value;
   var date = document.getElementById('scb-date').value;
@@ -20559,14 +20716,24 @@ function saveSubconBill() {
   var amount = parseFloat(document.getElementById('scb-amount').value)||0;
   var paid = parseFloat(document.getElementById('scb-paid').value)||0;
   var desc = document.getElementById('scb-desc').value.trim();
-  if (!contractor || !amount) { toast('Select contractor and enter amount', 'err'); return; }
+  if (!contractor) { toast('Select a contractor', 'err'); return; }
+  // A bill can legitimately have 0 total (e.g. logging just a chunked
+  // payment against a bill that will be raised later) — but it must
+  // carry at least a bill amount OR a paid amount, not both blank.
+  if (!amount && !paid) { toast('Enter a bill amount, or at least a paid amount', 'err'); return; }
   var bills = lscb();
-  bills.push({ id: Date.now().toString(36), contractor:contractor, date:date||ist(), billNo:billNo, amount:amount, paid:paid, desc:desc });
+  if (_scbEditId) {
+    var idx = bills.findIndex(function(b){ return b.id===_scbEditId; });
+    if (idx>=0) {
+      bills[idx] = Object.assign({}, bills[idx], { contractor:contractor, date:date||bills[idx].date||ist(), billNo:billNo, amount:amount, paid:paid, desc:desc });
+    }
+    _scbEditId = null;
+    _scbResetPanelChrome();
+  } else {
+    bills.push({ id: Date.now().toString(36), contractor:contractor, date:date||ist(), billNo:billNo, amount:amount, paid:paid, desc:desc });
+  }
   sscb(bills);
-  document.getElementById('scb-no').value = '';
-  document.getElementById('scb-amount').value = '';
-  document.getElementById('scb-paid').value = '';
-  document.getElementById('scb-desc').value = '';
+  _scbClearFields();
   document.getElementById('subcon-bill-panel').style.display = 'none';
   toast('✅ Bill saved!', 'ok');
   renderSubconBills();
@@ -20594,11 +20761,15 @@ function renderSubconBills() {
       +'</div></div>'
       +list.map(function(b){
         var bal = b.amount - b.paid;
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid #e5e7eb;font-size:10px">'
-          +'<div><span style="color:#374151;font-weight:600">'+(b.billNo?b.billNo+' — ':'')+b.desc+'</span><br><span style="color:#9ca3af">'+b.date+'</span></div>'
-          +'<div style="text-align:right">'
-          +'<div style="font-weight:700;color:#374151">'+fc(b.amount)+'</div>'
-          +'<div style="color:'+(bal>0?'#dc2626':'#059669')+';font-weight:700">'+(bal>0?'Due: '+fc(bal):'✅ Paid')+'</div>'
+        var isPaymentOnly = (!b.amount || b.amount===0);
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid #e5e7eb;font-size:10px;gap:6px">'
+          +'<div style="min-width:0"><span style="color:#374151;font-weight:600">'+(b.billNo?b.billNo+' — ':'')+(b.desc||(isPaymentOnly?'Part payment':''))+'</span><br><span style="color:#9ca3af">'+b.date+'</span></div>'
+          +'<div style="text-align:right;flex-shrink:0">'
+          +'<div style="font-weight:700;color:#374151">'+(isPaymentOnly?'<span style="color:#9ca3af;font-weight:600">No bill yet</span>':fc(b.amount))+'</div>'
+          +'<div style="color:'+(bal>0?'#dc2626':'#059669')+';font-weight:700">'+(bal>0?'Due: '+fc(bal):(isPaymentOnly?'Paid: '+fc(b.paid):'✅ Paid'))+'</div>'
+          +'</div>'
+          +'<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">'
+          +'<button onclick="editSubconBill(\''+b.id+'\')" style="background:#e0e7ff;color:#4338ca;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700;cursor:pointer">✏️</button>'
           +'</div>'
           +'</div>';
       }).join('')
@@ -22813,8 +22984,9 @@ function _ownerLoadProject(pid) {
 // width, and keeps watching the viewport so it can auto-switch faces live if
 // the window is resized past the laptop breakpoint while it's open.
 window.openOwnerOverview = function() {
-  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
-    if (typeof toast === 'function') toast('⚠️ Admin only', 'err');
+  var _realOwner = (typeof WS_CROLE_KEY !== 'undefined' ? safeLS.getItem(WS_CROLE_KEY) === 'owner' : true);
+  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin' || window._ENGINEER_MODE || !_realOwner) {
+    if (typeof toast === 'function') toast('⚠️ Owner only', 'err');
     return;
   }
   var existing = document.getElementById('_owner-overview-modal');
@@ -22833,6 +23005,7 @@ function _ownerOpenMobileOverview() {
     '<div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
     + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">👑 Owner Overview</div><div style="color:rgba(255,255,255,.6);font-size:10px">All ' + (window.projects||[]).length + ' projects, tab by tab</div></div>'
     + '<div style="display:flex;gap:6px;flex-shrink:0">'
+    + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">💰</button>'
     + '<button onclick="openEditProfile()" title="Profile & Company Settings" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">⚙️</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
@@ -22966,6 +23139,359 @@ function _ownerCloseOverviewModals() {
   var m1 = document.getElementById('_owner-overview-modal'); if (m1) m1.remove();
   var m2 = document.getElementById('_owner-desktop-modal'); if (m2) m2.remove();
   try { if (typeof _ownerStopViewportWatch === 'function') _ownerStopViewportWatch(); } catch (e) {}
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// PARTNER / INVESTMENT EQUITY TRACKER  (owner-only, company-wide)
+// ────────────────────────────────────────────────────────────────────────
+// Tracks each partner/owner's agreed share of the business (as a %
+// of a proposed total, or a fixed committed amount) against how much
+// money they've actually put in so far ("Given"), how much they've
+// personally spent/drawn out ("Expenses", each with its own date), and
+// the resulting net position. Scoped to the COMPANY (via _cpk) — same
+// across every project — not per-project, since a partnership isn't
+// per-site. Works identically on mobile and desktop (single responsive
+// modal); visibility is gated the same way as the Owner Overview button.
+//
+// CLOUD SYNC NOTE: the four _cpk()-scoped keys below (cm_partners,
+// cm_partner_txns, cm_partner_expenses, cm_partner_meta) produce
+// localStorage keys like "sanj_company_<id>_cm_partners" — these never
+// match the per-PROJECT prefix that cloudBackupNow()'s generic cm_all
+// sweep looks for, so this data used to be 100% local-only and never
+// reached Supabase. Fixed the same way cm_sales was fixed: a dedicated
+// company_partners table + explicit push/pull (see _pushCompanyPartners /
+// _pullCompanyPartners below), with its own id-tombstone store so a
+// delete made on one device is respected everywhere. Requires the
+// company_partners SQL migration to be run once (see company_partners
+// migration file) — until then, push/pull silently no-op and data still
+// safely stays local, same as before.
+// ════════════════════════════════════════════════════════════════════════
+var PARTNERS_KEY      = 'cm_partners';
+var PARTNER_TXN_KEY    = 'cm_partner_txns';
+var PARTNER_EXP_KEY    = 'cm_partner_expenses';
+var PARTNER_META_KEY   = 'cm_partner_meta';
+var PARTNER_TOMB_KEY   = 'cm_partner_tombstones';
+
+function lpartners(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNERS_KEY))||'[]');}catch(e){return[];} }
+function spartners(x){ safeLS.setItem(_cpk(PARTNERS_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerTxns(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_TXN_KEY))||'[]');}catch(e){return[];} }
+function spartnerTxns(x){ safeLS.setItem(_cpk(PARTNER_TXN_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerExpenses(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_EXP_KEY))||'[]');}catch(e){return[];} }
+function spartnerExpenses(x){ safeLS.setItem(_cpk(PARTNER_EXP_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerMeta(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_META_KEY))||'{}');}catch(e){return{};} }
+function spartnerMeta(x){ safeLS.setItem(_cpk(PARTNER_META_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+
+// id -> deleted-at timestamp, shared across partners/txns/expenses (ids
+// are always unique per-record already) so a delete on one device isn't
+// silently resurrected by an older copy merging in from another device.
+function _peLoadTombstones(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_TOMB_KEY))||'{}');}catch(e){return{};} }
+function _peAddTombstone(id){
+  try{
+    var t = _peLoadTombstones();
+    t[id] = Date.now();
+    safeLS.setItem(_cpk(PARTNER_TOMB_KEY), JSON.stringify(t));
+  }catch(e){}
+}
+function _peMergeTombstones(localT, remoteT){
+  var merged = JSON.parse(JSON.stringify(localT||{}));
+  Object.keys(remoteT||{}).forEach(function(id){
+    if (!merged[id] || remoteT[id] > merged[id]) merged[id] = remoteT[id];
+  });
+  return merged;
+}
+
+// Proposed amount for a partner: fixed amount if that's how their share
+// was recorded, else their % cut of the company's total proposed capital.
+function _peProposed(p, totalProposed) {
+  if (p.shareType === 'amount') return parseFloat(p.shareValue) || 0;
+  return (totalProposed||0) * ((parseFloat(p.shareValue)||0) / 100);
+}
+function _peGiven(partnerId) {
+  return lpartnerTxns().filter(function(t){ return t.partnerId===partnerId; }).reduce(function(s,t){ return s+(parseFloat(t.amount)||0); },0);
+}
+function _peSpent(partnerId) {
+  return lpartnerExpenses().filter(function(t){ return t.partnerId===partnerId; }).reduce(function(s,t){ return s+(parseFloat(t.amount)||0); },0);
+}
+
+window.openPartnerEquityModal = function() {
+  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin' || window._ENGINEER_MODE) {
+    if (typeof toast === 'function') toast('⚠️ Owner only', 'err');
+    return;
+  }
+  var existing = document.getElementById('_partner-eq-modal'); if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = '_partner-eq-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0;';
+  modal.innerHTML =
+    '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+    + '<div style="background:linear-gradient(135deg,#0f5132 0%,#065f46 55%,#047857 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
+    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">💰 Partner / Investment Tracker</div><div style="color:rgba(255,255,255,.65);font-size:10px">Company-wide · visible to owner only</div></div>'
+    + '<button id="pe-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
+    + '</div>'
+    + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
+    + '<div id="pe-body"></div>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('pe-close').onclick = function(){ modal.remove(); };
+  modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
+  _peRender();
+  // Pull the shared company-wide copy so every device/user under this
+  // company sees the same partners/contributions/expenses, then re-render.
+  if (typeof _pullCompanyPartners === 'function') _pullCompanyPartners(function(){ _peRender(); });
+};
+
+var _peEditPartnerId = null; // set while the add/edit partner form is editing an existing partner
+
+function _peRender() {
+  var body = document.getElementById('pe-body'); if (!body) return;
+  var meta = lpartnerMeta();
+  var partners = lpartners();
+  var totalProposed = parseFloat(meta.totalProposed) || 0;
+  var totalGiven = lpartnerTxns().reduce(function(s,t){ return s+(parseFloat(t.amount)||0); },0);
+  var totalSpent = lpartnerExpenses().reduce(function(s,t){ return s+(parseFloat(t.amount)||0); },0);
+
+  var html = '';
+  // Company-wide proposed capital
+  html += '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #e5e7eb">'
+    + '<label style="font-size:9.5px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">Total Proposed Project Capital (₹)</label>'
+    + '<div style="display:flex;gap:6px">'
+    + '<input type="number" id="pe-total-proposed" value="'+(totalProposed||'')+'" placeholder="e.g. 5000000" step="any" style="flex:1;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;font-weight:700;">'
+    + '<button onclick="_peSaveMeta()" style="background:#065f46;color:#fff;border:none;border-radius:8px;padding:0 14px;font-weight:700;font-size:11px;cursor:pointer">Save</button>'
+    + '</div>'
+    + '<p style="font-size:9px;color:#9ca3af;margin-top:4px">Used to work out each %-based partner\'s share automatically.</p>'
+    + '</div>';
+
+  // Overall totals
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px">'
+    + _ownerStat('Proposed', fc(totalProposed))
+    + _ownerStat('Given so far', fc(totalGiven))
+    + _ownerStat('Total Expenses', fc(totalSpent))
+    + _ownerStat('Shortfall', fc(Math.max(0,totalProposed-totalGiven)))
+    + '</div>';
+
+  // Add / edit partner form
+  var editing = partners.find(function(p){ return p.id===_peEditPartnerId; });
+  html += '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:12px;border:1px solid #e5e7eb">'
+    + '<p style="font-size:11px;font-weight:800;color:#1e1b4b;margin-bottom:8px">'+(editing?'✏️ Edit Partner':'➕ Add Partner')+'</p>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
+    + '<input type="text" id="pe-p-name" placeholder="Partner name" value="'+(editing?_esc(editing.name):'')+'" style="grid-column:span 2;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px">'
+    + '<select id="pe-p-sharetype" onchange="_peToggleShareInput()" style="padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;background:#fff">'
+    +   '<option value="percent"'+(editing&&editing.shareType==='percent'?' selected':'')+'>% of proposed capital</option>'
+    +   '<option value="amount"'+(editing&&editing.shareType==='amount'?' selected':'')+'>Fixed amount (₹)</option>'
+    + '</select>'
+    + '<input type="number" id="pe-p-sharevalue" step="any" placeholder="e.g. 25" value="'+(editing?editing.shareValue:'')+'" style="padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px">'
+    + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button onclick="_peSavePartner()" style="flex:1;background:linear-gradient(135deg,#065f46,#047857);color:#fff;border:none;border-radius:8px;padding:9px;font-weight:800;font-size:12px;cursor:pointer">'+(editing?'💾 Update Partner':'💾 Add Partner')+'</button>'
+    + (editing ? '<button onclick="_peCancelEditPartner()" style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:9px 14px;font-weight:700;font-size:12px;cursor:pointer">Cancel</button>' : '')
+    + '</div></div>';
+
+  // Partner cards
+  if (!partners.length) {
+    html += _ownerEmpty('No partners added yet');
+  } else {
+    html += partners.map(function(p){
+      var proposed = _peProposed(p, totalProposed);
+      var given = _peGiven(p.id);
+      var spent = _peSpent(p.id);
+      var net = given - spent;
+      var bal = proposed - given;
+      var pct = proposed>0 ? Math.min(100, Math.round(given/proposed*100)) : (given>0?100:0);
+      var txns = lpartnerTxns().filter(function(t){ return t.partnerId===p.id; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+      var exps = lpartnerExpenses().filter(function(t){ return t.partnerId===p.id; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+      return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px">'
+        + '<div><p style="font-size:13px;font-weight:800;color:#1e1b4b;margin:0">'+_esc(p.name)+'</p>'
+        + '<p style="font-size:9.5px;color:#6b7280;margin:2px 0 0">'+(p.shareType==='amount'?('Fixed commitment: '+fc(p.shareValue)) : (p.shareValue+'% of proposed capital'))+'</p></div>'
+        + '<div style="display:flex;gap:4px;flex-shrink:0">'
+        + '<button onclick="_peEditPartner(\''+p.id+'\')" style="background:#e0e7ff;color:#4338ca;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">✏️</button>'
+        + '<button onclick="_peDeletePartner(\''+p.id+'\')" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;cursor:pointer">🗑️</button>'
+        + '</div></div>'
+        + '<div style="height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-bottom:6px">'
+        + '<div style="height:100%;width:'+pct+'%;background:'+(bal>0?'linear-gradient(90deg,#f59e0b,#d97706)':'linear-gradient(90deg,#10b981,#059669)')+'"></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:6px;font-size:10px">'
+        + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Proposed</p><p style="font-weight:800;color:#1e1b4b;margin:1px 0 0">'+fc(proposed)+'</p></div>'
+        + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Given</p><p style="font-weight:800;color:#059669;margin:1px 0 0">'+fc(given)+'</p></div>'
+        + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">'+(bal>0?'Shortfall':'Surplus')+'</p><p style="font-weight:800;color:'+(bal>0?'#dc2626':'#059669')+';margin:1px 0 0">'+fc(Math.abs(bal))+'</p></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;font-size:10px;background:#f8fafc;border-radius:8px;padding:6px">'
+        + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Expenses (by this partner)</p><p style="font-weight:800;color:#dc2626;margin:1px 0 0">'+fc(spent)+'</p></div>'
+        + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Net (Given − Expenses)</p><p style="font-weight:800;color:'+(net>=0?'#059669':'#dc2626')+';margin:1px 0 0">'+fc(net)+'</p></div>'
+        + '</div>'
+        + '<p style="font-size:9.5px;font-weight:800;color:#065f46;text-transform:uppercase;margin:0 0 4px">💵 Contributions Given</p>'
+        + '<div style="display:flex;gap:6px;margin-bottom:'+(txns.length?'8px':'2px')+'">'
+        + '<input type="date" id="pe-txn-date-'+p.id+'" value="'+ist()+'" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+        + '<input type="number" id="pe-txn-amt-'+p.id+'" placeholder="Amount ₹" step="any" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+        + '<button onclick="_peAddContribution(\''+p.id+'\')" style="background:#065f46;color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">+ Record</button>'
+        + '</div>'
+        + (txns.length ? '<div style="border-top:1px solid #f3f4f6;padding-top:6px;margin-bottom:8px">' + txns.map(function(t){
+            return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0">'
+              + '<span style="color:#6b7280">'+t.date+(t.note?' — '+_esc(t.note):'')+'</span>'
+              + '<span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#374151">'+fc(t.amount)+'</span>'
+              + '<button onclick="_peDeleteContribution(\''+t.id+'\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:10px">✕</button></span>'
+              + '</div>';
+          }).join('') + '</div>' : '')
+        + '<p style="font-size:9.5px;font-weight:800;color:#b91c1c;text-transform:uppercase;margin:0 0 4px">💸 Expenses (money spent by this partner)</p>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:'+(exps.length?'8px':'0')+'">'
+        + '<input type="date" id="pe-exp-date-'+p.id+'" value="'+ist()+'" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+        + '<input type="number" id="pe-exp-amt-'+p.id+'" placeholder="Amount ₹" step="any" style="flex:1;min-width:80px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+        + '<input type="text" id="pe-exp-note-'+p.id+'" placeholder="What for? (optional)" style="flex:1.4;min-width:110px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+        + '<button onclick="_peAddExpense(\''+p.id+'\')" style="background:#b91c1c;color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">+ Record</button>'
+        + '</div>'
+        + (exps.length ? '<div style="border-top:1px solid #f3f4f6;padding-top:6px">' + exps.map(function(t){
+            return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0">'
+              + '<span style="color:#6b7280">'+t.date+(t.note?' — '+_esc(t.note):'')+'</span>'
+              + '<span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#b91c1c">'+fc(t.amount)+'</span>'
+              + '<button onclick="_peDeleteExpense(\''+t.id+'\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:10px">✕</button></span>'
+              + '</div>';
+          }).join('') + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+  body.innerHTML = html;
+}
+
+function _peSaveMeta() {
+  var val = parseFloat(document.getElementById('pe-total-proposed').value) || 0;
+  spartnerMeta({ totalProposed: val });
+  toast('✅ Saved', 'ok');
+  _peRender();
+}
+function _peToggleShareInput() { /* placeholder for future unit-aware hints; kept simple on purpose */ }
+function _peEditPartner(id) { _peEditPartnerId = id; _peRender(); }
+function _peCancelEditPartner() { _peEditPartnerId = null; _peRender(); }
+function _peSavePartner() {
+  var name = document.getElementById('pe-p-name').value.trim();
+  var shareType = document.getElementById('pe-p-sharetype').value;
+  var shareValue = parseFloat(document.getElementById('pe-p-sharevalue').value) || 0;
+  if (!name) { toast('Enter partner name', 'err'); return; }
+  if (!shareValue) { toast('Enter a % share or fixed amount', 'err'); return; }
+  var partners = lpartners();
+  if (_peEditPartnerId) {
+    var idx = partners.findIndex(function(p){ return p.id===_peEditPartnerId; });
+    if (idx>=0) partners[idx] = Object.assign({}, partners[idx], { name:name, shareType:shareType, shareValue:shareValue });
+    _peEditPartnerId = null;
+  } else {
+    partners.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:name, shareType:shareType, shareValue:shareValue, createdAt: Date.now() });
+  }
+  spartners(partners);
+  toast('✅ Partner saved', 'ok');
+  _peRender();
+}
+function _peDeletePartner(id) {
+  askDel('Remove this partner and all their contribution/expense history?', function(){
+    spartners(lpartners().filter(function(p){ return p.id!==id; }));
+    lpartnerTxns().filter(function(t){ return t.partnerId===id; }).forEach(function(t){ _peAddTombstone(t.id); });
+    lpartnerExpenses().filter(function(t){ return t.partnerId===id; }).forEach(function(t){ _peAddTombstone(t.id); });
+    spartnerTxns(lpartnerTxns().filter(function(t){ return t.partnerId!==id; }));
+    spartnerExpenses(lpartnerExpenses().filter(function(t){ return t.partnerId!==id; }));
+    _peAddTombstone(id);
+    if (_peEditPartnerId===id) _peEditPartnerId = null;
+    toast('Deleted', 'ok');
+    _peRender();
+  });
+}
+function _peAddContribution(partnerId) {
+  var dateEl = document.getElementById('pe-txn-date-'+partnerId);
+  var amtEl = document.getElementById('pe-txn-amt-'+partnerId);
+  var date = dateEl ? dateEl.value : ist();
+  var amount = amtEl ? (parseFloat(amtEl.value)||0) : 0;
+  if (!amount) { toast('Enter an amount', 'err'); return; }
+  var txns = lpartnerTxns();
+  txns.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), partnerId:partnerId, date:date||ist(), amount:amount });
+  spartnerTxns(txns);
+  toast('✅ Payment recorded', 'ok');
+  _peRender();
+}
+function _peDeleteContribution(txnId) {
+  askDel('Delete this contribution entry?', function(){
+    _peAddTombstone(txnId);
+    spartnerTxns(lpartnerTxns().filter(function(t){ return t.id!==txnId; }));
+    toast('Deleted', 'ok');
+    _peRender();
+  });
+}
+// Records a dated expense/drawdown against a specific partner — e.g.
+// money that partner personally spent on the project or drew out.
+function _peAddExpense(partnerId) {
+  var dateEl = document.getElementById('pe-exp-date-'+partnerId);
+  var amtEl = document.getElementById('pe-exp-amt-'+partnerId);
+  var noteEl = document.getElementById('pe-exp-note-'+partnerId);
+  var date = dateEl ? dateEl.value : ist();
+  var amount = amtEl ? (parseFloat(amtEl.value)||0) : 0;
+  var note = noteEl ? noteEl.value.trim() : '';
+  if (!amount) { toast('Enter an amount', 'err'); return; }
+  var exps = lpartnerExpenses();
+  exps.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), partnerId:partnerId, date:date||ist(), amount:amount, note:note });
+  spartnerExpenses(exps);
+  toast('✅ Expense recorded', 'ok');
+  _peRender();
+}
+function _peDeleteExpense(expId) {
+  askDel('Delete this expense entry?', function(){
+    _peAddTombstone(expId);
+    spartnerExpenses(lpartnerExpenses().filter(function(t){ return t.id!==expId; }));
+    toast('Deleted', 'ok');
+    _peRender();
+  });
+}
+
+// ── Company-wide sync: company_partners table ───────────────────────
+// Mirrors the company_sales table pattern exactly (see _pushCompanySales /
+// _pullCompanySales) — one row per company, RLS-gated to anyone who
+// belongs to that company. Requires the company_partners SQL migration
+// to exist; if the table isn't there yet, push/pull just fail silently
+// and everything keeps working local-only (no worse than before).
+var _partnersPushTimer = null;
+function _scheduleCompanyPartnersPush() {
+  if (_partnersPushTimer) clearTimeout(_partnersPushTimer);
+  _partnersPushTimer = setTimeout(function(){ _pushCompanyPartners(); }, 1500);
+}
+function _pushCompanyPartners(cb) {
+  var cid = _currentCompanyId();
+  if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !cid) { if (cb) cb({error:'not ready'}); return; }
+  var payload = {
+    company_id: cid,
+    partners: lpartners(),
+    txns: lpartnerTxns(),
+    expenses: lpartnerExpenses(),
+    meta: lpartnerMeta(),
+    tombstones: _peLoadTombstones(),
+    updated_by: _adminSBUser.id
+  };
+  _sb.from('company_partners').upsert(payload, { onConflict: 'company_id' }).then(function(res){
+    if (cb) cb(res);
+  }).catch(function(e){ if (cb) cb({error:e}); });
+}
+function _pullCompanyPartners(cb) {
+  var cid = _currentCompanyId();
+  if (typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !cid) { if (cb) cb(); return; }
+  _sb.from('company_partners').select('partners,txns,expenses,meta,tombstones,updated_at').eq('company_id', cid).maybeSingle().then(function(r){
+    if (!r || r.error || !r.data) { if (cb) cb(); return; }
+    try {
+      var mergedTombs = _peMergeTombstones(_peLoadTombstones(), r.data.tombstones||{});
+      safeLS.setItem(_cpk(PARTNER_TOMB_KEY), JSON.stringify(mergedTombs));
+
+      function mergeById(local, remote) {
+        var byId = {};
+        (remote||[]).forEach(function(x){ if (x && x.id && !mergedTombs[x.id]) byId[x.id] = x; });
+        (local||[]).forEach(function(x){ if (x && x.id && !mergedTombs[x.id]) byId[x.id] = x; }); // local wins on conflicting edits
+        return Object.keys(byId).map(function(k){ return byId[k]; });
+      }
+      safeLS.setItem(_cpk(PARTNERS_KEY), JSON.stringify(mergeById(lpartners(), r.data.partners)));
+      safeLS.setItem(_cpk(PARTNER_TXN_KEY), JSON.stringify(mergeById(lpartnerTxns(), r.data.txns)));
+      safeLS.setItem(_cpk(PARTNER_EXP_KEY), JSON.stringify(mergeById(lpartnerExpenses(), r.data.expenses)));
+      // Meta (single object, not a list) — newest updated_at wins.
+      if (r.data.meta && typeof r.data.meta === 'object') {
+        var localMeta = lpartnerMeta();
+        if (!localMeta || !Object.keys(localMeta).length) {
+          safeLS.setItem(_cpk(PARTNER_META_KEY), JSON.stringify(r.data.meta));
+        }
+      }
+    } catch(e) {}
+    if (cb) cb();
+  }).catch(function(){ if (cb) cb(); });
 }
 
 var _ownerTabRenderers = {
@@ -23645,6 +24171,7 @@ function _ownerOpenDesktopDashboard() {
       + '<div id="owner-dt-filters" style="display:flex;gap:7px;flex-wrap:wrap;"></div>'
       + '<div style="display:flex;gap:8px;flex-shrink:0;">'
         + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">📢</button>'
+        + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">💰</button>'
         + '<button onclick="openEditProfile()" title="Profile & Company Settings" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">⚙️</button>'
         + '<button id="owner-dt-close" style="width:36px;height:36px;border-radius:10px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:15px;cursor:pointer;">✕</button>'
       + '</div>'
@@ -23688,6 +24215,13 @@ function _ownerOpenDesktopDashboard() {
 
 window._ENGINEER_MODE = false;
 window._ENGINEER_READONLY = false;
+// True only once _applyPermState() has actually resolved a server-verified
+// role for the current session (see updateOwnerBtn() below). Starts false
+// so the owner button fails CLOSED (hidden) rather than open during the
+// brief window right after login/reload before that real check completes —
+// previously it defaulted to showing for anyone whose ADMIN_ROLE_KEY/plan
+// flags happened to already be cached from a prior session.
+window._roleVerified = false;
 
 // Redeeming a join code must never create a device-only identity. Without a
 // real Supabase session behind it, this person has no valid JWT — every
@@ -23710,7 +24244,18 @@ var _joinOtpEmail = '';
 function _ownsAnyCompany() {
   try {
     if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner') return true;
-    if (typeof ADMIN_ROLE_KEY !== 'undefined' && safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') return true;
+    // REMOVED: a blanket `ADMIN_ROLE_KEY === 'admin'` check used to live here.
+    // ADMIN_ROLE_KEY only proves this device completed an OTP/email login —
+    // _handleOtpSuccess() sets it to 'admin' for EVERY successful login,
+    // including a joined engineer/sales_admin verifying their identity to
+    // redeem a join code. It says nothing about which company, or whether
+    // this account is that company's actual owner. Trusting it here let a
+    // joined member get silently promoted to 'owner' by _applyPermState()
+    // (which calls this function) whenever roleName wasn't literally
+    // 'owner' — showing them the 👑 Owner Dashboard / 💰 Partner Tracker
+    // buttons and full owner-level access. The two checks below are both
+    // genuinely company-scoped (sourced from get_my_companies() or set at
+    // the exact moment THIS device created a company) and are sufficient.
     // BUGFIX (owner demoted right after signup): WS_CROLE_KEY above is
     // itself populated FROM a server RPC (get_my_companies/get_my_projects)
     // — if that RPC is queried again immediately after this device just
@@ -25629,6 +26174,12 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(function () {
     try { if (typeof _pullCompanySales === 'function') _pullCompanySales(function () { try { _updateSalesDashCard(); } catch (e) {} }); } catch (e) {}
   }, 2500);
+  // Same idea for the company-wide Partner / Investment Tracker — pulled
+  // quietly on load so the money button's data is current even if the
+  // owner never explicitly opens it this session.
+  setTimeout(function () {
+    try { if (typeof _pullCompanyPartners === 'function') _pullCompanyPartners(); } catch (e) {}
+  }, 2700);
 });
 
 // ══════════════════════════════════════════════════════════════
