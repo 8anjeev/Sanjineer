@@ -3426,6 +3426,99 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   }
 }
 </style>
+<style id="mobile-compact-tabs">
+/* ════════════════════════════════════════════════════════════════
+   MOBILE-ONLY COMPACT TAB LAYOUT (prototype — Materials tab)
+   Phones ≤767px ONLY. Tablet/desktop (≥768px) get zero changes —
+   every rule below is scoped inside this single media query.
+   Pattern: tab's own date/period switcher (if any) stays on top →
+   compact "+ Add …" / "🖨️ Print" button row → records list.
+   The old always-visible Add-form and Print-filter cards are hidden
+   by default and instead open as a bottom-sheet popup when their
+   button is tapped, so the tab starts compact instead of showing a
+   full form immediately.
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  /* Compact action row: hidden on desktop by default (see inline
+     style="display:none" on the row itself), shown here on mobile */
+  .mob-action-row { display:flex !important; gap:8px; margin-bottom:10px; }
+  .mob-action-row .mob-add-btn {
+    flex: 1 1 0; min-width:0;
+    /* Vibrant color set per-tab via inline style="background:..." to match
+       that tab's own accent (Materials=orange, Attendance=green, etc.) —
+       this class only controls shape/size, not color. */
+    color:#fff; border:none; border-radius:14px;
+    padding:12px 10px; font-size:13px; font-weight:800;
+    box-shadow:0 4px 14px rgba(0,0,0,0.25);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .mob-action-row .mob-add-btn:active { transform:scale(0.97); }
+  .mob-action-row .mob-print-btn {
+    flex: 1 1 0; min-width:0;
+    background:#fff; color:#4338ca; border:2px solid #c7d2fe;
+    border-radius:14px; padding:12px 10px; font-size:13px; font-weight:800;
+  }
+  .mob-action-row .mob-print-btn:active { transform:scale(0.97); }
+
+  /* Panels this pattern controls: hidden in normal flow on mobile
+     until opened as a popup via .mob-open. Centered modal card —
+     sits slightly above vertical center, not pinned to top or bottom. */
+  .mob-panel { display:none !important; }
+  .mob-panel.mob-open {
+    display:block !important;
+    position:fixed !important;
+    left:50% !important; top:44% !important;
+    transform:translate(-50%,-50%) !important;
+    right:auto; bottom:auto;
+    z-index:9999; max-height:78vh; overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    width:92% !important; max-width:420px;
+    border-radius:20px !important;
+    box-shadow:0 20px 50px rgba(0,0,0,0.4);
+    margin:0 !important;
+    animation: mobPopIn .18s ease-out;
+    padding-top: 34px !important;
+  }
+  @keyframes mobPopIn {
+    from{ transform:translate(-50%,-46%) scale(0.94); opacity:0.3; }
+    to{ transform:translate(-50%,-50%) scale(1); opacity:1; }
+  }
+
+  .mob-panel-close {
+    display:flex !important; align-items:center; justify-content:center;
+    position:absolute; top:8px; right:8px; width:28px; height:28px;
+    border-radius:50%; background:#f1f5f9; color:#475569;
+    font-size:14px; font-weight:800; border:none; z-index:2;
+  }
+  .mob-panel-close:active { transform:scale(0.9); }
+
+  #mob-backdrop {
+    display:none; position:fixed; inset:0; z-index:9998;
+    background:rgba(15,15,35,0.5);
+  }
+  #mob-backdrop.show { display:block; }
+
+  /* Title shown only inside the popup itself, for panels (like Expenses'
+     Print) where the visible title on the page lives OUTSIDE the
+     .mob-panel wrapper (so desktop markup/layout stays untouched) */
+  .mob-panel.mob-open .mob-panel-title {
+    display:block !important; font-size:13px; font-weight:800;
+    color:#374151; margin:0 0 10px;
+  }
+  /* Expenses Print popup: stack the month-select + print button instead
+     of the inline flex row they use on desktop */
+  #exp-print-panel.mob-open {
+    display:flex !important; flex-direction:column; gap:10px; align-items:stretch;
+  }
+  #exp-print-panel.mob-open select,
+  #exp-print-panel.mob-open button { width:100% !important; }
+}
+/* Popup-only titles stay invisible outside the mobile popup state */
+.mob-panel-title { display:none; }
+/* Close button + backdrop stay invisible on desktop/tablet */
+.mob-panel-close { display:none; }
+#mob-backdrop { display:none; }
+</style>
 <style id="custom-ui-enhancements">
 @media (min-width: 1024px) {
   /* ══════════════════════════════════════════
@@ -3610,6 +3703,9 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
 </style>
 </head>
 <body>
+
+<!-- Shared backdrop for the mobile "Add / Print" bottom-sheet popups (see #mobile-compact-tabs style + mobOpenPanel()/mobClosePanels()) -->
+<div id="mob-backdrop" onclick="mobClosePanels()"></div>
 
 <!-- ========== SYNC LOADING OVERLAY ==========
      Covers the whole app on first open and on every project switch while
@@ -5426,9 +5522,10 @@ function _wsSelectProject(p) {
         <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
           <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
         </button>
-        <button id="partner-hdr-btn" onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:26px;height:26px;flex-shrink:0;cursor:pointer;-webkit-tap-highlight-color:transparent;">
-          <span style="font-size:13px;line-height:1;">💰</span>
-        </button>
+        <!-- Partner/Investment Tracker button removed from the main app header
+             per product decision — it now lives ONLY inside the Owner Overview
+             header (mobile + desktop), immediately left of the ⚙️ Settings
+             button. See _ownerOpenMobileOverview() / _ownerOpenDesktopDashboard(). -->
       </div>
       <!-- Stacked: company above, project dropdown below -->
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;max-width:200px;">
@@ -7083,20 +7180,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div id="tab-attendance" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
   <!-- Worker Attendance Print Panel -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="att-print-panel">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="att-print-panel">
     <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Print Worker Attendance <span class="font-normal text-gray-400">— select worker & month</span></p>
     <div class="flex gap-2 items-center flex-wrap">
       <select id="att-print-worker" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
         <option value="">-- Select Worker --</option>
       </select>
       <select id="att-print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-      <button onclick="printWorkerAttendance()" class="hdr-action-btn g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
+      <button onclick="printWorkerAttendance(); if (typeof mobClosePanels==='function') mobClosePanels();" class="hdr-action-btn g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
     </div>
   </div>
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="att-add-panel">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">➕ Add Worker</p>
-      <button onclick="openManageWorkers()" class="hdr-action-btn g-tor-violet500-purple500 text-white rounded-xl font-semibold active:scale-95" style="font-size:10px;padding:0 12px">⚙️ Manage Workers</button>
+      <button onclick="if (typeof mobClosePanels==='function') mobClosePanels(); openManageWorkers();" class="hdr-action-btn g-tor-violet500-purple500 text-white rounded-xl font-semibold active:scale-95" style="font-size:10px;padding:0 12px">⚙️ Manage Workers</button>
     </div>
     <div class="grid grid-cols-2 gap-2">
       <input type="text" id="w-name" placeholder="Worker Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -7131,6 +7228,12 @@ document.addEventListener('DOMContentLoaded', function() {
     <span style="font-size:10px;color:rgba(255,255,255,0.75);font-weight:500;line-height:1">Select to mark attendance</span>
   </button>
 
+  <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+  <div class="mob-action-row" style="display:none">
+    <button class="mob-add-btn" style="background:linear-gradient(135deg,#10b981,#14b8a6)" onclick="mobOpenPanel('att-add-panel')">+ Add Worker</button>
+    <button class="mob-print-btn" onclick="mobOpenPanel('att-print-panel')">🖨️ Print</button>
+  </div>
+
   <div class="dt-r bg-white rounded-2xl p-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">👷 Workers List</p>
     <div id="workers-list"><p class="text-gray-400 text-center py-4">No workers yet</p></div>
@@ -7140,7 +7243,14 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ===== EXPENSES ===== -->
 
 <div id="tab-expenses" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+  <div class="mob-action-row" style="display:none">
+    <button class="mob-add-btn" style="background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="mobOpenPanel('exp-add-panel')">+ Add Expense</button>
+    <button class="mob-print-btn" onclick="mobOpenPanel('exp-print-panel')">🖨️ Print</button>
+  </div>
+
+  <div id="exp-add-panel" class="dt-l mob-panel">
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">💰 Petty Cash <span class="font-normal text-gray-400">— record cash brought to site</span></p>
     <div class="grid grid-cols-3 gap-3" style="align-items:stretch">
       <input type="number" id="petty-amount" placeholder="Amount (₹)" step="any" class="px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400" style="height:44px;box-sizing:border-box">
@@ -7148,7 +7258,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="addPettyCash()" class="g-tor-cyan500-sky500 text-white rounded-xl font-semibold text-sm active:scale-95" style="height:44px;padding:0;box-sizing:border-box">💰 Deposit</button>
     </div>
   </div>
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <p class="text-xs font-semibold text-gray-500 mb-2">📝 Quick Entry <span class="font-normal text-gray-400">— material, tool or other site expense</span></p>
     <div class="grid grid-cols-2 gap-3">
       <input type="text" id="exp-mat-name" placeholder="Item / Description" oninput="expAutoFillSupplier()" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-amber-400">
@@ -7196,6 +7306,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button id="exp-save-btn" onclick="addExpenseMaterial()" class="g-tor-amber500-orange500 col-span-2 text-white rounded-xl font-bold text-sm active:scale-95" style="padding:9px 0">💾 Save Entry</button>
     </div>
   </div>
+  </div>
   <div class="dt-r">
     <div class="grid grid-cols-3 gap-2.5 mb-3">
       <div class="g-tobr-emerald500-teal500 rounded-xl text-white" style="padding:4px 10px"><p class="text-[9px] text-emerald-100 leading-none">Material Cost</p><p id="exp-mat-total" class="text-sm font-bold leading-none mt-0.5">₹0</p></div>
@@ -7205,10 +7316,13 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="bg-white rounded-2xl p-3 shadow-xl">
       <div class="flex items-center gap-2 mb-2">
         <p class="text-xs font-semibold text-gray-500 flex-shrink-0">💰 Expense Ledger</p>
-        <select id="exp-month-filter" class="flex-1 min-w-0 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400" style="font-size:11px;padding:4px 8px" onchange="viewExpenses()">
-          <option value="">Select Month</option>
-        </select>
-        <button onclick="printExpenses()" class="g-tor-emerald500-teal500 text-white rounded-lg font-semibold active:scale-95 flex-shrink-0" style="font-size:11px;padding:0 12px">🖨️ Print</button>
+        <div id="exp-print-panel" class="mob-panel" style="display:contents">
+          <p class="mob-panel-title">🖨️ Print Expense Ledger</p>
+          <select id="exp-month-filter" class="flex-1 min-w-0 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400" style="font-size:11px;padding:4px 8px" onchange="viewExpenses()">
+            <option value="">Select Month</option>
+          </select>
+          <button onclick="printExpenses(); if (typeof mobClosePanels==='function') mobClosePanels();" class="g-tor-emerald500-teal500 text-white rounded-lg font-semibold active:scale-95 flex-shrink-0" style="font-size:11px;padding:0 12px">🖨️ Print</button>
+        </div>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -7228,7 +7342,14 @@ document.addEventListener('DOMContentLoaded', function() {
     <p style="color:white;font-size:11px;font-weight:700;margin:0" id="mat-low-count">⚠️ 0 items low on stock</p>
     <button onclick="reorderWhatsApp()" style="background:rgba(255,255,255,0.25);border:none;color:white;font-size:10px;font-weight:800;padding:0 12px;border-radius:8px;cursor:pointer">📱 Reorder via WhatsApp</button>
   </div>
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+
+  <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+  <div class="mob-action-row" style="display:none">
+    <button class="mob-add-btn" style="background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="mobOpenPanel('materials-add-panel')">+ Add Material</button>
+    <button class="mob-print-btn" onclick="mobOpenPanel('materials-print-panel')">🖨️ Print</button>
+  </div>
+
+  <div id="materials-add-panel" class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">🧱 Material Entry</p>
       <button type="button" id="mat-new-toggle-btn" onclick="toggleNewMaterialForm()" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg active:scale-95" style="border:none;cursor:pointer">+ Add New Material</button>
@@ -7256,7 +7377,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
     </div>
   </div>
-  <div class="dt-l bg-white rounded-2xl p-2.5 mb-3 shadow-xl">
+  <div id="materials-print-panel" class="dt-l bg-white rounded-2xl p-2.5 mb-3 shadow-xl mob-panel">
     <div class="flex gap-2 items-center flex-wrap">
       <select id="mat-print-daterange" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400" style="flex:0 0 auto">
         <option value="all">📅 All Time</option>
@@ -7275,7 +7396,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <select id="mat-print-supplier" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
         <option value="">All Suppliers</option>
       </select>
-      <button onclick="printStockList()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print Received</button>
+      <button onclick="printStockList(); if (typeof mobClosePanels==='function') mobClosePanels();" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print Received</button>
     </div>
   </div>
   <div id="materials-list" class="dt-r space-y-3">
@@ -7567,66 +7688,82 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- ===== TEAMS ===== -->
 
-<div id="tab-contractors" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
-  <div class="dt-l bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
-    <div class="flex items-center justify-between gap-2">
-      <button onclick="changeViewMonth(-1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:0 12px">← Prev</button>
-      <div class="text-center"><p class="text-[9px] text-gray-500 leading-none">Period</p><p id="teams-period" class="text-sm font-bold text-gray-800 leading-none mt-0.5"></p></div>
-      <button onclick="changeViewMonth(1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:0 12px">Next →</button>
-    </div>
-  </div>
-  <!-- Monthly Payment Report Panel -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Monthly Payment Report <span class="font-normal text-gray-400">— select month & team</span></p>
-    <div class="flex gap-2 items-center flex-wrap mb-2">
-      <select id="print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-      <select id="teams-print-filter" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
-        <option value="all">All Teams</option>
-      </select>
-      <button onclick="printMonthlyReport()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
-    </div>
-  </div>
-  <!-- Subcontractor Bill Tracking -->
-  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <div class="flex items-center justify-between mb-2">
-      <p class="text-xs font-bold text-gray-700">🧾 Subcontractor Bill Tracker</p>
-      <button onclick="toggleSubconBillPanel()" class="bg-indigo-100 text-indigo-600 text-xs font-bold rounded-lg px-3 py-1">+ Add Bill</button>
-    </div>
-    <div id="subcon-bill-panel" style="display:none;margin-bottom:10px;padding:10px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <p id="scb-panel-title" style="font-size:11px;font-weight:800;color:#4338ca">➕ New Bill</p>
-        <p style="font-size:9px;color:#9ca3af">Tip: leave Bill Amount as 0 to log a part-payment only</p>
-      </div>
-      <div class="grid grid-cols-2 gap-2 mb-2">
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Contractor</label>
-          <select id="scb-contractor" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400"><option value="">Select Contractor</option></select>
-        </div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="scb-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill No.</label><input type="text" id="scb-no" placeholder="Bill / RA No." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill Amount (₹) — 0 if payment-only</label><input type="number" id="scb-amount" placeholder="0" step="any" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Paid (₹)</label><input type="number" id="scb-paid" placeholder="0" step="any" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-        <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Description</label><input type="text" id="scb-desc" placeholder="Brickwork, Plaster..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button onclick="saveSubconBill()" id="scb-save-btn" class="g-tor-indigo500-purple500 flex-1 text-white py-2 rounded-xl font-bold text-sm active:scale-95">💾 Save Bill</button>
-        <button onclick="cancelSubconBillEdit()" class="flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm bg-gray-200 text-gray-600 active:scale-95">Cancel</button>
-      </div>
-    </div>
-    <div id="subcon-bill-list"><p class="text-gray-400 text-xs text-center py-2">No bills tracked yet</p></div>
+<div id="tab-contractors" class="tab-content tab-hidden" style="display:none">
+
+  <!-- Sub-tabs: Team / Sub Contractor -->
+  <div class="flex gap-2 mb-3" id="contractors-subtabs-row">
+    <button id="ctab-team" onclick="switchContractorSubTab('team')" class="flex-1 py-2 rounded-xl text-sm font-bold text-white active:scale-95" style="background:linear-gradient(135deg,#4f46e5,#6366f1);border:none">👥 Team</button>
+    <button id="ctab-subcon" onclick="switchContractorSubTab('subcon')" class="flex-1 py-2 rounded-xl text-sm font-bold active:scale-95 bg-white text-indigo-700" style="border:2px solid #c7d2fe">🧾 Sub Contractor</button>
   </div>
 
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
-    <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Contractor / Staff</p>
-    <div class="grid grid-cols-2 gap-3">
-      <input type="text" id="ct-name" placeholder="Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
-      <select id="ct-type" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none">
-        <option value="Team">Team/Contractor</option><option value="Staff">Staff</option>
-      </select>
-      <input type="number" id="ct-total" placeholder="Contract Amount (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
-      <button onclick="addContractor()" class="g-tor-indigo500-purple500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
+  <!-- TEAM sub-section -->
+  <div id="csec-team" class="dt-split dt-cap">
+    <div class="dt-l bg-white rounded-xl mb-2 shadow-xl" style="padding:5px 10px">
+      <div class="flex items-center justify-between gap-2">
+        <button onclick="changeViewMonth(-1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:0 12px">← Prev</button>
+        <div class="text-center"><p class="text-[9px] text-gray-500 leading-none">Period</p><p id="teams-period" class="text-sm font-bold text-gray-800 leading-none mt-0.5"></p></div>
+        <button onclick="changeViewMonth(1)" class="bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium" style="padding:0 12px">Next →</button>
+      </div>
+    </div>
+    <!-- Monthly Payment Report Panel -->
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <p class="text-xs font-semibold text-gray-500 mb-2">🖨️ Monthly Payment Report <span class="font-normal text-gray-400">— select month & team</span></p>
+      <div class="flex gap-2 items-center flex-wrap mb-2">
+        <select id="print-month" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
+        <select id="teams-print-filter" class="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+          <option value="all">All Teams</option>
+        </select>
+        <button onclick="printMonthlyReport()" class="g-tor-violet500-purple600 flex-shrink-0 px-3 py-1.5 text-white rounded-xl text-xs font-semibold active:scale-95">🖨️ Print</button>
+      </div>
+    </div>
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <p class="text-xs font-semibold text-gray-500 mb-2">➕ Add Contractor / Staff</p>
+      <div class="grid grid-cols-2 gap-3">
+        <input type="text" id="ct-name" placeholder="Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <select id="ct-type" class="px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none">
+          <option value="Team">Team/Contractor</option><option value="Staff">Staff</option>
+        </select>
+        <input type="number" id="ct-total" placeholder="Contract Amount (Optional)" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
+        <button onclick="addContractor()" class="g-tor-indigo500-purple500 text-white py-2 rounded-xl font-semibold text-sm active:scale-95">Add</button>
+      </div>
+    </div>
+    <div id="contractors-list" class="dt-r space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
+  </div>
+
+  <!-- SUB CONTRACTOR sub-section -->
+  <div id="csec-subcon" class="dt-split dt-cap tab-hidden">
+    <!-- Subcontractor Bill Tracking -->
+    <div class="dt-full bg-white rounded-2xl p-3 mb-3 shadow-xl">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs font-bold text-gray-700">🧾 Subcontractor Bill Tracker</p>
+        <div style="display:flex;gap:6px">
+          <button onclick="printContractorHikeReport()" class="bg-orange-100 text-orange-700 text-xs font-bold rounded-lg px-3 py-1">📈 Rate Hike Report</button>
+          <button onclick="toggleSubconBillPanel()" class="bg-indigo-100 text-indigo-600 text-xs font-bold rounded-lg px-3 py-1">+ Add Bill</button>
+        </div>
+      </div>
+      <div id="subcon-bill-panel" style="display:none;margin-bottom:10px;padding:10px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <p id="scb-panel-title" style="font-size:11px;font-weight:800;color:#4338ca">➕ New Bill</p>
+          <p style="font-size:9px;color:#9ca3af">Tip: leave Bill Amount as 0 to log a part-payment only</p>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Contractor</label>
+            <select id="scb-contractor" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400"><option value="">Select Contractor</option></select>
+          </div>
+          <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Date</label><input type="date" id="scb-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+          <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill No.</label><input type="text" id="scb-no" placeholder="Bill / RA No." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+          <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Bill Amount (₹) — 0 if payment-only</label><input type="number" id="scb-amount" placeholder="0" step="any" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+          <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Paid (₹)</label><input type="number" id="scb-paid" placeholder="0" step="any" min="0" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+          <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Work Description</label><input type="text" id="scb-desc" placeholder="Brickwork, Plaster..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="saveSubconBill()" id="scb-save-btn" class="g-tor-indigo500-purple500 flex-1 text-white py-2 rounded-xl font-bold text-sm active:scale-95">💾 Save Bill</button>
+          <button onclick="cancelSubconBillEdit()" class="flex-shrink-0 px-4 py-2 rounded-xl font-bold text-sm bg-gray-200 text-gray-600 active:scale-95">Cancel</button>
+        </div>
+      </div>
+      <div id="subcon-bill-list"><p class="text-gray-400 text-xs text-center py-2">No bills tracked yet</p></div>
     </div>
   </div>
-  <div id="contractors-list" class="dt-r space-y-4"><p class="text-white/50 text-center py-4">No teams yet</p></div>
 </div>
 
 <!-- ===== BOQ DPR (standalone tab) ===== -->
@@ -7685,6 +7822,12 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
+  <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+  <div class="mob-action-row" style="display:none">
+    <button class="mob-add-btn" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)" onclick="mobOpenPanel('boq-project-info-panel')">🏗️ Project Info</button>
+    <button class="mob-add-btn" style="background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="mobOpenPanel('boq-import-panel')">📂 Add/Import BOQ</button>
+  </div>
+
   <!-- Today's Work Details card (right column, aligned with header) -->
   <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl">
     <div class="flex items-center justify-between mb-2">
@@ -7699,7 +7842,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Project Info -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="boq-project-info-panel">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">🏗️ Project Info</p>
       <div style="display:flex;gap:6px">
@@ -7729,7 +7872,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 
   <!-- Import / Add BOQ -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="boq-import-panel">
     <div class="flex items-center justify-between mb-2">
       <p class="text-sm font-bold text-gray-700">📂 Import / Add BOQ</p>
       <span id="boq-import-status" style="font-size:9px;color:#6b7280"></span>
@@ -7850,8 +7993,15 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
   </div>
+
+  <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+  <div class="mob-action-row" style="display:none">
+    <button class="mob-add-btn" style="background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="mobOpenPanel('mach-add-panel')">+ Add Session</button>
+    <button class="mob-print-btn" onclick="mobOpenPanel('mach-filters-panel')">🖨️ Print</button>
+  </div>
+
   <!-- Log Form -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="mach-add-panel">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">⚙️ Log Machine Hours</p>
       <button onclick="addMachineSession()" class="hdr-action-btn g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">+ Add Session</button>
@@ -7885,8 +8035,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
   <!-- Print Month + Filters — combined on one chip, same on mobile & desktop -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="mach-filters-panel">
-    <button id="mach-print-month-btn" onclick="printMachineryMonth()" class="g-tobr-violet500-purple500 w-full text-white rounded-lg text-xs font-semibold active:scale-95 mb-3" style="padding:8px 0">🖨️ Print Month</button>
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="mach-filters-panel">
+    <button id="mach-print-month-btn" onclick="printMachineryMonth(); if (typeof mobClosePanels==='function') mobClosePanels();" class="g-tobr-violet500-purple500 w-full text-white rounded-lg text-xs font-semibold active:scale-95 mb-3" style="padding:8px 0">🖨️ Print Month</button>
     <div class="grid grid-cols-3 gap-2" id="mach-filters-row">
       <div>
         <label class="text-[9px] font-bold text-gray-500 uppercase block mb-1">Month</label>
@@ -11257,6 +11407,7 @@ function addWorker() {
   if(monthlySalaryEl) monthlySalaryEl.value='';
   if(isStaffEl){ isStaffEl.checked=false; toggleStaffFields(); }
   toast('Worker added','ok'); AD=ld(); updateDropdowns(); viewWorkers();
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
 }
 function delWorker(id) {
   var w = AD.find(function(d){ return d.__id === id; });
@@ -12928,6 +13079,7 @@ function addPettyCash(){
   if (!amt||!date) { toast('Enter amount and date','err'); return; }
   ins({type:'material',material_name:'Petty Cash Deposit',quantity:0,cost:amt,date:date,is_petty_cash:true});
   document.getElementById('petty-amount').value=''; AD=ld(); toast('Cash deposited','ok'); viewExpenses(); updateDash();
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
 }
 function delExpense(id){
   var m=AD.find(function(d){ return d.__id===id; });
@@ -13053,6 +13205,7 @@ function addExpenseMaterial(){
     toast(label + ' saved!'+(type==='tool'?' ✅ Added to Tools stock.':_matStockUpdated?' ✅ Stock updated.':''), 'ok');
     viewExpenses();
     updateDash();
+    if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
   });
 }
 function viewExpenses(){
@@ -13204,6 +13357,7 @@ function addMaterialItem(){
   if (catEl) catEl.value='';
   toast('Material added','ok'); viewMaterials(); updateDash();
   toggleNewMaterialForm(true); // switch back to the "select material" picker
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
 }
 // ── Add-Material panel: toggle between the "pick an existing material"
 // dropdown (quick entry) and the "define a brand-new material" form. ──
@@ -13229,6 +13383,7 @@ function toggleNewMaterialForm(forcePicker){
 // delivery without hunting for it in the list below.
 function quickPickMaterial(id){
   if (!id) return;
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
   openMatPurchaseModal(id);
   var pickEl = document.getElementById('mat-name-select'); if (pickEl) pickEl.value = '';
 }
@@ -14120,6 +14275,62 @@ ins({type:'contractor_payment',contractor_name:c.contractor_name,payment:amt,dat
 AD=ld(); closeCTModal(); toast('Saved','ok'); viewContractors(); updateDash();
 }
 function delCTPay(id){ askDel('Delete payment?', function(){ del(id); AD=ld(); toast('Deleted','ok'); viewContractors(); updateDash(); }); }
+// Toggles between the "Team" and "Sub Contractor" sub-tabs inside the
+// Teams tab. This function was previously missing entirely — the
+// buttons called onclick="switchContractorSubTab(...)" but nothing was
+// ever defined with that name, so tapping "Sub Contractor" silently did
+// nothing. Also refreshes each section's content on open: the Team list
+// (viewContractors) and the Subcontractor Bill list (renderSubconBills)
+// were only ever re-rendered after an add/save action, never when the
+// tab was first opened, so bills already saved wouldn't show until you
+// added a new one.
+// ════════════════════════════════════════════════════════════════
+// MOBILE COMPACT ADD/PRINT PANEL HELPER (phone screens ≤767px only)
+// Opens an existing "Add ___" form card or "Print filters" card as a
+// bottom-sheet popup instead of it sitting always-open on the page.
+// On tablet/desktop this is a no-op — the .mob-panel/.mob-open classes
+// only have any visual effect inside the ≤767px media query, so the
+// panel simply stays exactly where it always was in the normal layout.
+// ════════════════════════════════════════════════════════════════
+function mobOpenPanel(panelId){
+  mobClosePanels();
+  var el = document.getElementById(panelId);
+  if (!el) return;
+  el.classList.add('mob-open');
+  var bd = document.getElementById('mob-backdrop');
+  if (bd) bd.classList.add('show');
+  if (el.scrollIntoView) { try { el.scrollTop = 0; } catch(e){} }
+}
+function mobClosePanels(){
+  document.querySelectorAll('.mob-panel.mob-open').forEach(function(el){ el.classList.remove('mob-open'); });
+  var bd = document.getElementById('mob-backdrop');
+  if (bd) bd.classList.remove('show');
+}
+
+function switchContractorSubTab(name){
+  var isTeam = (name === 'team');
+  var secTeam = document.getElementById('csec-team');
+  var secSub  = document.getElementById('csec-subcon');
+  if (secTeam) secTeam.classList.toggle('tab-hidden', !isTeam);
+  if (secSub)  secSub.classList.toggle('tab-hidden', isTeam);
+
+  var btnTeam = document.getElementById('ctab-team');
+  var btnSub  = document.getElementById('ctab-subcon');
+  var activeCls   = 'flex-1 py-2 rounded-xl text-sm font-bold text-white active:scale-95';
+  var inactiveCls = 'flex-1 py-2 rounded-xl text-sm font-bold active:scale-95 bg-white text-indigo-700';
+  if (btnTeam) {
+    btnTeam.className = isTeam ? activeCls : inactiveCls;
+    btnTeam.style.cssText = isTeam ? 'background:linear-gradient(135deg,#4f46e5,#6366f1);border:none' : 'border:2px solid #c7d2fe';
+  }
+  if (btnSub) {
+    btnSub.className = !isTeam ? activeCls : inactiveCls;
+    btnSub.style.cssText = !isTeam ? 'background:linear-gradient(135deg,#4f46e5,#6366f1);border:none' : 'border:2px solid #c7d2fe';
+  }
+
+  if (isTeam) { if (typeof viewContractors === 'function') viewContractors(); }
+  else        { if (typeof renderSubconBills === 'function') renderSubconBills(); }
+}
+
 function viewContractors(){
 try{
 AD=ld(); var vms=mkey(VM);
@@ -15276,6 +15487,7 @@ function addMachineSession(){
   renderMachMonthly();
   machPopulateDataLists();
   toast('Session saved!','ok');
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
 }
 
 function renderMachSessions(d){
@@ -17367,16 +17579,14 @@ function updateCloudBtn() {
 
 function updateOwnerBtn() {
   var btn = document.getElementById('owner-hdr-btn');
-  var pbtn = document.getElementById('partner-hdr-btn');
-  if (!btn && !pbtn) return;
+  if (!btn) return;
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   var hasPaidPlan = (window.userPlan === 'pro' || window.userPlan === 'enterprise');
   var isOwner = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE);
-  if (btn) btn.style.display = isOwner ? 'flex' : 'none';
-  // Partner/Investment tracker is strictly owner-only, on both mobile and
-  // desktop — never shown to a joined engineer/staff device (_ENGINEER_MODE)
-  // even if that device happens to carry an admin flag locally.
-  if (pbtn) pbtn.style.display = isOwner ? 'flex' : 'none';
+  btn.style.display = isOwner ? 'flex' : 'none';
+  // NOTE: the Partner/Investment Tracker button no longer lives in the main
+  // app header — it only appears inside the Owner Overview header (mobile +
+  // desktop, left of ⚙️ Settings), gated the same isOwner-only way there.
 }
 
 // -- Open / Close Cloud Modal --
@@ -20717,6 +20927,125 @@ function saveSubconBill() {
   renderSubconBills();
 }
 
+// Safe for embedding a free-text string inside a single-quoted inline
+// onclick="...('...')" attribute — escapes backslashes/quotes so a
+// contractor name containing an apostrophe (e.g. "O'Brien Builders")
+// can't break out of the string or inject script.
+function _jsStrEsc(s) { return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+// ── Contract total revision / rate-hike tracking ──────────────────
+// Lets the owner correct a contractor's overall billed total directly
+// (e.g. steel/cement rate hike, scope addition, negotiated increase)
+// instead of only ever adding line-item bills. Implemented as a normal
+// bill-line entry (isHikeAdjustment:true, amount = the +/- difference)
+// so it rides the EXACT SAME cm_subcon_bills storage/cloud-backup path
+// as every other bill — no separate store, nothing that can fall out of
+// sync, and the date + old→new amounts are preserved forever in the
+// ledger, exactly like any other dated record.
+var _scbHikeContractor = null;
+var _scbHikeBaseline = 0;
+function openContractorHikeModal(name, currentTotal) {
+  _scbHikeContractor = name;
+  _scbHikeBaseline = currentTotal;
+  var existing = document.getElementById('_scb-hike-modal'); if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = '_scb-hike-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.innerHTML =
+    '<div style="background:#fff;width:100%;max-width:360px;border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+    + '<div style="background:linear-gradient(135deg,#7c2d12,#c2410c);padding:14px 16px;">'
+    +   '<p style="color:#fff;font-size:13px;font-weight:800;margin:0">📈 Revise Contract Total — '+_esc(name)+'</p>'
+    +   '<p style="color:rgba(255,255,255,.75);font-size:10px;margin:2px 0 0">Current total billed: '+fc(currentTotal)+'</p>'
+    + '</div>'
+    + '<div style="padding:14px 16px;">'
+    +   '<label style="font-size:9.5px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">New Total Amount (₹)</label>'
+    +   '<input type="number" id="scb-hike-new-total" step="any" placeholder="'+currentTotal+'" style="width:100%;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;font-weight:700;margin-bottom:10px;box-sizing:border-box">'
+    +   '<label style="font-size:9.5px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">Date of Revision</label>'
+    +   '<input type="date" id="scb-hike-date" value="'+ist()+'" style="width:100%;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;margin-bottom:10px;box-sizing:border-box">'
+    +   '<label style="font-size:9.5px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">Reason (optional)</label>'
+    +   '<input type="text" id="scb-hike-note" placeholder="e.g. Steel rate hike, scope change" style="width:100%;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;margin-bottom:14px;box-sizing:border-box">'
+    +   '<div style="display:flex;gap:8px;">'
+    +     '<button onclick="saveContractorHike()" style="flex:1;background:linear-gradient(135deg,#c2410c,#ea580c);color:#fff;border:none;border-radius:8px;padding:10px;font-weight:800;font-size:12px;cursor:pointer">💾 Save Revision</button>'
+    +     '<button onclick="document.getElementById(\'_scb-hike-modal\').remove()" style="background:#e5e7eb;color:#374151;border:none;border-radius:8px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer">Cancel</button>'
+    +   '</div>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
+}
+function saveContractorHike() {
+  var name = _scbHikeContractor;
+  if (!name) return;
+  var newTotalEl = document.getElementById('scb-hike-new-total');
+  var dateEl = document.getElementById('scb-hike-date');
+  var noteEl = document.getElementById('scb-hike-note');
+  var newTotal = parseFloat(newTotalEl ? newTotalEl.value : '');
+  if (isNaN(newTotal)) { toast('Enter the new total amount', 'err'); return; }
+  var diff = newTotal - _scbHikeBaseline;
+  if (diff === 0) { toast('New total is the same as the current total — nothing to record', 'err'); return; }
+  var date = (dateEl && dateEl.value) || ist();
+  var note = (noteEl ? noteEl.value : '').trim();
+  var bills = lscb();
+  bills.push({
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    contractor: name,
+    date: date,
+    billNo: diff > 0 ? 'RATE HIKE' : 'RATE REVISION',
+    amount: diff,
+    paid: 0,
+    desc: note || (diff > 0 ? 'Contract total revised upward' : 'Contract total revised downward'),
+    isHikeAdjustment: true,
+    hikeFrom: _scbHikeBaseline,
+    hikeTo: newTotal
+  });
+  sscb(bills); // same storage/cloud path as every other bill — no extra backup work needed
+  var m = document.getElementById('_scb-hike-modal'); if (m) m.remove();
+  toast('✅ Revision recorded', 'ok');
+  renderSubconBills();
+}
+
+// ============================================================
+// PRINT: CONTRACTOR RATE REVISION / HIKE HISTORY
+// ============================================================
+// A dedicated printable ledger of every "Edit Total" revision ever
+// recorded, across all contractors — separate from the individual bill
+// list so an owner can hand a contractor (or an auditor) a clean paper
+// trail of exactly what changed, when, and why, without the day-to-day
+// payment noise mixed in.
+function printContractorHikeReport(){
+  var bills = lscb();
+  var hikes = bills.filter(function(b){ return b.isHikeAdjustment; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  if (!hikes.length) { toast('No rate revisions recorded yet', 'err'); return; }
+  var netTotal = hikes.reduce(function(s,h){ return s+h.amount; },0);
+  var rows = hikes.map(function(h){
+    return '<tr>'
+      +'<td style="padding:6px 8px;font-size:11px;border:1px solid #e5e7eb">'+h.date+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;font-weight:700;border:1px solid #e5e7eb">'+_esc(h.contractor)+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:right;border:1px solid #e5e7eb">'+fc(h.hikeFrom)+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:right;border:1px solid #e5e7eb">'+fc(h.hikeTo)+'</td>'
+      +'<td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:800;color:'+(h.amount>=0?'#c2410c':'#059669')+';border:1px solid #e5e7eb">'+(h.amount>=0?'+':'')+fc(h.amount)+'</td>'
+      +'<td style="padding:6px 8px;font-size:10px;color:#6b7280;border:1px solid #e5e7eb">'+_esc(h.desc||'')+'</td>'
+      +'</tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Rate Revision Report</title><style>'+pcs()+'table{border-collapse:collapse;width:100%}</style></head><body>'
+    +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Contractor Rate Revision History</span><button class="bp" onclick="window.print()">🖶 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
+    +'<div class="content">'+_pdfHeader('app.sanjineer.in',(lmergedProf()).company||'','',
+      '<p style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.75);line-height:1;text-transform:uppercase;letter-spacing:.04em">Subcontractor Bills</p>'
+      +'<p style="font-size:14px;font-weight:900;color:white;line-height:1.3;margin-top:3px">Rate Revision History</p>'
+      +'<p style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.9);margin-top:3px">'+hikes.length+' revision'+(hikes.length>1?'s':'')+' · Net '+fc(netTotal)+'</p>'
+    )
+    +'<table style="margin-top:10px">'
+    +'<thead><tr style="background:#fff7ed">'
+    +'<th style="padding:6px 8px;font-size:10px;text-align:left;border:1px solid #e5e7eb">Date</th>'
+    +'<th style="padding:6px 8px;font-size:10px;text-align:left;border:1px solid #e5e7eb">Contractor</th>'
+    +'<th style="padding:6px 8px;font-size:10px;text-align:right;border:1px solid #e5e7eb">Old Total</th>'
+    +'<th style="padding:6px 8px;font-size:10px;text-align:right;border:1px solid #e5e7eb">New Total</th>'
+    +'<th style="padding:6px 8px;font-size:10px;text-align:right;border:1px solid #e5e7eb">Change</th>'
+    +'<th style="padding:6px 8px;font-size:10px;text-align:left;border:1px solid #e5e7eb">Reason</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +pftr()+'</div></body></html>';
+  opw(html);
+}
+
 function renderSubconBills() {
   var el = document.getElementById('subcon-bill-list'); if (!el) return;
   var bills = lscb();
@@ -20729,22 +21058,26 @@ function renderSubconBills() {
     var totalBilled = list.reduce(function(s,b){return s+b.amount;},0);
     var totalPaid   = list.reduce(function(s,b){return s+b.paid;},0);
     var balance = totalBilled - totalPaid;
+    var hikes = list.filter(function(b){ return b.isHikeAdjustment; });
     return '<div style="margin-bottom:10px;padding:8px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">'
       +'<p style="font-size:12px;font-weight:800;color:#1f2937">'+name+'</p>'
-      +'<div style="display:flex;gap:8px;font-size:10px">'
+      +'<div style="display:flex;align-items:center;gap:8px;font-size:10px">'
       +'<span style="color:#4f46e5;font-weight:700">Billed: '+fc(totalBilled)+'</span>'
+      +'<button onclick="openContractorHikeModal(\''+_jsStrEsc(name)+'\','+totalBilled+')" title="Edit total (record a rate hike / cost revision)" style="background:#ffedd5;color:#c2410c;border:none;border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;cursor:pointer;white-space:nowrap">✏️ Edit Total</button>'
       +'<span style="color:#059669;font-weight:700">Paid: '+fc(totalPaid)+'</span>'
       +'<span style="color:'+(balance>0?'#dc2626':'#059669')+';font-weight:800">Bal: '+fc(balance)+'</span>'
       +'</div></div>'
+      +(hikes.length ? '<div style="font-size:9px;color:#c2410c;font-weight:700;margin-bottom:6px">📈 '+hikes.length+' rate revision'+(hikes.length>1?'s':'')+' recorded — net '+fc(hikes.reduce(function(s,h){return s+h.amount;},0))+'</div>' : '')
       +list.map(function(b){
         var bal = b.amount - b.paid;
         var isPaymentOnly = (!b.amount || b.amount===0);
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid #e5e7eb;font-size:10px;gap:6px">'
-          +'<div style="min-width:0"><span style="color:#374151;font-weight:600">'+(b.billNo?b.billNo+' — ':'')+(b.desc||(isPaymentOnly?'Part payment':''))+'</span><br><span style="color:#9ca3af">'+b.date+'</span></div>'
+        var isHike = !!b.isHikeAdjustment;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid '+(isHike?'#fed7aa':'#e5e7eb')+';background:'+(isHike?'#fff7ed':'transparent')+';font-size:10px;gap:6px">'
+          +'<div style="min-width:0"><span style="color:'+(isHike?'#c2410c':'#374151')+';font-weight:600">'+(isHike?'📈 ':'')+(b.billNo?b.billNo+' — ':'')+(b.desc||(isPaymentOnly?'Part payment':''))+'</span><br><span style="color:#9ca3af">'+b.date+(isHike?' · '+fc(b.hikeFrom)+' → '+fc(b.hikeTo):'')+'</span></div>'
           +'<div style="text-align:right;flex-shrink:0">'
-          +'<div style="font-weight:700;color:#374151">'+(isPaymentOnly?'<span style="color:#9ca3af;font-weight:600">No bill yet</span>':fc(b.amount))+'</div>'
-          +'<div style="color:'+(bal>0?'#dc2626':'#059669')+';font-weight:700">'+(bal>0?'Due: '+fc(bal):(isPaymentOnly?'Paid: '+fc(b.paid):'✅ Paid'))+'</div>'
+          +'<div style="font-weight:700;color:'+(isHike?(b.amount>=0?'#c2410c':'#059669'):'#374151')+'">'+(isHike?(b.amount>=0?'+':'')+fc(b.amount):(isPaymentOnly?'<span style="color:#9ca3af;font-weight:600">No bill yet</span>':fc(b.amount)))+'</div>'
+          +(isHike?'':'<div style="color:'+(bal>0?'#dc2626':'#059669')+';font-weight:700">'+(bal>0?'Due: '+fc(bal):(isPaymentOnly?'Paid: '+fc(b.paid):'✅ Paid'))+'</div>')
           +'</div>'
           +'<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">'
           +'<button onclick="editSubconBill(\''+b.id+'\')" style="background:#e0e7ff;color:#4338ca;border:none;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700;cursor:pointer">✏️</button>'
@@ -22983,7 +23316,6 @@ function _ownerOpenMobileOverview() {
     + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">👑 Owner Overview</div><div style="color:rgba(255,255,255,.6);font-size:10px">All ' + (window.projects||[]).length + ' projects, tab by tab</div></div>'
     + '<div style="display:flex;gap:6px;flex-shrink:0">'
     + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">💰</button>'
-    + '<button onclick="openEditProfile()" title="Profile & Company Settings" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">⚙️</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
     + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
@@ -23149,14 +23481,60 @@ var PARTNER_EXP_KEY    = 'cm_partner_expenses';
 var PARTNER_META_KEY   = 'cm_partner_meta';
 var PARTNER_TOMB_KEY   = 'cm_partner_tombstones';
 
-function lpartners(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNERS_KEY))||'[]');}catch(e){return[];} }
-function spartners(x){ safeLS.setItem(_cpk(PARTNERS_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
-function lpartnerTxns(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_TXN_KEY))||'[]');}catch(e){return[];} }
-function spartnerTxns(x){ safeLS.setItem(_cpk(PARTNER_TXN_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
-function lpartnerExpenses(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_EXP_KEY))||'[]');}catch(e){return[];} }
-function spartnerExpenses(x){ safeLS.setItem(_cpk(PARTNER_EXP_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
-function lpartnerMeta(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_META_KEY))||'{}');}catch(e){return{};} }
-function spartnerMeta(x){ safeLS.setItem(_cpk(PARTNER_META_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+// BUGFIX (partner tracker "not saving" amounts): _cpk() falls back to the
+// per-PROJECT key (_pk()) whenever window._wsCompanyId hasn't resolved yet
+// (e.g. the owner taps the 💰 button in the first second or two after
+// opening the app, before the company id round-trip from Supabase
+// finishes). Entries added in that brief window get written under
+// "sanj_project_<id>_cm_partners..." — but every later read, once the
+// company id HAS resolved, looks under "sanj_company_<id>_cm_partners..."
+// instead. The data never actually vanished, it just became invisible:
+// wrong key, forever. This self-heals it the same way lscb() already
+// self-heals legacy subcontractor-bill keys: the first time a real
+// company id is available, fold in anything sitting under the fallback
+// key, once, then it's gone for good.
+var _peFallbackHealed = false;
+function _peHealFallbackKey() {
+  if (_peFallbackHealed) return;
+  var cid = _currentCompanyId();
+  if (!cid) return; // company id still not resolved — nothing to heal yet, try again next call
+  _peFallbackHealed = true;
+  [PARTNERS_KEY, PARTNER_TXN_KEY, PARTNER_EXP_KEY, PARTNER_META_KEY, PARTNER_TOMB_KEY].forEach(function(baseKey) {
+    try {
+      var fallbackFullKey = _pk(baseKey); // what _cpk() would have used before cid resolved
+      var realFullKey = 'sanj_company_' + cid + '_' + baseKey;
+      if (fallbackFullKey === realFullKey) return; // never fell back (cid was already known) — nothing to merge
+      var fallbackRaw = safeLS.getItem(fallbackFullKey);
+      if (fallbackRaw === null) return; // nothing was ever stranded there
+      var realRaw = safeLS.getItem(realFullKey);
+      if (baseKey === PARTNER_META_KEY) {
+        // Single object — only adopt the stranded copy if the real one is empty
+        if (realRaw === null || realRaw === '{}') safeLS.setItem(realFullKey, fallbackRaw);
+      } else if (baseKey === PARTNER_TOMB_KEY) {
+        var fT = {}, rT = {}; try{fT=JSON.parse(fallbackRaw||'{}');}catch(e){} try{rT=JSON.parse(realRaw||'{}');}catch(e){}
+        Object.keys(fT).forEach(function(id){ if (!rT[id] || fT[id] > rT[id]) rT[id] = fT[id]; });
+        safeLS.setItem(realFullKey, JSON.stringify(rT));
+      } else {
+        // Arrays of {id,...} records — merge by id, keep both sides' entries
+        var fArr = [], rArr = []; try{fArr=JSON.parse(fallbackRaw||'[]');}catch(e){} try{rArr=JSON.parse(realRaw||'[]');}catch(e){}
+        var byId = {};
+        fArr.forEach(function(x){ if (x && x.id) byId[x.id] = x; });
+        rArr.forEach(function(x){ if (x && x.id) byId[x.id] = x; }); // real key wins on id clash
+        safeLS.setItem(realFullKey, JSON.stringify(Object.keys(byId).map(function(k){ return byId[k]; })));
+      }
+      safeLS.removeItem(fallbackFullKey); // stranded copy fully folded in — don't leave it to be re-merged later
+    } catch(e) {}
+  });
+}
+
+function lpartners(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNERS_KEY))||'[]');}catch(e){return[];} }
+function spartners(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNERS_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerTxns(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_TXN_KEY))||'[]');}catch(e){return[];} }
+function spartnerTxns(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNER_TXN_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerExpenses(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_EXP_KEY))||'[]');}catch(e){return[];} }
+function spartnerExpenses(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNER_EXP_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerMeta(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_META_KEY))||'{}');}catch(e){return{};} }
+function spartnerMeta(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNER_META_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
 
 // id -> deleted-at timestamp, shared across partners/txns/expenses (ids
 // are always unique per-record already) so a delete on one device isn't
@@ -23195,6 +23573,7 @@ window.openPartnerEquityModal = function() {
     if (typeof toast === 'function') toast('⚠️ Owner only', 'err');
     return;
   }
+  _peHealFallbackKey();
   var existing = document.getElementById('_partner-eq-modal'); if (existing) existing.remove();
   var modal = document.createElement('div');
   modal.id = '_partner-eq-modal';
@@ -24149,7 +24528,6 @@ function _ownerOpenDesktopDashboard() {
       + '<div style="display:flex;gap:8px;flex-shrink:0;">'
         + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">📢</button>'
         + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">💰</button>'
-        + '<button onclick="openEditProfile()" title="Profile & Company Settings" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">⚙️</button>'
         + '<button id="owner-dt-close" style="width:36px;height:36px;border-radius:10px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:15px;cursor:pointer;">✕</button>'
       + '</div>'
     + '</div>'
