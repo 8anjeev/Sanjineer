@@ -5295,8 +5295,6 @@ function _applyPermState(roleName) {
     // session (whether they came in as site_engineer, viewer, or
     // sales_admin — sales_admin is still not the company owner).
     window._ENGINEER_MODE = (roleName !== 'owner');
-    window._roleVerified = true;
-    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
     // PHASE 4 REBUILD: isCloudActivated() (localStorage 'cm_cloud_activated')
     // used to only ever get set by the owner's manual "Activate Cloud"
     // toggle. A joined engineer never sees that screen and has no way to
@@ -5329,8 +5327,6 @@ function _applyPermState(roleName) {
     window._IS_VIEWER = false;
     window._SALES_ADMIN_MODE = false;
     window._ENGINEER_MODE = (roleName !== 'owner');
-    window._roleVerified = true;
-    if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
   });
 }
 
@@ -17373,27 +17369,9 @@ function updateOwnerBtn() {
   var btn = document.getElementById('owner-hdr-btn');
   var pbtn = document.getElementById('partner-hdr-btn');
   if (!btn && !pbtn) return;
-  // Fail closed: until _applyPermState() has actually resolved a real,
-  // server-verified role for this session, never show owner-only UI —
-  // ADMIN_ROLE_KEY/userPlan alone can be stale/cached from a previous
-  // login and aren't proof of owning THIS company (see _ownsAnyCompany()
-  // fix + _applyPermState notes).
-  if (!window._roleVerified) {
-    if (btn) btn.style.display = 'none';
-    if (pbtn) pbtn.style.display = 'none';
-    return;
-  }
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   var hasPaidPlan = (window.userPlan === 'pro' || window.userPlan === 'enterprise');
-  // Require the actual company-level role from get_my_companies() (cached
-  // in WS_CROLE_KEY the moment login/reconcile establishes it) to
-  // literally be 'owner' — this is the one signal that's tied to the
-  // specific email that created/owns THIS company, not just "signed in
-  // somehow". !window._ENGINEER_MODE is the same fact expressed as a
-  // boolean; checking WS_CROLE_KEY too is belt-and-braces since it's the
-  // more direct, auditable source.
-  var realOwner = (typeof WS_CROLE_KEY !== 'undefined' ? safeLS.getItem(WS_CROLE_KEY) === 'owner' : true);
-  var isOwner = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE && realOwner);
+  var isOwner = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE);
   if (btn) btn.style.display = isOwner ? 'flex' : 'none';
   // Partner/Investment tracker is strictly owner-only, on both mobile and
   // desktop — never shown to a joined engineer/staff device (_ENGINEER_MODE)
@@ -22984,9 +22962,8 @@ function _ownerLoadProject(pid) {
 // width, and keeps watching the viewport so it can auto-switch faces live if
 // the window is resized past the laptop breakpoint while it's open.
 window.openOwnerOverview = function() {
-  var _realOwner = (typeof WS_CROLE_KEY !== 'undefined' ? safeLS.getItem(WS_CROLE_KEY) === 'owner' : true);
-  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin' || window._ENGINEER_MODE || !_realOwner) {
-    if (typeof toast === 'function') toast('⚠️ Owner only', 'err');
+  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
+    if (typeof toast === 'function') toast('⚠️ Admin only', 'err');
     return;
   }
   var existing = document.getElementById('_owner-overview-modal');
@@ -24215,13 +24192,6 @@ function _ownerOpenDesktopDashboard() {
 
 window._ENGINEER_MODE = false;
 window._ENGINEER_READONLY = false;
-// True only once _applyPermState() has actually resolved a server-verified
-// role for the current session (see updateOwnerBtn() below). Starts false
-// so the owner button fails CLOSED (hidden) rather than open during the
-// brief window right after login/reload before that real check completes —
-// previously it defaulted to showing for anyone whose ADMIN_ROLE_KEY/plan
-// flags happened to already be cached from a prior session.
-window._roleVerified = false;
 
 // Redeeming a join code must never create a device-only identity. Without a
 // real Supabase session behind it, this person has no valid JWT — every
@@ -24244,18 +24214,7 @@ var _joinOtpEmail = '';
 function _ownsAnyCompany() {
   try {
     if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner') return true;
-    // REMOVED: a blanket `ADMIN_ROLE_KEY === 'admin'` check used to live here.
-    // ADMIN_ROLE_KEY only proves this device completed an OTP/email login —
-    // _handleOtpSuccess() sets it to 'admin' for EVERY successful login,
-    // including a joined engineer/sales_admin verifying their identity to
-    // redeem a join code. It says nothing about which company, or whether
-    // this account is that company's actual owner. Trusting it here let a
-    // joined member get silently promoted to 'owner' by _applyPermState()
-    // (which calls this function) whenever roleName wasn't literally
-    // 'owner' — showing them the 👑 Owner Dashboard / 💰 Partner Tracker
-    // buttons and full owner-level access. The two checks below are both
-    // genuinely company-scoped (sourced from get_my_companies() or set at
-    // the exact moment THIS device created a company) and are sufficient.
+    if (typeof ADMIN_ROLE_KEY !== 'undefined' && safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') return true;
     // BUGFIX (owner demoted right after signup): WS_CROLE_KEY above is
     // itself populated FROM a server RPC (get_my_companies/get_my_projects)
     // — if that RPC is queried again immediately after this device just
