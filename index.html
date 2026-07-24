@@ -13304,8 +13304,20 @@ function saveMatPurchase(){
     (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {});
   _saveBill('mp', function(key){
     txn.bill_id = key;
+    // FIX: this purchase writes its cost into TWO places — this
+    // transaction (Materials tab) AND a separate dashboard/expense log
+    // entry (AD, type:'material', stock_synced:true) that "Material
+    // Cost" / "Total Expenses" chips actually total up from. The two
+    // were never linked, so deleting the material or this transaction
+    // later (delMaterialItem/delMatTxn) could only remove this side —
+    // the log entry's cost stayed counted forever. Storing the log
+    // entry's __id back onto the transaction lets deletes clean up both.
+    if (cost > 0) {
+      var _stockLogEntry = ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false,exp_type:'material',from_materials_tab:true,stock_synced:true});
+      txn.stock_log_id = _stockLogEntry.__id;
+      AD = ld();
+    }
     item.transactions.push(txn); smat(mats);
-    if(cost>0){ ins({type:'material',material_name:item.name,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false,exp_type:'material',from_materials_tab:true,stock_synced:true}); AD=ld(); }
     closeMatModal(); toast('Purchase saved','ok'); viewMaterials(); viewExpenses(); updateDash();
   });
 }
