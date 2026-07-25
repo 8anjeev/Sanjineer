@@ -24697,7 +24697,17 @@ var _joinOtpEmail = '';
 function _ownsAnyCompany() {
   try {
     if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner') return true;
-    if (typeof ADMIN_ROLE_KEY !== 'undefined' && safeLS.getItem(ADMIN_ROLE_KEY) === 'admin') return true;
+    // NOTE: an ADMIN_ROLE_KEY==='admin' check used to live here too, on the
+    // (wrong) assumption that it meant "this device owns a company". It
+    // doesn't — _handleOtpSuccess sets ADMIN_ROLE_KEY='admin' for EVERY
+    // successful login, owner or joined engineer/sales_admin alike, before
+    // their actual project role is even known. That made _ownsAnyCompany()
+    // return true for joined users too, which flipped their roleName to
+    // 'owner' below, cleared _ENGINEER_MODE, and leaked the 👑 Owner button
+    // (Owner Overview + Partner/Investment Tracker) to site engineers and
+    // sales managers who'd joined via a project code. Removed — ownership
+    // is decided by WS_CROLE_KEY / sanj_owned_company_<id> only, both of
+    // which are only ever set for a device that actually IS the owner.
     // BUGFIX (owner demoted right after signup): WS_CROLE_KEY above is
     // itself populated FROM a server RPC (get_my_companies/get_my_projects)
     // — if that RPC is queried again immediately after this device just
