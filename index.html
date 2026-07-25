@@ -1300,25 +1300,6 @@ self.addEventListener('fetch', function(e) {
   // badges and switchProject() can restore the right permission set
   // without a network round-trip every time.
   function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName, projectAddress) {
-    // BUGFIX (owner's own project showing "🔗 Joined" + a "Leave Project"
-    // button, letting them try to leave/join-by-code their OWN site):
-    // the caller at _reconcileMembershipFromServer passes whatever
-    // role_name the get_my_projects() RPC returns for this exact moment.
-    // That RPC can race right after this device creates the company/
-    // project (same documented class of race as _ownsAnyCompany() below
-    // guards against) and come back with a role that isn't literally
-    // 'owner' yet for the very account that just created it — which then
-    // permanently stamps this shell joined:true (see the ternary below),
-    // and nothing else in the app ever un-marks it since the self-heal
-    // a few lines down only fires again if a FUTURE reconcile call
-    // happens to return 'owner' correctly. sanj_owned_company_<companyId>
-    // is set locally, synchronously, the instant this device creates the
-    // company (_wsMarkOwnedCompany) — no server round-trip, so it can't
-    // race. Trust that over a possibly-stale server role for this exact
-    // company, the same way _ownsAnyCompany() already does elsewhere.
-    try {
-      if (companyId && safeLS.getItem('sanj_owned_company_' + companyId) === '1') roleName = 'owner';
-    } catch(e) {}
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
@@ -13225,7 +13206,17 @@ function addExpenseMaterial(){
   }
 
   _saveBill('exp', function(billKey) {
-    ins({
+    // BUGFIX (stranded "Material" ledger cost with no matching item, e.g.
+    // a deleted "Sand"/"cement" entry still counted in the Dashboard
+    // total): this Expenses quick-entry mirrors its cost into the same
+    // ledger entry type ('material') that Materials-tab purchases do, but
+    // unlike saveMatPurchase() it never linked the entry back onto the
+    // stock transaction via stock_log_id. So when the item/transaction
+    // was later deleted or edited, there was no way to find and remove
+    // the matching ledger cost — it stayed counted forever, with nothing
+    // in the Stock list to show for it. Capture ins()'s return value and
+    // link it, exactly like saveMatPurchase() already does.
+    var _expMatLogEntry = ins({
       type: 'material',
       exp_type: type,
       material_name: name,
@@ -13255,7 +13246,8 @@ function addExpenseMaterial(){
     if (type === 'material' && _existingMatForSync) {
       _existingMatForSync.transactions = _existingMatForSync.transactions || [];
       _existingMatForSync.transactions.push(Object.assign({ type:'purchase', qty:qty||1, date:date,
-        note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:_existingMatForSync.unit||'' },
+        note:'From Expenses'+(supplier?' · '+supplier:''), cost:cost, supplier:supplier||'', unit:_existingMatForSync.unit||'',
+        stock_log_id: _expMatLogEntry.__id },
         (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
       smat(_matsForSync);
       if (typeof viewMaterials === 'function') viewMaterials();
@@ -13417,26 +13409,109 @@ function addMaterialItem(){
   var supplierPhone=(document.getElementById('mat-supplier-phone')||{}).value||'';
   if (!name) { toast('Enter material name','err'); return; }
   var mats=lmat();
-  // BUGFIX: nothing stopped the same material being created twice (e.g.
-  // "Cement" added once, then added again later instead of using the
-  // existing item's "Received" button) — which then shows as two
-  // separate rows with separate stock/spend, splitting what should be
-  // one material's history in two. Block it here and send them to the
-  // existing item's Received flow instead, matching what quickPickMaterial
-  // already does for the normal "log a delivery" path.
-  var _dupExisting = mats.find(function(m){ return (m.name||'').trim().toLowerCase() === name.toLowerCase(); });
-  if (_dupExisting) {
-    toast('"'+_dupExisting.name+'" already exists — use its 📥 Received button to log this delivery instead', 'err');
-    toggleNewMaterialForm(true);
-    openMatPurchaseModal(_dupExisting.id);
-    return;
+  // BUGFIX (duplicate materials, e.g. two separate "Cement" cards): this
+  // used to always push a brand-new item, even if one with the same name
+  // already existed (the QDPR sync path already guarded against this with
+  // a case-insensitive name match — this form just never had the same
+  // check). Now it matches existing items the same way, and adds the
+  // opening quantity as a purchase transaction on the EXISTING item
+  // instead of creating a second, disconnected one.
+  var existing = mats.find(function(m){ return (m.name||'').trim().toLowerCase() === name.toLowerCase(); });
+  if (existing) {
+    if (initQty > 0) {
+      existing.transactions = existing.transactions || [];
+      existing.transactions.push(Object.assign({type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category||existing.category||''},
+        (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
+    }
+    if (!existing.unit && unit) existing.unit = unit;
+    if (!existing.category && category) existing.category = category;
+    if (!existing.minQty && minQty) existing.minQty = minQty;
+    smat(mats);
+    toast('"'+existing.name+'" already existed — added stock to it instead of creating a duplicate', 'ok');
+  } else {
+    mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,remark:remark,supplierPhone:supplierPhone,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
+    smat(mats);
+    toast('Material added','ok');
   }
-  mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,remark:remark,supplierPhone:supplierPhone,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
-  smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty','mat-remark','mat-supplier','mat-supplier-phone'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['mat-name','mat-unit','mat-init-qty','mat-min-qty','mat-remark','mat-supplier','mat-supplier-phone'].forEach(function(id){ document.getElementById(id).value=''; });
   if (catEl) catEl.value='';
-  toast('Material added','ok'); viewMaterials(); updateDash();
+  viewMaterials(); updateDash();
   toggleNewMaterialForm(true); // switch back to the "select material" picker
   if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
+}
+
+// ── Data-quality safety net: silently merges duplicate materials (same
+// name, case/spacing-insensitive) every time the Materials tab renders —
+// no button, no prompt. Also exposes a reconcile report for diagnosing
+// ledger totals that don't match the visible Stock list. ──────────────
+function _matNormName(name){ return String(name||'').trim().toLowerCase().replace(/\s+/g,' '); }
+function _matFindDuplicateGroups(mats){
+  var groups = {};
+  (mats||lmat()).forEach(function(m){
+    var key = _matNormName(m.name);
+    if (!key) return;
+    (groups[key] = groups[key] || []).push(m);
+  });
+  return Object.keys(groups).map(function(k){ return groups[k]; }).filter(function(g){ return g.length>1; });
+}
+function _matMergeAllDuplicates(){
+  var mats = lmat();
+  var groups = _matFindDuplicateGroups(mats);
+  if (!groups.length) return { merged:0, removedCount:0 };
+  var removedIds = [];
+  groups.forEach(function(group){
+    var sorted = group.slice().sort(function(a,b){ return (a.created||0)-(b.created||0); });
+    var canonical = sorted[0], rest = sorted.slice(1);
+    rest.forEach(function(dup){
+      canonical.transactions = (canonical.transactions||[]).concat(dup.transactions||[]);
+      if (!canonical.category && dup.category) canonical.category = dup.category;
+      if (!canonical.unit && dup.unit) canonical.unit = dup.unit;
+      if (!canonical.minQty && dup.minQty) canonical.minQty = dup.minQty;
+      removedIds.push(dup.id);
+    });
+    canonical.transactions.sort(function(a,b){ return new Date(a.date) - new Date(b.date); });
+  });
+  var newMats = mats.filter(function(m){ return removedIds.indexOf(m.id)===-1; });
+  smat(newMats);
+  return { merged: groups.length, removedCount: removedIds.length };
+}
+// Classifies every "material" ledger entry into: linked to a still-existing
+// material's transaction (stock_log_id or QDPR row), a legitimate standalone
+// Quick Entry expense (never meant to appear in the Stock list), or
+// genuinely orphaned (its item/transaction was deleted, but the cost was
+// never cleaned up — this is what makes the Dashboard "Material" total
+// look bigger than the Stock list).
+function _matReconcileReport(){
+  var mats = lmat();
+  var linkedStockLogIds = {}, linkedQdpr = {};
+  mats.forEach(function(m){
+    (m.transactions||[]).forEach(function(t){
+      if (t.stock_log_id) linkedStockLogIds[t.stock_log_id] = 1;
+      if (t.qdpr_report_id) linkedQdpr[t.qdpr_report_id+'::'+t.qdpr_material_row] = 1;
+    });
+  });
+  var all = ld();
+  var materialEntries = all.filter(function(e){ return e.type==='material' && !e.is_petty_cash; });
+  var linkedTotal=0, quickEntryTotal=0, orphanTotal=0, orphanList=[];
+  materialEntries.forEach(function(e){
+    var cost = parseFloat(e.cost)||0;
+    var qdprKey = e.qdpr_report_id ? (e.qdpr_report_id+'::'+e.qdpr_material_row) : null;
+    var stillLinked = (e.stock_synced && linkedStockLogIds[e.__id]) || (qdprKey && linkedQdpr[qdprKey]);
+    if (stillLinked) {
+      linkedTotal += cost;
+    } else if (!e.stock_synced && !e.qdpr_report_id && e.exp_type === 'material' && !e.from_materials_tab) {
+      quickEntryTotal += cost; // manual Quick Entry — by design, not a stock item
+    } else {
+      orphanTotal += cost; orphanList.push(e);
+    }
+  });
+  return { linkedTotal:linkedTotal, quickEntryTotal:quickEntryTotal, orphanTotal:orphanTotal, orphanList:orphanList };
+}
+function _matRemoveOrphanedLedgerEntries(){
+  var orphans = _matReconcileReport().orphanList;
+  orphans.forEach(function(e){ del(e.__id); });
+  AD = ld();
+  return orphans.length;
 }
 // ── Add-Material panel: toggle between the "pick an existing material"
 // dropdown (quick entry) and the "define a brand-new material" form. ──
@@ -13681,6 +13756,13 @@ function delMatTxn(matId,idx){
   });
 }
 function viewMaterials(){
+  // Silent background safety net: if any materials share the same name
+  // (case/spacing-insensitive — the actual root cause was the Add
+  // Material form not checking for an existing match), merge them into
+  // one item automatically before rendering. No prompt, no button —
+  // this just always keeps the Stock list duplicate-free.
+  var _mergeRes = _matMergeAllDuplicates();
+  if (_mergeRes.merged) { try { updateDash(); } catch(e){} }
   var mats=lmat(), div=document.getElementById('materials-list');
   if (!div) return;
   // Populate the "add new material" category dropdown (once)
@@ -24064,28 +24146,6 @@ function _peDeleteExpense(expId) {
     _peRender();
   });
 }
-// BUGFIX: this whole file section is wrapped in a top-level `(function(){
-// ... })()` IIFE (see the top of this <script> block), so every one of
-// these `function _peXxx(){...}` declarations is scoped to that closure,
-// NOT to `window`. The Partner Investment Tracker's HTML is built as a
-// big string with inline `onclick="_peSavePartner()"` etc, and inline
-// event-handler attributes can only call functions that exist on the
-// global object — so every single button in this modal (Save, Add
-// Partner, Edit, Delete, Record contribution/expense, toggle history)
-// was silently throwing "_peXxx is not defined" and doing nothing at
-// all when clicked. Explicitly re-exporting the ones referenced from
-// inline HTML fixes every button in one place.
-window._peSaveMeta = _peSaveMeta;
-window._peSavePartner = _peSavePartner;
-window._peEditPartner = _peEditPartner;
-window._peCancelEditPartner = _peCancelEditPartner;
-window._peDeletePartner = _peDeletePartner;
-window._peToggleExpanded = _peToggleExpanded;
-window._peToggleShareInput = _peToggleShareInput;
-window._peAddContribution = _peAddContribution;
-window._peDeleteContribution = _peDeleteContribution;
-window._peAddExpense = _peAddExpense;
-window._peDeleteExpense = _peDeleteExpense;
 
 // ── Company-wide sync: company_partners table ───────────────────────
 // Mirrors the company_sales table pattern exactly (see _pushCompanySales /
