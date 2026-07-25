@@ -5540,10 +5540,16 @@ function _wsSelectProject(p) {
         <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
           <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
         </button>
-        <!-- Partner/Investment Tracker button removed from the main app header
-             per product decision — it now lives ONLY inside the Owner Overview
-             header (mobile + desktop), immediately left of the ⚙️ Settings
-             button. See _ownerOpenMobileOverview() / _ownerOpenDesktopDashboard(). -->
+        <!-- Quick-access Partner/Investment Tracker button, right next to
+             "Owner" so it's reachable straight from the main header (mobile
+             AND desktop) as well as from inside the Owner Dashboard/Owner
+             Overview headers. Same visibility rule as the Owner button
+             itself (see updateOwnerBtn()) — hidden by default, shown only
+             for a real, paid (Pro/Enterprise) owner, never for anyone who
+             joined via a project/join code or a free-tier owner. -->
+        <button id="owner-hdr-money-btn" onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:26px;height:26px;cursor:pointer;-webkit-tap-highlight-color:transparent;margin-left:4px;">
+          <span style="font-size:12px;line-height:1;">💰</span>
+        </button>
       </div>
       <!-- Stacked: company above, project dropdown below -->
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;max-width:200px;">
@@ -10001,6 +10007,11 @@ function _broadcastKey() { return _pk('cm_broadcast'); }
 function _broadcastSeenKey() { return _pk('sanj_broadcast_seen'); }
 
 function openBroadcastComposer() {
+  // Defense-in-depth: this is only ever linked from inside the Owner
+  // Dashboard (mobile + desktop headers), which are themselves gated by
+  // _peGateOwnerAccess(), but re-check here too rather than relying
+  // solely on "you can't see the button" for access control.
+  if (typeof _peGateOwnerAccess === 'function' && !_peGateOwnerAccess('Owner Dashboard')) return;
   if (document.getElementById('_broadcast-compose-modal')) return;
   var modal = document.createElement('div');
   modal.id = '_broadcast-compose-modal';
@@ -17621,16 +17632,69 @@ function updateCloudBtn() {
   updateOwnerBtn();
 }
 
-function updateOwnerBtn() {
-  var btn = document.getElementById('owner-hdr-btn');
-  if (!btn) return;
+// ── Single source of truth for "is this device a real, paying owner" ──
+// Used by updateOwnerBtn() (header button visibility) AND by every
+// function that actually OPENS an owner-only surface (openOwnerOverview,
+// openPartnerEquityModal, the background company-partners auto-pull,
+// etc). A hidden header button is not access control by itself — it's
+// just CSS. Anything that must actually be restricted to real paid
+// owners re-checks this same helper before it runs, not just before it
+// renders. See _peGateOwnerAccess() below for the shared "check + toast"
+// wrapper other owner-only entry points use.
+//
+// - isAdmin: this device is logged in as SOMEONE with an active company
+//   session. NOT proof of ownership by itself (ADMIN_ROLE_KEY is set to
+//   'admin' for every successful login, owner or joined engineer/sales
+//   admin alike — see _ownsAnyCompany()'s comment above for the history
+//   of that exact bug).
+// - !window._ENGINEER_MODE: excludes anyone who joined this company via
+//   a project/join code (site engineer, sales admin, viewer, etc.) —
+//   _applyPermState() sets _ENGINEER_MODE=true for every role except
+//   'owner'.
+// - hasPaidPlan: excludes FREE-tier owners. Owner Dashboard and the
+//   Partner/Investment Tracker are Pro/Enterprise-only features even
+//   for the real owner of the company.
+function _isPaidOwner() {
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
   var hasPaidPlan = (window.userPlan === 'pro' || window.userPlan === 'enterprise');
-  var isOwner = (isAdmin && hasPaidPlan && !window._ENGINEER_MODE);
-  btn.style.display = isOwner ? 'flex' : 'none';
-  // NOTE: the Partner/Investment Tracker button no longer lives in the main
-  // app header — it only appears inside the Owner Overview header (mobile +
-  // desktop, left of ⚙️ Settings), gated the same isOwner-only way there.
+  return !!(isAdmin && hasPaidPlan && !window._ENGINEER_MODE);
+}
+// Same as _isPaidOwner() but without the paid-plan requirement — true for
+// the real owner regardless of plan. Used only where we need to tell a
+// free-tier owner "upgrade to unlock this" instead of a flat "not allowed"
+// (which is the right message for a joined/non-owner user).
+function _isRealOwnerAnyPlan() {
+  var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
+  return !!(isAdmin && !window._ENGINEER_MODE);
+}
+// Shared guard for owner-only entry points (Owner Dashboard, Partner/
+// Investment Tracker, ...): returns true and does nothing if access is
+// allowed; otherwise shows the right message (upgrade prompt for a free
+// owner, plain "owner only" for anyone else) and returns false so the
+// caller can bail out. featureName is passed straight to
+// _showUpgradePopup() for the free-owner case.
+function _peGateOwnerAccess(featureName) {
+  if (_isPaidOwner()) return true;
+  if (_isRealOwnerAnyPlan()) {
+    if (typeof _showUpgradePopup === 'function') _showUpgradePopup(featureName || 'Owner Dashboard');
+    else if (typeof toast === 'function') toast('⭐ Upgrade to Pro/Enterprise to unlock this', 'err');
+  } else {
+    if (typeof toast === 'function') toast('⚠️ Owner only', 'err');
+  }
+  return false;
+}
+
+function updateOwnerBtn() {
+  var btn = document.getElementById('owner-hdr-btn');
+  var moneyBtn = document.getElementById('owner-hdr-money-btn');
+  var show = _isPaidOwner() ? 'flex' : 'none';
+  if (btn) btn.style.display = show;
+  // Money/Partner-Tracker quick-access button lives right next to Owner in
+  // the main header (mobile + desktop) — see openPartnerEquityModal() for
+  // the actual access re-check on click (a hidden button alone is not
+  // access control). It ALSO still appears inside the Owner Overview /
+  // Owner Dashboard headers for convenience once you're already in there.
+  if (moneyBtn) moneyBtn.style.display = show;
 }
 
 // -- Open / Close Cloud Modal --
@@ -23339,10 +23403,15 @@ function _ownerLoadProject(pid) {
 // width, and keeps watching the viewport so it can auto-switch faces live if
 // the window is resized past the laptop breakpoint while it's open.
 window.openOwnerOverview = function() {
-  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin') {
-    if (typeof toast === 'function') toast('⚠️ Admin only', 'err');
-    return;
-  }
+  // BUGFIX: this used to only check ADMIN_ROLE_KEY==='admin', which is set
+  // for every successful login (owner OR joined engineer/sales_admin) and
+  // says nothing about plan tier either. A joined-by-code user or a free
+  // (non-paid) owner could open the full Owner Dashboard (and, from
+  // inside it, the Partner/Investment Tracker) even though the header
+  // button itself is correctly hidden from them — the hidden button was
+  // never real access control. Route through the same _isPaidOwner()
+  // check updateOwnerBtn() uses for the button's visibility.
+  if (!_peGateOwnerAccess('Owner Dashboard')) return;
   var existing = document.getElementById('_owner-overview-modal');
   if (existing) existing.remove();
   var existingDt = document.getElementById('_owner-desktop-modal');
@@ -23359,6 +23428,12 @@ function _ownerOpenMobileOverview() {
     '<div style="background:linear-gradient(135deg,#1E1458 0%,#2D1B8E 55%,#4A3AB5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
     + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">👑 Owner Overview</div><div style="color:rgba(255,255,255,.6);font-size:10px">All ' + (window.projects||[]).length + ' projects, tab by tab</div></div>'
     + '<div style="display:flex;gap:6px;flex-shrink:0">'
+    // BUGFIX: the 📢 "send a notice to everyone" button existed in the
+    // desktop Owner Dashboard header (_ownerOpenDesktopDashboard below)
+    // but was missing from this mobile-first overview header, so anyone
+    // on a phone/narrow viewport had no way to broadcast a notice at all.
+    // Same button, same handler, same place relative to 💰 / ✕ as desktop.
+    + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">📢</button>'
     + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">💰</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
@@ -23613,10 +23688,13 @@ function _peSpent(partnerId) {
 }
 
 window.openPartnerEquityModal = function() {
-  if (safeLS.getItem(ADMIN_ROLE_KEY) !== 'admin' || window._ENGINEER_MODE) {
-    if (typeof toast === 'function') toast('⚠️ Owner only', 'err');
-    return;
-  }
+  // BUGFIX: this checked isAdmin + _ENGINEER_MODE but never the paid-plan
+  // requirement, so a free-tier (non-paid) real owner could open the
+  // Partner/Investment Tracker directly even though it's meant to be a
+  // Pro/Enterprise-only feature, same as the rest of Owner Dashboard.
+  // Route through the shared gate so this, the header button, and Owner
+  // Dashboard all agree on who's allowed in.
+  if (!_peGateOwnerAccess('Partner / Investment Tracker')) return;
   _peHealFallbackKey();
   var existing = document.getElementById('_partner-eq-modal'); if (existing) existing.remove();
   var modal = document.createElement('div');
@@ -23735,6 +23813,16 @@ function _peRender() {
       var pct = proposed>0 ? Math.min(100, Math.round(given/proposed*100)) : (given>0?100:0);
       var txns = lpartnerTxns().filter(function(t){ return t.partnerId===p.id; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
       var exps = lpartnerExpenses().filter(function(t){ return t.partnerId===p.id; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+      // Records (contribution + expense forms/lists) are collapsed by
+      // default and expand on tap — was previously always fully expanded
+      // for every partner, which made the list unreadable once there were
+      // more than a couple of partners with any history. State persists
+      // per-partner for the life of the modal via _peExpanded.
+      var expanded = !!_peExpanded[p.id];
+      var recordsCount = txns.length + exps.length;
+      var toggleLabel = expanded
+        ? '▲ Hide investment records'
+        : '▼ View investment records' + (recordsCount ? ' (' + recordsCount + ')' : '');
       return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px">'
         + '<div><p style="font-size:13px;font-weight:800;color:#1e1b4b;margin:0">'+_esc(p.name)+'</p>'
@@ -23755,37 +23843,49 @@ function _peRender() {
         + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Expenses (by this partner)</p><p style="font-weight:800;color:#dc2626;margin:1px 0 0">'+fc(spent)+'</p></div>'
         + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Net (Given − Expenses)</p><p style="font-weight:800;color:'+(net>=0?'#059669':'#dc2626')+';margin:1px 0 0">'+fc(net)+'</p></div>'
         + '</div>'
-        + '<p style="font-size:9.5px;font-weight:800;color:#065f46;text-transform:uppercase;margin:0 0 4px">💵 Contributions Given</p>'
-        + '<div style="display:flex;gap:6px;margin-bottom:'+(txns.length?'8px':'2px')+'">'
-        + '<input type="date" id="pe-txn-date-'+p.id+'" value="'+ist()+'" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
-        + '<input type="number" id="pe-txn-amt-'+p.id+'" placeholder="Amount ₹" step="any" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
-        + '<button onclick="_peAddContribution(\''+p.id+'\')" style="background:#065f46;color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">+ Record</button>'
-        + '</div>'
-        + (txns.length ? '<div style="border-top:1px solid #f3f4f6;padding-top:6px;margin-bottom:8px">' + txns.map(function(t){
-            return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0">'
-              + '<span style="color:#6b7280">'+t.date+(t.note?' — '+_esc(t.note):'')+'</span>'
-              + '<span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#374151">'+fc(t.amount)+'</span>'
-              + '<button onclick="_peDeleteContribution(\''+t.id+'\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:10px">✕</button></span>'
-              + '</div>';
-          }).join('') + '</div>' : '')
-        + '<p style="font-size:9.5px;font-weight:800;color:#b91c1c;text-transform:uppercase;margin:0 0 4px">💸 Expenses (money spent by this partner)</p>'
-        + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:'+(exps.length?'8px':'0')+'">'
-        + '<input type="date" id="pe-exp-date-'+p.id+'" value="'+ist()+'" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
-        + '<input type="number" id="pe-exp-amt-'+p.id+'" placeholder="Amount ₹" step="any" style="flex:1;min-width:80px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
-        + '<input type="text" id="pe-exp-note-'+p.id+'" placeholder="What for? (optional)" style="flex:1.4;min-width:110px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
-        + '<button onclick="_peAddExpense(\''+p.id+'\')" style="background:#b91c1c;color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">+ Record</button>'
-        + '</div>'
-        + (exps.length ? '<div style="border-top:1px solid #f3f4f6;padding-top:6px">' + exps.map(function(t){
-            return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0">'
-              + '<span style="color:#6b7280">'+t.date+(t.note?' — '+_esc(t.note):'')+'</span>'
-              + '<span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#b91c1c">'+fc(t.amount)+'</span>'
-              + '<button onclick="_peDeleteExpense(\''+t.id+'\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:10px">✕</button></span>'
-              + '</div>';
-          }).join('') + '</div>' : '')
+        + '<button onclick="_peToggleExpanded(\''+p.id+'\')" style="width:100%;text-align:left;background:#f8fafc;border:1px solid #eef0f5;border-radius:8px;padding:7px 9px;font-size:10.5px;font-weight:800;color:#4338ca;cursor:pointer;margin-bottom:'+(expanded?'8px':'0')+'">'+toggleLabel+'</button>'
+        + (expanded ? (
+            '<p style="font-size:9.5px;font-weight:800;color:#065f46;text-transform:uppercase;margin:0 0 4px">💵 Contributions Given</p>'
+          + '<div style="display:flex;gap:6px;margin-bottom:'+(txns.length?'8px':'2px')+'">'
+          + '<input type="date" id="pe-txn-date-'+p.id+'" value="'+ist()+'" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+          + '<input type="number" id="pe-txn-amt-'+p.id+'" placeholder="Amount ₹" step="any" style="flex:1;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+          + '<button onclick="_peAddContribution(\''+p.id+'\')" style="background:#065f46;color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">+ Record</button>'
+          + '</div>'
+          + (txns.length ? '<div style="border-top:1px solid #f3f4f6;padding-top:6px;margin-bottom:8px">' + txns.map(function(t){
+              return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0">'
+                + '<span style="color:#6b7280">'+t.date+(t.note?' — '+_esc(t.note):'')+'</span>'
+                + '<span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#374151">'+fc(t.amount)+'</span>'
+                + '<button onclick="_peDeleteContribution(\''+t.id+'\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:10px">✕</button></span>'
+                + '</div>';
+            }).join('') + '</div>' : '')
+          + '<p style="font-size:9.5px;font-weight:800;color:#b91c1c;text-transform:uppercase;margin:0 0 4px">💸 Expenses (money spent by this partner)</p>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:'+(exps.length?'8px':'0')+'">'
+          + '<input type="date" id="pe-exp-date-'+p.id+'" value="'+ist()+'" style="flex:1;min-width:100px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+          + '<input type="number" id="pe-exp-amt-'+p.id+'" placeholder="Amount ₹" step="any" style="flex:1;min-width:80px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+          + '<input type="text" id="pe-exp-note-'+p.id+'" placeholder="What for? (optional)" style="flex:1.4;min-width:110px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;font-size:11px">'
+          + '<button onclick="_peAddExpense(\''+p.id+'\')" style="background:#b91c1c;color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap">+ Record</button>'
+          + '</div>'
+          + (exps.length ? '<div style="border-top:1px solid #f3f4f6;padding-top:6px">' + exps.map(function(t){
+              return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:2px 0">'
+                + '<span style="color:#6b7280">'+t.date+(t.note?' — '+_esc(t.note):'')+'</span>'
+                + '<span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#b91c1c">'+fc(t.amount)+'</span>'
+                + '<button onclick="_peDeleteExpense(\''+t.id+'\')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:10px">✕</button></span>'
+                + '</div>';
+            }).join('') + '</div>' : '')
+          ) : '')
         + '</div>';
     }).join('');
   }
   body.innerHTML = html;
+}
+
+// Tracks which partners' record lists are currently expanded within this
+// modal session (see "Partner cards" render above). Keyed by partner id,
+// reset naturally each time the app reloads / modal is freshly opened.
+var _peExpanded = {};
+function _peToggleExpanded(partnerId) {
+  _peExpanded[partnerId] = !_peExpanded[partnerId];
+  _peRender();
 }
 
 // Gives honest feedback about whether a save actually reached the
@@ -26629,8 +26729,15 @@ document.addEventListener('DOMContentLoaded', function () {
   // Same idea for the company-wide Partner / Investment Tracker — pulled
   // quietly on load so the money button's data is current even if the
   // owner never explicitly opens it this session.
+  // BUGFIX: this used to run for EVERY signed-in device (owner, joined
+  // engineer, sales admin, free-tier owner…), which meant a joined-by-
+  // code user's device would silently cache the company's partner/
+  // investment financial data into its own localStorage even though the
+  // UI ("visible to owner only") never showed it to them — the data was
+  // one dev-tools inspection away from being readable. Only pull it for
+  // devices that are actually allowed to see it.
   setTimeout(function () {
-    try { if (typeof _pullCompanyPartners === 'function') _pullCompanyPartners(); } catch (e) {}
+    try { if (_isPaidOwner() && typeof _pullCompanyPartners === 'function') _pullCompanyPartners(); } catch (e) {}
   }, 2700);
 });
 
