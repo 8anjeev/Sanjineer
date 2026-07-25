@@ -1300,6 +1300,25 @@ self.addEventListener('fetch', function(e) {
   // badges and switchProject() can restore the right permission set
   // without a network round-trip every time.
   function _resolveLocalShellForCloudProject(cloudProjectId, companyId, projectName, roleName, companyName, projectAddress) {
+    // BUGFIX (owner's own project showing "🔗 Joined" + a "Leave Project"
+    // button, letting them try to leave/join-by-code their OWN site):
+    // the caller at _reconcileMembershipFromServer passes whatever
+    // role_name the get_my_projects() RPC returns for this exact moment.
+    // That RPC can race right after this device creates the company/
+    // project (same documented class of race as _ownsAnyCompany() below
+    // guards against) and come back with a role that isn't literally
+    // 'owner' yet for the very account that just created it — which then
+    // permanently stamps this shell joined:true (see the ternary below),
+    // and nothing else in the app ever un-marks it since the self-heal
+    // a few lines down only fires again if a FUTURE reconcile call
+    // happens to return 'owner' correctly. sanj_owned_company_<companyId>
+    // is set locally, synchronously, the instant this device creates the
+    // company (_wsMarkOwnedCompany) — no server round-trip, so it can't
+    // race. Trust that over a possibly-stale server role for this exact
+    // company, the same way _ownsAnyCompany() already does elsewhere.
+    try {
+      if (companyId && safeLS.getItem('sanj_owned_company_' + companyId) === '1') roleName = 'owner';
+    } catch(e) {}
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
@@ -13398,6 +13417,20 @@ function addMaterialItem(){
   var supplierPhone=(document.getElementById('mat-supplier-phone')||{}).value||'';
   if (!name) { toast('Enter material name','err'); return; }
   var mats=lmat();
+  // BUGFIX: nothing stopped the same material being created twice (e.g.
+  // "Cement" added once, then added again later instead of using the
+  // existing item's "Received" button) — which then shows as two
+  // separate rows with separate stock/spend, splitting what should be
+  // one material's history in two. Block it here and send them to the
+  // existing item's Received flow instead, matching what quickPickMaterial
+  // already does for the normal "log a delivery" path.
+  var _dupExisting = mats.find(function(m){ return (m.name||'').trim().toLowerCase() === name.toLowerCase(); });
+  if (_dupExisting) {
+    toast('"'+_dupExisting.name+'" already exists — use its 📥 Received button to log this delivery instead', 'err');
+    toggleNewMaterialForm(true);
+    openMatPurchaseModal(_dupExisting.id);
+    return;
+  }
   mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,remark:remark,supplierPhone:supplierPhone,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
   smat(mats); ['mat-name','mat-unit','mat-init-qty','mat-min-qty','mat-remark','mat-supplier','mat-supplier-phone'].forEach(function(id){ document.getElementById(id).value=''; });
   if (catEl) catEl.value='';
@@ -24031,6 +24064,28 @@ function _peDeleteExpense(expId) {
     _peRender();
   });
 }
+// BUGFIX: this whole file section is wrapped in a top-level `(function(){
+// ... })()` IIFE (see the top of this <script> block), so every one of
+// these `function _peXxx(){...}` declarations is scoped to that closure,
+// NOT to `window`. The Partner Investment Tracker's HTML is built as a
+// big string with inline `onclick="_peSavePartner()"` etc, and inline
+// event-handler attributes can only call functions that exist on the
+// global object — so every single button in this modal (Save, Add
+// Partner, Edit, Delete, Record contribution/expense, toggle history)
+// was silently throwing "_peXxx is not defined" and doing nothing at
+// all when clicked. Explicitly re-exporting the ones referenced from
+// inline HTML fixes every button in one place.
+window._peSaveMeta = _peSaveMeta;
+window._peSavePartner = _peSavePartner;
+window._peEditPartner = _peEditPartner;
+window._peCancelEditPartner = _peCancelEditPartner;
+window._peDeletePartner = _peDeletePartner;
+window._peToggleExpanded = _peToggleExpanded;
+window._peToggleShareInput = _peToggleShareInput;
+window._peAddContribution = _peAddContribution;
+window._peDeleteContribution = _peDeleteContribution;
+window._peAddExpense = _peAddExpense;
+window._peDeleteExpense = _peDeleteExpense;
 
 // ── Company-wide sync: company_partners table ───────────────────────
 // Mirrors the company_sales table pattern exactly (see _pushCompanySales /
