@@ -5540,16 +5540,12 @@ function _wsSelectProject(p) {
         <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
           <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
         </button>
-        <!-- Quick-access Partner/Investment Tracker button, right next to
-             "Owner" so it's reachable straight from the main header (mobile
-             AND desktop) as well as from inside the Owner Dashboard/Owner
-             Overview headers. Same visibility rule as the Owner button
-             itself (see updateOwnerBtn()) — hidden by default, shown only
-             for a real, paid (Pro/Enterprise) owner, never for anyone who
-             joined via a project/join code or a free-tier owner. -->
-        <button id="owner-hdr-money-btn" onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:26px;height:26px;cursor:pointer;-webkit-tap-highlight-color:transparent;margin-left:4px;">
-          <span style="font-size:12px;line-height:1;">💰</span>
-        </button>
+        <!-- Partner Investment Tracker button lives ONLY inside the Owner
+             Overview / Owner Dashboard headers (mobile + desktop), next to
+             📢/✕ — not in the main app header. It was briefly added here
+             too but that duplicated the Owner button's job; removed per
+             product decision. See _ownerOpenMobileOverview() /
+             _ownerOpenDesktopDashboard() for where it actually lives. -->
       </div>
       <!-- Stacked: company above, project dropdown below -->
       <div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;max-width:200px;">
@@ -17652,7 +17648,7 @@ function updateCloudBtn() {
 //   _applyPermState() sets _ENGINEER_MODE=true for every role except
 //   'owner'.
 // - hasPaidPlan: excludes FREE-tier owners. Owner Dashboard and the
-//   Partner/Investment Tracker are Pro/Enterprise-only features even
+//   Partner Investment Tracker are Pro/Enterprise-only features even
 //   for the real owner of the company.
 function _isPaidOwner() {
   var isAdmin = safeLS.getItem(ADMIN_ROLE_KEY) === 'admin';
@@ -17686,15 +17682,12 @@ function _peGateOwnerAccess(featureName) {
 
 function updateOwnerBtn() {
   var btn = document.getElementById('owner-hdr-btn');
-  var moneyBtn = document.getElementById('owner-hdr-money-btn');
-  var show = _isPaidOwner() ? 'flex' : 'none';
-  if (btn) btn.style.display = show;
-  // Money/Partner-Tracker quick-access button lives right next to Owner in
-  // the main header (mobile + desktop) — see openPartnerEquityModal() for
-  // the actual access re-check on click (a hidden button alone is not
-  // access control). It ALSO still appears inside the Owner Overview /
-  // Owner Dashboard headers for convenience once you're already in there.
-  if (moneyBtn) moneyBtn.style.display = show;
+  if (!btn) return;
+  btn.style.display = _isPaidOwner() ? 'flex' : 'none';
+  // NOTE: the Partner Investment Tracker button does not live in the main
+  // app header — it only appears inside the Owner Overview / Owner
+  // Dashboard headers (mobile + desktop), gated the same isOwner-only way
+  // there (see openPartnerEquityModal()).
 }
 
 // -- Open / Close Cloud Modal --
@@ -23407,7 +23400,7 @@ window.openOwnerOverview = function() {
   // for every successful login (owner OR joined engineer/sales_admin) and
   // says nothing about plan tier either. A joined-by-code user or a free
   // (non-paid) owner could open the full Owner Dashboard (and, from
-  // inside it, the Partner/Investment Tracker) even though the header
+  // inside it, the Partner Investment Tracker) even though the header
   // button itself is correctly hidden from them — the hidden button was
   // never real access control. Route through the same _isPaidOwner()
   // check updateOwnerBtn() uses for the button's visibility.
@@ -23434,7 +23427,7 @@ function _ownerOpenMobileOverview() {
     // on a phone/narrow viewport had no way to broadcast a notice at all.
     // Same button, same handler, same place relative to 💰 / ✕ as desktop.
     + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">📢</button>'
-    + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">💰</button>'
+    + '<button onclick="openPartnerEquityModal()" title="Partner Investment Tracker" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">💰</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
     + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
@@ -23600,19 +23593,32 @@ var PARTNER_EXP_KEY    = 'cm_partner_expenses';
 var PARTNER_META_KEY   = 'cm_partner_meta';
 var PARTNER_TOMB_KEY   = 'cm_partner_tombstones';
 
-// BUGFIX (partner tracker "not saving" amounts): _cpk() falls back to the
-// per-PROJECT key (_pk()) whenever window._wsCompanyId hasn't resolved yet
-// (e.g. the owner taps the 💰 button in the first second or two after
-// opening the app, before the company id round-trip from Supabase
-// finishes). Entries added in that brief window get written under
-// "sanj_project_<id>_cm_partners..." — but every later read, once the
-// company id HAS resolved, looks under "sanj_company_<id>_cm_partners..."
-// instead. The data never actually vanished, it just became invisible:
-// wrong key, forever. This self-heals it the same way lscb() already
-// self-heals legacy subcontractor-bill keys: the first time a real
-// company id is available, fold in anything sitting under the fallback
-// key, once, then it's gone for good.
+// BUGFIX (partner tracker "not saving" amounts): the OLD version of this
+// fix fell back to the per-PROJECT key (_pk()) whenever window._wsCompanyId
+// hadn't resolved yet (e.g. the owner taps the 💰 button in the first
+// second or two after opening the app, before the company id round-trip
+// from Supabase finishes). That's still broken: if the user switches to a
+// DIFFERENT project (or the app auto-lands on a different one) before the
+// company id resolves, _pk() computes a different key than the one the
+// data was written under, and it becomes permanently invisible. This is
+// what was actually happening — the data wasn't lost, it was orphaned
+// under whichever project happened to be open at save time.
+//
+// Fix: use a single, project-INDEPENDENT "pending" key while the company
+// id is still unknown, so it's always the same key regardless of which
+// project is open. Then, the moment a real company id becomes available,
+// fold that pending key in — and ALSO sweep every localStorage key that
+// matches the OLD (buggy) per-project pattern, so any data a user already
+// lost to the previous version of this bug gets recovered too, once.
 var _peFallbackHealed = false;
+function _pePendingKey(baseKey) { return 'sanj_company_pending_' + baseKey; }
+// Company-scoped key for partner-tracker data specifically. Deliberately
+// NOT the shared _cpk() helper (used elsewhere, e.g. Sales) — this needs
+// its own project-independent fallback, see note above.
+function _peKey(baseKey) {
+  var cid = _currentCompanyId();
+  return cid ? ('sanj_company_' + cid + '_' + baseKey) : _pePendingKey(baseKey);
+}
 function _peHealFallbackKey() {
   if (_peFallbackHealed) return;
   var cid = _currentCompanyId();
@@ -23620,50 +23626,64 @@ function _peHealFallbackKey() {
   _peFallbackHealed = true;
   [PARTNERS_KEY, PARTNER_TXN_KEY, PARTNER_EXP_KEY, PARTNER_META_KEY, PARTNER_TOMB_KEY].forEach(function(baseKey) {
     try {
-      var fallbackFullKey = _pk(baseKey); // what _cpk() would have used before cid resolved
       var realFullKey = 'sanj_company_' + cid + '_' + baseKey;
-      if (fallbackFullKey === realFullKey) return; // never fell back (cid was already known) — nothing to merge
-      var fallbackRaw = safeLS.getItem(fallbackFullKey);
-      if (fallbackRaw === null) return; // nothing was ever stranded there
-      var realRaw = safeLS.getItem(realFullKey);
-      if (baseKey === PARTNER_META_KEY) {
-        // Single object — only adopt the stranded copy if the real one is empty
-        if (realRaw === null || realRaw === '{}') safeLS.setItem(realFullKey, fallbackRaw);
-      } else if (baseKey === PARTNER_TOMB_KEY) {
-        var fT = {}, rT = {}; try{fT=JSON.parse(fallbackRaw||'{}');}catch(e){} try{rT=JSON.parse(realRaw||'{}');}catch(e){}
-        Object.keys(fT).forEach(function(id){ if (!rT[id] || fT[id] > rT[id]) rT[id] = fT[id]; });
-        safeLS.setItem(realFullKey, JSON.stringify(rT));
-      } else {
-        // Arrays of {id,...} records — merge by id, keep both sides' entries
-        var fArr = [], rArr = []; try{fArr=JSON.parse(fallbackRaw||'[]');}catch(e){} try{rArr=JSON.parse(realRaw||'[]');}catch(e){}
-        var byId = {};
-        fArr.forEach(function(x){ if (x && x.id) byId[x.id] = x; });
-        rArr.forEach(function(x){ if (x && x.id) byId[x.id] = x; }); // real key wins on id clash
-        safeLS.setItem(realFullKey, JSON.stringify(Object.keys(byId).map(function(k){ return byId[k]; })));
-      }
-      safeLS.removeItem(fallbackFullKey); // stranded copy fully folded in — don't leave it to be re-merged later
+      // Every place stranded data could be sitting: the new project-
+      // independent pending key, plus (recovery for the old bug) any
+      // per-project key anywhere in localStorage ending in this baseKey.
+      var strandedKeys = [_pePendingKey(baseKey)];
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('sanj_project_') === 0 && k.slice(-(baseKey.length + 1)) === ('_' + baseKey)) {
+            strandedKeys.push(k);
+          }
+        }
+      } catch (e) {}
+      strandedKeys.forEach(function(fallbackFullKey) {
+        if (fallbackFullKey === realFullKey) return; // never fell back — nothing to merge
+        var fallbackRaw = safeLS.getItem(fallbackFullKey);
+        if (fallbackRaw === null) return; // nothing was ever stranded there
+        var realRaw = safeLS.getItem(realFullKey);
+        if (baseKey === PARTNER_META_KEY) {
+          // Single object — only adopt the stranded copy if the real one is empty
+          if (realRaw === null || realRaw === '{}') safeLS.setItem(realFullKey, fallbackRaw);
+        } else if (baseKey === PARTNER_TOMB_KEY) {
+          var fT = {}, rT = {}; try{fT=JSON.parse(fallbackRaw||'{}');}catch(e){} try{rT=JSON.parse(safeLS.getItem(realFullKey)||'{}');}catch(e){}
+          Object.keys(fT).forEach(function(id){ if (!rT[id] || fT[id] > rT[id]) rT[id] = fT[id]; });
+          safeLS.setItem(realFullKey, JSON.stringify(rT));
+        } else {
+          // Arrays of {id,...} records — merge by id, keep both sides' entries
+          var fArr = [], rArr = []; try{fArr=JSON.parse(fallbackRaw||'[]');}catch(e){} try{rArr=JSON.parse(safeLS.getItem(realFullKey)||'[]');}catch(e){}
+          var byId = {};
+          fArr.forEach(function(x){ if (x && x.id) byId[x.id] = x; });
+          rArr.forEach(function(x){ if (x && x.id) byId[x.id] = x; }); // real key wins on id clash
+          safeLS.setItem(realFullKey, JSON.stringify(Object.keys(byId).map(function(k){ return byId[k]; })));
+        }
+        safeLS.removeItem(fallbackFullKey); // stranded copy fully folded in — don't leave it to be re-merged later
+      });
     } catch(e) {}
   });
 }
 
-function lpartners(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNERS_KEY))||'[]');}catch(e){return[];} }
-function spartners(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNERS_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
-function lpartnerTxns(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_TXN_KEY))||'[]');}catch(e){return[];} }
-function spartnerTxns(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNER_TXN_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
-function lpartnerExpenses(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_EXP_KEY))||'[]');}catch(e){return[];} }
-function spartnerExpenses(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNER_EXP_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
-function lpartnerMeta(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_META_KEY))||'{}');}catch(e){return{};} }
-function spartnerMeta(x){ _peHealFallbackKey(); safeLS.setItem(_cpk(PARTNER_META_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartners(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_peKey(PARTNERS_KEY))||'[]');}catch(e){return[];} }
+function spartners(x){ _peHealFallbackKey(); safeLS.setItem(_peKey(PARTNERS_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerTxns(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_peKey(PARTNER_TXN_KEY))||'[]');}catch(e){return[];} }
+function spartnerTxns(x){ _peHealFallbackKey(); safeLS.setItem(_peKey(PARTNER_TXN_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerExpenses(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_peKey(PARTNER_EXP_KEY))||'[]');}catch(e){return[];} }
+function spartnerExpenses(x){ _peHealFallbackKey(); safeLS.setItem(_peKey(PARTNER_EXP_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
+function lpartnerMeta(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_peKey(PARTNER_META_KEY))||'{}');}catch(e){return{};} }
+function spartnerMeta(x){ _peHealFallbackKey(); safeLS.setItem(_peKey(PARTNER_META_KEY), JSON.stringify(x)); _scheduleCompanyPartnersPush(); }
 
 // id -> deleted-at timestamp, shared across partners/txns/expenses (ids
 // are always unique per-record already) so a delete on one device isn't
 // silently resurrected by an older copy merging in from another device.
-function _peLoadTombstones(){ try{return JSON.parse(safeLS.getItem(_cpk(PARTNER_TOMB_KEY))||'{}');}catch(e){return{};} }
+function _peLoadTombstones(){ _peHealFallbackKey(); try{return JSON.parse(safeLS.getItem(_peKey(PARTNER_TOMB_KEY))||'{}');}catch(e){return{};} }
 function _peAddTombstone(id){
   try{
+    _peHealFallbackKey();
     var t = _peLoadTombstones();
     t[id] = Date.now();
-    safeLS.setItem(_cpk(PARTNER_TOMB_KEY), JSON.stringify(t));
+    safeLS.setItem(_peKey(PARTNER_TOMB_KEY), JSON.stringify(t));
   }catch(e){}
 }
 function _peMergeTombstones(localT, remoteT){
@@ -23690,11 +23710,11 @@ function _peSpent(partnerId) {
 window.openPartnerEquityModal = function() {
   // BUGFIX: this checked isAdmin + _ENGINEER_MODE but never the paid-plan
   // requirement, so a free-tier (non-paid) real owner could open the
-  // Partner/Investment Tracker directly even though it's meant to be a
+  // Partner Investment Tracker directly even though it's meant to be a
   // Pro/Enterprise-only feature, same as the rest of Owner Dashboard.
   // Route through the shared gate so this, the header button, and Owner
   // Dashboard all agree on who's allowed in.
-  if (!_peGateOwnerAccess('Partner / Investment Tracker')) return;
+  if (!_peGateOwnerAccess('Partner Investment Tracker')) return;
   _peHealFallbackKey();
   var existing = document.getElementById('_partner-eq-modal'); if (existing) existing.remove();
   var modal = document.createElement('div');
@@ -23703,7 +23723,7 @@ window.openPartnerEquityModal = function() {
   modal.innerHTML =
     '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
     + '<div style="background:linear-gradient(135deg,#0f5132 0%,#065f46 55%,#047857 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
-    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">💰 Partner / Investment Tracker</div><div style="color:rgba(255,255,255,.65);font-size:10px">Company-wide · visible to owner only</div></div>'
+    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">💰 Partner Investment Tracker</div><div style="color:rgba(255,255,255,.65);font-size:10px">Company-wide · visible to owner only</div></div>'
     + '<button id="pe-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div>'
     + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
@@ -23823,7 +23843,7 @@ function _peRender() {
       var toggleLabel = expanded
         ? '▲ Hide investment records'
         : '▼ View investment records' + (recordsCount ? ' (' + recordsCount + ')' : '');
-      return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
+      return '<div id="pe-partner-'+p.id+'" style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,.04)">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:6px">'
         + '<div><p style="font-size:13px;font-weight:800;color:#1e1b4b;margin:0">'+_esc(p.name)+'</p>'
         + '<p style="font-size:9.5px;color:#6b7280;margin:2px 0 0">'+(p.shareType==='amount'?('Fixed commitment: '+fc(p.shareValue)) : (p.shareValue+'% of proposed capital'))+'</p></div>'
@@ -23923,22 +23943,36 @@ function _peToggleShareInput() { /* placeholder for future unit-aware hints; kep
 function _peEditPartner(id) { _peEditPartnerId = id; _peRender(); }
 function _peCancelEditPartner() { _peEditPartnerId = null; _peRender(); }
 function _peSavePartner() {
-  var name = document.getElementById('pe-p-name').value.trim();
-  var shareType = document.getElementById('pe-p-sharetype').value;
-  var shareValue = parseFloat(document.getElementById('pe-p-sharevalue').value) || 0;
+  var nameEl = document.getElementById('pe-p-name');
+  var shareTypeEl = document.getElementById('pe-p-sharetype');
+  var shareValueEl = document.getElementById('pe-p-sharevalue');
+  if (!nameEl || !shareTypeEl || !shareValueEl) { toast('Something went wrong opening the form — please close and reopen the tracker', 'err'); return; }
+  var name = nameEl.value.trim();
+  var shareType = shareTypeEl.value;
+  var shareValue = parseFloat(shareValueEl.value) || 0;
   if (!name) { toast('Enter partner name', 'err'); return; }
   if (!shareValue) { toast('Enter a % share or fixed amount', 'err'); return; }
   var partners = lpartners();
+  var savedId;
   if (_peEditPartnerId) {
     var idx = partners.findIndex(function(p){ return p.id===_peEditPartnerId; });
     if (idx>=0) partners[idx] = Object.assign({}, partners[idx], { name:name, shareType:shareType, shareValue:shareValue });
+    savedId = _peEditPartnerId;
     _peEditPartnerId = null;
   } else {
-    partners.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:name, shareType:shareType, shareValue:shareValue, createdAt: Date.now() });
+    savedId = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    partners.push({ id: savedId, name:name, shareType:shareType, shareValue:shareValue, createdAt: Date.now() });
   }
   spartners(partners);
+  // Immediately expand the saved partner's card so the person can SEE the
+  // save took effect, rather than trusting a toast that scrolls out of view.
+  _peExpanded[savedId] = true;
   _peSyncNow('Partner saved');
   _peRender();
+  try {
+    var card = document.getElementById('pe-partner-' + savedId);
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch(e) {}
 }
 function _peDeletePartner(id) {
   askDel('Remove this partner and all their contribution/expense history?', function(){
@@ -24032,7 +24066,7 @@ function _pullCompanyPartners(cb) {
     if (!r || r.error || !r.data) { if (cb) cb(); return; }
     try {
       var mergedTombs = _peMergeTombstones(_peLoadTombstones(), r.data.tombstones||{});
-      safeLS.setItem(_cpk(PARTNER_TOMB_KEY), JSON.stringify(mergedTombs));
+      safeLS.setItem(_peKey(PARTNER_TOMB_KEY), JSON.stringify(mergedTombs));
 
       function mergeById(local, remote) {
         var byId = {};
@@ -24040,14 +24074,14 @@ function _pullCompanyPartners(cb) {
         (local||[]).forEach(function(x){ if (x && x.id && !mergedTombs[x.id]) byId[x.id] = x; }); // local wins on conflicting edits
         return Object.keys(byId).map(function(k){ return byId[k]; });
       }
-      safeLS.setItem(_cpk(PARTNERS_KEY), JSON.stringify(mergeById(lpartners(), r.data.partners)));
-      safeLS.setItem(_cpk(PARTNER_TXN_KEY), JSON.stringify(mergeById(lpartnerTxns(), r.data.txns)));
-      safeLS.setItem(_cpk(PARTNER_EXP_KEY), JSON.stringify(mergeById(lpartnerExpenses(), r.data.expenses)));
+      safeLS.setItem(_peKey(PARTNERS_KEY), JSON.stringify(mergeById(lpartners(), r.data.partners)));
+      safeLS.setItem(_peKey(PARTNER_TXN_KEY), JSON.stringify(mergeById(lpartnerTxns(), r.data.txns)));
+      safeLS.setItem(_peKey(PARTNER_EXP_KEY), JSON.stringify(mergeById(lpartnerExpenses(), r.data.expenses)));
       // Meta (single object, not a list) — newest updated_at wins.
       if (r.data.meta && typeof r.data.meta === 'object') {
         var localMeta = lpartnerMeta();
         if (!localMeta || !Object.keys(localMeta).length) {
-          safeLS.setItem(_cpk(PARTNER_META_KEY), JSON.stringify(r.data.meta));
+          safeLS.setItem(_peKey(PARTNER_META_KEY), JSON.stringify(r.data.meta));
         }
       }
     } catch(e) {}
@@ -24732,7 +24766,7 @@ function _ownerOpenDesktopDashboard() {
       + '<div id="owner-dt-filters" style="display:flex;gap:7px;flex-wrap:wrap;"></div>'
       + '<div style="display:flex;gap:8px;flex-shrink:0;">'
         + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">📢</button>'
-        + '<button onclick="openPartnerEquityModal()" title="Partner / Investment Tracker" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">💰</button>'
+        + '<button onclick="openPartnerEquityModal()" title="Partner Investment Tracker" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">💰</button>'
         + '<button id="owner-dt-close" style="width:36px;height:36px;border-radius:10px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:15px;cursor:pointer;">✕</button>'
       + '</div>'
     + '</div>'
@@ -24804,7 +24838,7 @@ function _ownsAnyCompany() {
     // their actual project role is even known. That made _ownsAnyCompany()
     // return true for joined users too, which flipped their roleName to
     // 'owner' below, cleared _ENGINEER_MODE, and leaked the 👑 Owner button
-    // (Owner Overview + Partner/Investment Tracker) to site engineers and
+    // (Owner Overview + Partner Investment Tracker) to site engineers and
     // sales managers who'd joined via a project code. Removed — ownership
     // is decided by WS_CROLE_KEY / sanj_owned_company_<id> only, both of
     // which are only ever set for a device that actually IS the owner.
@@ -26726,7 +26760,7 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(function () {
     try { if (typeof _pullCompanySales === 'function') _pullCompanySales(function () { try { _updateSalesDashCard(); } catch (e) {} }); } catch (e) {}
   }, 2500);
-  // Same idea for the company-wide Partner / Investment Tracker — pulled
+  // Same idea for the company-wide Partner Investment Tracker — pulled
   // quietly on load so the money button's data is current even if the
   // owner never explicitly opens it this session.
   // BUGFIX: this used to run for EVERY signed-in device (owner, joined
