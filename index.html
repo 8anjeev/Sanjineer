@@ -3512,6 +3512,24 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   }
   #exp-print-panel.mob-open select,
   #exp-print-panel.mob-open button { width:100% !important; }
+
+  /* Drawings tab: put a compact "+ Add" button to the left of the
+     scrollable R1/R2/... room chips, in the same row. Desktop is
+     untouched — .drw-room-row/.drawing-room-tabs-wrap only get these
+     rules inside this media query; on desktop the wrap uses
+     display:contents (set inline) so it's invisible to layout and the
+     button stays display:none, leaving the original single
+     overflow-x-auto row exactly as authored. */
+  .drw-room-row { display:flex !important; align-items:center; gap:8px; overflow:visible !important; }
+  .drw-mob-add-btn {
+    display:flex !important; align-items:center; justify-content:center;
+    flex-shrink:0; width:auto; padding:0 14px; height:34px;
+    font-size:12px; box-shadow:0 3px 10px rgba(0,0,0,0.25);
+  }
+  #drawing-room-tabs-wrap {
+    display:block !important; overflow-x:auto !important;
+    flex:1 1 0; min-width:0; scrollbar-width:none;
+  }
 }
 /* Popup-only titles stay invisible outside the mobile popup state */
 .mob-panel-title { display:none; }
@@ -7491,7 +7509,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- ADD TOOLS sub-section -->
   <div id="tool-sec-add" class="dt-split dt-cap">
-    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="tool-add-dtl">
+    <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+    <div class="mob-action-row" style="display:none">
+      <button class="mob-add-btn" style="background:linear-gradient(135deg,#7c3aed,#9333ea)" onclick="mobOpenPanel('tool-add-dtl')">+ Add Tool</button>
+    </div>
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="tool-add-dtl">
       <p class="text-sm font-bold text-gray-700 mb-3">+ Add Tool / Equipment</p>
       <div class="grid grid-cols-2 gap-2.5">
         <input type="text" id="tl-name" placeholder="Tool Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
@@ -7520,7 +7542,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- ASSIGN TOOLS sub-section -->
   <div id="tool-sec-assign" class="dt-split dt-cap tab-hidden">
-    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl" id="tool-assign-dtl">
+    <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+    <div class="mob-action-row" style="display:none">
+      <button class="mob-add-btn" style="background:linear-gradient(135deg,#6366f1,#3b82f6)" onclick="mobOpenPanel('tool-assign-dtl')">+ Assign Tool</button>
+    </div>
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="tool-assign-dtl">
       <p class="text-sm font-bold text-gray-700 mb-3">📋 Assign Tool to Worker</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <div><label class="text-[10px] font-bold text-gray-500 block mb-1">Select Tool</label>
@@ -7562,10 +7588,10 @@ document.addEventListener('DOMContentLoaded', function() {
        used by the We Rented / Given Out sections below — see
        #rental-print-panel rule in #desktop-layout-tweaks. -->
 
-  <div id="rental-print-panel" class="bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div id="rental-print-panel" class="bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel">
     <div class="flex items-center justify-between mb-2">
       <p class="text-xs font-semibold text-gray-500">🖨️ Print by Client <span class="font-normal text-gray-400">— filter by month</span></p>
-      <button onclick="printRentalByClient()" class="hdr-action-btn" style="padding:0 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 3px 10px rgba(79,70,229,0.35)">🖨️ Print</button>
+      <button onclick="printRentalByClient(); if (typeof mobClosePanels==='function') mobClosePanels();" class="hdr-action-btn" style="padding:0 12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0;box-shadow:0 3px 10px rgba(79,70,229,0.35)">🖨️ Print</button>
     </div>
 
 <!-- Client selector -->
@@ -7592,7 +7618,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <!-- We Rented Section -->
 
   <div id="rsec-borrow" class="dt-split dt-cap">
-    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+    <div class="mob-action-row" style="display:none">
+      <button class="mob-add-btn" style="background:linear-gradient(135deg,#f43f5e,#ec4899)" onclick="mobOpenPanel('rsec-borrow-form')">+ Add Rental</button>
+      <button class="mob-print-btn" onclick="mobOpenPanel('rental-print-panel')">🖨️ Print</button>
+    </div>
+    <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="rsec-borrow-form">
       <p class="text-xs font-semibold text-gray-500 mb-2">📦 Equipment We Rented</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="rb-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -7640,7 +7671,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <!-- Given Out Section -->
 
   <div id="rsec-given" class="dt-split dt-cap tab-hidden" style="display:none">
-    <div class="dt-l bg-white rounded-2xl p-3 shadow-xl">
+    <!-- Mobile-only compact action row (hidden on desktop, shown ≤767px via #mobile-compact-tabs) -->
+    <div class="mob-action-row" style="display:none">
+      <button class="mob-add-btn" style="background:linear-gradient(135deg,#10b981,#14b8a6)" onclick="mobOpenPanel('rsec-given-form')">+ Add Rental</button>
+      <button class="mob-print-btn" onclick="mobOpenPanel('rental-print-panel')">🖨️ Print</button>
+    </div>
+    <div class="dt-l bg-white rounded-2xl p-3 shadow-xl mob-panel" id="rsec-given-form">
       <p class="text-xs font-semibold text-gray-500 mb-2">💰 Given to Others</p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="rg-name" placeholder="Item Name" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none">
@@ -8075,13 +8111,16 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ===== DRAWINGS ===== -->
 <div id="tab-drawings" class="tab-content dt-split dt-cap tab-hidden" style="display:none">
   <!-- Room Tabs -->
-  <div class="dt-full mb-3 overflow-x-auto" style="scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-    <div class="flex gap-1.5 pb-1" id="drawing-room-tabs">
-      <!-- Generated by JS -->
+  <div class="dt-full mb-3 overflow-x-auto drw-room-row" style="scrollbar-width:none;-webkit-overflow-scrolling:touch;">
+    <button class="mob-add-btn drw-mob-add-btn" style="display:none;background:linear-gradient(135deg,#f59e0b,#f97316)" onclick="mobOpenPanel('drw-add-panel')">+ Add</button>
+    <div id="drawing-room-tabs-wrap" style="display:contents">
+      <div class="flex gap-1.5 pb-1" id="drawing-room-tabs">
+        <!-- Generated by JS -->
+      </div>
     </div>
   </div>
   <!-- Add Drawing Form -->
-  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl mob-panel" id="drw-add-panel">
     <div class="flex items-center justify-between mb-3">
       <p class="text-sm font-bold text-gray-700">+ Add Drawing — <span id="drawing-room-label">R1</span></p>
       <button onclick="saveDrawing()" class="g-tobr-amber500-orange500 text-white rounded-lg text-xs font-bold active:scale-95" style="padding:0 12px">💾 Save</button>
@@ -13806,6 +13845,7 @@ function addTool(){
   ins({type:'tool',tool_name:name,tool_qty:qty,purchase_date:date,purchase_cost:cost});
   ['tl-name','tl-qty','tl-cost'].forEach(function(id){ document.getElementById(id).value=''; });
   AD=ld(); toast('Tool added!','ok'); viewTools(); updateDropdowns();
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
 }
 function delTool(id){
   var t=AD.find(function(d){ return d.__id===id; });
@@ -13823,6 +13863,7 @@ function assignTool(){
   if(assignedQty+qty>totalQty){toast('Only '+(totalQty-assignedQty)+' available','err');return;}
   ins({type:'tool_assign',tool_name:t.tool_name,worker_name:w.name,date:date,qty:qty,returned:false});
   AD=ld(); toast('Tool assigned!','ok'); viewTools();
+  if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Assign-sheet if open
 }
 function returnTool(id){
   var a=AD.find(function(d){return d.__id===id;});
@@ -13885,6 +13926,7 @@ function addRental(mode){
       ['rb-name','rb-client','rb-qty','rb-rate'].forEach(function(id){ document.getElementById(id).value=''; });
       clearBill('rb');
       AD=ld(); toast('Added','ok'); viewRentals(); updateDash();
+      if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
     });
   } else {
     var name=document.getElementById('rg-name').value.trim();
@@ -13898,6 +13940,7 @@ function addRental(mode){
       ['rg-name','rg-qty','rg-client','rg-rate'].forEach(function(id){ document.getElementById(id).value=''; });
       clearBill('rg');
       AD=ld(); toast('Added','ok'); viewRentals(); updateDash();
+      if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
     });
   }
 }
@@ -15750,6 +15793,7 @@ function saveDrawing(){
     ['drw-name','drw-rev'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
     if(fileEl)fileEl.value='';
     buildRoomTabs();renderDrawings();toast('Drawing saved!','ok');
+    if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
   }
   if(file){
     toast('☁️ Uploading drawing…', 'info');
@@ -23598,6 +23642,23 @@ window.openPartnerEquityModal = function() {
 
 var _peEditPartnerId = null; // set while the add/edit partner form is editing an existing partner
 
+// Total actual money spent across EVERY site/project the owner has —
+// same calculation as the Owner Overview "Expenses" tab (material-type
+// ledger entries, excluding petty cash), so the number shown here always
+// matches what's shown there. This is company-wide site spending, and is
+// intentionally separate from totalSpent above (which is only the money
+// partners have personally drawn/spent, not overall site expenses).
+function _peAllSitesExpenseTotal() {
+  var projects = window.projects || [];
+  var total = 0;
+  projects.forEach(function(p) {
+    var d = (typeof _ownerLoadProject === 'function') ? _ownerLoadProject(p.id) : { AD: [] };
+    (d.AD || []).filter(function(x){ return x.type === 'material' && !x.is_petty_cash && x.exp_type !== 'material'; })
+      .forEach(function(x){ total += parseFloat(x.cost) || 0; });
+  });
+  return total;
+}
+
 function _peRender() {
   var body = document.getElementById('pe-body'); if (!body) return;
   var meta = lpartnerMeta();
@@ -23605,8 +23666,27 @@ function _peRender() {
   var totalProposed = parseFloat(meta.totalProposed) || 0;
   var totalGiven = lpartnerTxns().reduce(function(s,t){ return s+(parseFloat(t.amount)||0); },0);
   var totalSpent = lpartnerExpenses().reduce(function(s,t){ return s+(parseFloat(t.amount)||0); },0);
+  var allSitesSpent = _peAllSitesExpenseTotal();
 
   var html = '';
+  // ── Graphic row: Total Expenses (all sites) vs Total Proposed Capital ──
+  (function(){
+    var pct = totalProposed > 0 ? Math.min(100, Math.round((allSitesSpent/totalProposed)*100)) : (allSitesSpent>0?100:0);
+    var over = allSitesSpent > totalProposed && totalProposed > 0;
+    html += '<div style="background:linear-gradient(135deg,#0f172a,#1e293b);border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(0,0,0,.18)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'
+      + '<div><p style="font-size:9px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;margin:0">💸 Total Expenses (all sites)</p>'
+      + '<p style="font-size:18px;font-weight:900;color:#fca5a5;margin:2px 0 0">'+fc(allSitesSpent)+'</p></div>'
+      + '<div style="text-align:right"><p style="font-size:9px;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;margin:0">Total Proposed</p>'
+      + '<p style="font-size:18px;font-weight:900;color:#86efac;margin:2px 0 0">'+fc(totalProposed)+'</p></div>'
+      + '</div>'
+      + '<div style="height:9px;background:rgba(255,255,255,.12);border-radius:99px;overflow:hidden">'
+      + '<div style="height:100%;width:'+pct+'%;background:'+(over?'linear-gradient(90deg,#ef4444,#dc2626)':'linear-gradient(90deg,#f59e0b,#f97316)')+'"></div>'
+      + '</div>'
+      + '<p style="font-size:9.5px;color:rgba(255,255,255,.6);margin:5px 0 0;text-align:right">'+pct+'% of proposed capital spent across all sites'+(over?' · over budget':'')+'</p>'
+      + '</div>';
+  })();
+
   // Company-wide proposed capital
   html += '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;border:1px solid #e5e7eb">'
     + '<label style="font-size:9.5px;font-weight:700;color:#6b7280;text-transform:uppercase;display:block;margin-bottom:4px">Total Proposed Project Capital (₹)</label>'
@@ -23708,10 +23788,35 @@ function _peRender() {
   body.innerHTML = html;
 }
 
+// Gives honest feedback about whether a save actually reached the
+// company-wide cloud copy (company_partners table), instead of always
+// showing "Saved" regardless of what happened. The local save (via
+// spartners/spartnerMeta/etc, already called before this) always
+// succeeds independently — this only reports the CLOUD sync outcome on
+// top of that, so a missing/misconfigured table is visible instead of
+// silently swallowed.
+function _peSyncNow(successMsg) {
+  if (typeof _pushCompanyPartners !== 'function') { toast(successMsg, 'ok'); return; }
+  _pushCompanyPartners(function(res) {
+    if (res && res.error) {
+      var msg = (res.error && res.error.message) ? res.error.message : String(res.error);
+      if (msg === 'not ready') {
+        toast(successMsg + ' (on this device — sign in for cloud sync)', 'ok');
+      } else if (/relation .* does not exist|company_partners/i.test(msg)) {
+        toast('⚠️ ' + successMsg + ' locally, but cloud table isn\'t set up yet — run the company_partners migration', 'err');
+      } else {
+        toast('⚠️ ' + successMsg + ' locally, but cloud sync failed: ' + msg, 'err');
+      }
+    } else {
+      toast('✅ ' + successMsg + ' & synced', 'ok');
+    }
+  });
+}
+
 function _peSaveMeta() {
   var val = parseFloat(document.getElementById('pe-total-proposed').value) || 0;
   spartnerMeta({ totalProposed: val });
-  toast('✅ Saved', 'ok');
+  _peSyncNow('Saved');
   _peRender();
 }
 function _peToggleShareInput() { /* placeholder for future unit-aware hints; kept simple on purpose */ }
@@ -23732,7 +23837,7 @@ function _peSavePartner() {
     partners.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:name, shareType:shareType, shareValue:shareValue, createdAt: Date.now() });
   }
   spartners(partners);
-  toast('✅ Partner saved', 'ok');
+  _peSyncNow('Partner saved');
   _peRender();
 }
 function _peDeletePartner(id) {
@@ -23757,7 +23862,7 @@ function _peAddContribution(partnerId) {
   var txns = lpartnerTxns();
   txns.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), partnerId:partnerId, date:date||ist(), amount:amount });
   spartnerTxns(txns);
-  toast('✅ Payment recorded', 'ok');
+  _peSyncNow('Payment recorded');
   _peRender();
 }
 function _peDeleteContribution(txnId) {
@@ -23781,7 +23886,7 @@ function _peAddExpense(partnerId) {
   var exps = lpartnerExpenses();
   exps.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), partnerId:partnerId, date:date||ist(), amount:amount, note:note });
   spartnerExpenses(exps);
-  toast('✅ Expense recorded', 'ok');
+  _peSyncNow('Expense recorded');
   _peRender();
 }
 function _peDeleteExpense(expId) {
