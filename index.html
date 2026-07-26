@@ -9425,7 +9425,7 @@ var _CM_TS_DEDICATED = {
   'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
   'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
   'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1,
-  'cm_po':1,'cm_suppliers':1,'cm_contacts':1
+  'cm_po':1,'cm_suppliers':1,'cm_contacts':1,'cm_boq_schedule':1,'cm_visits':1,'cm_invoices':1,'cm_quotations':1,'cm_measurements':1
 };
 var _cmTsInHook = false;
 function _touchCmModTs(fullKey) {
@@ -16839,9 +16839,9 @@ function boqToggleSec(secId){
   var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;});
   if(sec) sec.collapsed=!sec.collapsed; boqSave(data); boqRender();
 }
-function boqDelSec(secId){ askDel('Delete this section and all its items?',function(){ var data=boqLoad(); data.sections=data.sections.filter(function(s){return s.id!==secId;}); boqResequence(data); boqSave(data); boqRender(); toast('Section deleted','ok'); }); }
-function boqDelItem(secId,itemId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(sec) sec.items=sec.items.filter(function(i){return i.id!==itemId;}); boqResequence(data); boqSave(data); boqRender(); }
-function boqDelSubItem(secId,itemId,subId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return; var item=sec.items.find(function(i){return i.id===itemId;}); if(item&&item.subItems) item.subItems=item.subItems.filter(function(s){return s.id!==subId;}); boqResequence(data); boqSave(data); boqRender(); }
+function boqDelSec(secId){ askDel('Delete this section and all its items?',function(){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if (sec && typeof _addTombstone==='function') { _addTombstone('boqsec__'+secId, Date.now()); (sec.items||[]).forEach(function(it){ _addTombstone('boqitem__'+it.id, Date.now()); (it.subItems||[]).forEach(function(si){ _addTombstone('boqsub__'+si.id, Date.now()); }); }); } data.sections=data.sections.filter(function(s){return s.id!==secId;}); boqResequence(data); boqSave(data); boqRender(); toast('Section deleted','ok'); }); }
+function boqDelItem(secId,itemId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(sec){ var item=sec.items.find(function(i){return i.id===itemId;}); if (item && typeof _addTombstone==='function') { _addTombstone('boqitem__'+itemId, Date.now()); (item.subItems||[]).forEach(function(si){ _addTombstone('boqsub__'+si.id, Date.now()); }); } sec.items=sec.items.filter(function(i){return i.id!==itemId;}); } boqResequence(data); boqSave(data); boqRender(); }
+function boqDelSubItem(secId,itemId,subId){ var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return; var item=sec.items.find(function(i){return i.id===itemId;}); if(item&&item.subItems){ if (typeof _addTombstone==='function') _addTombstone('boqsub__'+subId, Date.now()); item.subItems=item.subItems.filter(function(s){return s.id!==subId;}); } boqResequence(data); boqSave(data); boqRender(); }
 
 function boqEdit(secId,itemId,field,val){
   var data=boqLoad(); var sec=data.sections.find(function(s){return s.id===secId;}); if(!sec) return;
@@ -17400,8 +17400,26 @@ function delPunch(id){askDel('Delete this punch list item?',function(){if (typeo
 // BILL
 // ============================================================
 var INV_STORE_KEY='cm_invoices';
-function linvs(){try{return JSON.parse(safeLS.getItem(INV_STORE_KEY)||'[]');}catch(e){return[];}}
-function sinvs(x){safeLS.setItem(INV_STORE_KEY,JSON.stringify(x));}
+// BUGFIX: same class of bug as Subcontractor Bills/Quotations — this was
+// a single global bucket shared by every project, never synced to the
+// cloud at all. Blind-copy migration (no site_id tagging exists on old
+// invoice records to split by, unlike Visit Logs).
+function linvs(){
+  try{
+    var k = _pk(INV_STORE_KEY);
+    var v = safeLS.getItem(k);
+    if (v === null) {
+      var legacy = safeLS.getItem(INV_STORE_KEY);
+      if (legacy !== null) { safeLS.setItem(k, legacy); v = legacy; }
+    }
+    return JSON.parse(v||'[]');
+  }catch(e){return[];}
+}
+function sinvs(x){
+  x = (typeof _autoStampArray === 'function') ? _autoStampArray(linvs(), x) : x;
+  safeLS.setItem(_pk(INV_STORE_KEY), JSON.stringify(x));
+  if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+}
 
 function addSalaryLine(){
   var body=document.getElementById('salary-extras-body');if(!body)return;
@@ -17680,6 +17698,7 @@ function renderInvoiceRecords(){
 
 function delInvoice(id){
   askDel('Delete this invoice?',function(){
+    if (typeof _addTombstone === 'function') _addTombstone('inv__'+id, Date.now());
     sinvs(linvs().filter(function(i){return i.id!==id;}));
     renderInvoiceRecords();toast('Invoice deleted','ok');
   });
@@ -18191,7 +18210,7 @@ function _mergeCmAllBucket(remoteCmAll, remoteCmAllTs, forceOverwrite) {
     'cm_sales':1,'cm_sm_activity':1,
     // Promoted to real per-record merge in _applyCloudData — see the
     // matching comment in _buildLocalPayload's _dedicatedKeys.
-    'cm_po':1,'cm_suppliers':1,'cm_contacts':1
+    'cm_po':1,'cm_suppliers':1,'cm_contacts':1,'cm_boq_schedule':1,'cm_visits':1,'cm_invoices':1,'cm_quotations':1,'cm_measurements':1
   };
   var _localTs  = _loadCmModTs();
   var _remoteTs = (remoteCmAllTs && typeof remoteCmAllTs === 'object') ? remoteCmAllTs : {};
@@ -18270,6 +18289,11 @@ function _applyFullBackup(d, forceOverwrite) {
   if (d.po)         { try { safeLS.setItem(_pk(PO_KEY), JSON.stringify(d.po)); } catch(e) {} }
   if (d.suppliers)  { try { safeLS.setItem(_pk(SUPPLIER_KEY), JSON.stringify(d.suppliers)); } catch(e) {} }
   if (d.contacts && typeof CONTACTS_KEY !== 'undefined') { try { safeLS.setItem(_pk(CONTACTS_KEY), JSON.stringify(d.contacts)); } catch(e) {} }
+  if (d.boq)        { try { safeLS.setItem(_pk(BOQ_KEY), JSON.stringify(d.boq)); } catch(e) {} }
+  if (d.visits)       { try { safeLS.setItem(_pk(VISITS_KEY), JSON.stringify(d.visits)); } catch(e) {} }
+  if (d.invoices)      { try { safeLS.setItem(_pk(INV_STORE_KEY), JSON.stringify(d.invoices)); } catch(e) {} }
+  if (d.quotations)    { try { safeLS.setItem(_pk(QT_KEY), JSON.stringify(d.quotations)); } catch(e) {} }
+  if (d.measurements)  { try { safeLS.setItem(_pk(MSHEET_KEY), JSON.stringify(d.measurements)); } catch(e) {} }
   if (d.nid)        safeLS.setItem('cm_nid', String(d.nid));
   // All cm_ keys (BOQ schedule, BOQ today data per date, BOQ project info,
   //   visits, quotations, subcon bills, PO, suppliers, invoices, tools, rentals, etc.)
@@ -18745,7 +18769,7 @@ function cloudBackupNow(silent) {
       // get "whichever device's copy landed last completely replaces the
       // other's", so a delete or an edit to a different record on another
       // device could silently clobber this device's own unsynced change.
-      'cm_po':1,'cm_suppliers':1,'cm_contacts':1
+      'cm_po':1,'cm_suppliers':1,'cm_contacts':1,'cm_boq_schedule':1,'cm_visits':1,'cm_invoices':1,'cm_quotations':1,'cm_measurements':1
     };
     var _prefix = window.currentProjectId ? ('sanj_project_' + window.currentProjectId + '_') : '';
     try {
@@ -18784,6 +18808,11 @@ function cloudBackupNow(silent) {
       po:         lpo(),
       suppliers:  lsuppliers(),
       contacts:   (typeof _contactsLoad === 'function' && window.currentProjectId) ? _contactsLoad(window.currentProjectId) : [],
+      boq:        (typeof boqLoad === 'function') ? boqLoad() : {sections:[]},
+      visits:      (typeof lvisits === 'function') ? lvisits() : [],
+      invoices:    (typeof linvs === 'function') ? linvs() : [],
+      quotations:  (typeof lqt === 'function') ? lqt() : [],
+      measurements:(typeof lmsheet === 'function') ? lmsheet() : [],
       rfi: [], safety: [],
       nid: parseInt(safeLS.getItem('cm_nid') || '1'),
       cm_all: _allCmKeys,
@@ -18934,8 +18963,21 @@ function cloudBackupNow(silent) {
         _absorbArr(lpl,  PL_KEY, cloudData.punchlist,  'pl__');
         _absorbArr(lpo,  PO_KEY, cloudData.po,          'po__');
         _absorbArr(lsuppliers, SUPPLIER_KEY, cloudData.suppliers, 'sup__');
+        _absorbArr(lvisits, VISITS_KEY, cloudData.visits, 'visit__');
+        _absorbArr(linvs, INV_STORE_KEY, cloudData.invoices, 'inv__');
+        _absorbArr(lqt, QT_KEY, cloudData.quotations, 'qt__');
+        _absorbArr(lmsheet, MSHEET_KEY, cloudData.measurements, 'msheet__');
         if (typeof CONTACTS_KEY !== 'undefined' && window.currentProjectId) {
           _absorbArr(function(){ return _contactsLoad(window.currentProjectId); }, CONTACTS_KEY, cloudData.contacts, 'contact__');
+        }
+        // BOQ (nested: sections -> items -> subItems) needs its own
+        // merge, not the flat-array _absorbArr helper above.
+        if (typeof _mergeBOQ === 'function') {
+          var localBOQ = boqLoad();
+          var mergedBOQ = _mergeBOQ(localBOQ, cloudData.boq, mergedTombs);
+          if (JSON.stringify(mergedBOQ) !== JSON.stringify(localBOQ)) {
+            try { safeLS.setItem(_pk(BOQ_KEY), JSON.stringify(mergedBOQ)); } catch(e) {}
+          }
         }
 
         // Dept work / Drawings (keyed by date/room)
@@ -19121,6 +19163,20 @@ function _applyCloudData(d, silent, scopeKey, visible) {
     try { safeLS.setItem(_pk(CONTACTS_KEY), JSON.stringify(mergedContacts)); } catch(e) {}
   }
 
+  // BOQ (nested: sections -> items -> subItems)
+  var mergedBOQ = (typeof _mergeBOQ === 'function') ? _mergeBOQ(boqLoad(), d.boq, mergedTombs) : boqLoad();
+  try { safeLS.setItem(_pk(BOQ_KEY), JSON.stringify(mergedBOQ)); } catch(e) {}
+
+  // Visits / Invoices / Quotations / Measurement Sheets (flat arrays; id + __ts)
+  var mergedVisits = _mergeArrayStore(lvisits(), d.visits || [], mergedTombs, 'id', '__ts', 'visit__');
+  try { safeLS.setItem(_pk(VISITS_KEY), JSON.stringify(mergedVisits)); } catch(e) {}
+  var mergedInvoices = _mergeArrayStore(linvs(), d.invoices || [], mergedTombs, 'id', '__ts', 'inv__');
+  try { safeLS.setItem(_pk(INV_STORE_KEY), JSON.stringify(mergedInvoices)); } catch(e) {}
+  var mergedQuotations = _mergeArrayStore(lqt(), d.quotations || [], mergedTombs, 'id', '__ts', 'qt__');
+  try { safeLS.setItem(_pk(QT_KEY), JSON.stringify(mergedQuotations)); } catch(e) {}
+  var mergedMeasurements = _mergeArrayStore(lmsheet(), d.measurements || [], mergedTombs, 'id', '__ts', 'msheet__');
+  try { safeLS.setItem(_pk(MSHEET_KEY), JSON.stringify(mergedMeasurements)); } catch(e) {}
+
   // Dept work + Drawings (keyed by date/room → array of items)
   var mergedDept = _mergeKeyedStore(ldept(), d.dept || {}, mergedTombs, 'id', '__ts', 'dept__');
   try { safeLS.setItem(_pk(DEPT), JSON.stringify(mergedDept)); } catch(e) {}
@@ -19155,6 +19211,11 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   dMerged.po = mergedPO;
   dMerged.suppliers = mergedSuppliers;
   dMerged.contacts = mergedContacts;
+  dMerged.boq = mergedBOQ;
+  dMerged.visits = mergedVisits;
+  dMerged.invoices = mergedInvoices;
+  dMerged.quotations = mergedQuotations;
+  dMerged.measurements = mergedMeasurements;
   dMerged.dept = mergedDept;
   dMerged.drawings = mergedDrw;
   if (mergedProf) dMerged.prof = mergedProf;
@@ -19172,7 +19233,7 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   var _dataChanged = true;
   try {
     if (_preMergeSnapshot) {
-      var _cmpKeys = ['db','machinery','mats','milestones','punchlist','po','suppliers','contacts','dept','drawings','prof','global_prof','budget','settings','cm_all'];
+      var _cmpKeys = ['db','machinery','mats','milestones','punchlist','po','suppliers','contacts','boq','visits','invoices','quotations','measurements','dept','drawings','prof','global_prof','budget','settings','cm_all'];
       _dataChanged = _cmpKeys.some(function(k) {
         return JSON.stringify(_preMergeSnapshot[k] || null) !== JSON.stringify(dMerged[k] || null);
       });
@@ -20022,10 +20083,53 @@ var VISITS_KEY  = 'cm_visits';
 var QT_KEY      = 'cm_quotations';
 var SCB_KEY     = 'cm_subcon_bills';
 
-function lvisits(){ try{return JSON.parse(safeLS.getItem(VISITS_KEY)||'[]');}catch(e){return[];} }
-function svisits(x){ safeLS.setItem(VISITS_KEY, JSON.stringify(x)); }
-function lqt(){ try{return JSON.parse(safeLS.getItem(QT_KEY)||'[]');}catch(e){return[];} }
-function sqt(x){ safeLS.setItem(QT_KEY, JSON.stringify(x)); }
+// BUGFIX: same class of bug already fixed for Subcontractor Bills below —
+// this was a single global bucket shared by every project (never synced
+// to the cloud at all, purely local-only, and editing one project's
+// visits affected what every other project's Site Visits tab showed).
+// Old records already carry a site_id, so this migration can cleanly
+// split the legacy shared bucket by project instead of a blind copy.
+function lvisits(){
+  try{
+    var k = _pk(VISITS_KEY);
+    var v = safeLS.getItem(k);
+    if (v === null) {
+      var legacy = safeLS.getItem(VISITS_KEY);
+      if (legacy !== null) {
+        try {
+          var mine = (JSON.parse(legacy)||[]).filter(function(x){ return x && x.site_id === window.currentProjectId; });
+          safeLS.setItem(k, JSON.stringify(mine)); v = JSON.stringify(mine);
+        } catch(e) {}
+      }
+    }
+    return JSON.parse(v||'[]');
+  }catch(e){return[];}
+}
+function svisits(x){
+  x = (typeof _autoStampArray === 'function') ? _autoStampArray(lvisits(), x) : x;
+  safeLS.setItem(_pk(VISITS_KEY), JSON.stringify(x));
+  if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+}
+// BUGFIX: same bug, no site_id tagging exists on old quotation records
+// though, so this uses the same blind-copy migration as Subcontractor
+// Bills/BOQ (whichever project loads first keeps seeing the old data;
+// the legacy key itself is left untouched for any other project).
+function lqt(){
+  try{
+    var k = _pk(QT_KEY);
+    var v = safeLS.getItem(k);
+    if (v === null) {
+      var legacy = safeLS.getItem(QT_KEY);
+      if (legacy !== null) { safeLS.setItem(k, legacy); v = legacy; }
+    }
+    return JSON.parse(v||'[]');
+  }catch(e){return[];}
+}
+function sqt(x){
+  x = (typeof _autoStampArray === 'function') ? _autoStampArray(lqt(), x) : x;
+  safeLS.setItem(_pk(QT_KEY), JSON.stringify(x));
+  if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+}
 // BUGFIX: this used to read/write the raw, unprefixed SCB_KEY directly.
 // cloudBackupNow()'s generic cm_all sweep only ever picks up keys under
 // the ACTIVE project's _pk() prefix (or truly-legacy unprefixed keys when
@@ -21627,6 +21731,7 @@ function saveVisit() {
 
 function deleteVisit(id) {
   askDel('Delete this visit log?', function(){
+    if (typeof _addTombstone === 'function') _addTombstone('visit__'+id, Date.now());
     var visits = lvisits().filter(function(v){return v.id!==id;});
     svisits(visits); renderVisitsList(); toast('Deleted','ok');
   });
@@ -21706,8 +21811,20 @@ function switchQtSubTab(tab){
 // ── Measurement Sheet ──────────────────────────────────────────
 var MSHEET_KEY = "cm_measurements";
 var _msRowCount = 0;
-function lmsheet(){ try{return JSON.parse(localStorage.getItem(_pk(MSHEET_KEY))||'[]');}catch(e){return[];} }
-function smsheet(arr){ try{localStorage.setItem(_pk(MSHEET_KEY),JSON.stringify(arr));}catch(e){} }
+// BUGFIX: this used to call raw localStorage.getItem/setItem directly,
+// bypassing safeLS entirely. It was ALREADY correctly project-scoped
+// (_pk(MSHEET_KEY)) — the actual gap was that safeLS is where both the
+// whole-blob timestamp protection AND the cloud-push scheduling live, so
+// bypassing it meant measurement sheets never reached the cloud at all,
+// and a pull could clobber local edits unconditionally.
+function lmsheet(){ try{return JSON.parse(safeLS.getItem(_pk(MSHEET_KEY))||'[]');}catch(e){return[];} }
+function smsheet(arr){
+  try{
+    arr = (typeof _autoStampArray === 'function') ? _autoStampArray(lmsheet(), arr) : arr;
+    safeLS.setItem(_pk(MSHEET_KEY), JSON.stringify(arr));
+    if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  }catch(e){}
+}
 
 // Unit definitions: {label, base (base unit type: len/area/vol/cnt), factor (to SI base)}
 var MS_UNITS = [
@@ -21889,6 +22006,7 @@ function renderMsRecords(){
 }
 function deleteMsSheet(id){
   askDel('Delete this measurement sheet?',function(){
+    if (typeof _addTombstone === 'function') _addTombstone('msheet__'+id, Date.now());
     smsheet(lmsheet().filter(function(r){return r.id!==id;}));
     renderMsRecords(); toast('Deleted','ok');
   });
@@ -22140,6 +22258,7 @@ function reprintQuotation(id) {
 
 function deleteQuotation(id) {
   askDel('Delete this quotation?', function(){
+    if (typeof _addTombstone === 'function') _addTombstone('qt__'+id, Date.now());
     var records = lqt().filter(function(r){return r.id!==id;});
     sqt(records); renderQuotationRecords(); toast('Deleted','ok');
   });
