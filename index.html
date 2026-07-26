@@ -4566,7 +4566,18 @@ function _wsStart(user, email, onDone) {
             // Still a real, active membership — resume it directly instead
             // of making them re-enter the join code.
             window._wsCompanyId = storedCompanyId;
-            safeLS.setItem(WS_CROLE_KEY, proj.role_name || safeLS.getItem(WS_CROLE_KEY) || '');
+            // BUGFIX: this branch only runs when get_my_companies() already
+            // returned ZERO rows — i.e. this account is guaranteed NOT to
+            // own any company, only to be a joined member of one. So
+            // proj.role_name (a per-project field already known to be an
+            // unreliable label — see _applyPermState's comments) saying
+            // 'owner' here can only ever be a mislabeling bug, never a
+            // legitimate case. Never let it overwrite the company-level
+            // role key with 'owner' — that's what let a joined engineer's
+            // header leak the 👑 Owner button and Partner/Investment
+            // Tracker.
+            var _resumeSafeRole = (proj.role_name === 'owner') ? '' : proj.role_name;
+            safeLS.setItem(WS_CROLE_KEY, _resumeSafeRole || safeLS.getItem(WS_CROLE_KEY) || '');
             _wsSelectProject(proj);
           } else {
             // Genuinely no longer a member (removed, project deleted, or
@@ -5395,6 +5406,24 @@ function _applyPermState(roleName) {
   // that actually went through the owner login flow.
   if (roleName !== 'owner' && typeof _ownsAnyCompany === 'function' && _ownsAnyCompany()) {
     roleName = 'owner';
+  }
+  // BUGFIX (Owner button / Partner Investment Tracker leaking to joined
+  // engineers & sales admins): the flip side of the promotion above. The
+  // same per-project role_name field that's been observed mislabeling a
+  // real owner as 'project_manager' can also do the reverse — hand back
+  // roleName === 'owner' for someone who is NOT the company owner (e.g.
+  // resuming a joined session via get_my_projects, see the fallback path
+  // in the "0 rows from get_my_companies" branch above _applyPermState's
+  // call sites). That was trusted blindly, which is exactly what let a
+  // joined member's header show the 👑 Owner button and reach owner-only
+  // data like the Partner/Investment Tracker. _ownsAnyCompany() is the
+  // same independent, non-racy signal used for promotion above — if
+  // NEITHER of its checks (company-level WS_CROLE_KEY, or the local
+  // "this device created this company" flag set at creation time) backs
+  // up an 'owner' claim, don't trust it. Demote to a plain member instead
+  // of silently granting owner-only access.
+  else if (roleName === 'owner' && typeof _ownsAnyCompany === 'function' && !_ownsAnyCompany()) {
+    roleName = 'viewer';
   }
   return _permLoadForRole(roleName).then(function(keys) {
     window._permSet = new Set(keys);
@@ -8960,26 +8989,12 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div class="grid grid-cols-2 gap-3 items-start">
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Total Cost (₹) <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="mp-cost" placeholder="Total amount paid" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-        <div style="position:relative">
+        <div>
           <label class="text-xs font-semibold text-gray-500 block mb-1">Bill <span class="font-normal text-gray-400">(opt)</span></label>
-          <button type="button" id="mp-bill-upload-btn" onclick="_toggleMpBillOptions(event)" class="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl text-xs font-bold text-indigo-600 active:scale-95" style="cursor:pointer">📎 Add Bill</button>
-          <div id="mp-bill-options" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;overflow:hidden">
-            <label onclick="_toggleMpBillOptions()" class="flex items-center gap-2 px-3 py-2.5 hover:bg-indigo-50 cursor-pointer transition-all" style="border-bottom:1px solid #f3f4f6">
-              <span style="font-size:15px;line-height:1">📷</span>
-              <span style="font-size:12px;font-weight:700;color:#4f46e5">Camera</span>
-              <input type="file" id="mp-bill-cam" accept="image/*" capture="environment" class="hidden" onchange="billFileSelected(event,'mp')">
-            </label>
-            <label onclick="_toggleMpBillOptions()" class="flex items-center gap-2 px-3 py-2.5 hover:bg-amber-50 cursor-pointer transition-all" style="border-bottom:1px solid #f3f4f6">
-              <span style="font-size:15px;line-height:1">🖼️</span>
-              <span style="font-size:12px;font-weight:700;color:#d97706">Choose from Gallery</span>
-              <input type="file" id="mp-bill-img" accept="image/*" class="hidden" onchange="billFileSelected(event,'mp')">
-            </label>
-            <label onclick="_toggleMpBillOptions()" class="flex items-center gap-2 px-3 py-2.5 hover:bg-rose-50 cursor-pointer transition-all">
-              <span style="font-size:15px;line-height:1">📄</span>
-              <span style="font-size:12px;font-weight:700;color:#e11d48">Upload File</span>
-              <input type="file" id="mp-bill-pdf" accept="application/pdf,image/*" class="hidden" onchange="billFileSelected(event,'mp')">
-            </label>
-          </div>
+          <label id="mp-bill-upload-btn" class="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl text-xs font-bold text-indigo-600 active:scale-95 cursor-pointer">
+            <span id="mp-bill-btn-text">📎 Add Bill</span>
+            <input type="file" id="mp-bill-file" accept="image/*,application/pdf" class="hidden" onchange="billFileSelected(event,'mp')">
+          </label>
         </div>
       </div>
       <div id="mp-bill-preview" class="hidden">
@@ -9409,7 +9424,8 @@ var safeLS = {
 var _CM_TS_DEDICATED = {
   'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
   'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
-  'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1
+  'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1,
+  'cm_po':1,'cm_suppliers':1,'cm_contacts':1
 };
 var _cmTsInHook = false;
 function _touchCmModTs(fullKey) {
@@ -11868,6 +11884,12 @@ function _qdprSyncOtherProjectToCloud(pid) {
     var mergedMats = (typeof _mergeMaterials === 'function') ? _mergeMaterials(localMats, cloudData.mats || [], tombs) : localMats;
     cloudData.db = mergedDb;
     cloudData.mats = mergedMats;
+    // Contacts can also be edited for a non-active project — same merge
+    // treatment as db/mats above.
+    var localContacts = (typeof _contactsLoad === 'function') ? _contactsLoad(pid) : [];
+    var mergedContacts = (typeof _mergeArrayStore === 'function') ? _mergeArrayStore(localContacts, cloudData.contacts || [], tombs, 'id', '__ts', 'contact__') : localContacts;
+    cloudData.contacts = mergedContacts;
+    try { safeLS.setItem(_qdprProjKey(pid, CONTACTS_KEY), JSON.stringify(mergedContacts)); } catch(e) {}
     // BUGFIX: tombstones were computed for the local merge above but never
     // actually written back into the cloud row — so another device pulling
     // this project later would never see the delete, and could resurrect
@@ -11907,6 +11929,14 @@ function qdprUpdateInProj(pid, id, patch){
   return null;
 }
 function qdprDeleteFromProj(pid, id){
+  // BUGFIX: deleting a daily report itself was never tombstoned — only
+  // the materials/ledger entries INSIDE a report were fixed earlier. A
+  // report record lives in the same AD/db array as every other ledger
+  // entry (expenses, materials, etc.), which already merges via
+  // _mergeRecordArrays using a bare (no-prefix) id key — so this uses the
+  // same convention, scoped to pid (this report may belong to a
+  // non-active project) rather than the generic _addTombstone().
+  if (typeof _qdprAddTombstone === 'function') _qdprAddTombstone(pid, id, Date.now());
   qdprSaveProjAD(pid, qdprLoadProjAD(pid).filter(function(d){ return d.__id!==id; }));
 }
 function qdprLoadProjMats(pid){
@@ -11964,6 +11994,13 @@ function _qdprMergeCloudIntoProject(pid, d) {
     ? _mergeMaterials(localMats, d.mats || [], tombs)
     : (d.mats && d.mats.length ? d.mats : localMats);
   try { safeLS.setItem(_qdprProjKey(pid, MATS), JSON.stringify(mergedMats)); } catch(e) {}
+
+  // Contacts (editable for any project, same as db/mats above)
+  var localContacts = (typeof _contactsLoad === 'function') ? _contactsLoad(pid) : [];
+  var mergedContacts = (typeof _mergeArrayStore === 'function')
+    ? _mergeArrayStore(localContacts, d.contacts || [], tombs, 'id', '__ts', 'contact__')
+    : (d.contacts && d.contacts.length ? d.contacts : localContacts);
+  try { safeLS.setItem(_qdprProjKey(pid, CONTACTS_KEY), JSON.stringify(mergedContacts)); } catch(e) {}
 
   // BUGFIX: meta (site note/photos, from the Report tab) and prof
   // (address/profile) were being pushed to this project's cloud row by
@@ -13675,15 +13712,14 @@ function _showBillPreview(ctx){
   // Collapse the Scan/Gallery/PDF chooser back down once something's
   // attached, and reflect that on the toggle button itself — only exists
   // for contexts using the compact single-button uploader (e.g. 'mp').
-  var optsEl=document.getElementById(ctx+'-bill-options'); if (optsEl) optsEl.style.display='none';
-  var btnEl=document.getElementById(ctx+'-bill-upload-btn'); if (btnEl) btnEl.innerHTML='✅ Attached';
+var btnTextEl=document.getElementById(ctx+'-bill-btn-text'); if (btnTextEl) btnTextEl.textContent='✅ Attached';
   toast('Bill attached ✓','ok');
 }
 function clearBill(ctx){
   BILLS[ctx]=null;
   var prev=document.getElementById(ctx+'-bill-preview');
   if(prev) prev.classList.add('hidden');
-  var btnEl=document.getElementById(ctx+'-bill-upload-btn'); if (btnEl) btnEl.innerHTML='📎 Add Bill';
+  var btnTextEl=document.getElementById(ctx+'-bill-btn-text'); if (btnTextEl) btnTextEl.textContent='📎 Add Bill';
 }
 function _saveBill(ctx, cb){
   var b=BILLS[ctx];
@@ -13713,52 +13749,10 @@ function openMatPurchaseModal(id){
   var _mpLast=_mpPurchases.length ? _mpPurchases[_mpPurchases.length-1] : null;
   document.getElementById('mp-supplier').value=(_mpLast&&_mpLast.supplier)||'';
   clearBill('mp');
-  var mpBillOpts=document.getElementById('mp-bill-options'); if (mpBillOpts) mpBillOpts.style.display='none';
-  var mpBillBtn=document.getElementById('mp-bill-upload-btn'); if (mpBillBtn) mpBillBtn.innerHTML='📎 Add Bill';
+  var mpBillFileEl=document.getElementById('mp-bill-file'); if (mpBillFileEl) mpBillFileEl.value='';
   _armModalGuard('mat-purchase-modal');
   document.getElementById('mat-purchase-modal').classList.add('modal-show');
 }
-// Real dropdown (Camera / Choose from Gallery / Upload File) that opens
-// under the "Add Bill" button and closes itself on outside click or on
-// picking an option — not an inline row that stays expanded and eats
-// extra vertical space in the form.
-// FIX: this used to be position:absolute inside the modal's own
-// scrollable box. The modal box has overflow-y:auto, and per a standard
-// CSS quirk, setting only overflow-y forces overflow-x to also become a
-// clipping/scrolling container — so a dropdown positioned near the
-// bottom of a long form (right where this row sits) could render
-// effectively invisible/clipped, looking like the tap "did nothing".
-// Using position:fixed with coordinates computed from the button's own
-// on-screen position sidesteps this entirely — it's placed relative to
-// the browser viewport, not any scrollable ancestor, so it always
-// renders visibly regardless of where it sits in the form.
-function _toggleMpBillOptions(e){
-  if (e && e.stopPropagation) e.stopPropagation();
-  var el = document.getElementById('mp-bill-options');
-  var btn = document.getElementById('mp-bill-upload-btn');
-  if (!el || !btn) return;
-  var showing = el.style.display === 'block';
-  if (showing) { el.style.display = 'none'; return; }
-  var r = btn.getBoundingClientRect();
-  var estHeight = 132; // approx height of the 3-option list
-  el.style.left = 'auto';
-  el.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
-  if (r.bottom + 4 + estHeight > window.innerHeight) {
-    // Not enough room below — open upward instead
-    el.style.top = 'auto';
-    el.style.bottom = (window.innerHeight - r.top + 4) + 'px';
-  } else {
-    el.style.bottom = 'auto';
-    el.style.top = (r.bottom + 4) + 'px';
-  }
-  el.style.display = 'block';
-}
-document.addEventListener('click', function(e){
-  var dd = document.getElementById('mp-bill-options');
-  if (dd && dd.style.display === 'block' && !dd.contains(e.target) && e.target.id !== 'mp-bill-upload-btn') {
-    dd.style.display = 'none';
-  }
-});
 // Matches the typed vehicle number against this material's own delivery
 // history (case-insensitive) and, on a match, suggests Size/Quantity from
 // that vehicle's most recent delivery — a given truck usually brings the
@@ -14031,7 +14025,7 @@ try{
       if (range==='yesterday' && t.date!==yesterday) return;
       if (range==='month' && (t.date||'').slice(0,7)!==thisMonth) return;
       if (filterSup && (t.supplier||'')!==filterSup) return;
-      rows.push({date:t.date||'', material:item.name, category:t.category||item.category||'', unit:t.unit||item.unit||'', qty:parseFloat(t.qty)||0, cost:parseFloat(t.cost)||0, supplier:t.supplier||'', vehicleNo:t.vehicle_no||'', chalanNo:t.chalan_no||''});
+      rows.push({date:t.date||'', material:item.name, unit:t.unit||item.unit||'', qty:parseFloat(t.qty)||0, cost:parseFloat(t.cost)||0, supplier:t.supplier||'', vehicleNo:t.vehicle_no||'', size:t.size||'', chalanNo:t.chalan_no||''});
     });
   });
   rows.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
@@ -14047,11 +14041,11 @@ try{
     return '<tr>'
       +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
       +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+r.material+'</td>'
-      +'<td style="padding:5px 8px;color:#6b7280">'+(r.category||'—')+'</td>'
       +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+r.qty+' '+r.unit+'</td>'
-      +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
       +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicleNo||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#0369a1">'+(r.size||'—')+'</td>'
       +'<td style="padding:5px 8px;color:#6b7280">'+(r.chalanNo||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
       +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
       +'</tr>';
   }).join('');
@@ -14080,18 +14074,18 @@ try{
     +'<table><thead><tr>'
     +'<th>Date</th>'
     +'<th>Material</th>'
-    +'<th>Type</th>'
     +'<th style="text-align:center">Qty</th>'
-    +'<th>Supplier</th>'
     +'<th>Vehicle No</th>'
+    +'<th>Size</th>'
     +'<th>Chalan No</th>'
+    +'<th>Supplier</th>'
     +'<th style="text-align:right">Cost</th>'
     +'</tr></thead>'
     +'<tbody>'+trs+'</tbody>'
     +'<tfoot><tr style="background:#f5f3ff">'
-    +'<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="3">TOTAL</td>'
+    +'<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="2">TOTAL</td>'
     +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalQty+'</td>'
-    +'<td></td><td></td><td></td>'
+    +'<td></td><td></td><td></td><td></td>'
     +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalCost)+'</td>'
     +'</tr></tfoot>'
     +'</table>'
@@ -16320,7 +16314,7 @@ function boqLoad(){
     return JSON.parse(scoped||'{"sections":[]}');
   }catch(e){ return {sections:[]}; }
 }
-function boqSave(d){ safeLS.setItem(_pk(BOQ_KEY),JSON.stringify(d)); _scheduleCloudPush(); }
+function boqSave(d){ d = (typeof _autoStampBOQ === 'function') ? _autoStampBOQ(boqLoad(), d) : d; safeLS.setItem(_pk(BOQ_KEY),JSON.stringify(d)); _scheduleCloudPush(); }
 function loadBoqTab(){ boqRender(); }
 
 /* ── Project Info ── */
@@ -18194,7 +18188,10 @@ function _mergeCmAllBucket(remoteCmAll, remoteCmAllTs, forceOverwrite) {
     // _pullCompanySales. Skip these here entirely so a stray older
     // per-project blob (from a device that hasn't refreshed yet) can
     // never overwrite the shared company copy through this path.
-    'cm_sales':1,'cm_sm_activity':1
+    'cm_sales':1,'cm_sm_activity':1,
+    // Promoted to real per-record merge in _applyCloudData — see the
+    // matching comment in _buildLocalPayload's _dedicatedKeys.
+    'cm_po':1,'cm_suppliers':1,'cm_contacts':1
   };
   var _localTs  = _loadCmModTs();
   var _remoteTs = (remoteCmAllTs && typeof remoteCmAllTs === 'object') ? remoteCmAllTs : {};
@@ -18270,6 +18267,9 @@ function _applyFullBackup(d, forceOverwrite) {
   }
   if (d.milestones) { try { safeLS.setItem(_pk(MS_KEY), JSON.stringify(d.milestones)); } catch(e) {} }
   if (d.punchlist)  { try { safeLS.setItem(_pk(PL_KEY), JSON.stringify(d.punchlist)); } catch(e) {} }
+  if (d.po)         { try { safeLS.setItem(_pk(PO_KEY), JSON.stringify(d.po)); } catch(e) {} }
+  if (d.suppliers)  { try { safeLS.setItem(_pk(SUPPLIER_KEY), JSON.stringify(d.suppliers)); } catch(e) {} }
+  if (d.contacts && typeof CONTACTS_KEY !== 'undefined') { try { safeLS.setItem(_pk(CONTACTS_KEY), JSON.stringify(d.contacts)); } catch(e) {} }
   if (d.nid)        safeLS.setItem('cm_nid', String(d.nid));
   // All cm_ keys (BOQ schedule, BOQ today data per date, BOQ project info,
   //   visits, quotations, subcon bills, PO, suppliers, invoices, tools, rentals, etc.)
@@ -18516,6 +18516,98 @@ function _mergeMaterials(localMats, remoteMats, tombstones) {
   return out;
 }
 
+// BOQ: sections -> items -> subItems, one level deeper than Materials'
+// items -> transactions. Same principle, extended: each level merges by
+// id/__ts with its own tombstone prefix, and a delete/change at any level
+// (a whole section, a single item, or just a sub-item) is handled
+// independently rather than the whole BOQ being one giant blob that a
+// stale device can wholesale clobber.
+function _mergeBOQItems(localItems, remoteItems, tombstones) {
+  var byId = {};
+  (localItems || []).forEach(function(it) { if (it && it.id) byId[it.id] = { local: it }; });
+  (remoteItems || []).forEach(function(it) {
+    if (!it || !it.id) return;
+    byId[it.id] = byId[it.id] || {};
+    byId[it.id].remote = it;
+  });
+  var out = [];
+  Object.keys(byId).forEach(function(id) {
+    var entry = byId[id];
+    var li = entry.local, ri = entry.remote;
+    var lts = (li && li.__ts) || 0, rts = (ri && ri.__ts) || 0;
+    var tomb = tombstones['boqitem__' + id] || 0;
+    if (tomb && tomb >= Math.max(lts, rts)) return;
+    var base = (!li) ? ri : (!ri) ? li : (rts > lts ? ri : li);
+    if (!base) return;
+    var merged = Object.assign({}, base);
+    merged.subItems = _mergeArrayStore(li ? li.subItems : [], ri ? ri.subItems : [], tombstones, 'id', '__ts', 'boqsub__');
+    out.push(merged);
+  });
+  return out;
+}
+function _mergeBOQ(localData, remoteData, tombstones) {
+  localData = localData || { sections: [] };
+  remoteData = remoteData || { sections: [] };
+  var byId = {};
+  (localData.sections || []).forEach(function(s) { if (s && s.id) byId[s.id] = { local: s }; });
+  (remoteData.sections || []).forEach(function(s) {
+    if (!s || !s.id) return;
+    byId[s.id] = byId[s.id] || {};
+    byId[s.id].remote = s;
+  });
+  var out = [];
+  Object.keys(byId).forEach(function(id) {
+    var entry = byId[id];
+    var ls = entry.local, rs = entry.remote;
+    var lts = (ls && ls.__ts) || 0, rts = (rs && rs.__ts) || 0;
+    var tomb = tombstones['boqsec__' + id] || 0;
+    if (tomb && tomb >= Math.max(lts, rts)) return;
+    var base = (!ls) ? rs : (!rs) ? ls : (rts > lts ? rs : ls);
+    if (!base) return;
+    var merged = Object.assign({}, base);
+    merged.items = _mergeBOQItems(ls ? ls.items : [], rs ? rs.items : [], tombstones);
+    out.push(merged);
+  });
+  // Any other top-level fields on the BOQ object (besides sections) —
+  // local wins on a genuine conflict, same bias used elsewhere (e.g. QDPR
+  // meta), since there's no per-field timestamp map for these.
+  return Object.assign({}, remoteData, localData, { sections: out });
+}
+// Recursively stamps __ts at every level (section/item/sub-item) whenever
+// its own content changed since the last save — same diff-based approach
+// as _autoStampArray, just applied three levels deep instead of one.
+function _autoStampBOQ(oldData, newData) {
+  oldData = oldData || { sections: [] };
+  newData = newData || { sections: [] };
+  newData.sections = newData.sections || [];
+  var oldSecMap = {};
+  (oldData.sections || []).forEach(function(s) { if (s && s.id) oldSecMap[s.id] = s; });
+  newData.sections.forEach(function(sec) {
+    if (!sec || !sec.id) return;
+    var oldSec = oldSecMap[sec.id];
+    sec.items = sec.items || [];
+    var oldItemMap = {};
+    ((oldSec && oldSec.items) || []).forEach(function(it) { if (it && it.id) oldItemMap[it.id] = it; });
+    sec.items.forEach(function(item) {
+      if (!item || !item.id) return;
+      var oldItem = oldItemMap[item.id];
+      item.subItems = item.subItems || [];
+      _autoStampArray(oldItem ? oldItem.subItems : [], item.subItems); // innermost first
+      var oldItemNoSub = oldItem ? Object.assign({}, oldItem) : null;
+      if (oldItemNoSub) { delete oldItemNoSub.subItems; delete oldItemNoSub.__ts; }
+      var curItemNoSub = Object.assign({}, item); delete curItemNoSub.subItems; delete curItemNoSub.__ts;
+      if (!oldItem || JSON.stringify(oldItemNoSub) !== JSON.stringify(curItemNoSub)) item.__ts = Date.now();
+      else item.__ts = oldItem.__ts || Date.now();
+    });
+    var oldSecNoItems = oldSec ? Object.assign({}, oldSec) : null;
+    if (oldSecNoItems) { delete oldSecNoItems.items; delete oldSecNoItems.__ts; }
+    var curSecNoItems = Object.assign({}, sec); delete curSecNoItems.items; delete curSecNoItems.__ts;
+    if (!oldSec || JSON.stringify(oldSecNoItems) !== JSON.stringify(curSecNoItems)) sec.__ts = Date.now();
+    else sec.__ts = oldSec.__ts || Date.now();
+  });
+  return newData;
+}
+
 // Per-field merge for single-object stores. `localFts`/`remoteFts` are
 // companion {fieldName: lastModifiedMs} maps — see _diffFts() below,
 // which is how each field's timestamp gets set every time its setter
@@ -18647,7 +18739,13 @@ function cloudBackupNow(silent) {
       'cm_data':1,'cm_meta':1,'cm_matstore':1,'cm_dept':1,'cm_profile':1,
       'cm_machinery':1,'cm_drawings':1,'cm_budget':1,'cm_milestones':1,
       'cm_punchlist':1,'cm_tombstones':1,'cm_phkeys':1,
-      'cm_sales':1,'cm_sm_activity':1 // company-wide now — see company_sales table
+      'cm_sales':1,'cm_sm_activity':1, // company-wide now — see company_sales table
+      // Promoted from the generic whole-blob cm_all bucket to real
+      // per-record merge (see _applyCloudData) — these used to only ever
+      // get "whichever device's copy landed last completely replaces the
+      // other's", so a delete or an edit to a different record on another
+      // device could silently clobber this device's own unsynced change.
+      'cm_po':1,'cm_suppliers':1,'cm_contacts':1
     };
     var _prefix = window.currentProjectId ? ('sanj_project_' + window.currentProjectId + '_') : '';
     try {
@@ -18683,6 +18781,9 @@ function cloudBackupNow(silent) {
       budget_fts: _readFts(_pk(BGT_KEY)),
       milestones: lms(),
       punchlist:  lpl(),
+      po:         lpo(),
+      suppliers:  lsuppliers(),
+      contacts:   (typeof _contactsLoad === 'function' && window.currentProjectId) ? _contactsLoad(window.currentProjectId) : [],
       rfi: [], safety: [],
       nid: parseInt(safeLS.getItem('cm_nid') || '1'),
       cm_all: _allCmKeys,
@@ -18831,6 +18932,11 @@ function cloudBackupNow(silent) {
         _absorbArr(lmat, MATS,   cloudData.mats,       'mat__');
         _absorbArr(lms,  MS_KEY, cloudData.milestones, 'ms__');
         _absorbArr(lpl,  PL_KEY, cloudData.punchlist,  'pl__');
+        _absorbArr(lpo,  PO_KEY, cloudData.po,          'po__');
+        _absorbArr(lsuppliers, SUPPLIER_KEY, cloudData.suppliers, 'sup__');
+        if (typeof CONTACTS_KEY !== 'undefined' && window.currentProjectId) {
+          _absorbArr(function(){ return _contactsLoad(window.currentProjectId); }, CONTACTS_KEY, cloudData.contacts, 'contact__');
+        }
 
         // Dept work / Drawings (keyed by date/room)
         var _absorbKeyed = function(loadFn, key, remoteObj, tombPrefix) {
@@ -18999,6 +19105,22 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   var mergedPl = _mergeArrayStore(lpl(), d.punchlist || [], mergedTombs, 'id', '__ts', 'pl__');
   try { safeLS.setItem(_pk(PL_KEY), JSON.stringify(mergedPl)); } catch(e) {}
 
+  // Purchase Orders (array; id + __ts)
+  var mergedPO = _mergeArrayStore(lpo(), d.po || [], mergedTombs, 'id', '__ts', 'po__');
+  try { safeLS.setItem(_pk(PO_KEY), JSON.stringify(mergedPO)); } catch(e) {}
+
+  // Suppliers (array; id + __ts)
+  var mergedSuppliers = _mergeArrayStore(lsuppliers(), d.suppliers || [], mergedTombs, 'id', '__ts', 'sup__');
+  try { safeLS.setItem(_pk(SUPPLIER_KEY), JSON.stringify(mergedSuppliers)); } catch(e) {}
+
+  // Contacts (array; id + __ts) — for whichever project is currently active
+  var mergedContacts = (typeof _contactsLoad === 'function' && window.currentProjectId)
+    ? _mergeArrayStore(_contactsLoad(window.currentProjectId), d.contacts || [], mergedTombs, 'id', '__ts', 'contact__')
+    : (d.contacts || []);
+  if (typeof CONTACTS_KEY !== 'undefined' && window.currentProjectId) {
+    try { safeLS.setItem(_pk(CONTACTS_KEY), JSON.stringify(mergedContacts)); } catch(e) {}
+  }
+
   // Dept work + Drawings (keyed by date/room → array of items)
   var mergedDept = _mergeKeyedStore(ldept(), d.dept || {}, mergedTombs, 'id', '__ts', 'dept__');
   try { safeLS.setItem(_pk(DEPT), JSON.stringify(mergedDept)); } catch(e) {}
@@ -19030,6 +19152,9 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   dMerged.mats = mergedMats;
   dMerged.milestones = mergedMs;
   dMerged.punchlist = mergedPl;
+  dMerged.po = mergedPO;
+  dMerged.suppliers = mergedSuppliers;
+  dMerged.contacts = mergedContacts;
   dMerged.dept = mergedDept;
   dMerged.drawings = mergedDrw;
   if (mergedProf) dMerged.prof = mergedProf;
@@ -19047,7 +19172,7 @@ function _applyCloudData(d, silent, scopeKey, visible) {
   var _dataChanged = true;
   try {
     if (_preMergeSnapshot) {
-      var _cmpKeys = ['db','machinery','mats','milestones','punchlist','dept','drawings','prof','global_prof','budget','settings','cm_all'];
+      var _cmpKeys = ['db','machinery','mats','milestones','punchlist','po','suppliers','contacts','dept','drawings','prof','global_prof','budget','settings','cm_all'];
       _dataChanged = _cmpKeys.some(function(k) {
         return JSON.stringify(_preMergeSnapshot[k] || null) !== JSON.stringify(dMerged[k] || null);
       });
@@ -20068,7 +20193,7 @@ function lpo(){
     return JSON.parse(raw||'[]');
   } catch(e){ return []; }
 }
-function spo(x){ safeLS.setItem(_pk(PO_KEY), JSON.stringify(x)); if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} } }
+function spo(x){ x = (typeof _autoStampArray === 'function') ? _autoStampArray(lpo(), x) : x; safeLS.setItem(_pk(PO_KEY), JSON.stringify(x)); if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} } }
 function lsuppliers(){
   try {
     var raw = safeLS.getItem(_pk(SUPPLIER_KEY));
@@ -20079,7 +20204,7 @@ function lsuppliers(){
     return JSON.parse(raw||'[]');
   } catch(e){ return []; }
 }
-function ssuppliers(x){ safeLS.setItem(_pk(SUPPLIER_KEY), JSON.stringify(x)); if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} } }
+function ssuppliers(x){ x = (typeof _autoStampArray === 'function') ? _autoStampArray(lsuppliers(), x) : x; safeLS.setItem(_pk(SUPPLIER_KEY), JSON.stringify(x)); if (typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} } }
 
 // PO approval workflow — every PO carries a live status that both the
 // site that raised it and the owner (in the Owner Overview PO tab) see:
@@ -20148,6 +20273,7 @@ function renderPOSuppliersList() {
 
 function deleteSupplier(id) {
   askDel('Delete this supplier?', function(){
+    if (typeof _addTombstone === 'function') _addTombstone('sup__'+id, Date.now());
     ssuppliers(lsuppliers().filter(function(s){return s.id!==id;}));
     renderPOSuppliersList(); renderPOSupplierDropdown(); toast('Deleted','ok');
   });
@@ -20580,6 +20706,13 @@ function whatsappPO(id) {
 
 function deletePO(id) {
   askDel('Delete this Purchase Order?', function(){
+    // BUGFIX (deleted PO could reappear via cross-device sync): PO/
+    // Supplier records now get real per-record merge (see _applyCloudData
+    // and _mergeArrayStore below), same as Materials/Milestones/Punchlist.
+    // Without a tombstone, a stale copy of this PO synced down from
+    // another device (or the cloud's last snapshot) would be treated as
+    // "still exists" and silently restored.
+    if (typeof _addTombstone === 'function') _addTombstone('po__'+id, Date.now());
     spo(lpo().filter(function(r){return r.id!==id;}));
     renderPORecords(); toast('Deleted','ok');
   });
@@ -23497,8 +23630,17 @@ function _contactsLoad(pid) {
   try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, CONTACTS_KEY)) || '[]'); } catch(e) { return []; }
 }
 function _contactsSave(pid, arr) {
+  arr = (typeof _autoStampArray === 'function') ? _autoStampArray(_contactsLoad(pid), arr) : arr;
   try { safeLS.setItem(_qdprProjKey(pid, CONTACTS_KEY), JSON.stringify(arr)); } catch(e) {}
-  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') { try{ _scheduleCloudPush(); }catch(e){} }
+  if (pid === window.currentProjectId && typeof _scheduleCloudPush === 'function') {
+    try{ _scheduleCloudPush(); }catch(e){}
+  } else if (typeof _qdprScheduleOtherProjectPush === 'function') {
+    // BUGFIX: editing contacts for a project OTHER than the one currently
+    // open used to just... not push at all. Same gap QDPR reports had for
+    // the same reason (both let you work against any project, not only
+    // the active one) — fixed there already, applying the same fix here.
+    try { _qdprScheduleOtherProjectPush(pid); } catch(e) {}
+  }
 }
 
 window.openContactsPanel = function() {
@@ -23624,6 +23766,12 @@ window.saveContact = function() {
 window.deleteContact = function(id) {
   if (!_contactsSelectedPid) return;
   askDel('Delete this contact?', function(){
+    // BUGFIX: contacts can be edited for ANY project (not just the one
+    // currently open), same as QDPR reports — so this uses the pid-scoped
+    // tombstone helper, not the generic _addTombstone() (which is scoped
+    // to window.currentProjectId and would silently record it under the
+    // WRONG project's tombstone store whenever pid isn't the active one).
+    if (typeof _qdprAddTombstone === 'function') _qdprAddTombstone(_contactsSelectedPid, 'contact__'+id, Date.now());
     var list = _contactsLoad(_contactsSelectedPid).filter(function(c){ return c.id !== id; });
     _contactsSave(_contactsSelectedPid, list);
     _renderContactsList();
