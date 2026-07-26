@@ -7386,13 +7386,9 @@ document.addEventListener('DOMContentLoaded', function() {
       <p class="text-xs font-semibold text-gray-500 mb-2 mt-2">🧱 New Stock Item <span class="font-normal text-gray-400">— set min alert level</span></p>
       <div class="grid grid-cols-2 gap-2.5 mb-3">
         <input type="text" id="mat-name" placeholder="Material Name (e.g. Cement)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <input type="number" id="mat-init-qty" placeholder="Opening Stock Qty" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
         <select id="mat-category" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select>
-        <input type="text" id="mat-remark" placeholder="Remark (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <input type="text" id="mat-supplier" placeholder="Supplier Name (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
-        <input type="text" id="mat-supplier-phone" placeholder="Supplier Phone (opt)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="text" id="mat-unit" placeholder="Unit (bags, kg, nos...)" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+        <input type="number" id="mat-min-qty" placeholder="Min Stock Alert" step="any" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       </div>
       <button onclick="addMaterialItem()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">🧱 Add Material Item</button>
     </div>
@@ -8956,51 +8952,50 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="space-y-3">
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="mp-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity *</label><input type="number" id="mp-qty" placeholder="e.g. 50" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Unit</label><input type="text" id="mp-unit" placeholder="bags, kg, nos..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Total Cost (₹) *</label><input type="number" id="mp-cost" placeholder="Total amount paid" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Chalan No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-chalan" placeholder="Delivery challan no." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Vehicle No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-vehicle" placeholder="e.g. MH04AB1234" style="text-transform:uppercase" onblur="_mpVehicleAutofill()" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Size <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-size" placeholder="e.g. 20mm, 10 tyre..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="mp-qty" placeholder="e.g. 50" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Supplier Name</label><input type="text" id="mp-supplier" placeholder="Supplier / vendor name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Material Type</label><select id="mp-category" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400"></select></div>
       </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 block mb-1">📎 Bill / Receipt <span class="font-normal text-gray-400">(Optional)</span></label>
-        <div class="flex gap-2 mb-2">
-          <label class="flex-1 flex flex-col items-center gap-1 px-2 py-1.5 bg-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl cursor-pointer active:scale-95 transition-all" style="min-width:0">
-            <span style="font-size:13px;line-height:1">📷</span>
-            <span style="font-size:9px;font-weight:700;color:#4f46e5;text-align:center;line-height:1.2">Scan</span>
-            <input type="file" id="mp-bill-cam" accept="image/*" capture="environment" class="hidden" onchange="billFileSelected(event,'mp')">
-          </label>
-          <label class="flex-1 flex flex-col items-center gap-1 px-2 py-1.5 bg-amber-50 border-2 border-dashed border-amber-300 rounded-xl cursor-pointer active:scale-95 transition-all" style="min-width:0">
-            <span style="font-size:13px;line-height:1">🖼️</span>
-            <span style="font-size:9px;font-weight:700;color:#d97706;text-align:center;line-height:1.2">Gallery</span>
-            <input type="file" id="mp-bill-img" accept="image/*" class="hidden" onchange="billFileSelected(event,'mp')">
-          </label>
-          <label class="flex-1 flex flex-col items-center gap-1 px-2 py-1.5 bg-rose-50 border-2 border-dashed border-rose-300 rounded-xl cursor-pointer active:scale-95 transition-all" style="min-width:0">
-            <span style="font-size:13px;line-height:1">📄</span>
-            <span style="font-size:9px;font-weight:700;color:#e11d48;text-align:center;line-height:1.2">PDF</span>
-            <input type="file" id="mp-bill-pdf" accept="application/pdf" class="hidden" onchange="billFileSelected(event,'mp')">
-          </label>
-        </div>
-        <div id="mp-bill-preview" class="hidden">
-          <div class="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl">
-            <span id="mp-bill-icon" style="font-size:13px">📎</span>
-            <div class="flex-1 min-w-0">
-              <p id="mp-bill-name" class="text-xs font-bold text-green-700 truncate"></p>
-              <p id="mp-bill-size" class="text-[10px] text-green-500"></p>
-            </div>
-            <button onclick="clearBill('mp')" class="text-rose-400 leading-none flex-shrink-0" style="font-size:13px">✕</button>
+      <div class="grid grid-cols-2 gap-3 items-start">
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Total Cost (₹) <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="mp-cost" placeholder="Total amount paid" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div style="position:relative">
+          <label class="text-xs font-semibold text-gray-500 block mb-1">Bill <span class="font-normal text-gray-400">(opt)</span></label>
+          <button type="button" id="mp-bill-upload-btn" onclick="_toggleMpBillOptions(event)" class="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 border-2 border-dashed border-indigo-300 rounded-xl text-xs font-bold text-indigo-600 active:scale-95" style="cursor:pointer">📎 Add Bill</button>
+          <div id="mp-bill-options" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;overflow:hidden">
+            <label onclick="_toggleMpBillOptions()" class="flex items-center gap-2 px-3 py-2.5 hover:bg-indigo-50 cursor-pointer transition-all" style="border-bottom:1px solid #f3f4f6">
+              <span style="font-size:15px;line-height:1">📷</span>
+              <span style="font-size:12px;font-weight:700;color:#4f46e5">Camera</span>
+              <input type="file" id="mp-bill-cam" accept="image/*" capture="environment" class="hidden" onchange="billFileSelected(event,'mp')">
+            </label>
+            <label onclick="_toggleMpBillOptions()" class="flex items-center gap-2 px-3 py-2.5 hover:bg-amber-50 cursor-pointer transition-all" style="border-bottom:1px solid #f3f4f6">
+              <span style="font-size:15px;line-height:1">🖼️</span>
+              <span style="font-size:12px;font-weight:700;color:#d97706">Choose from Gallery</span>
+              <input type="file" id="mp-bill-img" accept="image/*" class="hidden" onchange="billFileSelected(event,'mp')">
+            </label>
+            <label onclick="_toggleMpBillOptions()" class="flex items-center gap-2 px-3 py-2.5 hover:bg-rose-50 cursor-pointer transition-all">
+              <span style="font-size:15px;line-height:1">📄</span>
+              <span style="font-size:12px;font-weight:700;color:#e11d48">Upload File</span>
+              <input type="file" id="mp-bill-pdf" accept="application/pdf,image/*" class="hidden" onchange="billFileSelected(event,'mp')">
+            </label>
           </div>
         </div>
       </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 block mb-1">📝 Remark <span class="font-normal text-gray-400">(Optional)</span></label>
-        <input type="text" id="mp-remark" placeholder="e.g. Delivered late, short by 2 bags..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
+      <div id="mp-bill-preview" class="hidden">
+        <div class="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl">
+          <span id="mp-bill-icon" style="font-size:13px">📎</span>
+          <div class="flex-1 min-w-0">
+            <p id="mp-bill-name" class="text-xs font-bold text-green-700 truncate"></p>
+            <p id="mp-bill-size" class="text-[10px] text-green-500"></p>
+          </div>
+          <button onclick="clearBill('mp')" class="text-rose-400 leading-none flex-shrink-0" style="font-size:13px">✕</button>
+        </div>
       </div>
       <button onclick="saveMatPurchase()" class="g-tor-emerald500-teal500 w-full py-2 text-white rounded-xl font-bold text-sm active:scale-95">💾 Save — Adds to Stock</button>
     </div>
   </div>
+
 </div>
 
 <!-- Material Use Modal -->
@@ -11579,13 +11574,13 @@ function qdprPhotoGridView(photos){
 var QDPR_ROW_FIELDS = {
   labour:      [{key:'category',label:'Category',type:'select',options:QDPR_WORKER_ROLES},{key:'count',label:'No.',ph:'4',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concreting, soiling of Footing 79',full:true}],
   deptWork:    [{key:'category',label:'Category',type:'select',options:QDPR_WORKER_ROLES},{key:'workers',label:'No.',ph:'1',type:'number'},{key:'floor',label:'Floor',ph:'Ground / 1st / Terrace'},{key:'workDone',label:'Work Done',ph:'Concrete around RCC pipe',full:true}],
-  matBought:   [{key:'material',label:'Material',ph:'Cement / Hammer beat'},{key:'matCategory',label:'Material Type',type:'select',options:MATERIAL_CATEGORIES},{key:'qty',label:'Qty',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Bags / Kg / Nos'},{key:'supplier',label:'Supplier Name',ph:'Supplier / Vendor'},{key:'amount',label:'Amount (₹)',ph:'0',type:'number'}],
+  matBought:   [{key:'material',label:'Material',ph:'Cement / Hammer beat'},{key:'qty',label:'Qty',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Bags / Kg / Nos'},{key:'chalanNo',label:'Chalan No',ph:'Delivery challan no.'},{key:'vehicleNo',label:'Vehicle No',ph:'e.g. MH04AB1234'},{key:'size',label:'Size',ph:'e.g. 20mm, 10 tyre...'},{key:'supplier',label:'Supplier Name',ph:'Supplier / Vendor'},{key:'amount',label:'Amount (₹)',ph:'0',type:'number'}],
   matRequired: [{key:'material',label:'Material',ph:'Binding wire / Cement'},{key:'matCategory',label:'Material Type',type:'select',options:MATERIAL_CATEGORIES},{key:'qty',label:'Qty Needed',ph:'10',type:'number'},{key:'unit',label:'Unit',ph:'Kg / Bags / Nos'}]
 };
 var QDPR_ROW_BLANKS = {
   labour:      {category:'',count:'',floor:'',workDone:''},
   deptWork:    {category:'',workers:'',floor:'',workDone:''},
-  matBought:   {material:'',matCategory:'',qty:'',unit:'',supplier:'',amount:''},
+  matBought:   {material:'',qty:'',unit:'',chalanNo:'',vehicleNo:'',size:'',supplier:'',amount:''},
   matRequired: {material:'',matCategory:'',qty:'',unit:''}
 };
 function qdprBuildRowsHTML(section){
@@ -11792,6 +11787,27 @@ function closeQdprPanel(){
 // so every project saved in the app shows up here, and every report
 // is written straight into that project's own date-wise records.
 function _qdprProjKey(pid, base){ return 'sanj_project_' + pid + '_' + base; }
+// BUGFIX (materials deleted from a QDPR report could come back from
+// another device): the generic _addTombstone()/_loadTombstones() always
+// write/read against window.currentProjectId — fine for the Materials tab
+// itself, but QDPR intentionally lets an owner file a report against ANY
+// of their projects, not just whichever one is open on screen. Using the
+// generic helpers here would silently record the tombstone under the
+// WRONG project's key whenever pid isn't the active project. These
+// pid-scoped equivalents resolve to the exact same storage key as the
+// generic ones when pid IS the active project, so behavior is unchanged
+// for the common case, and correct for the "other project" case too.
+function _qdprLoadTombstones(pid) {
+  try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, TOMB_KEY)) || '{}'); } catch(e) { return {}; }
+}
+function _qdprSaveTombstones(pid, t) {
+  try { safeLS.setItem(_qdprProjKey(pid, TOMB_KEY), JSON.stringify(t)); } catch(e) {}
+}
+function _qdprAddTombstone(pid, id, ts) {
+  if (!id) return;
+  var t = _qdprLoadTombstones(pid);
+  if (!t[id] || ts > t[id]) { t[id] = ts; _qdprSaveTombstones(pid, t); }
+}
 function qdprLoadProjAD(pid){
   try { return JSON.parse(safeLS.getItem(_qdprProjKey(pid, DB)) || '[]'); } catch(e){ return []; }
 }
@@ -11838,13 +11854,28 @@ function _qdprSyncOtherProjectToCloud(pid) {
   var key = base + '_p' + String(pid).replace(/[^a-zA-Z0-9]/g,'').slice(0,8);
   _sb.from('cloud_backups').select('data').eq('admin_id', _adminSBUser.id).eq('backup_key', key).maybeSingle().then(function(r) {
     var cloudData = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : {};
-    var tombs = (typeof _loadTombstones === 'function') ? _loadTombstones() : {};
+    // BUGFIX: this used to read tombstones via the generic _loadTombstones(),
+    // which is scoped to window.currentProjectId — wrong project's tombstone
+    // store entirely whenever pid isn't the one currently open on screen, so
+    // deletes made here (e.g. a material dropped from a report) never
+    // actually suppressed the stale remote copy. Use pid's own tombstone
+    // store, merged with whatever the cloud row already has, so deletes
+    // recorded from EITHER side survive.
+    var tombs = _mergeTombstones(_qdprLoadTombstones(pid), cloudData.tombstones || {});
     var localDb   = qdprLoadProjAD(pid);
     var mergedDb  = (typeof _mergeRecordArrays === 'function') ? _mergeRecordArrays(localDb, cloudData.db || [], tombs) : localDb;
     var localMats = qdprLoadProjMats(pid);
     var mergedMats = (typeof _mergeMaterials === 'function') ? _mergeMaterials(localMats, cloudData.mats || [], tombs) : localMats;
     cloudData.db = mergedDb;
     cloudData.mats = mergedMats;
+    // BUGFIX: tombstones were computed for the local merge above but never
+    // actually written back into the cloud row — so another device pulling
+    // this project later would never see the delete, and could resurrect
+    // the very entry this device just removed. Persist the merged set, and
+    // also save it back locally so pid's own store stays in sync with
+    // whatever the cloud already knew about.
+    cloudData.tombstones = tombs;
+    _qdprSaveTombstones(pid, tombs);
     // meta (site note/photos) is a single object, not a record array — this
     // device just edited it, so it's the newest copy; keep it as-is rather
     // than risk a stale remote object winning a field-by-field merge.
@@ -11912,7 +11943,15 @@ function _qdprSiteIdFor(pid) {
 }
 function _qdprMergeCloudIntoProject(pid, d) {
   if (!d) return;
-  var tombs = d.tombstones || {};
+  // BUGFIX: this used to take the cloud row's tombstones as the whole
+  // truth, discarding anything recorded locally (e.g. this device just
+  // deleted a material from a report on THIS project a moment ago, before
+  // its own push had a chance to reach the cloud) — a pull happening in
+  // that window could undo the local delete outright. Merge both sides
+  // (newest wins) and persist the merged set so this project's own
+  // tombstone store never regresses.
+  var tombs = _mergeTombstones(_qdprLoadTombstones(pid), d.tombstones || {});
+  _qdprSaveTombstones(pid, tombs);
   var localDb = qdprLoadProjAD(pid);
   var mergedDb = (typeof _mergeRecordArrays === 'function')
     ? _mergeRecordArrays(localDb, d.db || [], tombs)
@@ -12023,29 +12062,40 @@ function _qdprSyncMaterials(pid, report){
   if (!report) return;
   var mats = qdprLoadProjMats(pid);
   var reportId = report.__id;
+  var liveRowIds = (report.matBought||[]).filter(function(m){ return m.material && parseFloat(m.qty)>0; }).map(function(m){ return m.id; });
+
   (report.matBought||[]).forEach(function(m){
     if (!m.material || !(parseFloat(m.qty) > 0)) return;
     var nameKey = m.material.trim();
     var item = mats.find(function(x){ return (x.name||'').trim().toLowerCase() === nameKey.toLowerCase(); });
     if (!item) {
-      item = {id:'mat'+Date.now()+Math.random().toString(36).slice(2,6), name:nameKey, unit:m.unit||'', category:m.matCategory||'', minQty:0, transactions:[], created:Date.now()};
+      item = {id:'mat'+Date.now()+Math.random().toString(36).slice(2,6), name:nameKey, unit:m.unit||'', category:'', minQty:0, transactions:[], created:Date.now()};
       mats.push(item);
-    } else if (m.matCategory && !item.category) {
-      item.category = m.matCategory;
     }
+    // BUGFIX: editing an existing row's qty/cost/date is a delete-then-
+    // recreate of its transaction under the hood — tombstone the OLD copy
+    // first so a cross-device merge can't bring back the stale version.
+    (item.transactions||[]).forEach(function(t){
+      if (t.qdpr_report_id===reportId && t.qdpr_material_row===m.id && t.__id) _qdprAddTombstone(pid, 'mattxn__'+t.__id, Date.now());
+    });
     item.transactions = (item.transactions||[]).filter(function(t){ return !(t.qdpr_report_id===reportId && t.qdpr_material_row===m.id); });
     item.transactions.push(Object.assign({
       type:'purchase', qty: parseFloat(m.qty)||0, date: report.date, unit: m.unit||item.unit,
-      cost: parseFloat(m.amount)||0, supplier: m.supplier||'QDPR Entry', category: m.matCategory||item.category||'',
+      cost: parseFloat(m.amount)||0, supplier: m.supplier||'QDPR Entry',
+      chalan_no: (m.chalanNo||'').trim(), vehicle_no: (m.vehicleNo||'').trim(), size: (m.size||'').trim(),
       qdpr_report_id: reportId, qdpr_material_row: m.id
     }, (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
   });
-  // Drop any auto-synced transactions for rows that were removed from the report
-  var liveRowIds = (report.matBought||[]).filter(function(m){ return m.material && parseFloat(m.qty)>0; }).map(function(m){ return m.id; });
+  // Drop (and tombstone) any auto-synced transactions for rows that were removed from the report entirely
   mats.forEach(function(item){
-    item.transactions = (item.transactions||[]).filter(function(t){
-      return t.qdpr_report_id !== reportId || liveRowIds.indexOf(t.qdpr_material_row) !== -1;
+    var kept = [];
+    (item.transactions||[]).forEach(function(t){
+      var isThisReport = t.qdpr_report_id === reportId;
+      var stillLive = !isThisReport || liveRowIds.indexOf(t.qdpr_material_row) !== -1;
+      if (stillLive) { kept.push(t); return; }
+      if (t.__id) _qdprAddTombstone(pid, 'mattxn__'+t.__id, Date.now());
     });
+    item.transactions = kept;
   });
   qdprSaveProjMats(pid, mats);
 
@@ -12054,6 +12104,14 @@ function _qdprSyncMaterials(pid, report){
   // per-project totals, and the dashboard "Total Spends" figure update
   // automatically — exactly as a manual Materials-tab purchase would. ──
   var pAD = qdprLoadProjAD(pid);
+  // BUGFIX: this used to just .filter() out the old ledger mirrors for
+  // this report with no tombstone recorded at all — meaning a re-save
+  // that removed or changed a material row could have the OLD ledger
+  // entry silently reappear later via a cross-device cloud merge (which
+  // has no way to know it was ever intentionally removed). Tombstone
+  // every existing mirror for this report before dropping it.
+  pAD.filter(function(d){ return d.type==='material' && d.qdpr_report_id===reportId; })
+     .forEach(function(d){ if (d.__id) _qdprAddTombstone(pid, d.__id, Date.now()); });
   pAD = pAD.filter(function(d){ return !(d.type==='material' && d.qdpr_report_id===reportId); });
   (report.matBought||[]).forEach(function(m){
     if (!m.material || !(parseFloat(m.qty) > 0)) return;
@@ -12063,7 +12121,8 @@ function _qdprSyncMaterials(pid, report){
       __id: gid(), __ts: Date.now(), type:'material',
       material_name: m.material.trim(), quantity: parseFloat(m.qty)||0, unit: m.unit||'',
       cost: cost, date: report.date, supplier: m.supplier||'QDPR Entry',
-      category: m.matCategory||'', is_petty_cash:false,
+      chalan_no: (m.chalanNo||'').trim(), vehicle_no: (m.vehicleNo||'').trim(), size: (m.size||'').trim(),
+      is_petty_cash:false,
       qdpr_report_id: reportId, qdpr_material_row: m.id
     });
   });
@@ -12071,9 +12130,19 @@ function _qdprSyncMaterials(pid, report){
 }
 function _qdprRemoveMaterialsForReport(pid, reportId){
   var mats = qdprLoadProjMats(pid);
-  mats.forEach(function(item){ item.transactions = (item.transactions||[]).filter(function(t){ return t.qdpr_report_id !== reportId; }); });
+  mats.forEach(function(item){
+    var kept = [];
+    (item.transactions||[]).forEach(function(t){
+      if (t.qdpr_report_id !== reportId) { kept.push(t); return; }
+      if (t.__id) _qdprAddTombstone(pid, 'mattxn__'+t.__id, Date.now());
+    });
+    item.transactions = kept;
+  });
   qdprSaveProjMats(pid, mats);
-  var pAD = qdprLoadProjAD(pid).filter(function(d){ return !(d.type==='material' && d.qdpr_report_id===reportId); });
+  var pAD = qdprLoadProjAD(pid);
+  pAD.filter(function(d){ return d.type==='material' && d.qdpr_report_id===reportId; })
+     .forEach(function(d){ if (d.__id) _qdprAddTombstone(pid, d.__id, Date.now()); });
+  pAD = pAD.filter(function(d){ return !(d.type==='material' && d.qdpr_report_id===reportId); });
   qdprSaveProjAD(pid, pAD);
 }
 
@@ -12482,7 +12551,7 @@ function qdprReportCard(site, report){
   var dRowsBase = (report.deptWork||[]).filter(function(d){ return d.category; }).map(function(d){ return [esc(d.category), esc(d.workers), esc(d.floor), esc(d.workDone)]; });
   var dRows = dRowsBase.concat(dW>0?[['<strong>Total</strong>', dW, '', '']]:[]);
   var mRows = (report.matBought||[]).filter(function(m){ return m.material; }).map(function(m){
-    return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim(), esc(m.supplier||'—'), m.amount?fc(parseFloat(m.amount)||0):'—'];
+    return [esc(m.material), (esc(m.qty)+' '+esc(m.unit||'')).trim(), esc(m.chalanNo||'—'), esc(m.vehicleNo||'—'), esc(m.size||'—'), esc(m.supplier||'—'), m.amount?fc(parseFloat(m.amount)||0):'—'];
   });
   var reqRows = (report.matRequired||[]).filter(function(m){ return m.material; }).map(function(m){ return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim()]; });
 
@@ -12503,7 +12572,7 @@ function qdprReportCard(site, report){
     +((report.weather||report.siteNote)?('<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:9px 12px;margin-bottom:13px;display:flex;gap:8px;align-items:flex-start"><span>'+_qdprWeatherEmoji(report.weather)+'</span><div style="font-size:12.5px"><span style="font-weight:700;color:#92400E">'+esc(report.weather||'')+'</span>'+(report.siteNote?('<span style="color:#78350F"> — '+esc(report.siteNote)+'</span>'):'')+'</div></div>'):'')
     +(lRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('👷','Labour Summary')+qdprDataTable(['Category','Count','Floor','Work Done'],lRows,[1])+'</div>'):'')
     +(dRowsBase.length?('<div style="margin-bottom:13px">'+qdprSecHead('🏗️','Departmental Work')+qdprDataTable(['Category','Workers','Floor','Work Done'],dRows,[1])+'</div>'):'')
-    +(mRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('🛒','Materials Received')+qdprDataTable(['Material','Type','Qty','Supplier','Amount'],mRows,[2])+'</div>'):'')
+    +(mRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('🛒','Materials Received')+qdprDataTable(['Material','Qty','Chalan','Vehicle','Size','Supplier','Amount'],mRows,[1])+'</div>'):'')
     +(reqRows.length?('<div style="margin-bottom:13px">'+qdprSecHead('📋','Material Required')+qdprDataTable(['Material','Type','Qty'],reqRows,[2])+'</div>'):'')
     +qdprPhotoGridView(report.photos)
     +'</div></div>';
@@ -12558,7 +12627,7 @@ function openQdprForm(pid, reportId){
   };
   ['labour','deptWork','matBought','matRequired'].forEach(function(k){
     if (!qdprFormState[k] || !qdprFormState[k].length) qdprFormState[k] = [Object.assign({id:uid()}, QDPR_ROW_BLANKS[k])];
-    // Backfill any newly-added fields (matCategory/supplier/amount) missing from older saved reports
+    // Backfill any newly-added fields (chalanNo/vehicleNo/size/supplier/amount) missing from older saved reports
     qdprFormState[k] = qdprFormState[k].map(function(r){ return Object.assign({id: r.id||uid()}, QDPR_ROW_BLANKS[k], r); });
   });
   if (!qdprFormState.photos) qdprFormState.photos = [];
@@ -12687,9 +12756,9 @@ function qdprPrintSiteSectionHTML(site, report){
     html += '<div style="margin-bottom:9px">'+qdprSecHead('🏗️','Departmental Work')+qdprDataTable(['Category','Workers','Floor','Work Done'],dRows,[1])+'</div>';
   }
   var mRows = (report.matBought||[]).filter(function(m){ return m.material; }).map(function(m){
-    return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim(), esc(m.supplier||'—'), m.amount?fc(parseFloat(m.amount)||0):'—'];
+    return [esc(m.material), (esc(m.qty)+' '+esc(m.unit||'')).trim(), esc(m.chalanNo||'—'), esc(m.vehicleNo||'—'), esc(m.size||'—'), esc(m.supplier||'—'), m.amount?fc(parseFloat(m.amount)||0):'—'];
   });
-  if (mRows.length) html += '<div style="margin-bottom:9px">'+qdprSecHead('🛒','Materials Received')+qdprDataTable(['Material','Type','Qty','Supplier','Amount'],mRows,[2])+'</div>';
+  if (mRows.length) html += '<div style="margin-bottom:9px">'+qdprSecHead('🛒','Materials Received')+qdprDataTable(['Material','Qty','Chalan','Vehicle','Size','Supplier','Amount'],mRows,[1])+'</div>';
   var reqRows = (report.matRequired||[]).filter(function(m){ return m.material; }).map(function(m){ return [esc(m.material), esc(m.matCategory||'—'), (esc(m.qty)+' '+esc(m.unit||'')).trim()]; });
   if (reqRows.length) html += '<div style="margin-bottom:9px">'+qdprSecHead('📋','Material Required')+qdprDataTable(['Material','Type','Qty'],reqRows,[2])+'</div>';
   if (!lRows.length && !dRowsBase.length && !mRows.length && !reqRows.length && !(report.photos&&report.photos.length)){
@@ -13402,43 +13471,38 @@ try{
 // ============================================================
 function addMaterialItem(){
   var name=document.getElementById('mat-name').value.trim(), unit=document.getElementById('mat-unit').value.trim();
-  var initQty=parseFloat(document.getElementById('mat-init-qty').value)||0, minQty=parseFloat(document.getElementById('mat-min-qty').value)||0;
+  var minQty=parseFloat(document.getElementById('mat-min-qty').value)||0;
   var catEl=document.getElementById('mat-category'), category=catEl?catEl.value:'';
-  var remark=(document.getElementById('mat-remark')||{}).value||'';
-  var supplier=(document.getElementById('mat-supplier')||{}).value||'';
-  var supplierPhone=(document.getElementById('mat-supplier-phone')||{}).value||'';
   if (!name) { toast('Enter material name','err'); return; }
   var mats=lmat();
   // BUGFIX (duplicate materials, e.g. two separate "Cement" cards): this
   // used to always push a brand-new item, even if one with the same name
   // already existed (the QDPR sync path already guarded against this with
   // a case-insensitive name match — this form just never had the same
-  // check). Now it matches existing items the same way, and adds the
-  // opening quantity as a purchase transaction on the EXISTING item
-  // instead of creating a second, disconnected one.
+  // check). Now it matches existing items the same way, updating whichever
+  // details were left blank instead of creating a second, disconnected one.
   var existing = mats.find(function(m){ return (m.name||'').trim().toLowerCase() === name.toLowerCase(); });
   if (existing) {
-    if (initQty > 0) {
-      existing.transactions = existing.transactions || [];
-      existing.transactions.push(Object.assign({type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category||existing.category||''},
-        (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
-    }
     if (!existing.unit && unit) existing.unit = unit;
     if (!existing.category && category) existing.category = category;
     if (!existing.minQty && minQty) existing.minQty = minQty;
     smat(mats);
-    toast('"'+existing.name+'" already existed — added stock to it instead of creating a duplicate', 'ok');
+    toast('"'+existing.name+'" already existed — updated its details instead of creating a duplicate', 'ok');
   } else {
-    mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,remark:remark,supplierPhone:supplierPhone,minQty:minQty,transactions:initQty>0?[{type:'purchase',qty:initQty,date:ist(),note:'Opening stock',cost:0,supplier:supplier,category:category}]:[],created:Date.now()});
+    // New items start with zero stock and no transactions — actual
+    // quantity/cost always comes in through "📥 Received" from here on,
+    // which also captures chalan no., vehicle no., size, etc.
+    mats.push({id:'mat'+Date.now(),name:name,unit:unit,category:category,minQty:minQty,transactions:[],created:Date.now()});
     smat(mats);
-    toast('Material added','ok');
+    toast('Material added — use 📥 Received to log the first delivery','ok');
   }
-  ['mat-name','mat-unit','mat-init-qty','mat-min-qty','mat-remark','mat-supplier','mat-supplier-phone'].forEach(function(id){ document.getElementById(id).value=''; });
+  ['mat-name','mat-unit','mat-min-qty'].forEach(function(id){ document.getElementById(id).value=''; });
   if (catEl) catEl.value='';
   viewMaterials(); updateDash();
   toggleNewMaterialForm(true); // switch back to the "select material" picker
   if (typeof mobClosePanels === 'function') mobClosePanels(); // close mobile Add-sheet if open
 }
+
 
 // ── Data-quality safety net: silently merges duplicate materials (same
 // name, case/spacing-insensitive) every time the Materials tab renders —
@@ -13608,12 +13672,18 @@ function _showBillPreview(ctx){
   if(iconEl) iconEl.textContent = b.isPdf ? '📄' : '🖼️';
   if(nameEl) nameEl.textContent = b.name||'file';
   if(sizeEl) sizeEl.textContent = fmtBytes(b.size||0)+(b.isPdf?' · PDF':' · Image');
+  // Collapse the Scan/Gallery/PDF chooser back down once something's
+  // attached, and reflect that on the toggle button itself — only exists
+  // for contexts using the compact single-button uploader (e.g. 'mp').
+  var optsEl=document.getElementById(ctx+'-bill-options'); if (optsEl) optsEl.style.display='none';
+  var btnEl=document.getElementById(ctx+'-bill-upload-btn'); if (btnEl) btnEl.innerHTML='✅ Attached';
   toast('Bill attached ✓','ok');
 }
 function clearBill(ctx){
   BILLS[ctx]=null;
   var prev=document.getElementById(ctx+'-bill-preview');
   if(prev) prev.classList.add('hidden');
+  var btnEl=document.getElementById(ctx+'-bill-upload-btn'); if (btnEl) btnEl.innerHTML='📎 Add Bill';
 }
 function _saveBill(ctx, cb){
   var b=BILLS[ctx];
@@ -13628,33 +13698,109 @@ function openMatPurchaseModal(id){
   MID=id; var item=lmat().find(function(m){ return m.id===id; }); if(!item) return;
   document.getElementById('mat-modal-title').textContent='Material Received — '+item.name;
   document.getElementById('mp-date').value=ist(); document.getElementById('mp-qty').value='';
-  document.getElementById('mp-unit').value=item.unit||''; document.getElementById('mp-cost').value='';
-  // Auto-suggest supplier + remark from THIS material's last purchase entry
-  // instead of always starting blank — a supplier rarely changes between
-  // deliveries, and the remark commonly carries vehicle no. & size, which
-  // is otherwise retyped every single time. Both fields stay fully
-  // editable, this is only a starting suggestion.
+  document.getElementById('mp-cost').value='';
+  document.getElementById('mp-chalan').value=''; document.getElementById('mp-vehicle').value=''; document.getElementById('mp-size').value='';
+  // Auto-suggest supplier from THIS material's last purchase entry instead
+  // of always starting blank — a supplier rarely changes between
+  // deliveries. Stays fully editable, this is only a starting suggestion.
+  // (Vehicle no. itself is left blank on purpose — that's what the person
+  // is about to type in, which is what _mpVehicleAutofill() then uses to
+  // suggest Size/Quantity from that vehicle's last delivery. Unit and
+  // Category are never asked here at all — both are fixed once on the
+  // material itself when it's first created, not re-entered on every
+  // delivery.)
   var _mpPurchases=(item.transactions||[]).filter(function(t){ return t.type==='purchase'; });
   var _mpLast=_mpPurchases.length ? _mpPurchases[_mpPurchases.length-1] : null;
   document.getElementById('mp-supplier').value=(_mpLast&&_mpLast.supplier)||'';
-  var mpRemarkEl=document.getElementById('mp-remark'); if (mpRemarkEl) mpRemarkEl.value=(_mpLast&&_mpLast.remark)||'';
-  var mpCatEl=document.getElementById('mp-category');
-  if (mpCatEl) mpCatEl.innerHTML=_matCatOptionsHTML(item.category||'', false);
   clearBill('mp');
+  var mpBillOpts=document.getElementById('mp-bill-options'); if (mpBillOpts) mpBillOpts.style.display='none';
+  var mpBillBtn=document.getElementById('mp-bill-upload-btn'); if (mpBillBtn) mpBillBtn.innerHTML='📎 Add Bill';
   _armModalGuard('mat-purchase-modal');
   document.getElementById('mat-purchase-modal').classList.add('modal-show');
 }
+// Real dropdown (Camera / Choose from Gallery / Upload File) that opens
+// under the "Add Bill" button and closes itself on outside click or on
+// picking an option — not an inline row that stays expanded and eats
+// extra vertical space in the form.
+// FIX: this used to be position:absolute inside the modal's own
+// scrollable box. The modal box has overflow-y:auto, and per a standard
+// CSS quirk, setting only overflow-y forces overflow-x to also become a
+// clipping/scrolling container — so a dropdown positioned near the
+// bottom of a long form (right where this row sits) could render
+// effectively invisible/clipped, looking like the tap "did nothing".
+// Using position:fixed with coordinates computed from the button's own
+// on-screen position sidesteps this entirely — it's placed relative to
+// the browser viewport, not any scrollable ancestor, so it always
+// renders visibly regardless of where it sits in the form.
+function _toggleMpBillOptions(e){
+  if (e && e.stopPropagation) e.stopPropagation();
+  var el = document.getElementById('mp-bill-options');
+  var btn = document.getElementById('mp-bill-upload-btn');
+  if (!el || !btn) return;
+  var showing = el.style.display === 'block';
+  if (showing) { el.style.display = 'none'; return; }
+  var r = btn.getBoundingClientRect();
+  var estHeight = 132; // approx height of the 3-option list
+  el.style.left = 'auto';
+  el.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+  if (r.bottom + 4 + estHeight > window.innerHeight) {
+    // Not enough room below — open upward instead
+    el.style.top = 'auto';
+    el.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+  } else {
+    el.style.bottom = 'auto';
+    el.style.top = (r.bottom + 4) + 'px';
+  }
+  el.style.display = 'block';
+}
+document.addEventListener('click', function(e){
+  var dd = document.getElementById('mp-bill-options');
+  if (dd && dd.style.display === 'block' && !dd.contains(e.target) && e.target.id !== 'mp-bill-upload-btn') {
+    dd.style.display = 'none';
+  }
+});
+// Matches the typed vehicle number against this material's own delivery
+// history (case-insensitive) and, on a match, suggests Size/Quantity from
+// that vehicle's most recent delivery — a given truck usually brings the
+// same load every time, so this saves re-typing it. Only fills fields
+// that are still empty, and both stay fully editable either way.
+function _mpVehicleAutofill(){
+  var vEl = document.getElementById('mp-vehicle');
+  if (!vEl || !MID) return;
+  var v = vEl.value.trim();
+  vEl.value = v;
+  if (!v) return;
+  var item = lmat().find(function(m){ return m.id===MID; });
+  if (!item) return;
+  var matches = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v.toLowerCase(); });
+  if (!matches.length) return;
+  var latest = matches[matches.length-1];
+  var sizeEl = document.getElementById('mp-size'), qtyEl = document.getElementById('mp-qty');
+  var filledSomething = false;
+  if (sizeEl && !sizeEl.value && latest.size) { sizeEl.value = latest.size; filledSomething = true; }
+  if (qtyEl && !qtyEl.value && latest.qty) { qtyEl.value = latest.qty; filledSomething = true; }
+  if (filledSomething) toast('Auto-filled from '+v+"'s last delivery — edit if different", 'ok');
+}
 function closeMatModal(){ document.getElementById('mat-purchase-modal').classList.remove('modal-show'); }
 function saveMatPurchase(){
-  var date=document.getElementById('mp-date').value, qty=parseFloat(document.getElementById('mp-qty').value)||0;
-  var unit=document.getElementById('mp-unit').value.trim(), cost=parseFloat(document.getElementById('mp-cost').value)||0;
+  var date=document.getElementById('mp-date').value||ist(), qty=parseFloat(document.getElementById('mp-qty').value)||0;
+  var cost=parseFloat(document.getElementById('mp-cost').value)||0;
   var supplier=document.getElementById('mp-supplier').value.trim();
-  var remarkEl=document.getElementById('mp-remark'); var remark=remarkEl?remarkEl.value.trim():'';
-  var catEl=document.getElementById('mp-category'), category=catEl?catEl.value:'';
-  if(!date||!qty){ toast('Enter date and quantity','err'); return; }
+  var chalan=(document.getElementById('mp-chalan')||{}).value||'';
+  var vehicleNo=(document.getElementById('mp-vehicle')||{}).value||'';
+  var size=(document.getElementById('mp-size')||{}).value||'';
+  // Only Date + a selected material are required now — Chalan No.,
+  // Vehicle No., Size, Quantity and Amount are all optional, so a delivery
+  // can be logged (e.g. just the challan/vehicle) before the full count is
+  // in, and filled in later via "Edit" or a follow-up entry.
+  if (!date) { toast('Enter a date','err'); return; }
   var mats=lmat(), item=mats.find(function(m){ return m.id===MID; }); if(!item) return;
-  if (category && !item.category) item.category = category;
-  var txn=Object.assign({type:'purchase',qty:qty,date:date,unit:unit||item.unit,cost:cost,supplier:supplier,category:category||item.category||'',remark:remark},
+  // Unit and Category are intentionally NOT captured per delivery — both
+  // are fixed once, on the material itself (via "+ Add Material"), and
+  // only exist there for filtering/printing, not to be repeated on every
+  // single entry.
+  var txn=Object.assign({type:'purchase',qty:qty,date:date,unit:item.unit||'',cost:cost,supplier:supplier,
+      chalan_no:chalan.trim(),vehicle_no:vehicleNo.trim(),size:size.trim()},
     (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {});
   _saveBill('mp', function(key){
     txn.bill_id = key;
@@ -13751,6 +13897,13 @@ function delMatTxn(matId,idx){
     // Removing only the transaction left that ledger entry counted
     // forever. Remove the linked entry too, and refresh dash/expenses.
     if (txn && txn.stock_log_id) { del(txn.stock_log_id); AD = ld(); }
+    // BUGFIX: the transaction itself was only ever removed from the local
+    // array with .splice() — no tombstone recorded. _mergeMaterials()
+    // merges each item's transactions array by id using a 'mattxn__'
+    // tombstone prefix, so without this, a stale copy of this material
+    // synced down from another device (or the cloud's last snapshot)
+    // could silently bring the deleted transaction right back.
+    if (txn && txn.__id && typeof _addTombstone === 'function') _addTombstone('mattxn__'+txn.__id, Date.now());
     item.transactions.splice(idx,1); smat(mats);
     toast('Deleted','ok'); viewMaterials(); if (typeof viewExpenses==='function') viewExpenses(); updateDash();
   });
@@ -13831,6 +13984,9 @@ function viewMaterials(){
             +'<span style="font-size:10px;color:#6b7280">'+fd(t.date)+'</span>'
             +'<span style="font-size:10px;font-weight:700;color:'+(isP?'#047857':'#be123c')+'">'+(isP?'+':'-')+t.qty+' '+(t.unit||item.unit)+'</span>'
             +(isP&&t.cost?'<span style="font-size:10px;color:#b45309;font-weight:600">'+fc(t.cost)+'</span>':'')
+            +(isP&&t.vehicle_no?'<span style="font-size:10px;color:#0369a1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">🚚 '+esc(t.vehicle_no)+'</span>':'')
+            +(isP&&t.size?'<span style="font-size:10px;color:#0369a1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+esc(t.size)+'</span>':'')
+            +(isP&&t.chalan_no?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">Ch# '+esc(t.chalan_no)+'</span>':'')
             +(isP&&t.supplier?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+t.supplier+'</span>':'')
             +(isP&&t.remark?'<span style="font-size:10px;color:#9333ea;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">📝 '+esc(t.remark)+'</span>':'')
             +(!isP&&t.note?'<span style="font-size:10px;color:#6b7280">'+t.note+'</span>':'')
@@ -13875,7 +14031,7 @@ try{
       if (range==='yesterday' && t.date!==yesterday) return;
       if (range==='month' && (t.date||'').slice(0,7)!==thisMonth) return;
       if (filterSup && (t.supplier||'')!==filterSup) return;
-      rows.push({date:t.date||'', material:item.name, category:t.category||item.category||'', unit:t.unit||item.unit||'', qty:parseFloat(t.qty)||0, cost:parseFloat(t.cost)||0, supplier:t.supplier||''});
+      rows.push({date:t.date||'', material:item.name, category:t.category||item.category||'', unit:t.unit||item.unit||'', qty:parseFloat(t.qty)||0, cost:parseFloat(t.cost)||0, supplier:t.supplier||'', vehicleNo:t.vehicle_no||'', chalanNo:t.chalan_no||''});
     });
   });
   rows.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
@@ -13894,6 +14050,8 @@ try{
       +'<td style="padding:5px 8px;color:#6b7280">'+(r.category||'—')+'</td>'
       +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+r.qty+' '+r.unit+'</td>'
       +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicleNo||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.chalanNo||'—')+'</td>'
       +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
       +'</tr>';
   }).join('');
@@ -13925,13 +14083,15 @@ try{
     +'<th>Type</th>'
     +'<th style="text-align:center">Qty</th>'
     +'<th>Supplier</th>'
+    +'<th>Vehicle No</th>'
+    +'<th>Chalan No</th>'
     +'<th style="text-align:right">Cost</th>'
     +'</tr></thead>'
     +'<tbody>'+trs+'</tbody>'
     +'<tfoot><tr style="background:#f5f3ff">'
     +'<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="3">TOTAL</td>'
     +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalQty+'</td>'
-    +'<td></td>'
+    +'<td></td><td></td><td></td>'
     +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalCost)+'</td>'
     +'</tr></tfoot>'
     +'</table>'
