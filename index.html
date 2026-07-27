@@ -4461,6 +4461,16 @@ function doAdminSignup() { cmSendSignupOtp(); }
 var WS_COMPANY_KEY  = 'sanj_company_id';
 var WS_CNAME_KEY     = 'sanj_company_name';
 var WS_CROLE_KEY     = 'sanj_company_role';
+// BUGFIX (owner status leaking across companies): WS_CROLE_KEY used to be
+// a single flat "have I ever been confirmed as an owner" flag with no
+// record of WHICH company that applied to. An account that legitimately
+// owns Company A, but has ALSO joined Company B via a project code as a
+// plain engineer, would have WS_CROLE_KEY='owner' left over from Company
+// A — and _ownsAnyCompany() had no way to tell that it didn't apply to
+// whichever company (B) is currently active. This companion key records
+// the company id every legitimate 'owner' write actually applies to, so
+// that check can be scoped correctly. See _ownsAnyCompany() below.
+var WS_CROLE_COMPANY_KEY = 'sanj_company_role_company_id';
 var WS_CPLAN_KEY     = 'sanj_company_plan';
 var WS_PROJECT_KEY  = 'sanj_project_id';
 var WS_PNAME_KEY     = 'sanj_project_name';
@@ -4568,16 +4578,18 @@ function _wsStart(user, email, onDone) {
             window._wsCompanyId = storedCompanyId;
             // BUGFIX: this branch only runs when get_my_companies() already
             // returned ZERO rows — i.e. this account is guaranteed NOT to
-            // own any company, only to be a joined member of one. So
-            // proj.role_name (a per-project field already known to be an
-            // unreliable label — see _applyPermState's comments) saying
-            // 'owner' here can only ever be a mislabeling bug, never a
-            // legitimate case. Never let it overwrite the company-level
-            // role key with 'owner' — that's what let a joined engineer's
-            // header leak the 👑 Owner button and Partner/Investment
-            // Tracker.
-            var _resumeSafeRole = (proj.role_name === 'owner') ? '' : proj.role_name;
-            safeLS.setItem(WS_CROLE_KEY, _resumeSafeRole || safeLS.getItem(WS_CROLE_KEY) || '');
+            // own any company, only to be a joined member of one. It used
+            // to write proj.role_name into WS_CROLE_KEY (a per-project
+            // field already known to be an unreliable label — see
+            // _applyPermState's comments), which could say 'owner' for a
+            // non-owner and leak the 👑 Owner button / Partner Investment
+            // Tracker. Now WS_CROLE_KEY is never touched here at all —
+            // it's company-scoped (see WS_CROLE_COMPANY_KEY) and reserved
+            // exclusively for the confirmed-owner path
+            // (_wsSelectCompanyConfirmed), so a stale value from a
+            // DIFFERENT company this account owns can't leak in here
+            // either, and _applyPermState's own demotion check catches
+            // proj.role_name itself being wrong.
             _wsSelectProject(proj);
           } else {
             // Genuinely no longer a member (removed, project deleted, or
@@ -5221,6 +5233,7 @@ function _wsSelectCompanyConfirmed(c) {
   safeLS.setItem(WS_COMPANY_KEY, c.company_id);
   safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
   safeLS.setItem(WS_CROLE_KEY, c.role_name || 'owner');
+  safeLS.setItem(WS_CROLE_COMPANY_KEY, c.company_id || '');
   safeLS.setItem(WS_CPLAN_KEY, c.plan_tier || '');
   // Fixes Sales Manager / Share Project / Cross-Device Sharing / PO
   // Approvals being blocked for genuinely paid Enterprise owners — those
@@ -6503,7 +6516,7 @@ function _buildDashCharts() {
                          : item.value);
     return '<div style="margin-bottom:10px">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">'
-      + '<span style="font-size:10.5px;font-weight:700;color:#e2e8f0">'+item.label+'</span>'
+      + '<span style="font-size:10.5px;font-weight:700;color:#e2e8f0">'+_esc(item.label)+'</span>'
       + '<span style="font-size:10.5px;font-weight:800;color:'+item.color+'">'+disp+'</span>'
       + '</div>'
       + '<div style="height:8px;background:rgba(255,255,255,0.1);border-radius:99px;overflow:hidden">'
@@ -10364,7 +10377,7 @@ function _buildColorSwatches(current) {
   if (!el) return;
   el.innerHTML = _HEADER_COLORS.map(function(c, i) {
     var selected = c.v === current;
-    return '<div data-ci="'+i+'" title="'+c.label+'" style="'
+    return '<div data-ci="'+i+'" title="'+_esc(c.label)+'" style="'
       +'width:30px;height:30px;border-radius:8px;cursor:pointer;flex-shrink:0;'
       +'background:'+c.v+';'
       +'border:2.5px solid '+(selected?'#1e293b':'rgba(0,0,0,0.12)')+';'
@@ -11231,8 +11244,8 @@ function viewDaily() {
         var remaining = currentStock;
         var isLow = item.minQty > 0 && remaining <= item.minQty;
         var nameCell = isLow
-          ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:6px;padding:2px 7px;font-size:11px">'+item.name+'</span> <span style="background:#fef08a;color:#92400e;font-weight:700;border-radius:4px;padding:1px 5px;font-size:9px">LOW</span>'
-          : '<span style="font-size:11px;font-weight:600;color:#374151">'+item.name+'</span>';
+          ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:6px;padding:2px 7px;font-size:11px">'+_esc(item.name)+'</span> <span style="background:#fef08a;color:#92400e;font-weight:700;border-radius:4px;padding:1px 5px;font-size:9px">LOW</span>'
+          : '<span style="font-size:11px;font-weight:600;color:#374151">'+_esc(item.name)+'</span>';
         var remCell = isLow
           ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:6px;padding:2px 6px;font-size:11px">'+remaining+' '+item.unit+'</span>'
           : '<span style="color:#059669;font-weight:700;font-size:11px">'+remaining+' '+item.unit+'</span>';
@@ -11618,7 +11631,7 @@ function qdprBuildRowsHTML(section){
       control = '<input type="'+(f.type||'text')+'" value="'+esc(row[f.key]||'')+'" placeholder="'+(f.ph||'')+'" oninput="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">';
     }
     return '<div style="'+(f.full?'grid-column:1/-1':'')+'">'
-      +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">'+f.label+'</label>'
+      +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">'+_esc(f.label)+'</label>'
       +control
       +'</div>';
   }
@@ -12861,8 +12874,8 @@ function _renderMwWorkerList() {
       +'<div style="width:18px;height:18px;border-radius:5px;border:2px solid '+(isSel?'#6366f1':'#d1d5db')+';background:'+(isSel?'#6366f1':'white')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
       +(isSel?'<span style="color:white;font-size:11px;font-weight:900">✓</span>':'')+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<p style="font-size:12px;font-weight:800;color:'+(isActive?'#1f2937':'#9ca3af')+'">'+w.name+(isActive?'':' <span style="font-size:9px;color:#ef4444">[Inactive]</span>')+'</p>'
-      +'<p style="font-size:9.5px;color:#6b7280">'+w.category+' · '+fc(w.hourly_wage||0)+'/hr'+(parseFloat(w.ot_rate)>0?' | OT: '+fc(w.ot_rate)+'/hr':'')+'</p>'
+      +'<p style="font-size:12px;font-weight:800;color:'+(isActive?'#1f2937':'#9ca3af')+'">'+_esc(w.name)+(isActive?'':' <span style="font-size:9px;color:#ef4444">[Inactive]</span>')+'</p>'
+      +'<p style="font-size:9.5px;color:#6b7280">'+_esc(w.category)+' · '+fc(w.hourly_wage||0)+'/hr'+(parseFloat(w.ot_rate)>0?' | OT: '+fc(w.ot_rate)+'/hr':'')+'</p>'
       +'</div>'
       +'<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;background:'+(isActive?'#d1fae5':'#fee2e2')+';color:'+(isActive?'#065f46':'#991b1b')+';flex-shrink:0">'+(isActive?'Active':'Inactive')+'</span>'
       +'</div>';
@@ -13065,10 +13078,10 @@ function viewWorkers() {
           +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
           +'<div style="width:40px;height:40px;border-radius:50%;background:'+(w.active===false?'linear-gradient(135deg,#9ca3af,#6b7280)':'linear-gradient(135deg,#6366f1,#8b5cf6)')+';display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:16px;flex-shrink:0;box-shadow:0 4px 12px rgba(99,102,241,0.4)">'+(w.name&&w.name.length?w.name[0].toUpperCase():'?')+'</div>'
           +'<div style="flex:1;min-width:0">'
-          +'<p style="font-weight:800;color:#1f2937;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+w.name+(w.is_staff?' <span style="font-size:8.5px;color:#7c3aed;font-weight:800;background:#f5f3ff;padding:1px 5px;border-radius:99px">STAFF</span>':'')+(w.active===false?' <span style="font-size:9px;color:#ef4444;font-weight:700">[Inactive]</span>':'')+'</p>'
+          +'<p style="font-weight:800;color:#1f2937;font-size:14px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(w.name)+(w.is_staff?' <span style="font-size:8.5px;color:#7c3aed;font-weight:800;background:#f5f3ff;padding:1px 5px;border-radius:99px">STAFF</span>':'')+(w.active===false?' <span style="font-size:9px;color:#ef4444;font-weight:700">[Inactive]</span>':'')+'</p>'
           +(w.is_staff
-            ? '<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.monthly_salary)+'/month (fixed)'+(w.team_name?' &middot; '+w.team_name:'')+'</p>'
-            : '<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.hourly_wage)+'/hr'+(w.team_name?' &middot; '+w.team_name:'')+'</p>'
+            ? '<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.monthly_salary)+'/month (fixed)'+(w.team_name?' &middot; '+_esc(w.team_name):'')+'</p>'
+            : '<p style="font-size:9.5px;color:#6b7280;line-height:1;margin-top:2px">'+fc(w.hourly_wage)+'/hr'+(w.team_name?' &middot; '+_esc(w.team_name):'')+'</p>'
               +(w.ot_rate&&parseFloat(w.ot_rate)>0?'<p style="font-size:9px;color:#7c3aed;font-weight:700;line-height:1;margin-top:1px">OT: '+fc(w.ot_rate)+'/hr</p>':''))
           +'</div>'
           +'<button onclick="toggleCal(\''+w.__id+'\')" style="font-size:11px;padding:0 12px;background:linear-gradient(135deg,#e0e7ff,#c7d2fe);color:#4338ca;border:none;border-radius:9px;cursor:pointer;font-weight:700;box-shadow:0 1px 3px rgba(99,102,241,0.4),0 1px 2px rgba(0,0,0,0.1);white-space:nowrap;flex-shrink:0">📅 Calendar</button>'
@@ -13921,7 +13934,7 @@ function viewMaterials(){
     var curSel = filterEl.value;
     filterEl.innerHTML = '<option value="">📦 All Materials (Stock)</option>' +
       mats.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); })
-        .map(function(m){ return '<option value="'+m.id+'">'+m.name+'</option>'; }).join('');
+        .map(function(m){ return '<option value="'+m.id+'">'+_esc(m.name)+'</option>'; }).join('');
     if (curSel && mats.some(function(m){ return m.id===curSel; })) filterEl.value = curSel;
   }
   // Populate / refresh the "Select Material to Add Entry" quick-pick dropdown
@@ -13929,7 +13942,7 @@ function viewMaterials(){
   if (pickEl) {
     pickEl.innerHTML = '<option value="">— Choose a material —</option>' +
       mats.slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); })
-        .map(function(m){ return '<option value="'+m.id+'">'+m.name+(m.unit?' ('+m.unit+')':'')+'</option>'; }).join('');
+        .map(function(m){ return '<option value="'+m.id+'">'+_esc(m.name)+(m.unit?' ('+m.unit+')':'')+'</option>'; }).join('');
   }
   // Populate / refresh category filter (distinct categories in use)
   var catFilterEl = document.getElementById('mat-print-category');
@@ -13960,7 +13973,7 @@ function viewMaterials(){
     return '<div style="background:white;border-radius:12px;overflow:hidden;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
       +'<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #f3f4f6">'
       +'<div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,'+(low?'#ef4444,#f43f5e':'#6366f1,#8b5cf6')+');display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:13px">'+(item.name&&item.name.length?item.name[0].toUpperCase():'?')+'</div>'
-      +'<div style="flex:1;min-width:0"><p style="font-weight:700;color:#1f2937;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+(item.category?' <span style="font-size:9px;background:#eef2ff;color:#4f46e5;padding:1px 5px;border-radius:999px;font-weight:600">'+esc(item.category)+'</span>':'')+(low?' <span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:999px">LOW</span>':'')+'</p>'
+      +'<div style="flex:1;min-width:0"><p style="font-weight:700;color:#1f2937;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(item.name)+(item.category?' <span style="font-size:9px;background:#eef2ff;color:#4f46e5;padding:1px 5px;border-radius:999px;font-weight:600">'+esc(item.category)+'</span>':'')+(low?' <span style="font-size:9px;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:999px">LOW</span>':'')+'</p>'
       +'<p style="font-size:10px"><span style="font-weight:600;color:'+(low?'#dc2626':'#059669')+'">Stock: '+bal+' '+item.unit+'</span> &nbsp;|&nbsp; Bought: '+tPQ+' &nbsp;|&nbsp; <span style="color:#b45309;font-weight:600">'+fc(tC)+'</span></p></div>'
       +'<div style="display:flex;gap:4px;flex-shrink:0">'
       +'<button onclick="openMatPurchaseModal(\''+item.id+'\')" style="font-size:10px;padding:0 12px;background:#10b981;color:white;border:none;border-radius:7px;cursor:pointer;font-weight:700">📥 Received</button>'
@@ -13981,9 +13994,9 @@ function viewMaterials(){
             +(isP&&t.vehicle_no?'<span style="font-size:10px;color:#0369a1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">🚚 '+esc(t.vehicle_no)+'</span>':'')
             +(isP&&t.size?'<span style="font-size:10px;color:#0369a1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+esc(t.size)+'</span>':'')
             +(isP&&t.chalan_no?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">Ch# '+esc(t.chalan_no)+'</span>':'')
-            +(isP&&t.supplier?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+t.supplier+'</span>':'')
+            +(isP&&t.supplier?'<span style="font-size:10px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">'+_esc(t.supplier)+'</span>':'')
             +(isP&&t.remark?'<span style="font-size:10px;color:#9333ea;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">📝 '+esc(t.remark)+'</span>':'')
-            +(!isP&&t.note?'<span style="font-size:10px;color:#6b7280">'+t.note+'</span>':'')
+            +(!isP&&t.note?'<span style="font-size:10px;color:#6b7280">'+_esc(t.note)+'</span>':'')
             +'<div style="margin-left:auto;display:flex;gap:3px;flex-shrink:0">'
             +(isP&&(t.bill_id||t.bill)?'<button onclick="viewBill(\''+( t.bill_id||t.bill)+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:3px;cursor:pointer">Bill</button>':'')
             +'<button onclick="delMatTxn(\''+item.id+'\','+idx+')" style="font-size:10px;padding:0 12px;background:white;border:1px solid #e5e7eb;color:#f43f5e;border-radius:3px;cursor:pointer">X</button>'
@@ -14040,7 +14053,7 @@ try{
     totalQty+=r.qty; totalCost+=r.cost;
     return '<tr>'
       +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
-      +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+r.material+'</td>'
+      +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+_esc(r.material)+'</td>'
       +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+r.qty+' '+r.unit+'</td>'
       +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicleNo||'—')+'</td>'
       +'<td style="padding:5px 8px;color:#0369a1">'+(r.size||'—')+'</td>'
@@ -14180,7 +14193,7 @@ function viewTools(){
   var ta=document.getElementById('tool-assignments');
   if (ta) ta.innerHTML=asgn.length
     ? asgn.map(function(a){ return '<div style="padding:8px 10px;background:'+(a.returned?'#f0fdf4':'#eff6ff')+';border-radius:10px;border:1px solid '+(a.returned?'#bbf7d0':'#bfdbfe')+';margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
-        '<div><p style="font-weight:700;color:#374151;font-size:12px">'+a.tool_name+' <span style="font-weight:400;font-size:10px;color:#6b7280">×'+(a.qty||1)+'</span></p><p style="font-size:10px;color:#9ca3af">👷 '+a.worker_name+' · '+fd(a.date)+'</p></div>'+
+        '<div><p style="font-weight:700;color:#374151;font-size:12px">'+_esc(a.tool_name)+' <span style="font-weight:400;font-size:10px;color:#6b7280">×'+(a.qty||1)+'</span></p><p style="font-size:10px;color:#9ca3af">👷 '+a.worker_name+' · '+fd(a.date)+'</p></div>'+
         (a.returned?'<span style="font-size:10px;font-weight:700;color:#059669;background:#dcfce7;padding:2px 8px;border-radius:6px">Returned</span>':'<button onclick="returnTool(\''+a.__id+'\')" style="font-size:10px;padding:0 12px;background:#dbeafe;color:#1d4ed8;border:none;border-radius:6px;cursor:pointer;font-weight:700">Return</button>')+
         '</div>'; }).join('')
     : '<p style="text-align:center;color:#9ca3af;font-size:12px;padding:12px">No assignments yet</p>';
@@ -14436,7 +14449,7 @@ function printRentalByClient(){
         var amt = g.days * g.rate * g.qty;
         mBowExp += amt; grandExp += amt;
         out += '<tr>'
-          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+g.name+'</td>'
+          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+_esc(g.name)+'</td>'
           +'<td style="text-align:center;font-weight:600;padding:5px 8px;font-size:12px">'+g.qty+'</td>'
           +'<td style="text-align:center;color:#4f46e5;font-weight:700;padding:5px 8px;font-size:12px">'+fc(g.rate)+'</td>'
           +'<td style="text-align:center;color:#6b7280;padding:5px 8px;font-size:12px">'+fd(g.start)+'</td>'
@@ -14479,7 +14492,7 @@ function printRentalByClient(){
         var amt = g.days * g.rate * g.qty;
         mGivInc += amt; grandInc += amt;
         out += '<tr>'
-          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+g.name+'</td>'
+          +'<td style="font-weight:700;color:#1f2937;padding:5px 10px;font-size:12px">'+_esc(g.name)+'</td>'
           +'<td style="text-align:center;font-weight:600;padding:5px 8px;font-size:12px">'+g.qty+'</td>'
           +'<td style="text-align:center;color:#4f46e5;font-weight:700;padding:5px 8px;font-size:12px">'+fc(g.rate)+'</td>'
           +'<td style="text-align:center;color:#6b7280;padding:5px 8px;font-size:12px">'+fd(g.start)+'</td>'
@@ -14685,7 +14698,7 @@ return '<div style="background:white;border-radius:16px;padding:14px;box-shadow:
 +'<div class="team-stat-chip" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:10px;padding:8px;text-align:center;box-shadow:0 2px 7px rgba(0,0,0,0.13),0 1px 3px rgba(0,0,0,0.08)"><p style="font-size:9px;color:#d97706;font-weight:700">Advances</p><p style="font-size:14px;font-weight:800;color:#b45309">'+fc(ta2)+'</p></div>'
 +'<div class="team-stat-chip" style="background:'+(bal>=0?'linear-gradient(135deg,#f0fdf4,#dcfce7)':'linear-gradient(135deg,#fff1f2,#ffe4e6)')+';border-radius:10px;padding:8px;text-align:center;box-shadow:0 2px 7px rgba(0,0,0,0.13),0 1px 3px rgba(0,0,0,0.08)"><p style="font-size:9px;color:'+(bal>=0?'#059669':'#dc2626')+';font-weight:700">Balance</p><p style="font-size:14px;font-weight:800;color:'+(bal>=0?'#047857':'#be123c')+'">'+fc(bal)+'</p></div>'
 +'</div>'
-+(tw.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px;margin-bottom:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Team ('+tw.length+')</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">'+tw.map(function(w){ return '<div class="team-worker-chip" style="background:white;border-radius:11px;padding:10px 11px;box-shadow:0 4px 14px rgba(0,0,0,0.26),0 1px 5px rgba(0,0,0,0.16)"><p style="font-weight:800;color:#374151;font-size:13px;line-height:1.2">'+w.name+'</p><p style="font-size:11px;color:#6b7280;margin-top:2px">'+w.category+' · '+fc(w.hourly_wage)+'/hr</p></div>'; }).join('')+'</div></div>' : '')
++(tw.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px;margin-bottom:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Team ('+tw.length+')</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">'+tw.map(function(w){ return '<div class="team-worker-chip" style="background:white;border-radius:11px;padding:10px 11px;box-shadow:0 4px 14px rgba(0,0,0,0.26),0 1px 5px rgba(0,0,0,0.16)"><p style="font-weight:800;color:#374151;font-size:13px;line-height:1.2">'+_esc(w.name)+'</p><p style="font-size:11px;color:#6b7280;margin-top:2px">'+_esc(w.category)+' · '+fc(w.hourly_wage)+'/hr</p></div>'; }).join('')+'</div></div>' : '')
 +(pays.length ? '<div style="background:#f9fafb;border-radius:10px;padding:8px"><p style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">Advances ('+mlabel(VM)+')</p><table style="width:100%;font-size:11px;border-collapse:collapse"><tbody>'
 +pays.sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(p){ return '<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:4px 6px;color:#6b7280">'+fd(p.date)+'</td><td style="padding:4px 6px;text-align:right;font-weight:600">'+fc(p.payment)+'</td><td style="padding:4px 6px;text-align:center"><button onclick="delCTPay(\''+p.__id+'\')" style="font-size:10px;padding:0 12px;background:#fee2e2;color:#dc2626;border:none;border-radius:4px;cursor:pointer">Del</button></td></tr>'; }).join('')
 +'</tbody><tfoot><tr style="background:#fefce8"><td style="padding:5px 6px;font-weight:700;color:#b45309">Total</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#b45309">'+fc(cP)+'</td><td></td></tr></tfoot></table></div>'
@@ -14874,7 +14887,7 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:14px;overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
     +'<div style="'+leftStyle+'">'+logoHtml+'</div>'
     +'<div style="text-align:center;flex:1;padding:0 12px"><p style="font-size:16px;font-weight:900;color:white;line-height:1">'+company+'</p>'
-    +(showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+prof.address+'</p>' : (!showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:3px">'+prof.address+'</p>' : ''))
+    +(showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+_esc(prof.address)+'</p>' : (!showEngineer && prof.address ? '<p style="font-size:9px;color:rgba(255,255,255,0.7);margin-top:3px">'+_esc(prof.address)+'</p>' : ''))
     +(showEngineer && prof.engineer ? '<p style="font-size:10px;color:rgba(255,255,255,0.85);margin-top:2px">'+prof.engineer+'</p>' : '')
     +'</div><div style="text-align:right;flex-shrink:0">'+(rightHtml||defaultRight)+'</div></div>';
 }
@@ -14948,7 +14961,7 @@ var _poLogoSrc = companyLogoSrc || 'https://cdn.jsdelivr.net/gh/8anjeev/Sanjinee
 var _poLogoSz = _isUserLogo2 ? '44px' : '88px';
 var logoHtml = '<img class="logo" src="'+_poLogoSrc+'" style="width:'+_poLogoSz+';height:'+_poLogoSz+';object-fit:contain;display:block;background:transparent;border-radius:0;" onerror="this.style.display=\'none\'">';
 return '<div class="hdr" style="border-bottom:3px solid '+solidColor+'"><div style="display:flex;align-items:center;gap:12px">'+logoHtml+'<div><div class="cn" style="color:'+solidColor+'">app.sanjineer.in</div><div class="csub" style="color:'+solidColor+'">Site Manager</div></div></div>'
-+'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+(p.company||'')+'</div>'+(p.address?'<div style="font-size:10px;color:#6b7280;margin-top:3px;font-weight:400">'+p.address+'</div>':'')+'</div>'
++'<div style="flex:1;padding:0 12px;text-align:center"><div class="hcname">'+(p.company||'')+'</div>'+(p.address?'<div style="font-size:10px;color:#6b7280;margin-top:3px;font-weight:400">'+_esc(p.address)+'</div>':'')+'</div>'
 +'<div><div class="rt">'+title+'</div><div class="rd">'+sub+'</div><div class="rp">'+now.toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})+'</div></div></div>';
 }
 // ── Print Authority Slots ─────────────────────────────────────
@@ -15207,7 +15220,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
     var remaining = currentStock;
     var isLow = item.minQty > 0 && remaining <= item.minQty;
     var nameCell = isLow
-      ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:5px;padding:2px 6px">'+item.name+'</span> <span style="background:#fef08a;color:#92400e;font-weight:700;border-radius:4px;padding:1px 5px;font-size:9px">LOW</span>'
+      ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:5px;padding:2px 6px">'+_esc(item.name)+'</span> <span style="background:#fef08a;color:#92400e;font-weight:700;border-radius:4px;padding:1px 5px;font-size:9px">LOW</span>'
       : item.name;
     var remCell = isLow
       ? '<span style="background:#fee2e2;color:#dc2626;font-weight:800;border-radius:5px;padding:2px 6px">'+remaining+' '+item.unit+'</span>'
@@ -15243,7 +15256,7 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
       +'<table><thead><tr><th style="width:70px;text-align:center">Item No.</th><th>Description</th><th style="width:90px;text-align:center">Qty Today</th></tr></thead><tbody>'
       +tItems.map(function(x){
         return '<tr><td style="text-align:center;font-weight:800;color:#4f46e5;padding:5px 8px">'+x.no+'</td>'
-          +'<td style="padding:5px 8px;font-weight:600">'+x.desc+'</td>'
+          +'<td style="padding:5px 8px;font-weight:600">'+_esc(x.desc)+'</td>'
           +'<td style="text-align:center;padding:5px 8px;font-weight:800;color:#059669">'+x.qty+(x.unit?' '+x.unit:'')+'</td></tr>';
       }).join('')
       +'</tbody></table></div>';
@@ -15309,18 +15322,18 @@ if (isStaff) {
   var cL=allAtt.filter(function(a){return a.status==='L';}).length;
   var stColor={P:'#059669',A:'#dc2626',HD:'#d97706',L:'#1d4ed8'};
 
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+worker.name+'</title><style>'+pcs()+'\n'
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+_esc(worker.name)+'</title><style>'+pcs()+'\n'
   +'body{font-size:12px}*{font-family:\'Outfit\',Arial,sans-serif}'
   +'table{width:100%;border-collapse:collapse}'
   +'th{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:4px 6px;font-weight:700;font-size:12px;text-align:left}'
   +'td{padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:400}'
   +'tfoot td{background:#f0f4ff;font-weight:700;font-size:12px}'
   +'</style></head><body>'
-  +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance \u2014 '+worker.name+'</span><button class="bp" onclick="window.print()">\u2756 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
+  +'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance \u2014 '+_esc(worker.name)+'</span><button class="bp" onclick="window.print()">\u2756 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
   +'<div class="content">'
   +_pdfHeader('app.sanjineer.in',company,'',
-    '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+worker.name+'</p>'
-    +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+worker.category+'</p>'
+    '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+_esc(worker.name)+'</p>'
+    +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+_esc(worker.category)+'</p>'
     +'<p style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px">'+mL+'</p>'
     +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Total Present: '+cP+'</p>'
   )
@@ -15360,18 +15373,18 @@ totalHrs+=hrs; totalOtHrs+=otHrs; totalAdv+=adv; totalPay+=pay;
 var dailyWage=(parseFloat(worker.hourly_wage)||0)*8;
 var bal=totalPay-totalAdv;
 
-var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+worker.name+'</title><style>'+pcs()+'\n'
+var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Attendance \u2014 '+_esc(worker.name)+'</title><style>'+pcs()+'\n'
 +'body{font-size:12px}*{font-family:\'Outfit\',Arial,sans-serif}'
 +'table{width:100%;border-collapse:collapse}'
 +'th{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;padding:4px 6px;font-weight:700;font-size:12px;text-align:left}'
 +'td{padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:400}'
 +'tfoot td{background:#f0f4ff;font-weight:700;font-size:12px}'
 +'</style></head><body>'
-+'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance \u2014 '+worker.name+'</span><button class="bp" onclick="window.print()">\u2756 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
++'<div class="bar"><button class="bb" onclick="window.close()">← Back</button><span style="flex:1;font-weight:700">Attendance \u2014 '+_esc(worker.name)+'</span><button class="bp" onclick="window.print()">\u2756 Print</button><button class="bx" onclick="window.close()">✕</button></div>'
 +'<div class="content">'
 +_pdfHeader('app.sanjineer.in',company,'',
-  '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+worker.name+'</p>'
-  +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+worker.category+(worker.team_name?' &middot; '+worker.team_name:'')+'</p>'
+  '<p style="font-size:17px;font-weight:900;color:white;line-height:1">'+_esc(worker.name)+'</p>'
+  +'<p style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;font-weight:700">'+_esc(worker.category)+(worker.team_name?' &middot; '+_esc(worker.team_name):'')+'</p>'
   +'<p style="font-size:11px;color:#fde68a;margin-top:3px;font-weight:700">Reg: '+fc((parseFloat(worker.hourly_wage)||0)*8)+'/day'+(parseFloat(worker.ot_rate)>0?' &nbsp;|&nbsp; OT: '+fc(parseFloat(worker.ot_rate))+'/hr':'')+'</p>'
   +'<p style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px">'+mL+'</p>'
 )
@@ -15455,7 +15468,7 @@ var bal=pay-adv;
 var hrsDisplay=otHrs>0?hrs.toFixed(1)+'+'+otHrs.toFixed(1)+'h':hrs.toFixed(1)+'h';
 tTeamPay+=pay; tTeamAdv+=adv;
 workerRows+='<tr>'
-+'<td style="padding:5px 8px;font-size:11px;font-weight:600;color:#1f2937">'+w.name+' <span style="font-size:10px;font-weight:400;color:#6b7280">('+w.category+')</span></td>'
++'<td style="padding:5px 8px;font-size:11px;font-weight:600;color:#1f2937">'+_esc(w.name)+' <span style="font-size:10px;font-weight:400;color:#6b7280">('+_esc(w.category)+')</span></td>'
 +'<td style="text-align:center;padding:5px 8px;font-size:11px">'+days+'</td>'
 +'<td style="text-align:center;padding:5px 8px;font-size:11px;color:#4f46e5;font-weight:700">'+hrsDisplay+'</td>'
 +'<td style="text-align:right;padding:5px 8px;font-size:11px;font-weight:700;color:#059669">'+fc(pay)+'</td>'
@@ -15823,11 +15836,11 @@ function renderMachSessions(d){
     sessions.map(function(s){
       return '<div class="border border-gray-100 rounded-xl p-2.5 mb-2">'+
         '<div class="flex justify-between items-start">'+
-        '<div><p class="font-bold text-gray-800 text-sm">⚙️ '+s.name+'</p>'+(s.operator?'<p class="text-xs text-gray-500">👷 '+s.operator+'</p>':'')+'</div>'+
+        '<div><p class="font-bold text-gray-800 text-sm">⚙️ '+_esc(s.name)+'</p>'+(s.operator?'<p class="text-xs text-gray-500">👷 '+_esc(s.operator)+'</p>':'')+'</div>'+
         '<button onclick="delMachSession(\''+d+'\',\''+s.id+'\')" class="text-rose-400 leading-none" style="font-size:13px">✕</button></div>'+
         '<div class="flex gap-3 mt-1 text-xs text-gray-500">'+
         (s.start?'<span>🕐 '+s.start+(s.end?' – '+s.end:'')+'</span>':'')+(s.hours?'<span>⏱ '+s.hours.toFixed(1)+'h</span>':'')+(s.cost?'<span class="text-emerald-600 font-bold">'+fc(s.cost)+'</span>':'')+
-        '</div>'+(s.notes?'<p class="text-xs text-gray-400 mt-1">📝 '+s.notes+'</p>':'')+
+        '</div>'+(s.notes?'<p class="text-xs text-gray-400 mt-1">📝 '+_esc(s.notes)+'</p>':'')+
         '</div>';
     }).join('');
 }
@@ -15880,7 +15893,7 @@ function renderMachMonthly(){
   var rows=Object.values(machMap).map(function(m2){
     total.sessions+=m2.sessions;total.hours+=m2.hours;total.cost+=m2.cost;
     return '<div class="border border-gray-100 rounded-xl p-2.5 mb-2 flex justify-between items-center">'+
-      '<div><p class="font-bold text-gray-800 text-sm">⚙️ '+m2.name+'</p><p class="text-xs text-gray-500">👷 '+m2.operator+' · '+m2.sessions+' sessions · '+m2.hours.toFixed(1)+'h</p></div>'+
+      '<div><p class="font-bold text-gray-800 text-sm">⚙️ '+_esc(m2.name)+'</p><p class="text-xs text-gray-500">👷 '+_esc(m2.operator)+' · '+m2.sessions+' sessions · '+m2.hours.toFixed(1)+'h</p></div>'+
       '<p class="font-black text-emerald-700">'+fc(m2.cost)+'</p></div>';
   });
   rows.push('<div class="rounded-xl p-2.5 flex justify-between items-center" style="background:linear-gradient(135deg,#1e1b4b,#312e81)">'+
@@ -15909,7 +15922,7 @@ try{
     var mC=list.reduce(function(a,s){return a+(parseFloat(s.cost)||0);},0);
     var rows=list.map(function(s){
       return '<tr>'
-        +'<td style="padding:4px 8px;font-weight:700;color:#1f2937">'+s.name+'</td>'
+        +'<td style="padding:4px 8px;font-weight:700;color:#1f2937">'+_esc(s.name)+'</td>'
         +'<td style="padding:4px 8px;color:#4f46e5;font-weight:600">'+(s.operator||'—')+'</td>'
         +'<td style="padding:4px 8px;text-align:center">'+(s.start||'—')+(s.end?' – '+s.end:'')+'</td>'
         +'<td style="padding:4px 8px;text-align:center;font-weight:700;color:#059669">'+fhm(parseFloat(s.hours)||0)+'</td>'
@@ -15975,11 +15988,11 @@ try{
       return '<tr>'
         +'<td style="padding:4px 8px;font-weight:600;color:#374151">'+fd(r.date)+'</td>'
         +'<td style="padding:4px 8px;font-weight:700;color:#1f2937">'+mName+'</td>'
-        +'<td style="padding:4px 8px;color:#4f46e5;font-weight:600">'+r.operator+'</td>'
+        +'<td style="padding:4px 8px;color:#4f46e5;font-weight:600">'+_esc(r.operator)+'</td>'
         +'<td style="padding:4px 8px;text-align:center">'+(r.start+(r.end?' – '+r.end:''))+'</td>'
         +'<td style="padding:4px 8px;text-align:center;font-weight:700;color:#059669">'+fhm(r.hours)+'</td>'
         +'<td style="padding:4px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
-        +'<td style="padding:4px 8px;color:#6b7280;font-size:11px">'+r.notes+'</td>'
+        +'<td style="padding:4px 8px;color:#6b7280;font-size:11px">'+_esc(r.notes)+'</td>'
         +'</tr>';
     }).join('');
     return '<div style="margin-bottom:14px;border:1.5px solid #e0e7ff;border-radius:10px;overflow:hidden">'
@@ -16092,7 +16105,7 @@ function renderDrawings(){
       '<div class="flex justify-between items-start">'+
       '<div class="flex-1 min-w-0">'+
       '<div class="flex items-center gap-2 mb-1"><span style="background:'+col+'20;color:'+col+';font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px">'+d.type+'</span><span style="background:#f3f4f6;color:#6b7280;font-size:9px;font-weight:600;padding:2px 6px;border-radius:99px">'+d.floor+'</span>'+(d.rev?'<span style="background:#fef3c7;color:#b45309;font-size:9px;font-weight:600;padding:2px 6px;border-radius:99px">'+d.rev+'</span>':'')+'</div>'+
-      '<p class="font-bold text-gray-800">'+d.name+'</p>'+
+      '<p class="font-bold text-gray-800">'+_esc(d.name)+'</p>'+
       '<p class="text-xs text-gray-400">Added '+fd(d.date)+'</p>'+
       '</div>'+
       '<div class="flex gap-1 flex-shrink-0 ml-2">'+
@@ -16108,8 +16121,8 @@ function openDrawingFile(id,room){
   var d=list.find(function(x){return x.id===id;});
   if(!d||!d.file){toast('No file attached','err');return;}
   var w=window.open('','_blank');
-  if(w){w.document.write('<html><head><title>'+d.name+'</title><style>body{margin:0;background:#000;display:flex;flex-direction:column;align-items:center;min-height:100vh}.ctrl{padding:10px 16px;background:#1e1b4b;display:flex;gap:10px;width:100%;align-items:center;box-sizing:border-box}.ctrl button{padding:6px 14px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px}.view-area{flex:1;width:100%;display:flex;align-items:center;justify-content:center;padding:10px}</style></head><body>'+
-    '<div class="ctrl"><button onclick="window.close()" style="background:#374151;color:white">← Back</button><span style="color:white;font-weight:700;font-size:14px;flex:1">'+d.name+'</span><button onclick="document.getElementById(\'zoom-el\').style.transform=\'scale(\'+((parseFloat(document.getElementById(\'zoom-el\').style.transform.replace(/[^0-9.]/g,\'\')||\'1\'))+0.25)+\')\'" style="background:#4f46e5;color:white">🔍+</button><button onclick="document.getElementById(\'zoom-el\').style.transform=\'scale(\'+Math.max(0.25,(parseFloat(document.getElementById(\'zoom-el\').style.transform.replace(/[^0-9.]/g,\'\')||\'1\'))-0.25)+\')\'" style="background:#374151;color:white">🔍-</button><button onclick="document.getElementById(\'zoom-el\').style.transform=\'scale(1)\'" style="background:#374151;color:white">Reset</button></div>'+
+  if(w){w.document.write('<html><head><title>'+_esc(d.name)+'</title><style>body{margin:0;background:#000;display:flex;flex-direction:column;align-items:center;min-height:100vh}.ctrl{padding:10px 16px;background:#1e1b4b;display:flex;gap:10px;width:100%;align-items:center;box-sizing:border-box}.ctrl button{padding:6px 14px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px}.view-area{flex:1;width:100%;display:flex;align-items:center;justify-content:center;padding:10px}</style></head><body>'+
+    '<div class="ctrl"><button onclick="window.close()" style="background:#374151;color:white">← Back</button><span style="color:white;font-weight:700;font-size:14px;flex:1">'+_esc(d.name)+'</span><button onclick="document.getElementById(\'zoom-el\').style.transform=\'scale(\'+((parseFloat(document.getElementById(\'zoom-el\').style.transform.replace(/[^0-9.]/g,\'\')||\'1\'))+0.25)+\')\'" style="background:#4f46e5;color:white">🔍+</button><button onclick="document.getElementById(\'zoom-el\').style.transform=\'scale(\'+Math.max(0.25,(parseFloat(document.getElementById(\'zoom-el\').style.transform.replace(/[^0-9.]/g,\'\')||\'1\'))-0.25)+\')\'" style="background:#374151;color:white">🔍-</button><button onclick="document.getElementById(\'zoom-el\').style.transform=\'scale(1)\'" style="background:#374151;color:white">Reset</button></div>'+
     '<div class="view-area"><iframe id="zoom-el" src="'+d.file+'" style="width:100%;height:85vh;border:0;border-radius:8px;transform-origin:center top;transform:scale(1)"></iframe></div>'+
     '</body></html>');w.document.close();}
 }
@@ -16202,7 +16215,7 @@ function renderBudgetStats(){
   var catEl=document.getElementById('bgt-categories');
   if(catEl)catEl.innerHTML=cats.map(function(c){
     var cp=c.budget>0?Math.min(100,(c.actual/c.budget*100)):0;
-    return '<div class="mb-3"><div class="flex justify-between text-xs mb-1"><span class="font-semibold text-gray-700">'+c.name+'</span><span class="text-gray-500">'+fc(c.actual)+' / '+fc(c.budget||0)+'</span></div><div class="rounded-full overflow-hidden mb-0.5" style="height:5px;background:#e5e7eb"><div style="width:'+cp.toFixed(0)+'%;height:100%;background:linear-gradient(to right,#4f46e5,#7c3aed);border-radius:99px"></div></div><p class="text-right text-[10px] text-gray-400">'+cp.toFixed(0)+'%</p></div>';
+    return '<div class="mb-3"><div class="flex justify-between text-xs mb-1"><span class="font-semibold text-gray-700">'+_esc(c.name)+'</span><span class="text-gray-500">'+fc(c.actual)+' / '+fc(c.budget||0)+'</span></div><div class="rounded-full overflow-hidden mb-0.5" style="height:5px;background:#e5e7eb"><div style="width:'+cp.toFixed(0)+'%;height:100%;background:linear-gradient(to right,#4f46e5,#7c3aed);border-radius:99px"></div></div><p class="text-right text-[10px] text-gray-400">'+cp.toFixed(0)+'%</p></div>';
   }).join('');
 
   // Plinth Summary
@@ -16248,9 +16261,9 @@ function renderSchedule(){
       '<div class="flex justify-between items-start">'+
       '<div class="flex-1 min-w-0">'+
       '<div class="flex items-center gap-2 mb-1"><span style="background:'+sc+'20;color:'+sc+';font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">'+m.status+'</span></div>'+
-      '<p class="font-bold text-gray-800">'+m.title+'</p>'+
+      '<p class="font-bold text-gray-800">'+_esc(m.title)+'</p>'+
       (m.start||m.end?'<p class="text-xs text-gray-500 mt-0.5">📅 '+(m.start?fd(m.start):'')+' → '+(m.end?fd(m.end):'—')+'</p>':'')+
-      (m.notes?'<p class="text-xs text-gray-400 mt-0.5">📝 '+m.notes+'</p>':'')+
+      (m.notes?'<p class="text-xs text-gray-400 mt-0.5">📝 '+_esc(m.notes)+'</p>':'')+
       '</div>'+
       '<div class="flex gap-1 flex-shrink-0 ml-2">'+
       (m.status!=='✅ Completed'?'<button onclick="markMsDone(\''+m.id+'\')" class="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg active:scale-95">✓</button>':'')+
@@ -16938,7 +16951,7 @@ function boqUpdateGantt(){
     if(s+w>100) w=100-s;
     var fillW=Math.round(w*item.pct/100),col=boqBarColor(item.pct,item.start,item.end);
     var tLine=todayPct>0&&todayPct<100?'<div style="position:absolute;left:'+todayPct+'%;top:0;width:1.5px;height:100%;background:#ef4444;opacity:.7;z-index:3"></div>':'';
-    html+='<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:#1f2937;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(item.no+' '+item.desc)+'</div>';
+    html+='<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:#1f2937;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(item.no+' '+_esc(item.desc))+'</div>';
     html+='<div style="height:18px;background:#f3f4f6;border-radius:9px;position:relative;overflow:hidden">'+tLine;
     html+='<div style="position:absolute;left:'+s+'%;width:'+w+'%;height:100%;background:'+(col+'22')+';border-radius:9px"></div>';
     html+='<div style="position:absolute;left:'+s+'%;width:'+fillW+'%;height:100%;background:'+col+';border-radius:9px;opacity:.9"></div>';
@@ -16952,6 +16965,14 @@ function boqUpdateGantt(){
 var TH='padding:8px 6px;font-size:9px;font-weight:700;color:#0d9488;letter-spacing:.5px;text-align:center;border-bottom:2px solid #ccfbf1;white-space:nowrap;';
 var TD='padding:6px 5px;font-size:11px;';
 function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// For the rare case of inserting user text into an inline event-handler
+// attribute that itself uses single-quoted JS string literals (e.g.
+// onmouseover="fn('...')") — _esc() alone escapes the HTML-attribute
+// boundary (<, >, &, ") but not the JS-string boundary inside it. A name
+// containing a raw ' would otherwise terminate that inner string early
+// and let arbitrary JS follow. Escaping to \' keeps it a literal
+// character once the browser hands the attribute text to the JS parser.
+function _escJsAttr(s){ return _esc(s).replace(/'/g, "\\'"); }
 
 function boqRender(){
   var data=boqLoad(); var wrap=document.getElementById('boq-table-wrap'); if(!wrap) return;
@@ -17384,10 +17405,10 @@ function renderPunchList(){
       '<div style="display:flex;gap:5px;flex-shrink:0;margin-left:6px">'+
       (p.status!=='resolved'?'<button onclick="updatePunchStatus(\''+p.id+'\',\''+(p.status==='open'?'progress':'resolved')+'\')" style="font-size:12px;font-weight:800;color:#4f46e5;background:#eef2ff;padding:0 12px;border-radius:9px;border:none;cursor:pointer;white-space:nowrap">'+(p.status==='open'?'→ Progress':'✓ Resolve')+'</button>':'')+
       '<button onclick="delPunch(\''+p.id+'\')" style="color:#fb7185;font-size:18px;padding:0 12px;background:none;border:none;cursor:pointer;line-height:1">✕</button></div></div>'+
-      '<p style="font-size:14px;font-weight:800;color:#1f2937;margin-bottom:5px">'+p.title+'</p>'+
-      (p.category?'<span style="font-size:11px;background:#f3f4f6;color:#4b5563;padding:3px 10px;border-radius:99px;font-weight:700;display:inline-block;margin-bottom:5px">'+p.category+'</span>':'')+
+      '<p style="font-size:14px;font-weight:800;color:#1f2937;margin-bottom:5px">'+_esc(p.title)+'</p>'+
+      (p.category?'<span style="font-size:11px;background:#f3f4f6;color:#4b5563;padding:3px 10px;border-radius:99px;font-weight:700;display:inline-block;margin-bottom:5px">'+_esc(p.category)+'</span>':'')+
       '<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#9ca3af">'+
-      (p.location?'<span>📍 '+p.location+'</span>':'')+(p.assigned?'<span>👤 '+p.assigned+'</span>':'')+'<span>📅 '+fd(p.date)+'</span>'+
+      (p.location?'<span>📍 '+_esc(p.location)+'</span>':'')+(p.assigned?'<span>👤 '+_esc(p.assigned)+'</span>':'')+'<span>📅 '+fd(p.date)+'</span>'+
       (p.due?'<span>⏰ Due: '+fd(p.due)+'</span>':'')+
       '</div></div>';
   }).join('');
@@ -17440,7 +17461,7 @@ function initBillTab(){
   if(sel){
     var workers=AD.filter(function(d){return d.type==='worker';});
     sel.innerHTML='<option value="">-- All Workers & Engineers --</option>'+
-      workers.map(function(w){return '<option value="'+w.name+'">'+w.name+' ('+w.category+(w.team_name?' · '+w.team_name:'')+')</option>';}).join('');
+      workers.map(function(w){return '<option value="'+_esc(w.name)+'">'+_esc(w.name)+' ('+_esc(w.category)+(w.team_name?' · '+_esc(w.team_name):'')+')</option>';}).join('');
   }
   var ms=document.getElementById('bill-month');
   if(ms){ms.innerHTML='';var now=new Date();for(var i=0;i<12;i++){var d=new Date(now.getFullYear(),now.getMonth()-i,1);var o=document.createElement('option');o.value=mkey(d);o.textContent=mlabel(d);if(!i)o.selected=true;ms.appendChild(o);}}
@@ -17593,7 +17614,7 @@ function generateSalarySlip(){
     '<table>'+
     '<tr><td style="color:#6b7280">Employee Name</td><td>'+wName+'</td></tr>'+
     '<tr><td style="color:#6b7280">Designation</td><td>'+(worker.category||'Worker')+(isStaff?' (Staff)':'')+'</td></tr>'+
-    (worker.team_name?'<tr><td style="color:#6b7280">Team</td><td>'+worker.team_name+'</td></tr>':'')+
+    (worker.team_name?'<tr><td style="color:#6b7280">Team</td><td>'+_esc(worker.team_name)+'</td></tr>':'')+
     (isStaff
       ? ('<tr><td style="color:#6b7280">Salary Type</td><td>Fixed Monthly</td></tr>'+attSummaryRow)
       : ('<tr><td style="color:#6b7280">Hourly Rate</td><td>'+fc(parseFloat(worker.hourly_wage)||0)+'/hr'+(otRate&&otRate!==regRate?' &nbsp;<span style="font-size:10px;color:#7c3aed">OT: '+fc(otRate)+'/hr</span>':'')+'</td></tr>'+
@@ -17683,13 +17704,13 @@ function renderInvoiceRecords(){
   el.innerHTML=[...list].reverse().map(function(inv){
     return '<div style="background:white;border-radius:10px;border:1px solid #e5e7eb;padding:7px 10px;margin-bottom:6px;box-shadow:0 2px 6px rgba(0,0,0,0.10),0 1px 2px rgba(0,0,0,0.07)">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
-      +'<p style="font-weight:800;color:#1f2937;font-size:12px;line-height:1;margin:0">'+inv.no+' — '+inv.client+'</p>'
+      +'<p style="font-weight:800;color:#1f2937;font-size:12px;line-height:1;margin:0">'+inv.no+' — '+_esc(inv.client)+'</p>'
       +'<div style="display:flex;gap:5px;align-items:center;flex-shrink:0;margin-left:8px">'
       +'<button onclick="reprintInvoice(\''+inv.id+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:5px;cursor:pointer;font-weight:700;line-height:1">Print</button>'
       +'<button onclick="delInvoice(\''+inv.id+'\')" style="font-size:11px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;line-height:1">×</button>'
       +'</div></div>'
       +'<div style="display:flex;align-items:center;justify-content:space-between">'
-      +'<p style="font-size:10px;color:#9ca3af;margin:0">'+fd(inv.date)+(inv.project?' · '+inv.project:'')+'</p>'
+      +'<p style="font-size:10px;color:#9ca3af;margin:0">'+fd(inv.date)+(inv.project?' · '+_esc(inv.project):'')+'</p>'
       +'<p style="font-weight:800;font-size:12px;color:#4f46e5;margin:0">'+fc(inv.total)+'</p>'
       +'</div>'
       +'</div>';
@@ -20324,7 +20345,7 @@ var PO_STATUS_META = {
 };
 function poStatusBadge(status){
   var s = PO_STATUS_META[status] || PO_STATUS_META.pending;
-  return '<span style="flex-shrink:0;font-size:9px;background:'+s.bg+';color:'+s.fg+';border-radius:99px;padding:1px 7px;font-weight:800;white-space:nowrap">'+s.label+'</span>';
+  return '<span style="flex-shrink:0;font-size:9px;background:'+s.bg+';color:'+s.fg+';border-radius:99px;padding:1px 7px;font-weight:800;white-space:nowrap">'+_esc(s.label)+'</span>';
 }
 
 function loadPOTab() {
@@ -20367,7 +20388,7 @@ function renderPOSuppliersList() {
   if (!sups.length) { el.innerHTML='<p class="text-gray-400 text-xs text-center py-2">No suppliers yet</p>'; return; }
   el.innerHTML = sups.map(function(s){
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 6px;border-bottom:1px solid #f0fdf4;font-size:11px">'
-      +'<div><p style="font-weight:700;color:#374151">'+s.name+'</p>'
+      +'<div><p style="font-weight:700;color:#374151">'+_esc(s.name)+'</p>'
       +(s.contact?'<p style="font-size:9px;color:#6b7280">📞 '+s.contact+'</p>':'')
       +(s.gst?'<p style="font-size:9px;color:#6b7280">GST: '+s.gst+'</p>':'')+'</div>'
       +'<button onclick="deleteSupplier(\''+s.id+'\')" style="background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:10px;padding:0 12px;cursor:pointer;font-weight:700">✕</button>'
@@ -20414,7 +20435,7 @@ function renderPOSupplierDropdown() {
   });
   sel.innerHTML = '<option value="">Select Supplier</option>'
     + (saved.length ? '<optgroup label="── Saved Suppliers">'
-        + saved.map(function(s){ return '<option value="'+s.id+'" '+(cur===s.id?'selected':'')+'>'+s.name+'</option>'; }).join('')
+        + saved.map(function(s){ return '<option value="'+s.id+'" '+(cur===s.id?'selected':'')+'>'+_esc(s.name)+'</option>'; }).join('')
         + '</optgroup>' : '')
     + (extraNames.length ? '<optgroup label="── From Materials / Expenses">'
         + extraNames.map(function(n){ return '<option value="name:'+n+'" '+(cur==='name:'+n?'selected':'')+'>'+n+'</option>'; }).join('')
@@ -20621,8 +20642,8 @@ function generatePOPDF(saveRec, record) {
     +'<div style="background:#f8fafc;border-radius:10px;padding:10px">'
     +'<p style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:3px">Delivery Details</p>'
     +(rec.delivery?'<p style="font-size:11px;color:#374151"><strong>By:</strong> '+fd(rec.delivery)+'</p>':'')
-    +(rec.site?'<p style="font-size:11px;color:#374151"><strong>Site:</strong> '+rec.site+'</p>':'')
-    +(p.address?'<p style="font-size:10px;color:#6b7280">'+p.address+'</p>':'')
+    +(rec.site?'<p style="font-size:11px;color:#374151"><strong>Site:</strong> '+_esc(rec.site)+'</p>':'')
+    +(p.address?'<p style="font-size:10px;color:#6b7280">'+_esc(p.address)+'</p>':'')
     +'</div></div>'
     // Items table
     +'<table><thead><tr style="background:'+hSolid+';color:white">'
@@ -20634,7 +20655,7 @@ function generatePOPDF(saveRec, record) {
     +'</tr></thead><tbody>'
     +rec.lines.map(function(l,i){
       return '<tr style="background:'+(i%2?'#f9fafb':'white')+'">'
-        +'<td style="padding:7px 10px;font-weight:600">'+l.desc+'</td>'
+        +'<td style="padding:7px 10px;font-weight:600">'+_esc(l.desc)+'</td>'
         +'<td style="padding:7px 10px;text-align:center">'+(l.unit||'—')+'</td>'
         +'<td style="padding:7px 10px;text-align:center">'+l.qty+'</td>'
         +'<td style="padding:7px 10px;text-align:right">'+fc(l.rate)+'</td>'
@@ -20648,7 +20669,7 @@ function generatePOPDF(saveRec, record) {
     +'<td colspan="4" style="padding:9px 10px;text-align:right;font-weight:900;font-size:14px">TOTAL AMOUNT</td>'
     +'<td style="padding:9px 10px;text-align:right;font-weight:900;font-size:14px">'+fc(rec.total)+'</td>'
     +'</tr></tfoot></table>'
-    +(rec.notes?'<div style="margin-top:14px;padding:10px;background:#f8fafc;border-radius:8px"><p style="font-size:10px;font-weight:700;color:#374151;margin-bottom:3px">Terms & Notes:</p><p style="font-size:11px;color:#6b7280">'+rec.notes+'</p></div>':'')
+    +(rec.notes?'<div style="margin-top:14px;padding:10px;background:#f8fafc;border-radius:8px"><p style="font-size:10px;font-weight:700;color:#374151;margin-bottom:3px">Terms & Notes:</p><p style="font-size:11px;color:#6b7280">'+_esc(rec.notes)+'</p></div>':'')
     +'<div style="margin-top:36px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px">'
     +'<div><div style="border-top:1.5px solid #374151;padding-top:4px;font-size:10px;color:#6b7280">Prepared By</div><p style="font-size:11px;font-weight:700;color:#374151;margin-top:4px">'+(p.engineer||p.company||'')+'</p><p style="font-size:9px;color:#9ca3af;margin-top:2px">Name & Designation</p></div>'
     +'<div style="text-align:center"><div style="border-top:1.5px solid #374151;padding-top:4px;font-size:10px;color:#6b7280">Authorised By</div><p style="font-size:11px;color:#9ca3af;margin-top:4px">Signature & Date</p></div>'
@@ -20678,7 +20699,7 @@ function renderPORecords() {
       +'<div style="display:flex;align-items:center;gap:6px;min-width:0">'
       +'<p style="font-weight:800;color:#1f2937;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.poNo+' — '+(r.sup?r.sup.name:'No Supplier')+'</p>'
       +(isReceived?'<span style="flex-shrink:0;font-size:9px;background:#d1fae5;color:#059669;border-radius:99px;padding:1px 7px;font-weight:800">✅ Received</span>':(enterpriseOn?poStatusBadge(status):''))
-      +(r.site?'<span style="flex-shrink:0;font-size:9px;background:#eef2ff;color:#4338ca;border-radius:99px;padding:1px 7px;font-weight:700">📍 '+r.site+'</span>':'')
+      +(r.site?'<span style="flex-shrink:0;font-size:9px;background:#eef2ff;color:#4338ca;border-radius:99px;padding:1px 7px;font-weight:700">📍 '+_esc(r.site)+'</span>':'')
       +'</div>'
       +'<div style="display:flex;gap:5px;flex-shrink:0">'
       +(isReceived?'':'<button onclick="markPOReceived(\''+idSafe+'\')" style="font-size:10px;padding:0 10px;height:22px;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;border-radius:5px;cursor:pointer;font-weight:700">📦 Mark Received</button>')
@@ -21204,16 +21225,16 @@ function renderMasterAttWorkers() {
           if (!_maStaffData[_maKey(w.__id)]) _maStaffData[_maKey(w.__id)] = {status:curStatus, advance:curAdv};
           var sd = _maStaffData[_maKey(w.__id)];
           return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;background:'+(alreadyDone?'#fefce8':'#f5f3ff')+';border:1px solid '+(alreadyDone?'#fde047':'#ddd6fe')+'">'
-            +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" data-staff="1" '+(alreadyDone?'checked':'')
+            +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+_esc(w.name)+'" data-already="'+(alreadyDone?'1':'0')+'" data-staff="1" '+(alreadyDone?'checked':'')
             +' style="width:16px;height:16px;accent-color:#7c3aed;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openMaStaffModal(\''+w.__id+'\')">'
-            +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+w.name+' <span style="font-size:9px;color:#7c3aed;font-weight:800">STAFF</span>'+(alreadyDone?' ⚠️':'')+'</span>'
+            +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+_esc(w.name)+' <span style="font-size:9px;color:#7c3aed;font-weight:800">STAFF</span>'+(alreadyDone?' ⚠️':'')+'</span>'
             +'<span id="ma-staff-pill-'+w.__id+'" onclick="event.stopPropagation();openMaStaffModal(\''+w.__id+'\')" style="font-size:10px;font-weight:800;border:1px solid #c4b5fd;border-radius:7px;padding:3px 8px;background:#fff;color:#5b21b6;cursor:pointer">'+sd.status+(sd.advance>0?' · ₹'+sd.advance:'')+'</span>'
             +'</label>';
         }
         return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;margin-bottom:3px;cursor:pointer;background:'+(alreadyDone?'#fefce8':'#f8fafc')+';border:1px solid '+(alreadyDone?'#fde047':'#e5e7eb')+'">'
-          +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+w.name+'" data-already="'+(alreadyDone?'1':'0')+'" '+(alreadyDone?'checked':'')
+          +'<input type="checkbox" id="'+chkId+'" data-wid="'+w.__id+'" data-name="'+_esc(w.name)+'" data-already="'+(alreadyDone?'1':'0')+'" '+(alreadyDone?'checked':'')
           +' style="width:16px;height:16px;accent-color:#4f46e5;flex-shrink:0;cursor:pointer">'
-          +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+w.name+(alreadyDone?' ⚠️ Already marked':' ')+'</span>'
+          +'<span style="flex:1;font-size:11px;font-weight:'+(alreadyDone?'700':'600')+';color:'+(alreadyDone?'#92400e':'#374151')+'">'+_esc(w.name)+(alreadyDone?' ⚠️ Already marked':' ')+'</span>'
           +(w.hourly_wage?'<span style="font-size:9px;color:#9ca3af">₹'+w.hourly_wage+'/hr</span>':'')
           +'</label>';
       }).join('')
@@ -21385,7 +21406,7 @@ function renderBudgetVisualBars() {
     var barW = Math.min(100, pct);
     return '<div style="margin-bottom:14px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
-      +'<span style="font-size:11px;font-weight:700;color:#374151">'+c.label+'</span>'
+      +'<span style="font-size:11px;font-weight:700;color:#374151">'+_esc(c.label)+'</span>'
       +'<span style="font-size:10px;color:'+(over?'#dc2626':'#374151')+';font-weight:700">'+fc(c.actual)+' / '+fc(c.budgeted)+'</span>'
       +'</div>'
       +'<div style="height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden">'
@@ -21424,7 +21445,7 @@ function renderGantt() {
         ? '<div style="position:absolute;left:'+todayPct+'%;top:0;width:1.5px;height:100%;background:#ef4444;opacity:0.6;z-index:2"></div>'
         : '';
       return '<div style="margin-bottom:14px">'
-        +'<div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:3px;word-break:break-word;line-height:1.3">'+m.title+'</div>'
+        +'<div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:3px;word-break:break-word;line-height:1.3">'+_esc(m.title)+'</div>'
         +'<div style="height:16px;background:#f3f4f6;border-radius:8px;position:relative;overflow:hidden">'
         +todayLine
         +'<div style="position:absolute;left:'+s+'%;width:'+w+'%;height:100%;background:'+col+';border-radius:8px;opacity:0.9;transition:width .3s"></div>'
@@ -21491,7 +21512,7 @@ function editSubconBill(id) {
       return '<option value="'+n+'"'+(n===b.contractor?' selected':'')+'>'+n+'</option>';
     }).join('');
     if (![].some.call(sel.options, function(o){return o.value===b.contractor;})) {
-      sel.innerHTML += '<option value="'+b.contractor+'" selected>'+b.contractor+'</option>';
+      sel.innerHTML += '<option value="'+_esc(b.contractor)+'" selected>'+_esc(b.contractor)+'</option>';
     }
   }
   document.getElementById('scb-date').value = b.date || ist();
@@ -21754,7 +21775,7 @@ function renderVisitsList() {
       +'<span style="font-size:10px;color:#9ca3af">'+v.date+'</span>'
       +'<button onclick="deleteVisit(\''+v.id+'\')" style="background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:10px;padding:0 12px;cursor:pointer;font-weight:700">✕</button>'
       +'</div></div>'
-      +(v.notes?'<p style="font-size:10px;color:#374151;margin:3px 0">'+v.notes+'</p>':'')
+      +(v.notes?'<p style="font-size:10px;color:#374151;margin:3px 0">'+_esc(v.notes)+'</p>':'')
       +(v.action?'<p style="font-size:10px;color:#d97706;font-weight:700;margin-top:2px">→ Action: '+v.action+'</p>':'')
       +'</div>';
   }).join('');
@@ -21995,12 +22016,12 @@ function renderMsRecords(){
   el.innerHTML=arr.map(function(r){
     return '<div style="background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:7px 10px;margin-bottom:6px;box-shadow:0 2px 6px rgba(0,0,0,0.07)">'
      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
-     +'<p style="font-weight:800;color:#1f2937;font-size:12px">'+r.sheetNo+(r.title?' — '+r.title:'')+'</p>'
+     +'<p style="font-weight:800;color:#1f2937;font-size:12px">'+r.sheetNo+(r.title?' — '+_esc(r.title):'')+'</p>'
      +'<div style="display:flex;gap:5px">'
      +'<button onclick="reprintMsSheet(\''+r.id+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:5px;cursor:pointer;font-weight:700">Print</button>'
      +'<button onclick="deleteMsSheet(\''+r.id+'\')" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;font-size:11px">×</button>'
      +'</div></div>'
-     +'<p style="font-size:10px;color:#9ca3af">'+fd(r.date)+(r.location?' · '+r.location:'')+'</p>'
+     +'<p style="font-size:10px;color:#9ca3af">'+fd(r.date)+(r.location?' · '+_esc(r.location):'')+'</p>'
      +'</div>';
   }).join('');
 }
@@ -22055,8 +22076,8 @@ function _printMsHtml(r){
       +'<p style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px">'+fd(r.date)+'</p>'
     )
     +(r.title||r.location?'<div style="background:#f0f4ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;gap:20px">'
-      +(r.title?'<div><p style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase">Work Item</p><p style="font-size:13px;font-weight:800;color:#1e1b4b;margin-top:2px">'+r.title+'</p></div>':'')
-      +(r.location?'<div><p style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase">Location / Notes</p><p style="font-size:12px;color:#374151;margin-top:2px">'+r.location+'</p></div>':'')
+      +(r.title?'<div><p style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase">Work Item</p><p style="font-size:13px;font-weight:800;color:#1e1b4b;margin-top:2px">'+_esc(r.title)+'</p></div>':'')
+      +(r.location?'<div><p style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase">Location / Notes</p><p style="font-size:12px;color:#374151;margin-top:2px">'+_esc(r.location)+'</p></div>':'')
       +'</div>':'')
     +'<table><thead><tr>'
     +'<th style="width:32px;text-align:center">S.No</th>'
@@ -22195,7 +22216,7 @@ function generateQuotePDF(saveRecord) {
     +'</div>'
     +'<table><thead><tr style="background:'+hSolid+';color:white"><th style="padding:8px 10px;text-align:left">Description</th><th style="padding:8px 10px;text-align:center">Unit</th><th style="padding:8px 10px;text-align:center">Qty</th><th style="padding:8px 10px;text-align:right">Rate (₹)</th><th style="padding:8px 10px;text-align:right">Amount (₹)</th></tr></thead><tbody>'
     +lines.map(function(l,i){
-      return '<tr style="background:'+(i%2?'#f9fafb':'white')+'"><td style="padding:7px 10px;font-weight:600">'+l.desc+'</td><td style="padding:7px 10px;text-align:center">'+( l.unit||'—')+'</td><td style="padding:7px 10px;text-align:center">'+l.qty+'</td><td style="padding:7px 10px;text-align:right">'+fc(l.rate)+'</td><td style="padding:7px 10px;text-align:right;font-weight:700">'+fc(l.amt)+'</td></tr>';
+      return '<tr style="background:'+(i%2?'#f9fafb':'white')+'"><td style="padding:7px 10px;font-weight:600">'+_esc(l.desc)+'</td><td style="padding:7px 10px;text-align:center">'+( l.unit||'—')+'</td><td style="padding:7px 10px;text-align:center">'+l.qty+'</td><td style="padding:7px 10px;text-align:right">'+fc(l.rate)+'</td><td style="padding:7px 10px;text-align:right;font-weight:700">'+fc(l.amt)+'</td></tr>';
     }).join('')
     +'</tbody><tfoot>'
     +'<tr><td colspan="4" style="padding:7px 10px;text-align:right;font-weight:700">Subtotal</td><td style="padding:7px 10px;text-align:right;font-weight:700">'+fc(subtotal)+'</td></tr>'
@@ -22224,7 +22245,7 @@ function renderQuotationRecords() {
       +'<button onclick="deleteQuotation(\''+r.id+'\')" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;cursor:pointer;font-weight:800;font-size:11px">×</button>'
       +'</div></div>'
       +'<div style="display:flex;justify-content:space-between">'
-      +'<p style="font-size:10px;color:#9ca3af">'+fd(r.date)+(r.project?' · '+r.project:'')+'</p>'
+      +'<p style="font-size:10px;color:#9ca3af">'+fd(r.date)+(r.project?' · '+_esc(r.project):'')+'</p>'
       +'<p style="font-weight:800;font-size:12px;color:#4f46e5">'+fc(r.total)+'</p>'
       +'</div></div>';
   }).join('');
@@ -22470,7 +22491,7 @@ window._buildDashCharts = function() {
       +' fill="transparent" stroke="'+item.color+'" stroke-width="12"'
       +' stroke-dasharray="'+dash.toFixed(2)+' '+((circ-dash).toFixed(2))+'"'
       +' stroke-dashoffset="'+(-offset).toFixed(2)+'"'
-      +' data-label="'+item.label+'" data-val="'+(item.value>=1e5?(item.value/1e5).toFixed(1)+'L':item.value>=1e3?(item.value/1e3).toFixed(1)+'K':item.value)+'"'
+      +' data-label="'+_esc(item.label)+'" data-val="'+(item.value>=1e5?(item.value/1e5).toFixed(1)+'L':item.value>=1e3?(item.value/1e3).toFixed(1)+'K':item.value)+'"'
       +' onmouseover="_showTip(event,this.dataset.label,\'₹\'+this.dataset.val)"'
       +' onmouseleave="_hideTip()"'
       +' ontouchstart="_showTip(event,this.dataset.label,\'₹\'+this.dataset.val)" ontouchend="_hideTip()"'
@@ -22490,12 +22511,12 @@ window._buildDashCharts = function() {
     var disp = '₹'+(item.value>=1e5?(item.value/1e5).toFixed(1)+'L':item.value>=1e3?(item.value/1e3).toFixed(1)+'K':item.value);
     return '<div style="margin-bottom:9px">'
       +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-      +'<span style="font-size:10px;font-weight:700;color:#374151">'+item.label+'</span>'
+      +'<span style="font-size:10px;font-weight:700;color:#374151">'+_esc(item.label)+'</span>'
       +'<span style="font-size:10px;font-weight:800;color:'+item.color+'">'+disp+'</span>'
       +'</div>'
       +'<div style="height:9px;background:#f3f4f6;border-radius:99px;overflow:hidden" '
-      +'onmouseover="_showTip(event,\''+item.label+'\',\''+disp+'\')" onmouseleave="_hideTip()" '
-      +'ontouchstart="_showTip(event,\''+item.label+'\',\''+disp+'\')" ontouchend="_hideTip()">'
+      +'onmouseover="_showTip(event,\''+_escJsAttr(item.label)+'\',\''+_escJsAttr(disp)+'\')" onmouseleave="_hideTip()" '
+      +'ontouchstart="_showTip(event,\''+_escJsAttr(item.label)+'\',\''+_escJsAttr(disp)+'\')" ontouchend="_hideTip()">'
       +'<div class="ichart-bar" style="height:100%;width:0%;background:'+item.color+';border-radius:99px;transition:width .65s cubic-bezier(.34,1.1,.64,1) '+(idx*0.07)+'s" data-w="'+pct+'%"></div>'
       +'</div></div>';
   }).join('');
@@ -22503,7 +22524,7 @@ window._buildDashCharts = function() {
   // Legend dots
   var legend = items.map(function(i){
     return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#6b7280;margin:1px 5px 1px 0">'
-      +'<span style="width:7px;height:7px;border-radius:50%;background:'+i.color+';flex-shrink:0;display:inline-block"></span>'+i.label+'</span>';
+      +'<span style="width:7px;height:7px;border-radius:50%;background:'+i.color+';flex-shrink:0;display:inline-block"></span>'+_esc(i.label)+'</span>';
   }).join('');
 
   var html = '<div style="margin-bottom:11px">'
@@ -22672,8 +22693,8 @@ function renderSigList() {
     return '<div style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:6px 10px;margin-bottom:6px">'
       +'<img src="'+s.img+'" style="width:50px;height:24px;object-fit:contain;border-radius:4px;background:#fff">'
       +'<div style="flex:1;min-width:0">'
-      +'<p style="font-size:11px;font-weight:800;color:#c7d2fe;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+s.name+'</p>'
-      +(s.role ? '<p style="font-size:9px;color:rgba(167,139,250,.7);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+s.role+'</p>' : '')
+      +'<p style="font-size:11px;font-weight:800;color:#c7d2fe;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(s.name)+'</p>'
+      +(s.role ? '<p style="font-size:9px;color:rgba(167,139,250,.7);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc(s.role)+'</p>' : '')
       +'</div>'
       +'<button onclick="openSignatureModal('+i+')" style="font-size:10px;padding:2px 7px;background:rgba(99,102,241,.2);color:#818cf8;border:none;border-radius:5px;cursor:pointer">Edit</button>'
       +'<button onclick="deleteSignature('+i+')" style="font-size:10px;padding:2px 7px;background:rgba(239,68,68,.15);color:#fca5a5;border:none;border-radius:5px;cursor:pointer">✕</button>'
@@ -22699,7 +22720,7 @@ function showSigPlacer(targetId, anchorEl) {
   drop.innerHTML = _sigData.map(function(s,i){
     return '<div class="sig-drop-item" onclick="placeSig(\''+targetId+'\','+i+');this.parentElement.classList.remove(\'open\')">'
       +'<img src="'+s.img+'" style="width:40px;height:18px;object-fit:contain;border-radius:3px">'
-      +'<span>'+s.name+'</span>'
+      +'<span>'+_esc(s.name)+'</span>'
       +'</div>';
   }).join('');
   var rect = anchorEl.getBoundingClientRect();
@@ -25372,7 +25393,14 @@ var _joinOtpEmail = '';
 // for the common case and gives instant feedback.
 function _ownsAnyCompany() {
   try {
-    if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner') return true;
+    // BUGFIX: WS_CROLE_KEY==='owner' alone is no longer trusted — it must
+    // also match the CURRENTLY ACTIVE company (window._wsCompanyId) via
+    // WS_CROLE_COMPANY_KEY. Without this, an account that owns Company A
+    // and has separately joined Company B as a plain member would still
+    // read as "owns a company" while B is active, leaking the 👑 Owner
+    // button and Partner/Investment Tracker into Company B too.
+    if (typeof WS_CROLE_KEY !== 'undefined' && safeLS.getItem(WS_CROLE_KEY) === 'owner'
+        && window._wsCompanyId && safeLS.getItem(WS_CROLE_COMPANY_KEY) === window._wsCompanyId) return true;
     // NOTE: an ADMIN_ROLE_KEY==='admin' check used to live here too, on the
     // (wrong) assumption that it meant "this device owns a company". It
     // doesn't — _handleOtpSuccess sets ADMIN_ROLE_KEY='admin' for EVERY
@@ -25502,26 +25530,56 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
           return;
         }
 
-        // Project-level join — go straight in. Company id/role isn't
-        // returned by redeem_join_code itself, so fetch both via
-        // get_my_companies + get_my_projects — this also gives us the
-        // real role_name needed to load the correct permission set
-        // (Phase 3), not just the ids.
-        _sb.rpc('get_my_companies').then(function(cr) {
-          var companies = (cr && cr.data) || [];
-          var companyId = companies.length ? companies[0].company_id : null;
-          var companyName = companies.length ? companies[0].company_name : null;
-          if (companies.length) {
-            var c = companies[0];
-            window._wsCompanyId = c.company_id;
-            safeLS.setItem(WS_COMPANY_KEY, c.company_id);
-            safeLS.setItem(WS_CNAME_KEY, c.company_name || '');
-            safeLS.setItem(WS_CROLE_KEY, c.role_name || '');
-            if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(c.plan_tier);
-          }
+        // Project-level join — go straight in.
+        // BUGFIX: this used to call get_my_companies() and take its FIRST
+        // row as "the company" — but get_my_companies() only ever returns
+        // companies this account OWNS, which has nothing to do with
+        // whatever company the project they just joined belongs to. For
+        // an account that both owns a company AND joined this one as a
+        // plain member, that meant: wrong company_id (their OWNED
+        // company's dashboard/settings would show instead of the one they
+        // just joined), AND WS_CROLE_KEY got set to their real 'owner'
+        // role from that unrelated company — which is exactly what leaked
+        // the 👑 Owner button and Partner Investment Tracker into a
+        // company they only joined as an engineer/sales admin.
+        // Fix: read this project's own company_id directly (RLS already
+        // allows a project member to read their own project row), then
+        // its plan tier from subscriptions (also member-readable). Role
+        // still comes from get_my_projects below, same as before — and
+        // WS_CROLE_KEY is never written here at all; it's reserved for
+        // the confirmed-owner path only (_wsSelectCompanyConfirmed).
+        _sb.from('projects').select('company_id,name,address').eq('id', projectId).maybeSingle().then(function(pjr) {
+          var companyId = pjr && pjr.data ? pjr.data.company_id : null;
+          var afterCompany = function(companyName, planTier) {
+            if (companyId) {
+              window._wsCompanyId = companyId;
+              safeLS.setItem(WS_COMPANY_KEY, companyId);
+              safeLS.setItem(WS_CNAME_KEY, companyName || '');
+              if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(planTier);
+            }
+            if (session && session.user) _adminSBUser = session.user;
+            proceedToFinish(companyId, companyName);
+          };
+          if (!companyId) { afterCompany(null, null); return; }
+          Promise.all([
+            _sb.from('companies').select('name').eq('id', companyId).maybeSingle(),
+            _sb.from('subscriptions').select('plan_tier').eq('company_id', companyId).maybeSingle()
+          ]).then(function(results) {
+            var co = results[0] && results[0].data;
+            var sub = results[1] && results[1].data;
+            afterCompany(co ? co.name : null, sub ? sub.plan_tier : null);
+          }).catch(function() { afterCompany(null, null); });
+        }).catch(function() {
+          // Couldn't read the project row at all — proceed with no
+          // company context rather than fail the whole join outright.
+          proceedToFinish(null, null);
+        });
+        function proceedToFinish(companyId, companyName) {
+          // Always record the join locally, regardless of whether company
+          // resolution above succeeded — matches the original fail-closed
+          // behavior (an unresolved role still lets them in, read-only).
           window._wsProjectId = projectId;
           safeLS.setItem(WS_PROJECT_KEY, projectId);
-          if (session && session.user) _adminSBUser = session.user;
           var finish = function(roleName, projName, projAddress) {
             safeLS.setItem(WS_PROLE_KEY, roleName || '');
             safeLS.setItem(WS_PNAME_KEY, projName || '');
@@ -25577,17 +25635,7 @@ function _doJoinProjectRedeem(code, memberName, btn, errEl, codeEl, session) {
             var proj = ((pr && pr.data) || []).find(function(x) { return x.project_id === projectId; });
             finish(proj ? proj.role_name : null, proj ? proj.project_name : null, proj ? proj.project_address : null);
           }).catch(function() { finish(null); });
-        }).catch(function() {
-          window._wsProjectId = projectId;
-          safeLS.setItem(WS_PROJECT_KEY, projectId);
-          // Couldn't confirm role — _applyPermState fails closed (read-only)
-          // rather than silently granting write access.
-          _applyPermState(null).then(function() {
-            if (typeof _obEnterAppAfterJoin === 'function') _obEnterAppAfterJoin();
-            toast('✅ Joined project', 'ok');
-            if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
-          });
-        });
+        }
       }).catch(function(e) {
         if (btn) { btn.textContent = '🤝 Join Project'; btn.disabled = false; }
         if (errEl) { errEl.textContent = /could not find the table|schema cache/i.test(e.message||'') ? 'App not fully set up yet — ask your admin to finish the setup step.' : '⚠️ ' + (e.message || 'Invalid code'); errEl.style.display = 'block'; }
