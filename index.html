@@ -23398,6 +23398,27 @@ function _cBuildUnitNumpad(){
 }
 
 // ── Delegation ──
+// BUGFIX (code quality / CSP): this used to eval() the data-ca action
+// string directly. Every value it's ever set to is a fixed string this
+// same code writes into the button itself (see _cBtn/_cBuildStd/
+// _cBuildSci above) — never user input — so it wasn't exploitable in
+// practice, but eval() is still unnecessary here and blocks any future
+// Content-Security-Policy hardening (which disallows eval by default).
+// The action set is small and fully known, so this parses "fnName(arg)"
+// and calls the real function directly instead.
+var _CALC_FNS = { _cDigit:_cDigit, _cOp:_cOp, _cSci:_cSci, _cClear:_cClear, _cBack:_cBack, _cSign:_cSign, _cPct:_cPct, _cEquals:_cEquals };
+function _calcDispatch(action) {
+  var m = /^([A-Za-z_$][A-Za-z0-9_$]*)\(\s*(.*?)\s*\)$/.exec(action);
+  if (!m) return;
+  var fn = _CALC_FNS[m[1]];
+  if (typeof fn !== 'function') return;
+  var argStr = m[2];
+  if (argStr === '') { fn(); return; }
+  var qm = /^['"](.*)['"]$/.exec(argStr);
+  if (qm) { fn(qm[1]); return; }
+  var num = parseFloat(argStr);
+  if (!isNaN(num)) { fn(num); return; }
+}
 document.addEventListener('click',function(e){
   var btn=e.target.closest?e.target.closest('[data-ca]'):null;
   if(!btn)return;
@@ -23405,7 +23426,7 @@ document.addEventListener('click',function(e){
   if(!m||m.style.display==='none')return;
   var action=btn.getAttribute('data-ca');
   if(!action)return;
-  try{eval(action);}catch(ex){console.error('calc:',action,ex);}
+  try{_calcDispatch(action);}catch(ex){console.error('calc:',action,ex);}
 });
 
 // keyboard
