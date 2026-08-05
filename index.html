@@ -3407,7 +3407,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     overflow-x: hidden !important;
     touch-action: pan-y !important;
   }
-  #main-app > nav > div {
+  #main-app > nav > div, #main-app > nav #nav-tab-scroll-row {
     height: auto !important;
     min-height: unset !important;
     align-items: flex-start !important;
@@ -5752,6 +5752,28 @@ function _wsSelectProject(p) {
       .tab-drawer-item.active { background: linear-gradient(135deg,#4f46e5,#7c3aed); color: #fff; box-shadow: 0 2px 10px rgba(99,102,241,.35); }
       .tab-drawer-item .ico { font-size: 16px; flex-shrink: 0; }
 
+      /* Desktop (matches the 1024px breakpoint used everywhere else in
+         this app for the two-column desktop layout): the horizontal/
+         vertical switcher is a mobile space-saving feature only — a
+         wide screen has plenty of room for the full tab row already, so
+         it's forced to the original horizontal view here and the
+         switcher controls are disabled rather than offered. !important
+         so this always wins over the persisted per-device setting and
+         any inline styles JS has already applied. */
+      @media (min-width: 1024px) {
+        #tab-orient-quickbtn, #nav-active-tab-label { display: none !important; }
+        #nav-tab-scroll-row { display: flex !important; }
+        #sett-taborient-row { opacity: .4; pointer-events: none; }
+        /* BUGFIX: this wrapper div (added for the mobile ☰/drawer
+           feature) sits between <nav> and the real tab list, which broke
+           the app's pre-existing desktop sidebar CSS — that CSS expected
+           the tab list to be nav's direct child. display:contents removes
+           this wrapper's own box so its children (the tab list) lay out
+           as if they were direct children of <nav> again, restoring the
+           original vertical-sidebar rendering. */
+        #nav-btn-wrap { display: contents !important; }
+      }
+
       .view-seg {display:flex;gap:5px;background:rgba(0,0,0,0.3);border-radius:10px;padding:4px;border:1px solid rgba(255,255,255,.05);}
       .view-btn {
         flex:1;padding:7px 0;border:none;border-radius:7px;
@@ -6982,7 +7004,7 @@ document.addEventListener('DOMContentLoaded', function() {
          Sanjineer Cloud account panel (opened via the Login/Cloud entry in
          Settings) for the single remaining Logout control. -->
   </div>
-  <div style="display:flex;align-items:stretch">
+  <div id="nav-btn-wrap" style="display:flex;align-items:stretch">
     <button id="tab-orient-quickbtn" onclick="openTabDrawer()" title="Switch tab"
       style="display:none;flex-shrink:0;align-items:center;justify-content:center;width:34px;background:rgba(255,255,255,.06);border:none;border-right:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);font-size:15px;cursor:pointer;-webkit-tap-highlight-color:transparent;">☰</button>
     <button id="nav-active-tab-label" onclick="openTabDrawer()"
@@ -22977,7 +22999,13 @@ function _syncActiveTabLabel() {
   if (icoEl) icoEl.textContent = srcIco ? srcIco.textContent : '';
   if (nameEl) nameEl.textContent = srcLbl ? srcLbl.textContent : '';
 }
+function _isDesktopWidth() { return window.innerWidth >= 1024; }
 function _applyTabOrientation(mode) {
+  // Desktop always shows the original horizontal tab row — the switcher
+  // is a mobile space-saving feature only, and a wide screen has room
+  // for the full tab list already. CSS also enforces this (@media
+  // min-width:1024px), this is the JS-side backstop.
+  if (_isDesktopWidth()) mode = 'horizontal';
   var qbtn = document.getElementById('tab-orient-quickbtn');
   var activeLabel = document.getElementById('nav-active-tab-label');
   var scrollRow = document.getElementById('nav-tab-scroll-row');
@@ -22997,6 +23025,7 @@ function _applyTabOrientation(mode) {
   if (vertical) _syncActiveTabLabel();
 }
 function toggleTabOrientation() {
+  if (_isDesktopWidth()) return; // switcher is disabled on desktop — nothing to toggle
   // Bug 1: exactly one mode active at a time, defaulting to horizontal —
   // this just flips the single persisted value, never both/neither.
   var next = _tabOrientation() === 'vertical' ? 'horizontal' : 'vertical';
@@ -23005,6 +23034,11 @@ function toggleTabOrientation() {
   if (typeof toast === 'function') toast(next === 'vertical' ? 'Vertical tab mode on' : 'Horizontal tab mode on', 'ok');
 }
 document.addEventListener('DOMContentLoaded', function(){ _applyTabOrientation(_tabOrientation()); });
+var _tabOrientResizeTimer = null;
+window.addEventListener('resize', function(){
+  clearTimeout(_tabOrientResizeTimer);
+  _tabOrientResizeTimer = setTimeout(function(){ _applyTabOrientation(_tabOrientation()); }, 150);
+});
 
 // ══════════════════════════════════════════════════════════════
 // TAB DRAWER — left slide-out overlay listing every tab, opened via
