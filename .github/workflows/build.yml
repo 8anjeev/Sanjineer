@@ -29,17 +29,67 @@ jobs:
           sed -i 's/compileSdkVersion 29/compileSdkVersion 34/' app/build.gradle
           sed -i 's/targetSdkVersion 29/targetSdkVersion 34/' app/build.gradle
           printf '\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n' >> gradle.properties
+
+          # ROOT-CAUSE FIX 1/4 — AGP 8+ requires an explicit `namespace` in the
+          # android {} block. Older AGP derived it from the manifest's
+          # package="com.placeholder" attribute; that fallback was REMOVED in
+          # AGP 8. Without this, the build fails immediately at configuration
+          # time with "Namespace not specified. Please specify a namespace in
+          # the module's build file." — before a single line of code compiles.
+          sed -i "s/^android {/android {\n    namespace 'com.sanjvik.sanjineer'/" app/build.gradle
+
+          # ROOT-CAUSE FIX 2/4 — androidbrowserhelper 1.1.0 (2019) predates the
+          # targetSdk-31 android:exported requirement entirely: its OWN bundled
+          # manifest components (TrustedWebActivityService etc.) don't declare
+          # it either, and that's inside a downloaded AAR we can't sed. It also
+          # requires minSdkVersion 16, while any modern release needs 23+, so
+          # bumping alone (without also raising minSdk below) trades one
+          # manifest-merger failure for another ("uses-sdk:minSdkVersion 16
+          # cannot be smaller than 23 declared in library"). 2.6.0 is a stable
+          # release already built against compileSdk 31+ with exported set
+          # correctly throughout — swap it in.
+          sed -i "s#com.google.androidbrowserhelper:androidbrowserhelper:1.1.0#com.google.androidbrowserhelper:androidbrowserhelper:2.6.0#" app/build.gradle
+          sed -i 's/minSdkVersion 16/minSdkVersion 23/' app/build.gradle
+
+          # ROOT-CAUSE FIX 5/5 — androidbrowserhelper 2.6.0 has a known upstream
+          # bug (GoogleChrome/android-browser-helper#538): it transitively pulls
+          # androidx.browser:1.9.0-alpha02, which demands compileSdk 36 + AGP
+          # 8.9.1+. Confirmed this isn't fixed by going to a newer
+          # androidbrowserhelper release either — even the later STABLE
+          # androidx.browser:1.9.0 still requires compileSdk 36, so chasing
+          # this forward just trades an accidental requirement for a
+          # deliberate one. Rather than cascade this 2019 template through
+          # compileSdk 36 / AGP 8.9+ / Gradle 8.11+ (a much bigger, riskier
+          # jump), force dependency resolution back to 1.8.0 — the last
+          # androidx.browser release before this compileSdk-36 floor kicked
+          # in, and functionally sufficient for what this TWA actually uses.
+          cat >> app/build.gradle << 'EOF'
+
+          configurations.all {
+              resolutionStrategy {
+                  force 'androidx.browser:browser:1.8.0'
+              }
+          }
+          EOF
       - name: Update TWA Config - Package Name & Domain
         run: |
           cd twa-project
-          
-          # Update build.gradle with new package name and domain
-          sed -i 's/jakearchibald\.github\.io\/svgomg/app.sanjineer.in/g' app/build.gradle
-          sed -i 's/io\.jakearchibald\.svgomg/com.sanjvik.sanjineer/g' app/build.gradle
-          
+
+          # ROOT-CAUSE FIX 3/4 — these sed patterns previously targeted
+          # jakearchibald.github.io/svgomg and io.jakearchibald.svgomg, which
+          # don't exist anywhere in this template. The actual defaults declared
+          # in the twaManifest map at the top of app/build.gradle are
+          # hostName: 'svgomg.firebaseapp.com' and
+          # applicationId: 'org.chromium.twa.svgomg'. The old patterns matched
+          # nothing, so this step was silently a no-op — the build (once it
+          # compiled) would have produced an APK still pointed at Google's demo
+          # site instead of app.sanjineer.in. Target the real strings instead.
+          sed -i "s/svgomg\.firebaseapp\.com/app.sanjineer.in/g" app/build.gradle
+          sed -i "s/org\.chromium\.twa\.svgomg/com.sanjvik.sanjineer/g" app/build.gradle
+
           # Verify the changes were made
           echo "=== Updated build.gradle ==="
-          grep -E "(applicationId|HOST_NAME)" app/build.gradle || echo "Package name updated successfully"
+          grep -E "(applicationId|hostName|namespace)" app/build.gradle
       - name: Update TWA Config - App Name & Resources
         run: |
           cd twa-project
@@ -58,6 +108,24 @@ jobs:
           
           echo "=== Created strings.xml ==="
           cat app/src/main/res/values/strings.xml
+      - name: Fix AndroidManifest Exported Attribute
+        run: |
+          cd twa-project
+          # ROOT-CAUSE FIX 4/4 — LauncherActivity has two <intent-filter>
+          # blocks (MAIN/LAUNCHER + VIEW) but no android:exported attribute.
+          # Apps targeting API 31+ (we just bumped targetSdkVersion to 34)
+          # MUST explicitly declare android:exported on every component that
+          # has an intent-filter, or the manifest merger fails with
+          # "android:exported needs to be explicitly specified for element
+          # <activity#...LauncherActivity>". This activity is the app's actual
+          # launcher entry point, so it must be exported=true (not false) —
+          # everything else in this manifest (FileProvider, DelegationService)
+          # already declares its own exported value explicitly and doesn't
+          # need touching.
+          MANIFEST="app/src/main/AndroidManifest.xml"
+          sed -i 's#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"\n            android:exported="true"#' "$MANIFEST"
+          echo "=== LauncherActivity declaration after patch ==="
+          grep -A2 "LauncherActivity\"" "$MANIFEST"
       - name: Setup Gradle
         run: |
           cd twa-project
