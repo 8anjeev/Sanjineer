@@ -2070,7 +2070,40 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       if (r.error) { console.warn('[reconcile] get_my_companies failed', r.error); return; }
       var rows = r.data || [];
       if (!rows.length) return; // nothing to restore — leave existing state alone
-      var storedCompany = (typeof WS_COMPANY_KEY !== 'undefined') ? safeLS.getItem(WS_COMPANY_KEY) : null;
+      // ROOT-CAUSE FIX (leaked 👑 Owner button on joined projects): this used
+      // to always pick the company from WS_COMPANY_KEY-match-or-rows[0],
+      // with no regard for what's actually on screen. get_my_companies()
+      // returns EVERY company this account has any membership in — for an
+      // account that owns its own (e.g. auto-created personal/free)
+      // workspace AND has separately joined someone else's project via
+      // code, that's two rows. If WS_COMPANY_KEY was ever empty/stale (new
+      // device, cleared storage, a save racing this reconcile) it fell back
+      // to rows[0], which can easily be the OWNED company — silently
+      // reassigning window._wsCompanyId to it while window.currentProjectId
+      // (restored from localStorage at boot, BEFORE this async reconcile
+      // ever runs) still points at the JOINED project actually being
+      // viewed. _ownsAnyCompany() only checks whether window._wsCompanyId
+      // equals the owned company id — it has no idea the on-screen project
+      // belongs to someone else — so that mismatch alone was enough to
+      // leak the Owner button (and Partner/Investment Tracker) onto a
+      // joined engineer/sales_admin's screen.
+      //
+      // Fix: the company backing the project CURRENTLY ON SCREEN always
+      // wins. sanj_sb_project_map carries a companyId for every resolved
+      // project shell, owned or joined (see _resolveLocalShellForCloudProject
+      // and switchProject's own use of this exact map). Only when there is
+      // no active project yet (e.g. very first reconcile on a fresh
+      // device) do we fall back to the remembered WS_COMPANY_KEY, then
+      // finally rows[0].
+      var activeCompanyId = null;
+      if (window.currentProjectId) {
+        try {
+          var _rcMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}');
+          var _rcIds = _rcMap[window.currentProjectId];
+          if (_rcIds && _rcIds.companyId) activeCompanyId = _rcIds.companyId;
+        } catch(e) {}
+      }
+      var storedCompany = activeCompanyId || ((typeof WS_COMPANY_KEY !== 'undefined') ? safeLS.getItem(WS_COMPANY_KEY) : null);
       var company = rows.find(function(c){ return c.company_id === storedCompany; }) || rows[0];
       window._wsCompanyId = company.company_id;
       if (typeof WS_COMPANY_KEY !== 'undefined') safeLS.setItem(WS_COMPANY_KEY, company.company_id);
@@ -2118,6 +2151,27 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           window.currentProjectId = pickId;
           try { localStorage.setItem('sanj_current_project', pickId); } catch(e) {}
           if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
+        }
+        // SAFETY NET: a project was already active on screen before this
+        // reconcile ran (hadCurrent) — re-derive ITS permission state from
+        // what the server just confirmed (sanj_sb_project_map, freshly
+        // written above by _resolveLocalShellForCloudProject) and refresh
+        // the header. Cheap and a no-op when nothing was wrong; but it
+        // means if window._wsCompanyId was ever out of sync with the
+        // active project for any reason (this reconcile firing mid-render,
+        // an older cache, etc.), the 👑 Owner button self-corrects the
+        // moment reconcile completes instead of only on the next manual
+        // project switch (switchProject already does this same refresh).
+        if (hadCurrent) {
+          var _rcActiveMap = {};
+          try { _rcActiveMap = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+          var _rcActiveIds = _rcActiveMap[window.currentProjectId];
+          if (_rcActiveIds && _rcActiveIds.role && typeof _applyPermState === 'function') {
+            if (typeof WS_PROLE_KEY !== 'undefined') { try { safeLS.setItem(WS_PROLE_KEY, _rcActiveIds.role); } catch(e) {} }
+            _applyPermState(_rcActiveIds.role).then(function() {
+              if (typeof updateOwnerBtn === 'function') { try { updateOwnerBtn(); } catch(e) {} }
+            });
+          }
         }
       }).catch(function(e) { console.warn('[reconcile] get_my_projects error', e); });
     }).catch(function(e) { _reconcileInFlight = false; console.warn('[reconcile] get_my_companies error', e); });
@@ -3423,6 +3477,28 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     padding: 8px 12px !important;
     border-radius: 10px !important;
     width: 100% !important;
+    margin-bottom: 2px !important;
+    /* BUGFIX: matches .tab-drawer-item's alignment (the mobile "Switch
+       Tab" drawer) — icon+label as a proper flex row instead of the
+       default inline layout, which only ever looked right in the
+       horizontal scrolling pill buttons this same markup is also used
+       for on mobile. */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 10px !important;
+    text-align: left !important;
+  }
+  #main-app > nav .tab-btn-ico {
+    margin-right: 0 !important;
+    font-size: 16px !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
+  }
+  #main-app > nav .tab-btn-label {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 }
 </style>
