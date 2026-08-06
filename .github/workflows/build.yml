@@ -123,7 +123,7 @@ jobs:
           # already declares its own exported value explicitly and doesn't
           # need touching.
           MANIFEST="app/src/main/AndroidManifest.xml"
-          sed -i 's#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"\n            android:exported="true"#' "$MANIFEST"
+          sed -i 's#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"\n            android:exported="true"#g' "$MANIFEST"
           echo "=== LauncherActivity declaration after patch ==="
           grep -A2 "LauncherActivity\"" "$MANIFEST"
       - name: Setup Gradle
