@@ -1657,6 +1657,18 @@ self.addEventListener('fetch', function(e) {
 
     wrap.innerHTML = html;
 
+    // ROOT-CAUSE FIX (dropdown sometimes seems to open on its own / needs
+    // an extra tap): this function rebuilds proj-menu from scratch on
+    // every call — and it's called from ~15 places (project switch,
+    // save, rename, reconcile, etc.), often with no user interaction at
+    // all. Every fresh build starts closed (display:none in the template
+    // above), but the global _projMenuOpen flag was never reset to match,
+    // so it could silently drift out of sync with what's actually in the
+    // DOM. The next real tap then toggled from the WRONG remembered
+    // state — closing a menu that looked open, or vice versa. Resetting
+    // it here keeps the flag and the DOM always in agreement.
+    _projMenuOpen = false;
+
     // ── Attach events via JS (no inline handlers for reliability) ──
     var btn = document.getElementById('proj-dd-btn');
     var menu = document.getElementById('proj-menu');
@@ -1745,10 +1757,14 @@ self.addEventListener('fetch', function(e) {
     var currentCompany = current ? ((map[current.id] && map[current.id].companyName) || fallbackCompanyName) : '';
 
     if (joined.length <= 1) {
-      wrap.innerHTML = '<span style="display:inline-flex;flex-direction:column;line-height:1.15;padding:2px 8px;">'
-        + '<span style="font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);">' + _escHtml(name) + '</span>'
-        + (currentCompany ? '<span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.5);">' + _escHtml(currentCompany) + '</span>' : '')
-        + '</span>';
+      // BUGFIX: hdr-company (the bold line directly above this dropdown
+      // in the header) already shows this exact same company name via
+      // lmergedProf() — for both owner and joined sessions. Repeating it
+      // here as a subtitle was pure duplication (the "company name shown
+      // twice" bug), not a formatting issue. Just show the project name.
+      // Truncates cleanly instead of wrapping, matching every other line
+      // in this dropdown.
+      wrap.innerHTML = '<span style="display:inline-block;max-width:180px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 8px;font-size:11px;font-weight:800;color:rgba(255,255,255,0.85);">' + _escHtml(name) + '</span>';
       return;
     }
 
@@ -8485,6 +8501,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <input type="date" id="pl-date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
       <input type="date" id="pl-due" placeholder="Due Date" class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400">
     </div>
+    <div id="pl-photo-section" class="mb-3"></div>
     <button onclick="addPunchItem()" class="g-tobr-amber500-orange500 w-full text-white py-2 rounded-xl font-bold text-sm active:scale-95">📋 Add to Punch List</button>
   </div>
   <!-- Filter + List -->
@@ -11100,7 +11117,17 @@ function loadPhotos() {
   var div = document.getElementById('photo-previews');
   if (!div) return;
   var keys = lphkeys()[DD] || [];
-  var qdprPhotos = (lm()[DD] || {}).qdprPhotos || []; // already data URLs — synced from QDPR, no resolve needed
+  // BUGFIX (QDPR photos showing as a broken-image box here): report.photos
+  // is an array of {id, src} objects everywhere else in the app (QDPR's
+  // own grid, the punch list, etc.) — this m[d].qdprPhotos copy is no
+  // different (see the assignment a few hundred lines down: `m[d].qdprPhotos
+  // = (report.photos || []).slice(...)`, which stores those objects
+  // untouched). But this stale comment and the rendering below treated
+  // each entry as if it were already a plain URL string, doing
+  // '<img src="' + s + '">' — string-concatenating a whole object
+  // produces src="[object Object]", an invalid URL, hence the broken-image
+  // box instead of the real photo. Normalize to the actual src string here.
+  var qdprPhotos = ((lm()[DD] || {}).qdprPhotos || []).map(function(p){ return (p && typeof p === 'object') ? (p.src || '') : (p || ''); }).filter(Boolean);
   if (!keys.length && !qdprPhotos.length) { div.innerHTML = '<p class="text-gray-400 text-xs">No photos yet</p>'; return; }
   div.innerHTML = '<p class="text-gray-400 text-xs">Loading photos...</p>';
   resolveAllFileSrc(keys, function(imgs) {
@@ -15372,7 +15399,11 @@ function printDailyReport(){
 try{
 AD=ld();
 var photoKeys = lphkeys()[DD] || [];
-var qdprPhotos = (lm()[DD] || {}).qdprPhotos || []; // already data URLs, no resolve needed
+// Same normalization as loadPhotos() above — qdprPhotos entries are
+// {id, src} objects, not plain strings; extract .src before they get
+// concatenated into an <img src="..."> string below, or they render as a
+// broken-image box (src="[object Object]") in the printed report too.
+var qdprPhotos = ((lm()[DD] || {}).qdprPhotos || []).map(function(p){ return (p && typeof p === 'object') ? (p.src || '') : (p || ''); }).filter(Boolean);
 resolveAllFileSrc(photoKeys, function(photos) {
 try{
 photos = photos.filter(Boolean).concat(qdprPhotos);
@@ -17573,15 +17604,81 @@ var PL_KEY='cm_punchlist';
 function lpl(){try{return JSON.parse(safeLS.getItem(_pk(PL_KEY))||'[]');}catch(e){return [];}}
 function spl(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampArray(lpl(), x || []); } catch(e) {} safeLS.setItem(_pk(PL_KEY),JSON.stringify(x));_scheduleCloudPush();}
 
-function loadPunchTab(){renderPunchList();}
+function loadPunchTab(){renderPunchList();_plRenderPhotoSection();}
+
+// ── Punch list photos (optional) ────────────────────────────
+// Mirrors the QDPR photo pipeline exactly (geoStampImageFile → R2 upload →
+// {id, src} objects) so punch-list images get the same compression, geo
+// stamping, and cloud backup/sync as every other photo in the app —
+// nothing punch-list-specific was invented here on purpose. Photos live on
+// the punch item itself (p.photos), so they ride along with the existing
+// punch-list array sync/merge logic (_absorbArr/_mergeArrayStore) for free.
+var PL_MAX_PHOTOS = 4;
+var plFormPhotos = [];
+function plPhotoSectionHTML(){
+  var n = plFormPhotos.length;
+  var full = n >= PL_MAX_PHOTOS;
+  return '<p class="text-xs font-bold text-gray-500 mb-2">📷 Photos (optional) <span style="font-weight:600;color:'+(full?'#ef4444':'#9ca3af')+'">'+n+'/'+PL_MAX_PHOTOS+'</span></p>'
+    + '<div id="pl-photo-grid">'+plBuildPhotoGridEditableHTML()+'</div>'
+    + '<label style="display:'+(full?'none':'flex')+';align-items:center;justify-content:center;gap:6px;margin-top:'+(n?'8px':'0')+';padding:10px;border-radius:10px;border:1.5px dashed #d1d5db;background:#f9fafb;color:#374151;font-size:12.5px;font-weight:700;cursor:pointer">'
+    + '📷 Add Photos'
+    + '<input type="file" accept="image/*" multiple style="display:none" onchange="onPlPhotoChange(this)"></label>';
+}
+function plBuildPhotoGridEditableHTML(){
+  if (!plFormPhotos.length) return '';
+  return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+    + plFormPhotos.map(function(p){
+        return '<div style="position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1.5px solid #e5e7eb">'
+          + '<img src="'+p.src+'" onclick="qdprOpenImageViewer(this.src)" style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer">'
+          + '<button onclick="plRemovePhoto(\''+p.id+'\')" style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.62);color:white;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">✕</button>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+function _plRenderPhotoSection(){
+  var el = document.getElementById('pl-photo-section');
+  if (el) el.innerHTML = plPhotoSectionHTML();
+}
+async function onPlPhotoChange(input){
+  var files = Array.from(input.files||[]);
+  if (!files.length) return;
+  if (typeof window !== 'undefined' && window._ENGINEER_MODE && window._ENGINEER_READONLY) {
+    toast('👁️ Read-only access — ask the project owner for write permission to upload photos', 'err');
+    input.value = '';
+    return;
+  }
+  var room = PL_MAX_PHOTOS - plFormPhotos.length;
+  if (room<=0){ toast('Maximum '+PL_MAX_PHOTOS+' photos allowed','err'); input.value=''; return; }
+  var toProcess = files.slice(0, room);
+  if (files.length>room) toast('Only '+room+' more photo(s) added (max '+PL_MAX_PHOTOS+')','err');
+  if (toProcess.length) toast('☁️ Uploading photo(s)…', 'info');
+  for (var i=0;i<toProcess.length;i++){
+    try{
+      var dataUrl = await geoStampImageFile(toProcess[i], 1000, 0.78, window.currentProjectId);
+      var url = await new Promise(function(resolve){
+        uploadFileToR2(dataURLtoBlob(dataUrl), 'site-photos', function(u, err){ resolve(u || dataUrl); if(!u) toast('⚠️ Photo kept locally only (upload failed: '+(err||'offline')+')','err'); });
+      });
+      plFormPhotos.push({id:uid(), src:url});
+    }
+    catch(e){ console.error('Punch list photo processing failed', e); }
+  }
+  input.value='';
+  _plRenderPhotoSection();
+}
+function plRemovePhoto(id){
+  plFormPhotos = plFormPhotos.filter(function(p){ return p.id!==id; });
+  _plRenderPhotoSection();
+}
 
 function addPunchItem(){
   var title=document.getElementById('pl-title').value.trim();
   if(!title){toast('Issue title required','err');return;}
   var list=lpl();
-  list.push({id:'pl'+Date.now(),__ts:Date.now(),title:title,location:document.getElementById('pl-location').value.trim(),category:document.getElementById('pl-category').value,priority:document.getElementById('pl-priority').value,assigned:document.getElementById('pl-assigned').value.trim(),date:document.getElementById('pl-date').value||ist(),due:document.getElementById('pl-due').value,status:'open',created:Date.now()});
+  list.push({id:'pl'+Date.now(),__ts:Date.now(),title:title,location:document.getElementById('pl-location').value.trim(),category:document.getElementById('pl-category').value,priority:document.getElementById('pl-priority').value,assigned:document.getElementById('pl-assigned').value.trim(),date:document.getElementById('pl-date').value||ist(),due:document.getElementById('pl-due').value,status:'open',created:Date.now(),photos:plFormPhotos.slice()});
   spl(list);
   ['pl-title','pl-location','pl-assigned'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  plFormPhotos = [];
+  _plRenderPhotoSection();
   renderPunchList();toast('Added to punch list!','ok');
 }
 
@@ -17616,7 +17713,11 @@ function renderPunchList(){
       '<div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#9ca3af">'+
       (p.location?'<span>📍 '+_esc(p.location)+'</span>':'')+(p.assigned?'<span>👤 '+_esc(p.assigned)+'</span>':'')+'<span>📅 '+fd(p.date)+'</span>'+
       (p.due?'<span>⏰ Due: '+fd(p.due)+'</span>':'')+
-      '</div></div>';
+      '</div>'+
+      ((p.photos&&p.photos.length)?('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px">'+p.photos.map(function(ph){
+        return '<div style="aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb"><img src="'+ph.src+'" onclick="qdprOpenImageViewer(this.src)" style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer"></div>';
+      }).join('')+'</div>'):'')+
+      '</div>';
   }).join('');
 }
 
