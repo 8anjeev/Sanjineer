@@ -559,6 +559,8 @@ self.addEventListener('fetch', function(e) {
         window._offlineQueue.push(entry);
         _saveOfflineQueue();
         _showOfflineBanner();
+        if (typeof _syncLogAdd === 'function') _syncLogAdd('queued', '');
+        if (typeof updateSyncBadge === 'function') updateSyncBadge();
       }
     });
   }
@@ -583,14 +585,18 @@ self.addEventListener('fetch', function(e) {
   // ── 3. Online/offline event listeners ──────────────────────────────────────
   window.addEventListener('online', function() {
     window._isOnline = true;
+    if (typeof _syncLogAdd === 'function') _syncLogAdd('online', '');
     _replayOfflineQueue();
     var ind = document.getElementById('offline-indicator');
     if (ind) ind.style.display = 'none';
+    if (typeof updateSyncBadge === 'function') updateSyncBadge();
   });
   window.addEventListener('offline', function() {
     window._isOnline = false;
+    if (typeof _syncLogAdd === 'function') _syncLogAdd('offline', '');
     var ind = document.getElementById('offline-indicator');
     if (ind) ind.style.display = 'flex';
+    if (typeof updateSyncBadge === 'function') updateSyncBadge();
   });
 
   // ── 4. Replay queued mutations when back online ─────────────────────────────
@@ -631,10 +637,13 @@ self.addEventListener('fetch', function(e) {
     _replayInFlight = false;
     if (failed.length === 0) {
       _hideOfflineBanner();
+      if (queue.length > 0 && typeof _syncLogAdd === 'function') _syncLogAdd('replay_ok', queue.length + ' change' + (queue.length===1?'':'s'));
       if (typeof toast === 'function') toast('✅ ' + (queue.length - failed.length) + ' offline changes synced!', 'ok');
     } else {
+      if (typeof _syncLogAdd === 'function') _syncLogAdd('replay_fail', failed.length + ' of ' + queue.length + ' failed');
       _showOfflineBanner();
     }
+    if (typeof updateSyncBadge === 'function') updateSyncBadge();
   }
 
   // Inject offline UI indicators after DOM is ready
@@ -2413,26 +2422,18 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
   }
 
-  // ── snap helpers (kept for backward compat with existing code) ──
-  function _normSnap(snap) { return snap; }
-  function snapExists(snap) { return snap && snap.data !== null && snap.data !== undefined; }
-  function snapData(snap)   { return snap ? snap.data : null; }
-
-  // ── getSiteId / getFbConfig shims ─────────────────────────────
-  // These are called throughout the app — we keep them but map to Supabase
-  var CLOUD_FB_CFG  = 'cm_fb_cfg';
-  var CLOUD_SITE_ID = 'cm_cloud_site';
-  var CLOUD_KEY     = 'cm_cloud';
-  function getFbConfig() {
-    // Return a dummy object so all cfg checks pass
-    return { projectId: 'sanjineer-supabase', apiKey: '', authDomain: '', appId: '' };
-  }
-  function getSiteId() {
-    if (typeof safeLS === 'undefined' || !safeLS) return '';
-    var s = safeLS.getItem(CLOUD_SITE_ID);
-    return s || '';
-  }
-  function isCloudActivated() { return (typeof safeLS !== 'undefined' && safeLS) ? safeLS.getItem(CLOUD_KEY) === '1' : false; }
+  // ── snap helpers / getSiteId / getFbConfig / isCloudActivated ──
+  // NOTE: the real, active definitions of snapExists, snapData, getSiteId,
+  // getFbConfig, isCloudActivated, and the CLOUD_KEY/CLOUD_FB_CFG/CLOUD_SITE_ID
+  // constants live later in the file (Firebase-compat + Supabase cloud-sync
+  // sections). A duplicate, stale copy used to live here with DIFFERENT
+  // localStorage key names ('cm_cloud' / 'cm_fb_cfg' / 'cm_cloud_site' vs the
+  // real 'cm_cloud_activated' / 'cm_fb_config' / 'cm_site_id') and dummy
+  // logic. It was always silently overwritten by the later definitions
+  // (same global scope across <script> blocks), so it was dead code — but a
+  // dangerously fragile kind of dead code, since any future refactor that
+  // reordered the <script> blocks would have flipped which version "won"
+  // and orphaned every user's stored cloud-activation state. Removed.
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4198,25 +4199,16 @@ function _settOpenLogin() {
   var s1 = document.getElementById('ob-otp-step1'), s2 = document.getElementById('ob-otp-step2');
   if (s1) s1.style.display = 'block';
   if (s2) s2.style.display = 'none';
-  var menuSec = document.getElementById('ob-menu-section'), cloudSec = document.getElementById('ob-cloud-section');
-  if (menuSec) menuSec.style.display = 'none';
-  if (cloudSec) cloudSec.style.display = 'block';
   ao.style.opacity = '1';
   ao.style.display = 'flex';
 }
 
-// Single entry point for "Use Cloud Account" — replaces the old separate
-// Login / Create Account buttons. One OTP flow serves both new and
-// returning users (signInWithOtp auto-creates an account if one doesn't
-// exist yet, and _handleOtpSuccess below sorts out where to route them
-// afterwards). Plan selection (Pro/Enterprise) now happens via the
-// workspace flow's own payment step, instead of being duplicated here.
-function obGoCloud(){
-  var menuSec  = document.getElementById('ob-menu-section');
-  var cloudSec = document.getElementById('ob-cloud-section');
-  if (menuSec)  menuSec.style.display  = 'none';
-  if (cloudSec) cloudSec.style.display = 'block';
-}
+// Kept only in case some old cached HTML/older client build still calls it —
+// the "4-button menu" (ob-menu-section) this used to toggle away was removed
+// when Login/Create Account got consolidated into a single OTP flow; the
+// cloud panel (ob-cloud-section) is the only option shown now, so there's
+// nothing left to switch.
+function obGoCloud(){}
 
 // "Join Project" needs no login — open the existing Join Project modal (code entry)
 // ON TOP of the onboarding screen (we don't dismiss onboarding yet). This way, if the
@@ -4328,7 +4320,6 @@ function _handleOtpSuccess(user, email, onDismiss) {
 // ══════════════════════════════════════════════════════════════
 var _otpPendingName = '';
 function obSendOtp() {
-  var name  = (document.getElementById('ob-login-name') || {}).value || '';
   var email = (document.getElementById('ob-login-email') || {}).value || '';
   email = email.trim().toLowerCase();
   var errEl = document.getElementById('ob-login-err');
@@ -4338,7 +4329,6 @@ function obSendOtp() {
     errEl.textContent = '⚠️ Please enter a valid email'; errEl.style.display = 'block'; return;
   }
   btn.textContent = '⏳ Sending…'; btn.disabled = true;
-  _otpPendingName = name.trim();
   _waitSb(function() {
     _sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } }).then(function(r) {
       btn.textContent = '📧 Send OTP'; btn.disabled = false;
@@ -5026,7 +5016,6 @@ function _settRefreshLoginBtn() {
   var titleEl = document.getElementById('sett-login-title');
   var subEl = document.getElementById('sett-login-sub');
   var iconEl = document.getElementById('sett-login-icon');
-  var logoutEl = document.getElementById('sett-logout-btn');
   if (!titleEl || !subEl) return;
   var email = safeLS.getItem(ADMIN_EMAIL_KEY);
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
@@ -5040,12 +5029,10 @@ function _settRefreshLoginBtn() {
     titleEl.textContent = email;
     subEl.textContent = planLabel + (isMember ? ' · tap to manage' : ' plan · tap to manage');
     if (iconEl) iconEl.textContent = '👤';
-    if (logoutEl) logoutEl.style.display = 'inline-block';
   } else {
     titleEl.textContent = 'Login / Cloud';
     subEl.textContent = 'Sign in for backup & sync';
     if (iconEl) iconEl.textContent = '🔒';
-    if (logoutEl) logoutEl.style.display = 'none';
   }
 }
 // Dispatcher for the Settings login button — logged in → plan management,
@@ -5684,11 +5671,10 @@ function _wsSelectProject(p) {
     <div class="flex-1 min-w-0" style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:4px">
       <!-- Hidden kept for JS compat -->
       <span id="cloud-hdr-icon-center" style="display:none">🔒</span>
-      <!-- LEFT slot (mirrors QDPR slot on the right so center stays centered) -->
+      <!-- LEFT slot (kept empty now that Owner moved to the far-right
+           stacked block below — mirrors QDPR slot on the right so center
+           stays centered) -->
       <div style="display:flex;align-items:center;justify-content:flex-start;min-width:0;gap:4px">
-        <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;">
-          <span style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.85);line-height:1;">Owner</span>
-        </button>
         <!-- Partner Investment Tracker button lives ONLY inside the Owner
              Overview / Owner Dashboard headers (mobile + desktop), next to
              📢/✕ — not in the main app header. It was briefly added here
@@ -5701,19 +5687,24 @@ function _wsSelectProject(p) {
         <p id="hdr-company" class="font-black text-white truncate" style="font-size:13px!important;line-height:1;margin:0;transition:opacity .3s;letter-spacing:.01em;max-width:190px;text-align:center"></p>
         <div id="project-dropdown-wrap" style="flex-shrink:0;display:flex;align-items:center;justify-content:center"></div>
       </div>
-      <!-- RIGHT slot — QDPR mirrors Admin/Owner slot on the other side for symmetry -->
-      <div style="display:flex;align-items:center;justify-content:flex-end;min-width:0">
-        <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:3px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;transition:background .15s;flex-shrink:0;" ontouchstart="this.style.background='rgba(255,255,255,0.22)'" ontouchend="this.style.background='rgba(255,255,255,0.1)'">
-          <span style="font-size:10px;line-height:1;font-weight:800;color:#fff;">QDPR</span>
-        </button>
-      </div>
+      <!-- RIGHT slot (kept empty now that QDPR moved to the far-right
+           stacked block below) -->
+      <div style="display:flex;align-items:center;justify-content:flex-end;min-width:0"></div>
       <!-- Engineer name hidden — preserved for JS compat -->
       <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;display:none"></p>
     </div>
-    <!-- RIGHT: Total Spends -->
-    <div class="text-right flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
-      <p class="text-purple-200 uppercase" style="font-size:8px!important;letter-spacing:.05em;line-height:1;font-weight:500;margin:0">Total Spends</p>
-      <p id="header-spends" class="text-white" style="font-size:15px!important;line-height:1;font-weight:400;margin:0;transition:all .4s cubic-bezier(.34,1.56,.64,1)">₹0</p>
+    <!-- RIGHT: Owner + QDPR stacked (replaces the old Total Spends
+         display — see dash-total-spends chip on the Dashboard tab for
+         where spends now lives instead). owner-hdr-btn keeps its id;
+         updateOwnerBtn() still finds it here unchanged, just relocated.
+         Icon-only, transparent, no padding. -->
+    <div class="flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:center">
+      <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;width:26px;height:26px;padding:0;margin:0;border:none;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;">
+        <span style="font-size:16px;line-height:1">👑</span>
+      </button>
+      <button onclick="closeAllAndSettings();setTimeout(openQdprPanel,220)" title="QDPR" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;margin:0;border:none;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;outline:none;" ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">
+        <span style="font-size:16px;line-height:1">📋</span>
+      </button>
     </div>
   </div>
 </header>
@@ -5737,6 +5728,27 @@ function _wsSelectProject(p) {
         Cancel
       </button>
     </div>
+  </div>
+</div>
+
+<!-- ========== SYNC ACTIVITY PANEL ========== -->
+<div id="sync-activity-panel" style="display:none;position:fixed;inset:0;z-index:600001;align-items:flex-end;justify-content:center;pointer-events:none;" onclick="if(event.target===this&&_modalGuardOk('sync-activity-panel'))closeSyncActivityPanel()">
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);"></div>
+  <div id="sync-activity-inner" style="position:relative;z-index:1;width:100%;max-width:480px;max-height:78vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#1a1740,#241C5C);border-radius:20px 20px 0 0;padding:16px 14px 22px;transform:translateY(100%);transition:transform .3s cubic-bezier(0.34,1.15,0.64,1);pointer-events:auto;">
+    <div style="width:36px;height:4px;background:rgba(255,255,255,0.2);border-radius:99px;margin:0 auto 14px;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span id="sync-panel-dot" style="width:9px;height:9px;border-radius:50%;background:#6b7280;flex-shrink:0;"></span>
+        <div>
+          <p style="font-size:13px;font-weight:900;color:#fff;line-height:1;">Sync Activity</p>
+          <p id="sync-panel-status" style="font-size:9px;color:rgba(255,255,255,.5);margin-top:2px;">&mdash;</p>
+        </div>
+      </div>
+      <button onclick="closeSyncActivityPanel()" style="width:26px;height:26px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.6);font-size:13px;cursor:pointer;flex-shrink:0;">&#10005;</button>
+    </div>
+    <button id="sync-panel-retry-btn" onclick="_syncActivityRetryNow()" style="display:none;width:100%;padding:9px;margin-bottom:10px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:800;cursor:pointer;">&#128260; Retry sync now</button>
+    <div id="sync-activity-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
+    <p id="sync-activity-empty" style="display:none;text-align:center;font-size:11px;color:rgba(255,255,255,.35);padding:20px 0;">No sync activity yet</p>
   </div>
 </div>
 
@@ -5903,7 +5915,7 @@ function _wsSelectProject(p) {
       .sett-row:nth-child(3){animation-delay:.14s}
       .sett-row:nth-child(4){animation-delay:.19s}
 
-      /* Number pop when header-spends updates */
+      /* Number pop when dash-total-spends updates */
       .num-pop {animation:num-pop .35s ease;}
 
       /* Settings gear spin on open */
@@ -5917,6 +5929,20 @@ function _wsSelectProject(p) {
         <p style="font-size:13px;font-weight:900;color:#fff;margin:0;">Settings</p>
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
+        <!-- Sync status badge — always-visible cloud/offline indicator,
+             relocated here (left of Calc) from the main header per product
+             decision. Same ids (cloud-hdr-btn/cloud-hdr-label/sync-hdr-dot)
+             that updateCloudBtn()/updateSyncBadge() already look up — those
+             functions work unchanged, they just find the element here now.
+             Icon-only, transparent, no padding — matches its original
+             header style. Tapping opens the Sync Activity panel. -->
+        <button id="cloud-hdr-btn" class="cloud-btn" onclick="closeAllAndSettings();setTimeout(openSyncActivityPanel,220)" title="Sync status"
+          style="display:none;position:relative;align-items:center;justify-content:center;width:24px;height:24px;padding:0;margin:0;border:none;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;"
+          ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">
+          <span style="font-size:15px;line-height:1">☁️</span>
+          <span id="sync-hdr-dot" style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:#6b7280;border:1.5px solid #241C5C;display:none;"></span>
+          <span id="cloud-hdr-label" style="display:none"></span>
+        </button>
         <button onclick="closeAllAndSettings();setTimeout(openCalcModal,220)" title="Calculator" style="display:flex;align-items:center;gap:4px;height:24px;padding:0 9px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:11px;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent;" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'">🖩 Calc</button>
         <button onclick="closeAllAndSettings()" style="width:24px;height:24px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;" ontouchstart="this.style.transform='scale(.88)'" ontouchend="this.style.transform='scale(1)'">✕</button>
       </div>
@@ -7079,9 +7105,9 @@ document.addEventListener('DOMContentLoaded', function() {
   }, 900);
 });
 
-// ── Number pop animation on header-spends update ──────────────
+// ── Number pop animation on dash-total-spends update ───────────
 (function() {
-  var el = document.getElementById('header-spends');
+  var el = document.getElementById('dash-total-spends');
   if (!el) return;
   var obs = new MutationObserver(function() {
     el.classList.remove('num-pop');
@@ -7164,17 +7190,22 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Row 1: Advances + Remaining (two large equal cards) -->
-  <div class="grid grid-cols-2 gap-1.5 mb-1.5">
-    <div class="g-tobr-amber500-orange500 stat-card rounded-xl text-white" style="padding:9px 12px">
-      <p class="text-[9px] text-amber-100 font-semibold">Advances Given</p>
-      <p id="dash-advance" class="font-black leading-none" style="font-size:14px!important;margin-top:4px">₹0</p>
-      <p class="text-[8px] text-amber-200" style="margin-top:4px">This Month</p>
+  <!-- Row 1: Advances + Total Spends + Remaining (three equal cards) -->
+  <div class="grid grid-cols-3 gap-1.5 mb-1.5">
+    <div class="g-tobr-amber500-orange500 stat-card rounded-xl text-white" style="padding:8px 6px">
+      <p class="text-[8px] text-amber-100 font-semibold">Advances</p>
+      <p id="dash-advance" class="font-black leading-none" style="font-size:12px!important;margin-top:4px">₹0</p>
+      <p class="text-[7px] text-amber-200" style="margin-top:3px">This Month</p>
     </div>
-    <div class="g-tobr-rose500-pink500 stat-card rounded-xl text-white" style="padding:9px 12px">
-      <p class="text-[9px] text-rose-100 font-semibold">Remaining</p>
-      <p id="dash-remaining" class="font-black leading-none" style="font-size:14px!important;margin-top:4px">₹0</p>
-      <p class="text-[8px] text-rose-200" style="margin-top:4px">After Advances</p>
+    <div id="dash-total-spends-chip" class="g-tobr-indigo500-violet500 stat-card rounded-xl text-white" style="padding:8px 6px">
+      <p class="text-[8px] text-indigo-100 font-semibold">Total Spends</p>
+      <p id="dash-total-spends" class="font-black leading-none" style="font-size:12px!important;margin-top:4px">₹0</p>
+      <p class="text-[7px] text-indigo-200" style="margin-top:3px">All Time</p>
+    </div>
+    <div class="g-tobr-rose500-pink500 stat-card rounded-xl text-white" style="padding:8px 6px">
+      <p class="text-[8px] text-rose-100 font-semibold">Remaining</p>
+      <p id="dash-remaining" class="font-black leading-none" style="font-size:12px!important;margin-top:4px">₹0</p>
+      <p class="text-[7px] text-rose-200" style="margin-top:3px">After Advances</p>
     </div>
   </div>
 
@@ -8101,6 +8132,15 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="boq-today-summary-card">
       <p style="font-size:11px;color:#9ca3af;text-align:center;padding:12px 0">Tap "Fill Daily Status" to add today's work details</p>
     </div>
+  </div>
+
+  <!-- Today's Quantity Progress — driven by boqUpdateDailySummary(), which
+       is called on every BOQ quantity update (see boqSave() call sites).
+       Hidden by default; boqUpdateDailySummary() shows it only when at
+       least one item has a non-zero todayQty. -->
+  <div class="dt-r bg-white rounded-2xl p-3 mb-3 shadow-xl" id="boq-daily-summary" style="display:none">
+    <p class="text-sm font-bold text-gray-700 mb-2">📈 Today's Quantity Progress</p>
+    <div id="boq-today-list"></div>
   </div>
 
   <!-- Project Info -->
@@ -10712,6 +10752,12 @@ function applyHeaderColor() {
     +'  background-image: '+(isGrad?bg:'none')+' !important;'
     +'  background-color: '+(isGrad?'transparent':bg)+' !important;'
     +'  padding: 10px 14px !important;'
+    +'}'
+    // Dashboard "Total Spends" chip — same saved profile colour as the
+    // header/active tab, instead of its own fixed indigo/violet gradient.
+    +'#dash-total-spends-chip {'
+    +'  background-image: '+(isGrad?bg:'none')+' !important;'
+    +'  background-color: '+(isGrad?'transparent':bg)+' !important;'
     +'}';
 }
 function loadProfileLogo(evt) {
@@ -11035,7 +11081,7 @@ function boot() {
   safeLS.removeItem('sj_viewer_pid');
   safeLS.removeItem('sj_viewer_print');
   safeLS.removeItem('sj_viewer_token');
-  var _adminRole = safeLS.getItem('cm_admin_role') || safeLS.getItem('cm_cloud') || '';
+  var _adminRole = safeLS.getItem('cm_admin_role') || '';
   var _adminLoggedIn = (_adminRole === 'admin' || _adminRole === '1') && !!safeLS.getItem('cm_admin_email');
   switchTab('dashboard');
   // Guest/offline (no admin cloud session) — there's no pull coming to
@@ -11474,7 +11520,7 @@ function viewDaily() {
         var otHrs=wks.reduce(function(s,w){return s+(parseFloat(w.ot_hours)||0);},0);
         var hrsStr=otHrs>0?'<span style="color:#4f46e5;font-weight:700">'+hrs.toFixed(1)+'</span><span style="color:#7c3aed;font-weight:700">+'+otHrs.toFixed(1)+'h</span>':hrs.toFixed(1)+'h';
         var wd=(wks.find(function(w){ return w.work_done; })||{}).work_done||'--';
-        return '<tr class="border-b border-gray-100" data-cat="'+cat+'"><td class="px-2 py-2 font-bold text-xs">'+cat+'</td><td class="px-2 py-2 text-center font-bold text-xs" style="color:#4f46e5">'+wks.length+'</td><td class="px-2 py-2 text-center text-xs">'+hrsStr+'</td><td class="px-2 py-2 text-xs wd-cell">'+wd+'</td><td class="px-2 py-2 text-center"><button onclick="editWD(\''+cat+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:5px;cursor:pointer;">Edit</button></td></tr>';
+        return '<tr class="border-b border-gray-100" data-cat="'+cat+'"><td class="px-2 py-2 font-bold text-xs">'+cat+'</td><td class="px-2 py-2 text-center font-bold text-xs" style="color:#4f46e5">'+wks.length+'</td><td class="px-2 py-2 text-center text-xs">'+hrsStr+'</td><td class="px-2 py-2 text-xs wd-cell">'+_escHtml(wd)+'</td><td class="px-2 py-2 text-center"><button onclick="editWD(\''+cat+'\')" style="font-size:10px;padding:0 12px;background:#e0e7ff;color:#4f46e5;border:none;border-radius:5px;cursor:pointer;">Edit</button></td></tr>';
       }).join('')
     : '<tr><td colspan="5" class="py-4 text-center text-gray-400 text-xs">No attendance for this date</td></tr>';
 }
@@ -11482,7 +11528,7 @@ function editWD(cat) {
   var row = document.querySelector('[data-cat="'+cat+'"]'); if (!row) return;
   var cell = row.querySelector('.wd-cell'), cur = cell.textContent.trim()==='--' ? '' : cell.textContent.trim();
   var safe = cat.replace(/\s/g,'_');
-  cell.innerHTML = '<div style="display:flex;gap:4px"><input id="wd-'+safe+'" style="flex:1;padding:2px 6px;border:1px solid #6366f1;border-radius:4px;font-size:11px" value="'+cur+'"><button onclick="saveWD(\''+cat+'\')" style="padding:0 12px;background:#059669;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;">OK</button></div>';
+  cell.innerHTML = '<div style="display:flex;gap:4px"><input id="wd-'+safe+'" style="flex:1;padding:2px 6px;border:1px solid #6366f1;border-radius:4px;font-size:11px" value="'+_escHtml(cur)+'"><button onclick="saveWD(\''+cat+'\')" style="padding:0 12px;background:#059669;color:#fff;border:none;border-radius:4px;font-size:10px;cursor:pointer;">OK</button></div>';
   var inp = document.getElementById('wd-'+safe); if (inp) inp.focus();
 }
 function saveWD(cat) {
@@ -14994,9 +15040,9 @@ var allPay=dedup(AD.filter(function(d){ return d.type==='attendance'; })).reduce
 },0);
 function se(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
 se('dash-advance',fc(totalAdv)); se('dash-remaining',fc(Math.max(0,wPay+ctContr-totalAdv)));
+se('dash-total-spends',fc(allPay+pOut+rExp));
 se('dash-material',fc(matMonth)); se('dash-petty',fc(pIn)); se('dash-petty-left',fc(pIn-pOut));
 se('dash-rental-out',fc(rExp)); se('dash-rental-in',fc(rInc));
-se('header-spends',fc(allPay+pOut+rExp));
 // New stats
 var openPunches=lpl().filter(function(p){return p.status==='open';}).length;
 var toolsCount=AD.filter(function(d){return d.type==='tool';}).length;
@@ -16514,32 +16560,6 @@ function markMsDone(id){
   if(m){m.status='✅ Completed';m.__ts=Date.now();}sms(ms);renderSchedule();toast('Marked complete!','ok');
 }
 function delMs(id){askDel('Delete this milestone?',function(){if (typeof _addTombstone === 'function') _addTombstone('ms__'+id, Date.now()); var ms=lms().filter(function(m){return m.id!==id;});sms(ms);renderSchedule();toast('Deleted','ok');});}
-
-// ============================================================
-// SCHEDULE SUB-TAB SWITCHER
-// ============================================================
-var _schedSub = 'main';
-function switchSchedSub(name){
-  _schedSub = name;
-  var mainEl = document.getElementById('sched-sub-main');
-  var boqEl  = document.getElementById('sched-sub-boq');
-  var btnMain = document.getElementById('sched-sub-btn-main');
-  var btnBoq  = document.getElementById('sched-sub-btn-boq');
-  if(mainEl) mainEl.style.display = name==='main'?'block':'none';
-  if(boqEl)  boqEl.style.display  = name==='boq' ?'block':'none';
-  if(btnMain){
-    btnMain.style.background = name==='main'?'linear-gradient(135deg,#4f46e5,#7c3aed)':'#f3f4f6';
-    btnMain.style.color = name==='main'?'#fff':'#6b7280';
-    btnMain.style.boxShadow = name==='main'?'0 3px 10px rgba(79,70,229,0.3)':'none';
-  }
-  if(btnBoq){
-    btnBoq.style.background = name==='boq'?'linear-gradient(135deg,#0d9488,#0f766e)':'#f3f4f6';
-    btnBoq.style.color = name==='boq'?'#fff':'#6b7280';
-    btnBoq.style.boxShadow = name==='boq'?'0 3px 10px rgba(13,148,136,0.3)':'none';
-  }
-  if(name==='boq') boqRender();
-  else { renderSchedule(); setTimeout(renderGantt,200); }
-}
 
 // ============================================================
 // BOQ SCHEDULE
@@ -18242,6 +18262,161 @@ function updateCloudBtn() {
     }
   }
   updateOwnerBtn();
+  if (typeof updateSyncBadge === 'function') updateSyncBadge();
+}
+
+// ══════════ SYNC ACTIVITY LOG ══════════
+// A small, always-visible trust layer on top of the two sync paths that
+// already exist in this app:
+//   1. The legacy whole-project blob push/pull (_doPush / SanjCloud.pushBlob
+//      / project_backups) — tracked via the 'cm_push_pending' localStorage
+//      flag and retried with backoff inside _doPush itself.
+//   2. The newer per-mutation REST queue (window._offlineQueue /
+//      _replayOfflineQueue) for direct Supabase table writes made while
+//      offline.
+// Neither path previously had any persistent, glanceable UI beyond a toast
+// that disappears in a few seconds — if you looked away you'd never know a
+// push failed or a change was still queued. This module gives both a
+// shared home: a header dot (real now — see the cloud-hdr-btn markup) plus
+// a bottom-sheet log of the last ~30 sync events with timestamps.
+var SYNC_LOG_KEY = 'sanj_sync_log';
+var SYNC_LOG_MAX = 30;
+
+function _syncLogAdd(type, detail) {
+  try {
+    var log = _syncLogGet();
+    log.unshift({ ts: Date.now(), type: type, detail: detail || '' });
+    if (log.length > SYNC_LOG_MAX) log = log.slice(0, SYNC_LOG_MAX);
+    safeLS.setItem(SYNC_LOG_KEY, JSON.stringify(log));
+  } catch(e) {}
+  if (typeof updateSyncBadge === 'function') updateSyncBadge();
+  var panel = document.getElementById('sync-activity-panel');
+  if (panel && panel.style.display !== 'none' && typeof _renderSyncActivity === 'function') _renderSyncActivity();
+}
+
+function _syncLogGet() {
+  try { return JSON.parse(safeLS.getItem(SYNC_LOG_KEY) || '[]'); } catch(e) { return []; }
+}
+
+// Single source of truth for "is there anything unsynced right now" —
+// used by both the header dot and the panel's status line, so they can
+// never disagree with each other.
+function _syncPendingNow() {
+  var legacyPending = safeLS.getItem('cm_push_pending') === '1';
+  var queueLen = (window._offlineQueue && window._offlineQueue.length) || 0;
+  return legacyPending || queueLen > 0;
+}
+
+function updateSyncBadge() {
+  var dot = document.getElementById('sync-hdr-dot');
+  var btn = document.getElementById('cloud-hdr-btn');
+  if (!dot || !btn) return;
+  var offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+  var pending = _syncPendingNow();
+  dot.style.display = 'block';
+  if (offline) {
+    dot.style.background = '#dc2626';
+    btn.title = 'Offline — changes are saved locally and will sync when you\'re back online';
+  } else if (pending) {
+    dot.style.background = '#f59e0b';
+    btn.title = 'Sync pending — tap for details';
+  } else {
+    dot.style.background = '#22c55e';
+    btn.title = 'All changes synced';
+  }
+  var panelDot = document.getElementById('sync-panel-dot');
+  if (panelDot) panelDot.style.background = dot.style.background;
+}
+
+function openSyncActivityPanel() {
+  var panel = document.getElementById('sync-activity-panel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  panel.style.pointerEvents = 'auto';
+  requestAnimationFrame(function(){
+    var inner = document.getElementById('sync-activity-inner');
+    if (inner) inner.style.transform = 'translateY(0)';
+  });
+  updateSyncBadge();
+  _renderSyncActivity();
+}
+
+function closeSyncActivityPanel() {
+  var panel = document.getElementById('sync-activity-panel');
+  var inner = document.getElementById('sync-activity-inner');
+  if (inner) inner.style.transform = 'translateY(100%)';
+  setTimeout(function(){
+    if (panel) { panel.style.display = 'none'; panel.style.pointerEvents = 'none'; }
+  }, 300);
+}
+
+function _syncLogFmt(entry) {
+  var map = {
+    push_ok:     { icon: '\u2705', label: 'Backed up to cloud',      color: '#86efac' },
+    push_retry:  { icon: '\uD83D\uDD04', label: 'Retrying backup\u2026',      color: '#fcd34d' },
+    push_fail:   { icon: '\u26A0\uFE0F', label: 'Backup failed',            color: '#fca5a5' },
+    pull_ok:     { icon: '\u2B07\uFE0F', label: 'Pulled latest data',       color: '#93c5fd' },
+    pull_fail:   { icon: '\u26A0\uFE0F', label: 'Could not fetch latest',   color: '#fca5a5' },
+    queued:      { icon: '\uD83D\uDCE5', label: 'Change queued (offline)',  color: '#fcd34d' },
+    replay_ok:   { icon: '\u2705', label: 'Offline changes synced',   color: '#86efac' },
+    replay_fail: { icon: '\u26A0\uFE0F', label: 'Some offline changes failed', color: '#fca5a5' },
+    online:      { icon: '\uD83D\uDFE2', label: 'Back online',             color: '#86efac' },
+    offline:     { icon: '\uD83D\uDD34', label: 'Went offline',            color: '#fca5a5' }
+  };
+  return map[entry.type] || { icon: '\u2139\uFE0F', label: entry.type, color: 'rgba(255,255,255,.7)' };
+}
+
+function _renderSyncActivity() {
+  var list = document.getElementById('sync-activity-list');
+  var empty = document.getElementById('sync-activity-empty');
+  var statusEl = document.getElementById('sync-panel-status');
+  var retryBtn = document.getElementById('sync-panel-retry-btn');
+  if (!list) return;
+  var log = _syncLogGet();
+  var pending = _syncPendingNow();
+  var offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+  if (statusEl) {
+    if (offline) statusEl.textContent = 'Offline — changes saved locally';
+    else if (pending) statusEl.textContent = 'Sync pending\u2026';
+    else statusEl.textContent = 'All changes synced';
+  }
+  if (retryBtn) retryBtn.style.display = (pending && !offline) ? 'block' : 'none';
+  if (!log.length) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = log.map(function(entry) {
+    var f = _syncLogFmt(entry);
+    var d = new Date(entry.ts);
+    var timeStr = d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var dateStr = d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+    var isToday = new Date().toDateString() === d.toDateString();
+    return '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 8px;background:rgba(255,255,255,.04);border-radius:9px;">'
+      + '<span style="font-size:13px;line-height:1.2;flex-shrink:0;">' + f.icon + '</span>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<p style="font-size:11px;font-weight:700;color:' + f.color + ';margin:0;line-height:1.3;">' + _escHtml(f.label) + '</p>'
+      + (entry.detail ? '<p style="font-size:9.5px;color:rgba(255,255,255,.4);margin:1px 0 0;line-height:1.3;">' + _escHtml(entry.detail) + '</p>' : '')
+      + '</div>'
+      + '<span style="font-size:9px;color:rgba(255,255,255,.35);flex-shrink:0;white-space:nowrap;">' + (isToday ? timeStr : dateStr + ' ' + timeStr) + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function _syncActivityRetryNow() {
+  var retryBtn = document.getElementById('sync-panel-retry-btn');
+  if (retryBtn) { retryBtn.disabled = true; retryBtn.textContent = 'Retrying\u2026'; }
+  if (window._offlineQueue && window._offlineQueue.length && typeof _replayOfflineQueue === 'function') {
+    _replayOfflineQueue();
+  }
+  if (safeLS.getItem('cm_push_pending') === '1' && typeof cloudBackupNow === 'function') {
+    try { cloudBackupNow(); } catch(e) {}
+  }
+  setTimeout(function() {
+    if (retryBtn) { retryBtn.disabled = false; retryBtn.innerHTML = '\uD83D\uDD04 Retry sync now'; }
+    _renderSyncActivity();
+  }, 1500);
 }
 
 // ── Single source of truth for "is this device a real, paying owner" ──
@@ -18437,9 +18612,6 @@ function refreshCloudModalState() {
     if (adminPanel) adminPanel.style.display = 'block';
     var fbSection = document.getElementById('cloud-firebase-section');
     if (fbSection) fbSection.style.display = 'none';
-    var siteEl = document.getElementById('cloud-site-id-display');
-    var displaySite = siteId || ((_adminSBUser && _adminSBUser.id) ? 'user-' + _adminSBUser.id.replace(/-/g,'').slice(0,12) : '—');
-    if (siteEl) siteEl.textContent = 'Site ID: ' + displaySite;
     var syncDot  = document.getElementById('cloud-sync-dot');
     var syncTime = document.getElementById('cloud-sync-time');
     if (syncDot)  syncDot.style.background = sbReady ? '#22c55e' : '#fbbf24';
@@ -18463,14 +18635,10 @@ function refreshCloudModalState() {
   // else: admin logged in but DB check still pending — keep showing whatever is there
 }
 
-// -- Supabase Init (replaces saveFirebaseConfig + initFirebase) --
-function saveFirebaseConfig() {
-  // Config is now hardcoded in Supabase — nothing to save manually
-  var siteId = document.getElementById('fb-site-id') ? document.getElementById('fb-site-id').value.trim().replace(/\s+/g, '-').toLowerCase() : '';
-  if (siteId) safeLS.setItem(CLOUD_SITE_ID, siteId);
-  toast('☁️ Supabase already connected!', 'ok');
-  refreshCloudModalState(); updateCloudBtn(); cloudBackupNow();
-}
+// NOTE: saveFirebaseConfig() (used to save a manual Firebase config from an
+// fb-site-id input) was removed here — it was never called from anywhere,
+// and the input field it read no longer exists. Supabase config is
+// hardcoded, so there was nothing left for it to do.
 
 function initFirebase(cfg, cb) {
   // Supabase: always ready — just call cb(true)
@@ -19171,10 +19339,12 @@ function cloudBackupNow(silent) {
         // data itself is always safe locally either way; this only affects
         // how fast it reaches the cloud/other devices.
         if (_retriesLeft > 0) {
+          if (typeof _syncLogAdd === 'function') _syncLogAdd('push_retry', (4 - _retriesLeft) + '/4');
           setTimeout(function(){ _doPush(payload, _retriesLeft - 1); }, 3000);
           return;
         }
         safeLS.setItem('cm_push_pending', '1'); // picked up by the online-reconnect handler
+        if (typeof _syncLogAdd === 'function') _syncLogAdd('push_fail', (r.error && (r.error.message || r.error)) || '');
         if (!silent) toast('Backup failed: ' + (r.error.message || r.error), 'err');
         return;
       }
@@ -19183,6 +19353,7 @@ function cloudBackupNow(silent) {
       var now = new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata'});
       var el = document.getElementById('cloud-sync-time');
       if (el) el.textContent = 'Synced: ' + now;
+      if (typeof _syncLogAdd === 'function') _syncLogAdd('push_ok', '');
       if (!silent) toast('☁️ Backed up to cloud!', 'ok');
       updateCloudBtn();
       // BUGFIX (Phase 4 follow-on): the primary push moved to project_backups
@@ -19220,9 +19391,11 @@ function cloudBackupNow(silent) {
       // resolving with r.error — without this catch it was an unhandled
       // rejection and the push vanished with no retry at all.
       if (_retriesLeft > 0) {
+        if (typeof _syncLogAdd === 'function') _syncLogAdd('push_retry', (4 - _retriesLeft) + '/4 (network)');
         setTimeout(function(){ _doPush(payload, _retriesLeft - 1); }, 3000);
       } else {
         safeLS.setItem('cm_push_pending', '1');
+        if (typeof _syncLogAdd === 'function') _syncLogAdd('push_fail', 'offline or network error');
         if (!silent) toast('Backup failed (offline?) — will retry when back online', 'err');
       }
     });
@@ -19649,12 +19822,18 @@ function _adminCloudPull(silent, doneCb) {
       _done();
       return;
     }
-    if (err || !row || !row.data) { _done(); return; }
+    if (err) {
+      if (typeof _syncLogAdd === 'function') _syncLogAdd('pull_fail', (err.message || String(err)));
+      _done();
+      return;
+    }
+    if (!row || !row.data) { _done(); return; }
     var remoteTs = row.data.lastSync || 0;
     // Apply cloud data if it's strictly newer than what we last applied.
     // On first open _lastCloudTimestamp is 0 so this always pulls on startup.
     if (remoteTs > _lastCloudTimestamp) {
       _sanjLog('pull applied', 'remoteTs=' + remoteTs, 'tookMs=' + (Date.now() - _reqStart));
+      if (typeof _syncLogAdd === 'function') _syncLogAdd('pull_ok', row.data.syncedBy ? ('from ' + row.data.syncedBy) : '');
       _applyCloudData(row.data, !!silent);
     }
     _done();
@@ -19754,6 +19933,7 @@ function startAutoSync() {
   // PULL only every 10s — pushing is now done on every data save (debounced)
   var SYNC_MS = 10000;
   _cloudSyncTimer = setInterval(function() {
+    if (typeof updateSyncBadge === 'function') updateSyncBadge();
     if (!_syncGateOpen()) return;
     _adminCloudPull(true); // pull-only: check if another device/user pushed newer data
   }, SYNC_MS);
@@ -19862,30 +20042,11 @@ function _scheduleCloudPush() {
   }, _delay); // 3s debounce (waits until user stops making changes), capped at 6s per burst
 }
 
-// -- Supabase credential viewer --
-function toggleFbCreds() {
-  var panel = document.getElementById('fb-creds-display');
-  var btn = document.getElementById('fb-creds-toggle-btn');
-  var content = document.getElementById('fb-creds-content');
-  if (!panel) return;
-  var isHidden = panel.style.display === 'none';
-  if (isHidden) {
-    var siteId = getSiteId();
-    var rzpKey = safeLS.getItem('cm_rzp_payment_id') || '—';
-    var email  = (_adminSBUser && _adminSBUser.email) || safeLS.getItem('cm_admin_email') || '—';
-    content.innerHTML =
-      '<div style="margin-bottom:4px"><span style="color:#a78bfa;font-weight:700">Backend:</span> Supabase</div>' +
-      '<div style="margin-bottom:4px"><span style="color:#a78bfa;font-weight:700">Project:</span> doawfaujanpxivinvivn</div>' +
-      '<div style="margin-bottom:4px"><span style="color:#a78bfa;font-weight:700">Admin Email:</span> ' + email + '</div>' +
-      '<div style="margin-bottom:4px"><span style="color:#a78bfa;font-weight:700">Cloud Site ID:</span> ' + (siteId||'—') + '</div>' +
-      '<div><span style="color:#a78bfa;font-weight:700">Last Payment ID:</span> ' + rzpKey + '</div>';
-    panel.style.display = 'block';
-    if (btn) btn.textContent = 'Hide';
-  } else {
-    panel.style.display = 'none';
-    if (btn) btn.textContent = 'Show';
-  }
-}
+// NOTE: toggleFbCreds() (a "show connection debug info" panel — backend,
+// project id, admin email, site id, last payment id) was removed here —
+// never called from anywhere, and the panel/button/content ids it targeted
+// don't exist in the current HTML. If a credentials/debug viewer like this
+// is wanted again, it needs a real trigger button and container added.
 
 // -- Disconnect Cloud --
 function disconnectCloud() {
@@ -20106,12 +20267,10 @@ function closeAuthModal() {
   closeCloudModal();
 }
 
-function switchAuthTab(tab) {
-  document.getElementById('auth-form-login').style.display  = tab === 'login'  ? 'block' : 'none';
-  document.getElementById('auth-form-signup').style.display = tab === 'signup' ? 'block' : 'none';
-  document.getElementById('auth-tab-login').classList.toggle('active',  tab === 'login');
-  document.getElementById('auth-tab-signup').classList.toggle('active', tab === 'signup');
-}
+// NOTE: switchAuthTab() (a Login/Signup tab toggle for a password-based
+// auth-form-login/auth-form-signup pair) was removed here — never called
+// from anywhere, had no null guards, and all four ids it targeted no
+// longer exist. Superseded by the single OTP form (see obSendOtp()).
 
 // ── doSmartLogin / doAdminLogin — REMOVED (dead legacy code) ──
 // This used to be a password-based login: check_viewer_credentials RPC,
@@ -24431,6 +24590,7 @@ function _ownerOpenMobileOverview() {
     // Same button, same handler, same place relative to 💰 / ✕ as desktop.
     + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">📢</button>'
     + '<button onclick="openPartnerEquityModal()" title="Partner Investment Tracker" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">💰</button>'
+    + '<button onclick="openAuditTrailModal()" title="Audit Trail" style="background:rgba(255,255,255,.18);border:none;border-radius:10px;width:34px;height:34px;flex-shrink:0;cursor:pointer;color:white;font-size:15px;display:flex;align-items:center;justify-content:center">📜</button>'
     + '<button id="owner-ov-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
     + '</div></div>'
     + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
@@ -24742,6 +24902,151 @@ window.openPartnerEquityModal = function() {
 };
 
 var _peEditPartnerId = null; // set while the add/edit partner form is editing an existing partner
+
+// ══════════ AUDIT TRAIL MODAL ══════════
+// Surfaces audit.audit_log (see get_audit_trail RPC) — real Postgres
+// triggers already fire on every insert/update/delete to companies,
+// memberships, roles, and the financially-sensitive tables (expenses,
+// budget_categories, boq_items, client_bills, contractor_ledger,
+// payroll_records, worker_advances). This was previously write-only data
+// with zero UI on top of it. Gated the same owner-only, paid-plan way as
+// Partner Investment Tracker — change history is sensitive, so it starts
+// narrow rather than being visible to every team member.
+var _atTableFilter = null;
+var _atOldestLoaded = null; // ISO timestamp cursor for "load more"
+
+window.openAuditTrailModal = function() {
+  if (!_peGateOwnerAccess('Audit Trail')) return;
+  var existing = document.getElementById('_audit-trail-modal'); if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = '_audit-trail-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0;';
+  modal.innerHTML =
+    '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+    + '<div style="background:linear-gradient(135deg,#3730a3 0%,#4338ca 55%,#4f46e5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
+    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">📜 Audit Trail</div><div style="color:rgba(255,255,255,.65);font-size:10px">Who changed what · visible to owner only</div></div>'
+    + '<button id="at-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
+    + '</div>'
+    + '<div id="at-filters" style="display:flex;gap:6px;overflow-x:auto;padding:10px 14px 0;flex-shrink:0"></div>'
+    + '<div style="overflow-y:auto;padding:10px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
+    + '<div id="at-body"><p style="text-align:center;font-size:11px;color:#9ca3af;padding:24px 0;">Loading…</p></div>'
+    + '<button id="at-load-more" onclick="_atLoadMore()" style="display:none;width:100%;padding:9px;margin-top:10px;background:#e0e7ff;color:#4338ca;border:none;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;">Load older entries</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('at-close').onclick = function(){ modal.remove(); };
+  modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
+  _atTableFilter = null;
+  _atOldestLoaded = null;
+  _atRenderFilters();
+  _atLoadEntries(true);
+};
+
+function _atRenderFilters() {
+  var el = document.getElementById('at-filters');
+  if (!el) return;
+  var opts = [
+    { v: null, l: 'All' },
+    { v: 'expenses', l: 'Expenses' },
+    { v: 'budget_categories', l: 'Budget' },
+    { v: 'boq_items', l: 'BOQ' },
+    { v: 'client_bills', l: 'Client Bills' },
+    { v: 'contractor_ledger', l: 'Contractor Ledger' },
+    { v: 'payroll_records', l: 'Payroll' },
+    { v: 'worker_advances', l: 'Advances' },
+    { v: 'memberships', l: 'Team' },
+    { v: 'roles', l: 'Roles' }
+  ];
+  el.innerHTML = opts.map(function(o) {
+    var active = (_atTableFilter === o.v);
+    return '<button onclick="_atSetFilter(' + (o.v === null ? 'null' : "'" + o.v + "'") + ')" style="flex-shrink:0;padding:6px 12px;border-radius:99px;border:1px solid ' + (active ? '#4f46e5' : '#e5e7eb') + ';background:' + (active ? '#4f46e5' : '#fff') + ';color:' + (active ? '#fff' : '#374151') + ';font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;">' + o.l + '</button>';
+  }).join('');
+}
+
+function _atSetFilter(v) {
+  _atTableFilter = v;
+  _atRenderFilters();
+  _atLoadEntries(true);
+}
+
+function _atLoadEntries(reset) {
+  var body = document.getElementById('at-body');
+  var loadMoreBtn = document.getElementById('at-load-more');
+  if (!body || !window._sb) return;
+  if (reset) { _atOldestLoaded = null; body.innerHTML = '<p style="text-align:center;font-size:11px;color:#9ca3af;padding:24px 0;">Loading…</p>'; }
+  _sb.rpc('get_audit_trail', {
+    p_company_id: window._wsCompanyId,
+    p_limit: 30,
+    p_before: _atOldestLoaded,
+    p_table_filter: _atTableFilter
+  }).then(function(r) {
+    if (r.error) {
+      body.innerHTML = '<p style="text-align:center;font-size:11px;color:#dc2626;padding:24px 0;">Could not load audit trail: ' + _escHtml(r.error.message || String(r.error)) + '</p>';
+      if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+      return;
+    }
+    var rows = r.data || [];
+    if (reset) body.innerHTML = '';
+    if (reset && !rows.length) {
+      body.innerHTML = '<p style="text-align:center;font-size:11px;color:#9ca3af;padding:24px 0;">No changes logged yet for this filter.</p>';
+      if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+      return;
+    }
+    rows.forEach(function(row) { body.insertAdjacentHTML('beforeend', _atRenderEntry(row)); });
+    if (rows.length) _atOldestLoaded = rows[rows.length - 1].occurred_at;
+    if (loadMoreBtn) loadMoreBtn.style.display = (rows.length === 30) ? 'block' : 'none';
+  }).catch(function(e) {
+    body.innerHTML = '<p style="text-align:center;font-size:11px;color:#dc2626;padding:24px 0;">Could not load audit trail.</p>';
+    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+  });
+}
+
+function _atLoadMore() { _atLoadEntries(false); }
+window._atLoadMore = _atLoadMore;
+
+var _AT_ACTION_STYLE = {
+  INSERT: { icon: '➕', label: 'Created', color: '#059669', bg: '#ecfdf5' },
+  UPDATE: { icon: '✏️', label: 'Updated', color: '#d97706', bg: '#fffbeb' },
+  DELETE: { icon: '🗑️', label: 'Deleted', color: '#dc2626', bg: '#fef2f2' }
+};
+var _AT_TABLE_LABEL = {
+  companies: 'Company', memberships: 'Team member', roles: 'Role',
+  expenses: 'Expense', budget_categories: 'Budget category', boq_items: 'BOQ item',
+  client_bills: 'Client bill', contractor_ledger: 'Contractor ledger', payroll_records: 'Payroll record',
+  worker_advances: 'Worker advance'
+};
+// Fields worth calling out in the "what changed" line — the audit log
+// stores the FULL old/new row as JSON, which is too much noise to dump
+// raw. We diff just these commonly-meaningful fields; everything else in
+// the row is still logged server-side, just not surfaced inline here.
+var _AT_DIFF_FIELDS = ['amount', 'rate', 'quantity', 'qty', 'status', 'name', 'title',
+  'total', 'net_amount', 'gross_amount', 'description', 'category', 'role_id', 'role_name'];
+
+function _atRenderEntry(row) {
+  var st = _AT_ACTION_STYLE[row.action] || { icon: 'ℹ️', label: row.action, color: '#6b7280', bg: '#f9fafb' };
+  var tableLabel = _AT_TABLE_LABEL[row.table_name] || row.table_name;
+  var d = new Date(row.occurred_at);
+  var timeStr = d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  var diffHtml = '';
+  if (row.action === 'UPDATE' && row.old_data && row.new_data) {
+    var changes = [];
+    _AT_DIFF_FIELDS.forEach(function(f) {
+      var ov = row.old_data[f], nv = row.new_data[f];
+      if (ov !== undefined && nv !== undefined && JSON.stringify(ov) !== JSON.stringify(nv)) {
+        changes.push('<span style="color:#6b7280">' + _escHtml(f) + ':</span> <span style="color:#dc2626;text-decoration:line-through">' + _escHtml(String(ov)) + '</span> → <span style="color:#059669;font-weight:700">' + _escHtml(String(nv)) + '</span>');
+      }
+    });
+    if (changes.length) diffHtml = '<div style="font-size:10px;line-height:1.7;margin-top:5px;">' + changes.join('<br>') + '</div>';
+  }
+  return '<div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:8px;border:1px solid #eef0f5;">'
+    + '<div style="display:flex;align-items:center;gap:8px;">'
+    + '<span style="width:24px;height:24px;border-radius:7px;background:' + st.bg + ';display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">' + st.icon + '</span>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<p style="font-size:11.5px;font-weight:800;color:#1f2937;margin:0;">' + '<span style="color:' + st.color + '">' + st.label + '</span> ' + _escHtml(tableLabel) + '</p>'
+    + '<p style="font-size:9.5px;color:#9ca3af;margin:1px 0 0;">' + _escHtml(row.actor_name || 'Unknown user') + ' · ' + timeStr + '</p>'
+    + '</div></div>'
+    + diffHtml
+    + '</div>';
+}
 
 // Total actual money spent across EVERY site/project the owner has —
 // same calculation as the Owner Overview "Expenses" tab (material-type
@@ -25770,6 +26075,7 @@ function _ownerOpenDesktopDashboard() {
       + '<div style="display:flex;gap:8px;flex-shrink:0;">'
         + '<button onclick="openBroadcastComposer()" title="Send a notice to everyone" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">📢</button>'
         + '<button onclick="openPartnerEquityModal()" title="Partner Investment Tracker" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">💰</button>'
+        + '<button onclick="openAuditTrailModal()" title="Audit Trail" style="background:rgba(255,255,255,.14);border:none;border-radius:10px;width:36px;height:36px;cursor:pointer;color:#fff;font-size:16px;">📜</button>'
         + '<button id="owner-dt-close" style="width:36px;height:36px;border-radius:10px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:15px;cursor:pointer;">✕</button>'
       + '</div>'
     + '</div>'
@@ -26873,14 +27179,15 @@ window._setFloorRise = function (buildingId, field, value) {
 };
 
 // ── Dashboard summary card ───────────────────────────────────
-function _updateSalesNavTabVisibility() {
-  var navBtn = document.getElementById('nav-sales-tab-btn');
-  if (!navBtn) return;
-  // Only the true owner sees Sales as a dashboard tab — engineers, viewers,
-  // and Sales Admin join-code sessions reach it through the locked
-  // fullscreen panel instead (see _enterSalesEngineerMode / viewer mode).
-  navBtn.style.display = (_isSalesRealOwner() && _ownerHasEnterprise()) ? '' : 'none';
-}
+// NOTE: this used to toggle a persistent "Sales" bottom-nav tab
+// (nav-sales-tab-btn) visible only to true owners with Enterprise. That nav
+// tab doesn't exist in the current UI — Sales Manager is reached via the
+// dashboard card (_updateSalesDashCard below) and the 💰-style icon buttons
+// in the Owner Overview header instead. Kept as a no-op (rather than
+// removed outright) since _updateSalesDashCard() calls it on every
+// refresh — if a real nav-tab-visibility mechanism comes back, restore the
+// body here rather than re-adding a dead lookup.
+function _updateSalesNavTabVisibility() {}
 function _updateSalesDashCard() {
   _updateSalesNavTabVisibility();
   var card = document.getElementById('dash-sales-card');
@@ -26961,36 +27268,12 @@ if (!window._salesPanelResizeBound) {
   window.addEventListener('orientationchange', function () { setTimeout(_positionSalesPanel, 200); });
 }
 
-// ── Dock the Sales Manager panel inline into the "🏢 Sales" dashboard
-// tab (true owner only) vs. its normal fullscreen modal (engineers,
-// viewers, Sales Admin join-code sessions). Same DOM node, same render
-// functions (renderSalesManager etc.) — we just move it and swap a few
-// layout styles, so there is zero duplicated markup/logic to keep in sync.
-function _mountSalesPanelInTab() {
-  var panel = document.getElementById('sales-manager-panel');
-  var tabHost = document.getElementById('tab-sales');
-  var modalHost = document.getElementById('sales-manager-modal');
-  if (!panel || !tabHost) return;
-  if (modalHost) modalHost.style.display = 'none';
-  if (panel.parentElement !== tabHost) {
-    panel.style.position = 'static';
-    panel.style.top = ''; panel.style.left = ''; panel.style.right = ''; panel.style.bottom = '';
-    panel.style.height = 'calc(100vh - 130px)';
-    panel.style.borderRadius = '0 0 16px 16px';
-    panel.style.boxShadow = 'none';
-    tabHost.appendChild(panel);
-  }
-  var closeBtn = document.getElementById('sales-close-btn');
-  if (closeBtn) closeBtn.style.display = 'none'; // it's a tab now, not an overlay — nothing to "close"
-  var exitBtn = document.getElementById('sales-exit-btn');
-  if (exitBtn) exitBtn.style.display = 'none';
-  var sub = document.getElementById('sales-mgr-sub');
-  if (sub) sub.textContent = 'Floors · Flats · Pricing · Bookings';
-  var addWrap = document.getElementById('sales-add-building-wrap');
-  if (addWrap) addWrap.style.display = isSalesFullAdmin() ? 'block' : 'none';
-  renderSalesManager();
-  _renderSalesMgrActions();
-}
+// NOTE: _mountSalesPanelInTab() (would dock the Sales Manager panel inline
+// into a "tab-sales" dashboard tab, true-owner only) was removed here —
+// never called from anywhere, and tab-sales doesn't exist in the current
+// UI. Its counterpart, _unmountSalesPanelFromTab() below, is unrelated to
+// this and stays — it's genuinely called elsewhere and doesn't target
+// tab-sales.
 function _unmountSalesPanelFromTab() {
   var panel = document.getElementById('sales-manager-panel');
   var modalHost = document.getElementById('sales-manager-modal');
