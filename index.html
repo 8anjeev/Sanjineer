@@ -1658,7 +1658,7 @@ self.addEventListener('fetch', function(e) {
       + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
       + '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;transition:transform .18s">▾</span>'
       + '</button>'
-      + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:200px;max-width:260px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
+      + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:200px;max-width:260px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
       + listItems
       + newProjRow
       + '</div>'
@@ -1803,7 +1803,7 @@ self.addEventListener('fetch', function(e) {
       + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
       + '<span id="eng-proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;">▾</span>'
       + '</button>'
-      + '<div id="eng-proj-dd-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:190px;max-width:250px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
+      + '<div id="eng-proj-dd-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:190px;max-width:250px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
       + items
       + '</div></div>';
 
@@ -24878,27 +24878,38 @@ window.openPartnerEquityModal = function() {
   // Route through the shared gate so this, the header button, and Owner
   // Dashboard all agree on who's allowed in.
   if (!_peGateOwnerAccess('Partner Investment Tracker')) return;
-  _peHealFallbackKey();
-  var existing = document.getElementById('_partner-eq-modal'); if (existing) existing.remove();
-  var modal = document.createElement('div');
-  modal.id = '_partner-eq-modal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0;';
-  modal.innerHTML =
-    '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
-    + '<div style="background:linear-gradient(135deg,#0f5132 0%,#065f46 55%,#047857 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
-    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">💰 Partner Investment Tracker</div><div style="color:rgba(255,255,255,.65);font-size:10px">Company-wide · visible to owner only</div></div>'
-    + '<button id="pe-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
-    + '</div>'
-    + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
-    + '<div id="pe-body"></div>'
-    + '</div></div>';
-  document.body.appendChild(modal);
-  document.getElementById('pe-close').onclick = function(){ modal.remove(); };
-  modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
-  _peRender();
-  // Pull the shared company-wide copy so every device/user under this
-  // company sees the same partners/contributions/expenses, then re-render.
-  if (typeof _pullCompanyPartners === 'function') _pullCompanyPartners(function(){ _peRender(); });
+  try {
+    _peHealFallbackKey();
+    var existing = document.getElementById('_partner-eq-modal'); if (existing) existing.remove();
+    var modal = document.createElement('div');
+    modal.id = '_partner-eq-modal';
+    // z-index explicitly above _owner-overview-modal (99999) — this always
+    // opens from inside Owner Overview, so it must never be ambiguous
+    // which one paints on top (same collision class found & fixed in
+    // openAuditTrailModal).
+    modal.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0;';
+    modal.innerHTML =
+      '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+      + '<div style="background:linear-gradient(135deg,#0f5132 0%,#065f46 55%,#047857 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
+      + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">💰 Partner Investment Tracker</div><div style="color:rgba(255,255,255,.65);font-size:10px">Company-wide · visible to owner only</div></div>'
+      + '<button id="pe-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
+      + '</div>'
+      + '<div style="overflow-y:auto;padding:12px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
+      + '<div id="pe-body"></div>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    document.getElementById('pe-close').onclick = function(){ modal.remove(); };
+    modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
+    _peRender();
+    // Pull the shared company-wide copy so every device/user under this
+    // company sees the same partners/contributions/expenses, then re-render.
+    if (typeof _pullCompanyPartners === 'function') _pullCompanyPartners(function(){ _peRender(); });
+  } catch (e) {
+    // Previously any synchronous error here would make the button look
+    // like it silently did nothing — no toast, no modal, no error.
+    console.error('[Partner Investment Tracker] openPartnerEquityModal failed:', e);
+    if (typeof toast === 'function') toast('⚠️ Could not open Partner Investment Tracker — see console for details', 'err');
+  }
 };
 
 var _peEditPartnerId = null; // set while the add/edit partner form is editing an existing partner
@@ -25288,36 +25299,44 @@ function _peToggleShareInput() { /* placeholder for future unit-aware hints; kep
 function _peEditPartner(id) { _peEditPartnerId = id; _peRender(); }
 function _peCancelEditPartner() { _peEditPartnerId = null; _peRender(); }
 function _peSavePartner() {
-  var nameEl = document.getElementById('pe-p-name');
-  var shareTypeEl = document.getElementById('pe-p-sharetype');
-  var shareValueEl = document.getElementById('pe-p-sharevalue');
-  if (!nameEl || !shareTypeEl || !shareValueEl) { toast('Something went wrong opening the form — please close and reopen the tracker', 'err'); return; }
-  var name = nameEl.value.trim();
-  var shareType = shareTypeEl.value;
-  var shareValue = parseFloat(shareValueEl.value) || 0;
-  if (!name) { toast('Enter partner name', 'err'); return; }
-  if (!shareValue) { toast('Enter a % share or fixed amount', 'err'); return; }
-  var partners = lpartners();
-  var savedId;
-  if (_peEditPartnerId) {
-    var idx = partners.findIndex(function(p){ return p.id===_peEditPartnerId; });
-    if (idx>=0) partners[idx] = Object.assign({}, partners[idx], { name:name, shareType:shareType, shareValue:shareValue });
-    savedId = _peEditPartnerId;
-    _peEditPartnerId = null;
-  } else {
-    savedId = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-    partners.push({ id: savedId, name:name, shareType:shareType, shareValue:shareValue, createdAt: Date.now() });
-  }
-  spartners(partners);
-  // Immediately expand the saved partner's card so the person can SEE the
-  // save took effect, rather than trusting a toast that scrolls out of view.
-  _peExpanded[savedId] = true;
-  _peSyncNow('Partner saved');
-  _peRender();
   try {
-    var card = document.getElementById('pe-partner-' + savedId);
-    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  } catch(e) {}
+    var nameEl = document.getElementById('pe-p-name');
+    var shareTypeEl = document.getElementById('pe-p-sharetype');
+    var shareValueEl = document.getElementById('pe-p-sharevalue');
+    if (!nameEl || !shareTypeEl || !shareValueEl) { toast('Something went wrong opening the form — please close and reopen the tracker', 'err'); return; }
+    var name = nameEl.value.trim();
+    var shareType = shareTypeEl.value;
+    var shareValue = parseFloat(shareValueEl.value) || 0;
+    if (!name) { toast('Enter partner name', 'err'); return; }
+    if (!shareValue) { toast('Enter a % share or fixed amount', 'err'); return; }
+    var partners = lpartners();
+    var savedId;
+    if (_peEditPartnerId) {
+      var idx = partners.findIndex(function(p){ return p.id===_peEditPartnerId; });
+      if (idx>=0) partners[idx] = Object.assign({}, partners[idx], { name:name, shareType:shareType, shareValue:shareValue });
+      savedId = _peEditPartnerId;
+      _peEditPartnerId = null;
+    } else {
+      savedId = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      partners.push({ id: savedId, name:name, shareType:shareType, shareValue:shareValue, createdAt: Date.now() });
+    }
+    spartners(partners);
+    // Immediately expand the saved partner's card so the person can SEE the
+    // save took effect, rather than trusting a toast that scrolls out of view.
+    _peExpanded[savedId] = true;
+    _peSyncNow('Partner saved');
+    _peRender();
+    try {
+      var card = document.getElementById('pe-partner-' + savedId);
+      if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch(e) {}
+  } catch (e) {
+    // Previously any error here (e.g. corrupted localStorage JSON making
+    // lpartners() throw) would make Save look like it silently did
+    // nothing — the form would just sit there with no feedback.
+    console.error('[Partner Investment Tracker] _peSavePartner failed:', e);
+    if (typeof toast === 'function') toast('⚠️ Could not save partner — see console for details', 'err');
+  }
 }
 function _peDeletePartner(id) {
   askDel('Remove this partner and all their contribution/expense history?', function(){
