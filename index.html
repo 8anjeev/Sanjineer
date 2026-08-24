@@ -24916,29 +24916,40 @@ var _atTableFilter = null;
 var _atOldestLoaded = null; // ISO timestamp cursor for "load more"
 
 window.openAuditTrailModal = function() {
-  if (!_peGateOwnerAccess('Audit Trail')) return;
-  var existing = document.getElementById('_audit-trail-modal'); if (existing) existing.remove();
-  var modal = document.createElement('div');
-  modal.id = '_audit-trail-modal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0;';
-  modal.innerHTML =
-    '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
-    + '<div style="background:linear-gradient(135deg,#3730a3 0%,#4338ca 55%,#4f46e5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
-    + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">📜 Audit Trail</div><div style="color:rgba(255,255,255,.65);font-size:10px">Who changed what · visible to owner only</div></div>'
-    + '<button id="at-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
-    + '</div>'
-    + '<div id="at-filters" style="display:flex;gap:6px;overflow-x:auto;padding:10px 14px 0;flex-shrink:0"></div>'
-    + '<div style="overflow-y:auto;padding:10px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
-    + '<div id="at-body"><p style="text-align:center;font-size:11px;color:#9ca3af;padding:24px 0;">Loading…</p></div>'
-    + '<button id="at-load-more" onclick="_atLoadMore()" style="display:none;width:100%;padding:9px;margin-top:10px;background:#e0e7ff;color:#4338ca;border:none;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;">Load older entries</button>'
-    + '</div></div>';
-  document.body.appendChild(modal);
-  document.getElementById('at-close').onclick = function(){ modal.remove(); };
-  modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
-  _atTableFilter = null;
-  _atOldestLoaded = null;
-  _atRenderFilters();
-  _atLoadEntries(true);
+  try {
+    if (!_peGateOwnerAccess('Audit Trail')) return;
+    var existing = document.getElementById('_audit-trail-modal'); if (existing) existing.remove();
+    var modal = document.createElement('div');
+    modal.id = '_audit-trail-modal';
+    // z-index explicitly above _owner-overview-modal (99999) and
+    // _owner-desktop-modal — this always opens from inside one of those, so
+    // it must never be ambiguous which one paints on top.
+    modal.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(15,15,35,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:0;';
+    modal.innerHTML =
+      '<div style="background:#F3F4F8;width:100%;height:100%;max-width:640px;max-height:100vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+      + '<div style="background:linear-gradient(135deg,#3730a3 0%,#4338ca 55%,#4f46e5 100%);padding:14px 14px calc(10px + env(safe-area-inset-top,0px));padding-top:calc(14px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0">'
+      + '<div style="text-align:left"><div style="color:white;font-size:14px;font-weight:800;letter-spacing:.3px">📜 Audit Trail</div><div style="color:rgba(255,255,255,.65);font-size:10px">Who changed what · visible to owner only</div></div>'
+      + '<button id="at-close" style="width:34px;height:34px;flex-shrink:0;border-radius:10px;border:none;background:rgba(255,255,255,.18);color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'
+      + '</div>'
+      + '<div id="at-filters" style="display:flex;gap:6px;overflow-x:auto;padding:10px 14px 0;flex-shrink:0"></div>'
+      + '<div style="overflow-y:auto;padding:10px 14px calc(28px + env(safe-area-inset-bottom,0px));flex:1">'
+      + '<div id="at-body"><p style="text-align:center;font-size:11px;color:#9ca3af;padding:24px 0;">Loading…</p></div>'
+      + '<button id="at-load-more" onclick="_atLoadMore()" style="display:none;width:100%;padding:9px;margin-top:10px;background:#e0e7ff;color:#4338ca;border:none;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;">Load older entries</button>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    document.getElementById('at-close').onclick = function(){ modal.remove(); };
+    modal.addEventListener('click', function(e){ if (e.target===modal) modal.remove(); });
+    _atTableFilter = null;
+    _atOldestLoaded = null;
+    _atRenderFilters();
+    _atLoadEntries(true);
+  } catch (e) {
+    // Previously any synchronous error here (a bad selector, a missing
+    // helper, anything) would make the 📜 button look like it silently did
+    // nothing — no toast, no modal, no error. Now it's always visible.
+    console.error('[Audit Trail] openAuditTrailModal failed:', e);
+    if (typeof toast === 'function') toast('⚠️ Could not open Audit Trail — see console for details', 'err');
+  }
 };
 
 function _atRenderFilters() {
@@ -24971,15 +24982,38 @@ function _atSetFilter(v) {
 function _atLoadEntries(reset) {
   var body = document.getElementById('at-body');
   var loadMoreBtn = document.getElementById('at-load-more');
-  if (!body || !window._sb) return;
+  if (!body) return;
+  if (!window._sb) {
+    // Previously this just returned here — "Loading..." stayed on screen
+    // forever with zero feedback if _sb somehow wasn't ready yet. Now it's
+    // at least visible and logged, so this specific failure mode can never
+    // look like "the button does nothing."
+    console.error('[Audit Trail] window._sb is not initialized yet.');
+    body.innerHTML = '<p style="text-align:center;font-size:11px;color:#dc2626;padding:24px 0;">Cloud connection not ready yet — please try again in a moment.</p>';
+    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+    return;
+  }
   if (reset) { _atOldestLoaded = null; body.innerHTML = '<p style="text-align:center;font-size:11px;color:#9ca3af;padding:24px 0;">Loading…</p>'; }
+  // Race against a hard timeout — an RPC call that never resolves (dead
+  // connection, etc.) would otherwise leave "Loading..." on screen forever
+  // with no way to tell the difference between "still loading" and "silently
+  // stuck." 12s is generous for a single small query.
+  var timedOut = false;
+  var timeoutId = setTimeout(function() {
+    timedOut = true;
+    body.innerHTML = '<p style="text-align:center;font-size:11px;color:#dc2626;padding:24px 0;">Timed out loading audit trail. Check your connection and try again.</p>';
+    if (loadMoreBtn) loadMoreBtn.style.display = 'none';
+  }, 12000);
   _sb.rpc('get_audit_trail', {
     p_company_id: window._wsCompanyId,
     p_limit: 30,
     p_before: _atOldestLoaded,
     p_table_filter: _atTableFilter
   }).then(function(r) {
+    clearTimeout(timeoutId);
+    if (timedOut) return; // already showed the timeout message, don't overwrite it late
     if (r.error) {
+      console.error('[Audit Trail] get_audit_trail RPC error:', r.error);
       body.innerHTML = '<p style="text-align:center;font-size:11px;color:#dc2626;padding:24px 0;">Could not load audit trail: ' + _escHtml(r.error.message || String(r.error)) + '</p>';
       if (loadMoreBtn) loadMoreBtn.style.display = 'none';
       return;
@@ -24995,6 +25029,9 @@ function _atLoadEntries(reset) {
     if (rows.length) _atOldestLoaded = rows[rows.length - 1].occurred_at;
     if (loadMoreBtn) loadMoreBtn.style.display = (rows.length === 30) ? 'block' : 'none';
   }).catch(function(e) {
+    clearTimeout(timeoutId);
+    if (timedOut) return;
+    console.error('[Audit Trail] get_audit_trail threw:', e);
     body.innerHTML = '<p style="text-align:center;font-size:11px;color:#dc2626;padding:24px 0;">Could not load audit trail.</p>';
     if (loadMoreBtn) loadMoreBtn.style.display = 'none';
   });
