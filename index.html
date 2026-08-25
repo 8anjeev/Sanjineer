@@ -5248,7 +5248,7 @@ function _settShowPlanManage() {
   var isOwner = role === 'owner';
   _wsShow();
   _wsLoading('Loading account…');
-  var renderWithValidity = function(validityText) {
+  var renderWithValidity = function(validityText, isExpired) {
     var planLabel = plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free';
     var roleTag = isOwner ? planLabel : (planLabel + ' · Member');
     var html =
@@ -5259,42 +5259,68 @@ function _settShowPlanManage() {
           '<p style="margin:0;font-size:10px;color:rgba(199,210,254,.75);">Account · Plan · Sync</p>' +
         '</div>' +
       '</div>' +
-      '<div style="' + _wsCardStyle + 'cursor:default;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:space-between;gap:10px;"><div style="min-width:0;"><b>' + _wsEsc(email) + '</b><br>' +
+      // align-items:flex-start (was center) — Logout now sits level with
+      // the email line at the top of this card instead of vertically
+      // centering against all three lines of text, which put it down at
+      // roughly the "Enterprise" line.
+      '<div style="' + _wsCardStyle + 'cursor:default;background:rgba(255,255,255,.05);display:flex;align-items:flex-start;justify-content:space-between;gap:10px;"><div style="min-width:0;"><b>' + _wsEsc(email) + '</b><br>' +
       '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + roleTag + '</span><br>' +
-      '<span style="font-size:11px;color:rgba(255,255,255,.5);">' + validityText + '</span></div>' +
+      '<span style="font-size:11px;color:' + (isExpired ? '#fca5a5' : 'rgba(255,255,255,.5)') + ';">' + validityText + '</span></div>' +
       '<button onclick="event.stopPropagation();if(confirm(\'Log out of this device? You will need to log in again with OTP.\'))doAdminLogout();" style="flex-shrink:0;padding:5px 11px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:8px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;">🚪 Logout</button></div>';
     // Joined members (not the owner) only ever see email + validity —
     // they don't own the company, so there's nothing for them to upgrade.
+    //
+    // BUGFIX: an expired Enterprise subscription used to fall straight
+    // into the "you're on our top plan 🎉" branch below with no button at
+    // all — there was literally no way to pay from this screen once you
+    // were already on the top tier and it lapsed. Renew now shows
+    // whenever isExpired is true, regardless of tier.
+    if (isOwner && isExpired && (plan === 'pro' || plan === 'enterprise')) {
+      var renewFn = plan === 'enterprise' ? '_wsUpgradeToEnterprise' : '_wsUpgradeToPro';
+      var renewPrice = plan === 'enterprise' ? '₹99/m' : '₹30/m';
+      html += '<button style="' + _wsCardStyle + 'background:linear-gradient(135deg,#f59e0b,#f97316);border:none;text-align:center;" onclick="' + renewFn + '()"><b>🔄 Renew Now — ' + renewPrice + '</b></button>';
+    }
     if (isOwner && plan !== 'enterprise') {
       if (plan !== 'pro') {
         html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToPro()"><b>⭐ Upgrade to Pro — ₹30/m</b></button>';
       }
       html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — ₹99/m</b>' +
         (plan === 'pro' ? '<br><span style="font-size:11px;color:rgba(255,255,255,.5);">Remaining Pro days carry over</span>' : '') + '</button>';
-    } else if (isOwner && plan === 'enterprise') {
+    } else if (isOwner && plan === 'enterprise' && !isExpired) {
       html += '<p style="font-size:11px;color:rgba(255,255,255,.5);margin:8px 0;">You\'re on our top plan. 🎉</p>';
     }
     html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;margin-top:4px;" onclick="_wsCloseAccountPanel()">← Back</button>';
     _wsBody(html);
   };
   if (!companyId || plan === 'free') {
-    renderWithValidity(plan === 'free' ? 'No expiry — Free plan' : '');
+    renderWithValidity(plan === 'free' ? 'No expiry — Free plan' : '', false);
     return;
   }
   _sb.from('subscriptions').select('current_period_end,payment_status').eq('company_id', companyId).maybeSingle().then(function(r) {
     var d = r && r.data;
     var validityText = 'No validity on record';
+    var isExpired = false;
     if (d && d.current_period_end) {
       var end = new Date(d.current_period_end);
       var daysLeft = Math.ceil((end - Date.now()) / 86400000);
+      isExpired = daysLeft <= 0;
       validityText = (daysLeft > 0)
         ? 'Valid until ' + end.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) + ' (' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left)'
         : 'Expired ' + end.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
     } else if (d && d.payment_status && d.payment_status !== 'paid') {
       validityText = 'Payment pending';
+      isExpired = true;
+    } else if (!d) {
+      // No subscriptions row found at all, but the client still thinks
+      // this company is on a paid plan — ambiguous (could be a stale
+      // client-side plan cache, could be a genuinely lapsed/removed
+      // subscription). Treat as expired so there's always a way to pay
+      // rather than leaving someone stuck looking at "No validity on
+      // record" with no button, which is the exact gap this fixes.
+      isExpired = (plan === 'pro' || plan === 'enterprise');
     }
-    renderWithValidity(validityText);
-  }).catch(function() { renderWithValidity('Could not load validity — try again shortly'); });
+    renderWithValidity(validityText, isExpired);
+  }).catch(function() { renderWithValidity('Could not load validity — try again shortly', plan === 'pro' || plan === 'enterprise'); });
 }
 function _wsUpgradeToPro() {
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
