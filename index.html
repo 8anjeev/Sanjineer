@@ -1906,27 +1906,103 @@ self.addEventListener('fetch', function(e) {
       var endMs = company.subscription_end ? new Date(company.subscription_end).getTime() : null;
       if (!endMs || isNaN(endMs)) return;
 
-      var now = Date.now();
-      var oneDayMs = 24*60*60*1000;
-      var isCurrentlyPaid = (company.plan_tier === 'pro' || company.plan_tier === 'enterprise');
-      var expiringSoon = isCurrentlyPaid && (endMs - now) > 0 && (endMs - now) <= oneDayMs;
-      var alreadyExpired = !isCurrentlyPaid && endMs <= now;
-      if (!expiringSoon && !alreadyExpired) return;
+      // Cache so the periodic mid-session re-check (_subExpiryPeriodicCheck
+      // below) can keep evaluating this without another RPC round-trip —
+      // dates don't change on their own, only Date.now() does.
+      window._subReminderCache = { companyId: company.company_id, companyName: company.company_name, lastTier: lastTier, endMs: endMs };
 
-      // Once-per-calendar-day cooldown, per company — re-fires the next
-      // day if still unresolved: warn the day before, then daily until
-      // it's actually renewed.
-      var cooldownKey = 'sanj_sub_reminder_lastshown_' + company.company_id;
-      var today = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
-      if (safeLS.getItem(cooldownKey) === today) return;
-      safeLS.setItem(cooldownKey, today);
-
-      _showSubscriptionReminderModal(lastTier, expiringSoon, company.company_name);
+      _evaluateSubscriptionExpiry(company.company_id, company.company_name, lastTier, endMs);
     } catch (e) {
       console.error('[Subscription Reminder] check failed:', e);
     }
   }
   window._checkSubscriptionExpiryReminder = _checkSubscriptionExpiryReminder;
+
+  var GRACE_DAYS = 3;
+  var ONE_DAY_MS = 24*60*60*1000;
+
+  function _evaluateSubscriptionExpiry(companyId, companyName, lastTier, endMs) {
+    var now = Date.now();
+    var msSinceExpiry = now - endMs; // negative = not expired yet
+    var isCurrentlyPaid = msSinceExpiry <= 0;
+    var expiringSoon = isCurrentlyPaid && msSinceExpiry > -ONE_DAY_MS; // within 24h of expiry, not yet expired
+    var withinGrace = !isCurrentlyPaid && msSinceExpiry <= (GRACE_DAYS * ONE_DAY_MS);
+    var graceExceeded = !isCurrentlyPaid && msSinceExpiry > (GRACE_DAYS * ONE_DAY_MS);
+
+    if (graceExceeded) {
+      // Past the 3-day grace window — this is no longer a dismissible nag.
+      // Force a (non-destructive) sign-out and require re-login, where
+      // _wsSelectCompany's subscription check (already fixed to catch this
+      // via last_plan_tier) routes straight to the real payment gate.
+      // Once-per-day guard still applies so an already-open session isn't
+      // yanked repeatedly by the periodic re-check below.
+      var forceKey = 'sanj_sub_forcelogout_lastshown_' + companyId;
+      var today = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
+      if (safeLS.getItem(forceKey) === today) return;
+      safeLS.setItem(forceKey, today);
+      _forceSignOutForExpiredGrace(lastTier, companyName);
+      return;
+    }
+
+    if (!expiringSoon && !withinGrace) return;
+
+    // Once-per-calendar-day cooldown, per company — re-fires the next
+    // day if still unresolved: warn the day before, then daily during the
+    // grace window, until it's actually renewed.
+    var cooldownKey = 'sanj_sub_reminder_lastshown_' + companyId;
+    var today2 = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
+    if (safeLS.getItem(cooldownKey) === today2) return;
+    safeLS.setItem(cooldownKey, today2);
+
+    _showSubscriptionReminderModal(lastTier, expiringSoon, companyName);
+  }
+
+  // Mid-session safety net: _checkSubscriptionExpiryReminder only runs when
+  // membership is reconciled (login / session restore), which can be days
+  // before someone actually closes and reopens a long-lived PWA session. This
+  // re-evaluates the already-cached expiry data against the current clock
+  // every 30 minutes — no extra RPC call, just a fresh Date.now() comparison —
+  // so "log out once grace is exceeded" doesn't silently wait for next login.
+  setInterval(function() {
+    var c = window._subReminderCache;
+    if (!c) return;
+    try { _evaluateSubscriptionExpiry(c.companyId, c.companyName, c.lastTier, c.endMs); }
+    catch (e) { console.error('[Subscription Reminder] periodic check failed:', e); }
+  }, 30 * 60 * 1000);
+
+  // Signs out WITHOUT wiping local project data (unlike doAdminLogout(),
+  // which does a full destructive local-data purge for the "cancel/
+  // unsubscribe entirely" flow — wrong tool here: someone whose grace
+  // period lapsed shouldn't lose their local work, they just need to
+  // re-authenticate and pay). Mirrors the light cleanup already used
+  // elsewhere for a plain sign-out (role/email keys only).
+  function _forceSignOutForExpiredGrace(planTier, companyName) {
+    var planLabel = planTier === 'enterprise' ? 'ENTERPRISE' : 'PRO';
+    var modal = document.createElement('div');
+    modal.id = '_sub-forcelogout-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:20px;';
+    modal.innerHTML =
+      '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:24px 18px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
+      + '<div style="font-size:36px;margin-bottom:12px">🔒</div>'
+      + '<p style="font-size:15px;font-weight:800;color:#fff;margin:0 0 8px">Your ' + planLabel + ' grace period has ended</p>'
+      + '<p style="font-size:12px;color:rgba(255,255,255,0.6);margin:0 0 20px;line-height:1.5">' + _escHtml(companyName||'This company') + '\'s ' + planLabel + ' plan expired more than ' + GRACE_DAYS + ' days ago. Sign in again and renew to continue.</p>'
+      + '<button id="_sub-forcelogout-ok" style="width:100%;padding:11px;background:linear-gradient(135deg,#f59e0b,#f97316);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">Sign In &amp; Renew</button>'
+      + '</div>';
+    document.body.appendChild(modal);
+    document.getElementById('_sub-forcelogout-ok').onclick = function() {
+      // Light sign-out — see function comment above for why this isn't
+      // doAdminLogout(). On the next successful login, _wsSelectCompany's
+      // subscription check (which now also keys off last_plan_tier) routes
+      // straight into _wsLaunchPayment automatically.
+      try {
+        if (typeof _sb !== 'undefined' && _sb) _sb.auth.signOut().catch(function(){});
+        safeLS.removeItem(ADMIN_ROLE_KEY); safeLS.removeItem(ADMIN_EMAIL_KEY);
+        _adminUser = null; _adminApp = null; _adminSBUser = null;
+        if (typeof _cloudSyncTimer !== 'undefined' && _cloudSyncTimer) { clearInterval(_cloudSyncTimer); _cloudSyncTimer = null; }
+      } catch (e) { console.error('[Subscription Reminder] sign-out failed:', e); }
+      window.location.reload();
+    };
+  }
 
   function _showSubscriptionReminderModal(planTier, expiringSoon, companyName) {
     var planLabel = planTier === 'enterprise' ? 'ENTERPRISE' : 'PRO';
@@ -1947,7 +2023,7 @@ self.addEventListener('fetch', function(e) {
       + '<p style="font-size:15px;font-weight:800;color:#fff;margin:0 0 8px">' + headline + '</p>'
       + '<p style="font-size:12px;color:rgba(255,255,255,0.6);margin:0 0 20px;line-height:1.5">' + body + '</p>'
       + '<div style="display:flex;gap:10px;">'
-      + '<button id="_sub-rem-later" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">' + (expiringSoon ? 'Later' : 'Remind me tomorrow') + '</button>'
+      + '<button id="_sub-rem-later" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">' + (expiringSoon ? 'Later' : 'Continue on Free') + '</button>'
       + '<button id="_sub-rem-renew" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#f97316);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">Renew Now</button>'
       + '</div>'
       + '</div>';
@@ -5348,7 +5424,9 @@ function _wsEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, funct
 // paid (e.g. they closed the tab mid-payment last time), route back
 // into the payment gate instead of letting them straight into the app.
 function _wsSelectCompany(c) {
-  if ((c.plan_tier === 'pro' || c.plan_tier === 'enterprise') && c.role_name === 'owner') {
+  var wasEverPaid = (c.plan_tier === 'pro' || c.plan_tier === 'enterprise')
+    || (c.last_plan_tier === 'pro' || c.last_plan_tier === 'enterprise');
+  if (wasEverPaid && c.role_name === 'owner') {
     _wsLoading('Checking subscription…');
     // BUGFIX: also read current_period_end so an actually-lapsed
     // subscription is caught (not just payment_status), and — critically —
@@ -5359,6 +5437,18 @@ function _wsSelectCompany(c) {
     // Query errors now fail OPEN (let them into the app) instead of
     // failing into the payment gate — server-side RLS/webhooks remain the
     // real enforcement layer regardless, so this only affects UX routing.
+    //
+    // NOTE: the `wasEverPaid` check above used to just be
+    // `c.plan_tier === 'pro' || c.plan_tier === 'enterprise'` — but
+    // get_my_companies() was fixed to correctly report 'free' once a
+    // subscription's current_period_end has passed (it used to keep
+    // reporting the stale paid tier forever). That fix accidentally
+    // disarmed THIS check for exactly the case it exists to catch: an
+    // expired subscription would now short-circuit past here entirely
+    // before ever re-verifying against the subscriptions table. Checking
+    // last_plan_tier too (what they were most recently paying for, even if
+    // that has since lapsed) keeps this path firing for anyone who needs
+    // it re-verified.
     _sb.from('subscriptions').select('payment_status,current_period_end').eq('company_id', c.company_id).maybeSingle().then(function(r) {
       if (r && r.error) {
         console.warn('[_wsSelectCompany] subscription check failed — letting user through instead of forcing payment:', r.error.message);
@@ -5378,8 +5468,15 @@ function _wsSelectCompany(c) {
         return;
       }
       var explicitlyUnpaid = d.payment_status === 'failed' || d.payment_status === 'cancelled' || d.payment_status === 'pending';
-      var expired = !!(d.current_period_end && new Date(d.current_period_end).getTime() < Date.now());
-      if (explicitlyUnpaid || expired) { _wsLaunchPayment(c.plan_tier, c); return; }
+      var expiredMs = (d.current_period_end && !isNaN(new Date(d.current_period_end).getTime()))
+        ? (Date.now() - new Date(d.current_period_end).getTime()) : 0;
+      var expired = !!(d.current_period_end && expiredMs > 0);
+      var GRACE_MS = 3 * 24 * 60 * 60 * 1000; // 3-day grace window after expiry — see _checkSubscriptionExpiryReminder
+      // Within the 3-day grace window: let them in as normal — the daily
+      // expiry reminder (_checkSubscriptionExpiryReminder) nags them, but
+      // doesn't block. Explicitly unpaid (failed/cancelled charge) or past
+      // the grace window entirely: hard-block at the real payment gate.
+      if (explicitlyUnpaid || (expired && expiredMs > GRACE_MS)) { _wsLaunchPayment(c.plan_tier === 'free' ? (c.last_plan_tier || 'pro') : c.plan_tier, c); return; }
       _wsSelectCompanyConfirmed(c);
     }).catch(function(e) {
       console.warn('[_wsSelectCompany] subscription check threw — letting user through instead of forcing payment:', e && e.message);
