@@ -1885,6 +1885,87 @@ self.addEventListener('fetch', function(e) {
     modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
   }
 
+  // ══════════ SUBSCRIPTION EXPIRY REMINDER ══════════
+  // Runs once per reconcile (session start / company switch). Warns 1 day
+  // before a paid subscription lapses, then once a day after it has
+  // lapsed, until the user renews.
+  //
+  // NOTE on "auto payment": true zero-touch recurring billing (charging
+  // the card/UPI automatically with no user action) needs Razorpay
+  // Subscriptions + a UPI Autopay/card mandate — a materially different,
+  // bigger integration than the current one-time-checkout-per-renewal flow
+  // (mandate consent UX, a new webhook contract, recurring-charge
+  // handling). That's a deliberate follow-up project, not something to
+  // wire in silently alongside a UI fix — this reminder is the safety net
+  // until that decision is made: it guarantees a lapse is never silent.
+  function _checkSubscriptionExpiryReminder(company) {
+    try {
+      if (!company || !company.company_id) return;
+      var lastTier = company.last_plan_tier; // 'pro' | 'enterprise' | null — what they were last paying for
+      if (!lastTier || lastTier === 'free') return; // never had a paid plan — nothing to remind about
+      var endMs = company.subscription_end ? new Date(company.subscription_end).getTime() : null;
+      if (!endMs || isNaN(endMs)) return;
+
+      var now = Date.now();
+      var oneDayMs = 24*60*60*1000;
+      var isCurrentlyPaid = (company.plan_tier === 'pro' || company.plan_tier === 'enterprise');
+      var expiringSoon = isCurrentlyPaid && (endMs - now) > 0 && (endMs - now) <= oneDayMs;
+      var alreadyExpired = !isCurrentlyPaid && endMs <= now;
+      if (!expiringSoon && !alreadyExpired) return;
+
+      // Once-per-calendar-day cooldown, per company — re-fires the next
+      // day if still unresolved: warn the day before, then daily until
+      // it's actually renewed.
+      var cooldownKey = 'sanj_sub_reminder_lastshown_' + company.company_id;
+      var today = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
+      if (safeLS.getItem(cooldownKey) === today) return;
+      safeLS.setItem(cooldownKey, today);
+
+      _showSubscriptionReminderModal(lastTier, expiringSoon, company.company_name);
+    } catch (e) {
+      console.error('[Subscription Reminder] check failed:', e);
+    }
+  }
+  window._checkSubscriptionExpiryReminder = _checkSubscriptionExpiryReminder;
+
+  function _showSubscriptionReminderModal(planTier, expiringSoon, companyName) {
+    var planLabel = planTier === 'enterprise' ? 'ENTERPRISE' : 'PRO';
+    var existing = document.getElementById('_sub-reminder-modal');
+    if (existing) existing.remove();
+    var modal = document.createElement('div');
+    modal.id = '_sub-reminder-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);padding:20px;';
+    var headline = expiringSoon
+      ? 'Your ' + planLabel + ' plan renews tomorrow'
+      : 'Your ' + planLabel + ' plan has expired';
+    var body = expiringSoon
+      ? 'Renew now to avoid losing ' + planLabel + ' features on ' + _escHtml(companyName||'this company') + ' tomorrow.'
+      : _escHtml(companyName||'This company') + ' has dropped to the Free plan. Renew to get your ' + planLabel + ' features back.';
+    modal.innerHTML =
+      '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 18px;width:100%;max-width:310px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
+      + '<div style="font-size:32px;margin-bottom:12px">' + (expiringSoon ? '⏰' : '⚠️') + '</div>'
+      + '<p style="font-size:15px;font-weight:800;color:#fff;margin:0 0 8px">' + headline + '</p>'
+      + '<p style="font-size:12px;color:rgba(255,255,255,0.6);margin:0 0 20px;line-height:1.5">' + body + '</p>'
+      + '<div style="display:flex;gap:10px;">'
+      + '<button id="_sub-rem-later" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">' + (expiringSoon ? 'Later' : 'Remind me tomorrow') + '</button>'
+      + '<button id="_sub-rem-renew" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#f97316);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">Renew Now</button>'
+      + '</div>'
+      + '</div>';
+    document.body.appendChild(modal);
+    document.getElementById('_sub-rem-later').onclick = function(){ modal.remove(); };
+    document.getElementById('_sub-rem-renew').onclick = function(){
+      modal.remove();
+      if (planTier === 'enterprise' && typeof _wsUpgradeToEnterprise === 'function') {
+        _wsUpgradeToEnterprise();
+      } else if (typeof _wsUpgradeToPro === 'function') {
+        _wsUpgradeToPro();
+      } else {
+        toast('Visit app.sanjineer.in to renew', 'info');
+      }
+    };
+    modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     _initProjects();
     _refreshProStatus();
@@ -2134,6 +2215,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       if (typeof WS_COMPANY_KEY !== 'undefined') safeLS.setItem(WS_COMPANY_KEY, company.company_id);
       if (typeof WS_CNAME_KEY !== 'undefined') safeLS.setItem(WS_CNAME_KEY, company.company_name || '');
       if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(company.plan_tier);
+      if (typeof _checkSubscriptionExpiryReminder === 'function') _checkSubscriptionExpiryReminder(company);
 
       _sb.rpc('get_my_projects', { p_company_id: company.company_id }).then(function(pr) {
         if (pr.error || !pr.data) { console.warn('[reconcile] get_my_projects failed', pr.error); return; }
@@ -5693,12 +5775,12 @@ function _wsSelectProject(p) {
       <!-- Engineer name hidden — preserved for JS compat -->
       <p id="hdr-engineer" class="text-amber-300 truncate" style="font-size:10px!important;line-height:1;margin:0;display:none"></p>
     </div>
-    <!-- RIGHT: Owner + QDPR stacked (replaces the old Total Spends
-         display — see dash-total-spends chip on the Dashboard tab for
-         where spends now lives instead). owner-hdr-btn keeps its id;
-         updateOwnerBtn() still finds it here unchanged, just relocated.
-         Icon-only, transparent, no padding. -->
-    <div class="flex-shrink-0" style="display:flex;flex-direction:column;gap:2px;align-items:center">
+    <!-- RIGHT: Owner + QDPR side by side, Owner on the left (replaces the
+         old Total Spends display — see dash-total-spends chip on the
+         Dashboard tab for where spends now lives instead). owner-hdr-btn
+         keeps its id; updateOwnerBtn() still finds it here unchanged, just
+         relocated. Icon-only, transparent, no padding. -->
+    <div class="flex-shrink-0" style="display:flex;flex-direction:row;gap:4px;align-items:center">
       <button id="owner-hdr-btn" onclick="openOwnerOverview()" title="Owner overview" style="display:none;align-items:center;justify-content:center;width:26px;height:26px;padding:0;margin:0;border:none;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;">
         <span style="font-size:16px;line-height:1">👑</span>
       </button>
@@ -9619,7 +9701,7 @@ service cloud.firestore {
      z-index in use (sales-clients-modal at 620000) so toasts are always
      visible regardless of what's open. -->
 <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-xl shadow-2xl opacity-0 transition-all duration-300 text-sm font-medium pointer-events-none" style="z-index:900000;"></div>
-<div id="del-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-rose-600 text-white px-5 py-2.5 rounded-xl shadow-2xl hidden z-[100]">
+<div id="del-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-rose-600 text-white px-5 py-2.5 rounded-xl shadow-2xl hidden" style="z-index:1000000">
   <div class="flex items-center gap-3 text-sm"><span id="del-msg">Delete this?</span><button id="del-confirm-btn" onclick="confirmDel()" class="px-3 py-1 bg-white text-rose-600 rounded-lg font-bold text-xs" style="min-width:64px;">Delete</button><button onclick="cancelDel()" class="text-white/70 text-[11px] font-semibold underline" style="cursor:pointer;">Cancel</button></div>
 </div>
 <div id="po-receive-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 text-white px-5 py-2.5 rounded-xl shadow-2xl hidden z-[100]" style="background:#059669;min-width:260px;max-width:90vw">
@@ -25290,10 +25372,17 @@ function _peSyncNow(successMsg) {
 }
 
 function _peSaveMeta() {
-  var val = parseFloat(document.getElementById('pe-total-proposed').value) || 0;
-  spartnerMeta({ totalProposed: val });
-  _peSyncNow('Saved');
-  _peRender();
+  try {
+    var el = document.getElementById('pe-total-proposed');
+    if (!el) { toast('Something went wrong — please close and reopen the tracker', 'err'); return; }
+    var val = parseFloat(el.value) || 0;
+    spartnerMeta({ totalProposed: val });
+    _peSyncNow('Saved');
+    _peRender();
+  } catch (e) {
+    console.error('[Partner Investment Tracker] _peSaveMeta failed:', e);
+    if (typeof toast === 'function') toast('⚠️ Could not save — see console for details', 'err');
+  }
 }
 function _peToggleShareInput() { /* placeholder for future unit-aware hints; kept simple on purpose */ }
 function _peEditPartner(id) { _peEditPartnerId = id; _peRender(); }
