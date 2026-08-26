@@ -4716,6 +4716,36 @@ var WS_PROJECT_KEY  = 'sanj_project_id';
 var WS_PNAME_KEY     = 'sanj_project_name';
 var WS_PROLE_KEY     = 'sanj_project_role';
 
+// Shared self-healing plan refresh — same logic _settShowPlanManage uses.
+// Fetches the current, authoritative plan tier from the server and, if it
+// differs from what's cached, corrects window.userPlan/WS_CPLAN_KEY before
+// calling back. Any owner-only entry point that gates on window.userPlan
+// (via _isPaidOwner()/_peGateOwnerAccess()) can wrap itself in this so a
+// stale cached plan — from a since-fixed server bug, a lapsed-then-renewed
+// subscription, anything — can't silently keep blocking it until the next
+// full logout/reload.
+function _refreshPlanThenRun(cb) {
+  var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
+  if (!companyId || typeof _sb === 'undefined' || !_sb) { cb(); return; }
+  var cachedPlan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
+  _sb.rpc('get_my_companies').then(function(r) {
+    var rows = (r && r.data) || [];
+    var row = rows.find(function(x){ return x.company_id === companyId; });
+    if (row) {
+      var plan = row.plan_tier || 'free';
+      if (plan !== cachedPlan) {
+        safeLS.setItem(WS_CPLAN_KEY, plan);
+        if (window._wsCompanyId === companyId) window.userPlan = plan;
+        console.log('[Plan refresh] Corrected stale cached plan: ' + cachedPlan + ' → ' + plan);
+      }
+    }
+    cb();
+  }).catch(function(e) {
+    console.error('[Plan refresh] get_my_companies failed, proceeding with cached plan:', e);
+    cb();
+  });
+}
+
 // PLAN_PRICING — single source of truth for Razorpay checkout amounts.
 // amount is in paise (Razorpay's smallest currency unit for INR), so
 // 3000 = ₹30 and 9900 = ₹99, matching the prices shown throughout the
@@ -5242,13 +5272,13 @@ function _wsCloseAccountPanel() {
 function _settShowPlanManage() {
   if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
   var email = safeLS.getItem(ADMIN_EMAIL_KEY) || '';
-  var plan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
+  var cachedPlan = safeLS.getItem(WS_CPLAN_KEY) || 'free';
   var role = safeLS.getItem(WS_CROLE_KEY) || '';
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
   var isOwner = role === 'owner';
   _wsShow();
   _wsLoading('Loading account…');
-  var renderWithValidity = function(validityText, isExpired) {
+  var renderWithValidity = function(plan, validityText, isExpired) {
     var planLabel = plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free';
     var roleTag = isOwner ? planLabel : (planLabel + ' · Member');
     var html =
@@ -5292,35 +5322,52 @@ function _settShowPlanManage() {
     html += '<button style="' + _wsBtnStyle + 'text-align:center;background:rgba(255,255,255,.08);box-shadow:none;margin-top:4px;" onclick="_wsCloseAccountPanel()">← Back</button>';
     _wsBody(html);
   };
-  if (!companyId || plan === 'free') {
-    renderWithValidity(plan === 'free' ? 'No expiry — Free plan' : '', false);
-    return;
-  }
-  _sb.from('subscriptions').select('current_period_end,payment_status').eq('company_id', companyId).maybeSingle().then(function(r) {
-    var d = r && r.data;
+
+  // BUGFIX: this used to trust the cached plan value and, if it read
+  // 'free', return immediately WITHOUT ever checking the server — so a
+  // stale or wrongly-computed cached value could never self-correct short
+  // of a full logout/reload. It also assumed a subscription row's absence
+  // or a null payment_status meant "not paid", which broke manually-granted
+  // plans (payment_status was never set because they never went through
+  // Razorpay). Now this always asks the server for the current truth via
+  // get_my_companies() (the same expiry-and-manual-grant-aware function
+  // used everywhere else), and self-heals window.userPlan / WS_CPLAN_KEY
+  // if the fresh value differs — which also immediately unblocks
+  // Partner Investment Tracker and Audit Trail (both gate on
+  // window.userPlan) without needing a reload.
+  if (!companyId) { renderWithValidity(cachedPlan, cachedPlan === 'free' ? 'No expiry — Free plan' : '', false); return; }
+  _sb.rpc('get_my_companies').then(function(r) {
+    var rows = (r && r.data) || [];
+    var row = rows.find(function(x){ return x.company_id === companyId; });
+    var plan = row ? (row.plan_tier || 'free') : cachedPlan;
+
+    if (plan !== cachedPlan) {
+      safeLS.setItem(WS_CPLAN_KEY, plan);
+      if (window._wsCompanyId === companyId) window.userPlan = plan;
+      console.log('[Sanjineer Cloud] Corrected stale cached plan: ' + cachedPlan + ' → ' + plan);
+    }
+
     var validityText = 'No validity on record';
     var isExpired = false;
-    if (d && d.current_period_end) {
-      var end = new Date(d.current_period_end);
+    if (plan === 'free') {
+      validityText = 'No expiry — Free plan';
+    } else if (row && row.subscription_end) {
+      var end = new Date(row.subscription_end);
       var daysLeft = Math.ceil((end - Date.now()) / 86400000);
       isExpired = daysLeft <= 0;
       validityText = (daysLeft > 0)
         ? 'Valid until ' + end.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) + ' (' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left)'
         : 'Expired ' + end.toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
-    } else if (d && d.payment_status && d.payment_status !== 'paid') {
-      validityText = 'Payment pending';
-      isExpired = true;
-    } else if (!d) {
-      // No subscriptions row found at all, but the client still thinks
-      // this company is on a paid plan — ambiguous (could be a stale
-      // client-side plan cache, could be a genuinely lapsed/removed
-      // subscription). Treat as expired so there's always a way to pay
-      // rather than leaving someone stuck looking at "No validity on
-      // record" with no button, which is the exact gap this fixes.
-      isExpired = (plan === 'pro' || plan === 'enterprise');
+    } else if (plan === 'pro' || plan === 'enterprise') {
+      // Valid plan, no expiry date on record — a manually-granted plan
+      // with no current_period_end set. Valid indefinitely, not expired.
+      validityText = 'No expiry on record';
     }
-    renderWithValidity(validityText, isExpired);
-  }).catch(function() { renderWithValidity('Could not load validity — try again shortly', plan === 'pro' || plan === 'enterprise'); });
+    renderWithValidity(plan, validityText, isExpired);
+  }).catch(function(e) {
+    console.error('[Sanjineer Cloud] get_my_companies failed, falling back to cached plan:', e);
+    renderWithValidity(cachedPlan, 'Could not load validity — try again shortly', cachedPlan === 'pro' || cachedPlan === 'enterprise');
+  });
 }
 function _wsUpgradeToPro() {
   var companyId = window._wsCompanyId || safeLS.getItem(WS_COMPANY_KEY);
@@ -25076,6 +25123,13 @@ function _peSpent(partnerId) {
 }
 
 window.openPartnerEquityModal = function() {
+  // Refresh the plan tier from the server before gating — a stale cached
+  // plan (from a since-fixed server bug, a lapsed-then-renewed
+  // subscription, etc.) previously meant this stayed silently blocked
+  // until a full logout/reload, even after the underlying issue was fixed.
+  _refreshPlanThenRun(_openPartnerEquityModalInner);
+};
+function _openPartnerEquityModalInner() {
   // BUGFIX: this checked isAdmin + _ENGINEER_MODE but never the paid-plan
   // requirement, so a free-tier (non-paid) real owner could open the
   // Partner Investment Tracker directly even though it's meant to be a
@@ -25115,7 +25169,7 @@ window.openPartnerEquityModal = function() {
     console.error('[Partner Investment Tracker] openPartnerEquityModal failed:', e);
     if (typeof toast === 'function') toast('⚠️ Could not open Partner Investment Tracker — see console for details', 'err');
   }
-};
+}
 
 var _peEditPartnerId = null; // set while the add/edit partner form is editing an existing partner
 
@@ -25132,6 +25186,13 @@ var _atTableFilter = null;
 var _atOldestLoaded = null; // ISO timestamp cursor for "load more"
 
 window.openAuditTrailModal = function() {
+  // Refresh the plan tier from the server before gating — see
+  // openPartnerEquityModal for why (a stale cached plan previously stayed
+  // silently blocked until a full logout/reload, even after the
+  // underlying server issue was fixed).
+  _refreshPlanThenRun(_openAuditTrailModalInner);
+};
+function _openAuditTrailModalInner() {
   try {
     if (!_peGateOwnerAccess('Audit Trail')) return;
     var existing = document.getElementById('_audit-trail-modal'); if (existing) existing.remove();
@@ -25166,7 +25227,7 @@ window.openAuditTrailModal = function() {
     console.error('[Audit Trail] openAuditTrailModal failed:', e);
     if (typeof toast === 'function') toast('⚠️ Could not open Audit Trail — see console for details', 'err');
   }
-};
+}
 
 function _atRenderFilters() {
   var el = document.getElementById('at-filters');
