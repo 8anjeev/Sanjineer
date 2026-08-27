@@ -25495,6 +25495,12 @@ function _peRender() {
         + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Expenses (by this partner)</p><p style="font-weight:800;color:#dc2626;margin:1px 0 0">'+fc(spent)+'</p></div>'
         + '<div style="text-align:center"><p style="color:#9ca3af;font-weight:600;margin:0">Net (Given − Expenses)</p><p style="font-weight:800;color:'+(net>=0?'#059669':'#dc2626')+';margin:1px 0 0">'+fc(net)+'</p></div>'
         + '</div>'
+        + (!expanded && txns.length ? (
+            '<p style="font-size:9.5px;color:#6b7280;margin:0 0 8px;padding:5px 8px;background:#f0fdf4;border-radius:7px;">'
+            + '💵 Last contribution: <b style="color:#065f46">'+fc(txns[0].amount)+'</b> on '+txns[0].date
+            + (txns.length>1 ? ' <span style="color:#9ca3af">· '+txns.length+' record'+(txns.length===1?'':'s')+' total</span>' : '')
+            + '</p>'
+          ) : '')
         + '<button onclick="_peToggleExpanded(\''+p.id+'\')" style="width:100%;text-align:left;background:#f8fafc;border:1px solid #eef0f5;border-radius:8px;padding:7px 9px;font-size:10.5px;font-weight:800;color:#4338ca;cursor:pointer;margin-bottom:'+(expanded?'8px':'0')+'">'+toggleLabel+'</button>'
         + (expanded ? (
             '<p style="font-size:9.5px;font-weight:800;color:#065f46;text-transform:uppercase;margin:0 0 4px">💵 Contributions Given</p>'
@@ -26849,6 +26855,51 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// SCOPE-VISIBILITY FIX — this whole IIFE (opened above) traps every
+// plain `function NAME() {}` declared inside it in a closure. That's
+// invisible to two things that only ever resolve against the global
+// (window) scope:
+//   1. Inline onclick="NAME()" (and onchange=, etc.) HTML attributes —
+//      the browser looks NAME up starting from `window`, not from
+//      whatever closure happened to define it. A click just throws
+//      "NAME is not defined" in the console with zero visible UI
+//      feedback — exactly what made Save/Add Partner/Delete/Edit in
+//      Partner Investment Tracker, the Audit Trail filter tabs and
+//      "Load older entries", PO approve/reject, and the join-code OTP
+//      flow all silently do nothing.
+//   2. `typeof NAME === 'function'` guards in OTHER script blocks —
+//      these fail (correctly, but silently) since NAME really isn't
+//      global, so the guarded call just gets skipped every time with
+//      no error at all. That's how _pullCompanyPartners, _contactsLoad,
+//      and _wsMarkOwnedCompany stayed broken without ever throwing.
+// Every name below was confirmed (by grepping the whole file for
+// onclick=/onchange=/etc attributes and cross-script-block typeof
+// guards referencing something declared in this IIFE) to actually need
+// to be reachable from outside this closure. Don't remove entries from
+// this list without re-checking the same way — and if you add a new
+// function here that's called via an inline attribute or from another
+// script block, add its exposure line here too.
+window._atLoadMore = _atLoadMore;
+window._atSetFilter = _atSetFilter;
+window._ownerApprovePO = _ownerApprovePO;
+window._ownerRejectPO = _ownerRejectPO;
+window._peAddContribution = _peAddContribution;
+window._peAddExpense = _peAddExpense;
+window._peCancelEditPartner = _peCancelEditPartner;
+window._peDeleteContribution = _peDeleteContribution;
+window._peDeleteExpense = _peDeleteExpense;
+window._peDeletePartner = _peDeletePartner;
+window._peEditPartner = _peEditPartner;
+window._peSaveMeta = _peSaveMeta;
+window._peSavePartner = _peSavePartner;
+window._peToggleExpanded = _peToggleExpanded;
+window._peToggleShareInput = _peToggleShareInput;
+window.joinSendOtp = joinSendOtp;
+window.joinVerifyOtp = joinVerifyOtp;
+window._pullCompanyPartners = _pullCompanyPartners;
+window._contactsLoad = _contactsLoad;
+window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
 
 })();
 </script>
