@@ -25234,15 +25234,25 @@ function _atRenderFilters() {
   if (!el) return;
   var opts = [
     { v: null, l: 'All' },
-    { v: 'expenses', l: 'Expenses' },
-    { v: 'budget_categories', l: 'Budget' },
-    { v: 'boq_items', l: 'BOQ' },
-    { v: 'client_bills', l: 'Client Bills' },
-    { v: 'contractor_ledger', l: 'Contractor Ledger' },
-    { v: 'payroll_records', l: 'Payroll' },
-    { v: 'worker_advances', l: 'Advances' },
     { v: 'memberships', l: 'Team' },
     { v: 'roles', l: 'Roles' }
+    // NOTE: Expenses/Budget/BOQ/Client Bills/Contractor Ledger/
+    // Payroll/Advances used to be filter options here, each backed by a
+    // real audit.log_change() trigger on the matching table. Removed —
+    // those triggers can never actually fire. Expenses, BOQ, Budget, and
+    // the rest of the app's financial data are saved through the legacy
+    // whole-project JSON blob sync (project_backups.upsert(), see
+    // _buildLocalPayload()/_doPush()), not as real row-level INSERT/
+    // UPDATE/DELETE on those tables — the app has never written to them
+    // directly. The triggers are harmless (they just never fire), but
+    // showing filter tabs for data that can never appear is misleading,
+    // not a real feature. Team/Roles stay because memberships/roles
+    // genuinely do go through row-level writes (see project_team_members
+    // usage) — that's why those two "Created Team member" entries in the
+    // list are real. Proper coverage for the financial tabs needs either
+    // migrating those features to real per-row writes, or auditing the
+    // blob-save path directly (diffing project_backups.data) — both are
+    // deliberate follow-up projects, not something to fake here.
   ];
   el.innerHTML = opts.map(function(o) {
     var active = (_atTableFilter === o.v);
