@@ -18534,6 +18534,57 @@ function updateCloudBtn() {
 var SYNC_LOG_KEY = 'sanj_sync_log';
 var SYNC_LOG_MAX = 30;
 
+// ══════════ BLOB DATA CHANGE LOGGING (Audit Trail) ══════════
+// Expenses, Budget, BOQ, and Purchase Orders save through the whole-
+// project JSON blob (project_backups), not as real row-level table
+// writes — so a normal AFTER INSERT/UPDATE/DELETE trigger can never see
+// them change. This is the alternative: on every successful push, look
+// at the payload that was JUST pushed (read-only — never mutates it, so
+// this can't affect the actual sync), compare a coarse count for each
+// tracked category against what was recorded last time, and log a
+// summary via log_client_data_change() if it changed. This is
+// deliberately NOT a full diff — item counts only, no attempt at
+// per-field precision — because attempting a "smart" deep diff of an
+// opaque blob is exactly the kind of complexity that risks a real bug
+// in the middle of the sync pipeline. A count changing is still real,
+// honest signal: someone added or removed something.
+var BLOB_AUDIT_CATEGORIES = [
+  { key: 'db',     label: 'Daily Data (Expenses & Transactions)', count: function(p){ return (p.db || []).length; } },
+  { key: 'budget', label: 'Budget',                                count: function(p){ return (p.budget || []).length; } },
+  { key: 'boq',    label: 'BOQ',                                   count: function(p){ return (p.boq && p.boq.sections || []).length; } },
+  { key: 'po',     label: 'Purchase Orders',                       count: function(p){ return (p.po || []).length; } }
+];
+var BLOB_AUDIT_SNAPSHOT_KEY = 'sanj_blob_audit_snapshot';
+
+function _logBlobDataChanges(payload) {
+  try {
+    if (!payload || !window._wsCompanyId || typeof _sb === 'undefined' || !_sb) return;
+    var snapKey = BLOB_AUDIT_SNAPSHOT_KEY + '_' + window._wsCompanyId;
+    var prevSnapshot;
+    try { prevSnapshot = JSON.parse(safeLS.getItem(snapKey) || '{}'); } catch(e) { prevSnapshot = {}; }
+    var newSnapshot = {};
+    BLOB_AUDIT_CATEGORIES.forEach(function(cat) {
+      var newCount = cat.count(payload);
+      newSnapshot[cat.key] = newCount;
+      var oldCount = prevSnapshot[cat.key];
+      // Skip the very first push ever recorded for this category (oldCount
+      // undefined) — that's not a "change", it's just the first time we
+      // had anything to compare against.
+      if (typeof oldCount === 'number' && oldCount !== newCount) {
+        _sb.rpc('log_client_data_change', {
+          p_company_id: window._wsCompanyId,
+          p_category: cat.key,
+          p_old_summary: { count: oldCount, label: cat.label },
+          p_new_summary: { count: newCount, label: cat.label }
+        }).catch(function(e) { console.error('[Audit] log_client_data_change failed for ' + cat.key + ':', e); });
+      }
+    });
+    safeLS.setItem(snapKey, JSON.stringify(newSnapshot));
+  } catch (e) {
+    console.error('[Audit] _logBlobDataChanges failed:', e);
+  }
+}
+
 function _syncLogAdd(type, detail) {
   try {
     var log = _syncLogGet();
@@ -19608,6 +19659,7 @@ function cloudBackupNow(silent) {
       if (typeof _syncLogAdd === 'function') _syncLogAdd('push_ok', '');
       if (!silent) toast('☁️ Backed up to cloud!', 'ok');
       updateCloudBtn();
+      if (typeof _logBlobDataChanges === 'function') _logBlobDataChanges(payload);
       // BUGFIX (Phase 4 follow-on): the primary push moved to project_backups
       // when SanjCloud.pushBlob was introduced, but viewer share-links
       // (openViewerModal/fetchLatest) and cross-device-same-owner restore
@@ -25234,25 +25286,25 @@ function _atRenderFilters() {
   if (!el) return;
   var opts = [
     { v: null, l: 'All' },
+    { v: 'db', l: 'Daily Data' },
+    { v: 'budget', l: 'Budget' },
+    { v: 'boq', l: 'BOQ' },
+    { v: 'po', l: 'Purchase Orders' },
     { v: 'memberships', l: 'Team' },
     { v: 'roles', l: 'Roles' }
-    // NOTE: Expenses/Budget/BOQ/Client Bills/Contractor Ledger/
-    // Payroll/Advances used to be filter options here, each backed by a
-    // real audit.log_change() trigger on the matching table. Removed —
-    // those triggers can never actually fire. Expenses, BOQ, Budget, and
-    // the rest of the app's financial data are saved through the legacy
-    // whole-project JSON blob sync (project_backups.upsert(), see
-    // _buildLocalPayload()/_doPush()), not as real row-level INSERT/
-    // UPDATE/DELETE on those tables — the app has never written to them
-    // directly. The triggers are harmless (they just never fire), but
-    // showing filter tabs for data that can never appear is misleading,
-    // not a real feature. Team/Roles stay because memberships/roles
-    // genuinely do go through row-level writes (see project_team_members
-    // usage) — that's why those two "Created Team member" entries in the
-    // list are real. Proper coverage for the financial tabs needs either
-    // migrating those features to real per-row writes, or auditing the
-    // blob-save path directly (diffing project_backups.data) — both are
-    // deliberate follow-up projects, not something to fake here.
+    // These 4 (db/budget/boq/po) are backed by _logBlobDataChanges() —
+    // coarse, count-based change detection on every successful cloud
+    // push, logged via log_client_data_change(). NOT the same as
+    // Team/Roles, which get precise row-level diffs from real Postgres
+    // triggers — expenses/BOQ/etc. are saved via the whole-project JSON
+    // blob sync (project_backups), not real table writes, so a trigger
+    // can never see them change. What you'll see here is "count went
+    // from X to Y", not a field-level diff — that's a deliberate,
+    // honest limit, not a bug. Real triggers also still exist on
+    // expenses/boq_items/budget_categories/client_bills/
+    // contractor_ledger/payroll_records/worker_advances (added earlier
+    // this session) in case those features are ever migrated to real
+    // per-row writes — they're harmless dead weight until then.
   ];
   el.innerHTML = opts.map(function(o) {
     var active = (_atTableFilter === o.v);
