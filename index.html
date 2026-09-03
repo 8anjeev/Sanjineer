@@ -13970,7 +13970,7 @@ try{
   var allRecords=AD.filter(function(d){ return d.type==='material' && !d.from_materials_tab && d.exp_type !== 'material'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
 
   var monthLabel=selMonth ? mlabel(new Date(selMonth+'-01')) : (function(){
-    var mk={};records.forEach(function(r){ if(r.date) mk[r.date.substring(0,7)]=1; });
+    var mk={};allRecords.forEach(function(r){ if(r.date) mk[r.date.substring(0,7)]=1; });
     var ks=Object.keys(mk).sort();
     return ks.length===1?mlabel(new Date(ks[0]+'-01')):(mlabel(new Date(ks[0]+'-01'))+' – '+mlabel(new Date(ks[ks.length-1]+'-01')));
   })();
@@ -13978,12 +13978,12 @@ try{
   var totalPetty=0, totalMat=0;
   var runBal=0;
   // First pass to get opening balance
-  var pIn=records.filter(function(r){ return r.is_petty_cash; }).reduce(function(s,r){ return s+(parseFloat(r.cost)||0); },0);
+  var pIn=allRecords.filter(function(r){ return r.is_petty_cash; }).reduce(function(s,r){ return s+(parseFloat(r.cost)||0); },0);
   runBal=pIn; // start with full cash-in then subtract materials as we go
 
   // Build rows chronologically, computing live balance
   var pettySoFar=0, matSoFar=0;
-  var rows=records.map(function(r){
+  var rows=allRecords.map(function(r){
     var amt=parseFloat(r.cost)||0;
     if(r.is_petty_cash){ pettySoFar+=amt; runBal=pettySoFar-matSoFar; }
     else { matSoFar+=amt; runBal=pettySoFar-matSoFar; }
@@ -14308,15 +14308,43 @@ function _mpVehicleAutofill(){
   var v = vEl.value.trim();
   vEl.value = v;
   if (!v) return;
-  var item = lmat().find(function(m){ return m.id===MID; });
+  var allMats = lmat();
+  var item = allMats.find(function(m){ return m.id===MID; });
   if (!item) return;
-  var matches = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v.toLowerCase(); });
-  if (!matches.length) return;
-  var latest = matches[matches.length-1];
-  var sizeEl = document.getElementById('mp-size'), qtyEl = document.getElementById('mp-qty');
+  var sizeEl = document.getElementById('mp-size'), qtyEl = document.getElementById('mp-qty'), supplierEl = document.getElementById('mp-supplier');
   var filledSomething = false;
-  if (sizeEl && !sizeEl.value && latest.size) { sizeEl.value = latest.size; filledSomething = true; }
-  if (qtyEl && !qtyEl.value && latest.qty) { qtyEl.value = latest.qty; filledSomething = true; }
+
+  // Same-material match first (existing behaviour) — a given truck usually
+  // brings the same load of the SAME material every time, so quantity is a
+  // safe suggestion here specifically.
+  var sameMatMatches = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v.toLowerCase(); });
+  var sameMatLatest = sameMatMatches.length ? sameMatMatches[sameMatMatches.length-1] : null;
+  if (sameMatLatest) {
+    if (sizeEl && !sizeEl.value && sameMatLatest.size) { sizeEl.value = sameMatLatest.size; filledSomething = true; }
+    if (qtyEl && !qtyEl.value && sameMatLatest.qty) { qtyEl.value = sameMatLatest.qty; filledSomething = true; }
+  }
+
+  // Cross-material fallback — the vehicle itself (its size/capacity, and
+  // usually its supplier/owner) doesn't change based on what it's
+  // carrying, so a match on a DIFFERENT material's delivery history is
+  // still a valid source for Size and Supplier. Quantity is deliberately
+  // NOT pulled from a cross-material match — how much of Sand a truck
+  // brought tells you nothing about how much Cement it'll bring.
+  if (!sizeEl || !sizeEl.value || !supplierEl || !supplierEl.value) {
+    var crossMatch = null, crossMatchDate = null;
+    allMats.forEach(function(m){
+      (m.transactions||[]).forEach(function(t){
+        if (t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v.toLowerCase()) {
+          if (!crossMatch || (t.date||'') > crossMatchDate) { crossMatch = t; crossMatchDate = t.date||''; }
+        }
+      });
+    });
+    if (crossMatch) {
+      if (sizeEl && !sizeEl.value && crossMatch.size) { sizeEl.value = crossMatch.size; filledSomething = true; }
+      if (supplierEl && !supplierEl.value && crossMatch.supplier) { supplierEl.value = crossMatch.supplier; filledSomething = true; }
+    }
+  }
+
   if (filledSomething) toast('Auto-filled from '+v+"'s last delivery — edit if different", 'ok');
 }
 function closeMatModal(){ document.getElementById('mat-purchase-modal').classList.remove('modal-show'); }
@@ -27228,15 +27256,27 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
           <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft)</label>
           <input id="fd-rate" type="number" class="fd-input" oninput="_fdRecalc()">
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div id="fd-society-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Society Charges (₹)</label>
             <input id="fd-society" type="number" class="fd-input" oninput="_fdRecalc()">
           </div>
-          <div>
+          <div id="fd-dev-row-inner">
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Development Charges (₹)</label>
             <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()">
           </div>
+        </div>
+        <!-- Shown instead of the inputs above when this building has
+             Society/Development Charges set once at the building level
+             (see buildingChargesBlock in renderSalesManager) — computed,
+             not editable, same pattern as Floor Rise Charge below. -->
+        <div id="fd-society-fixed" style="display:none;align-items:center;justify-content:space-between;margin-bottom:6px;padding:5px 0;">
+          <span style="font-size:9.5px;font-weight:700;color:#7dd3fc;">💠 Society Charges <span style="color:#6b7280;font-weight:600;">(set for whole building)</span></span>
+          <span style="font-size:11px;font-weight:800;color:#7dd3fc;">₹0</span>
+        </div>
+        <div id="fd-dev-fixed" style="display:none;align-items:center;justify-content:space-between;margin-bottom:8px;padding:5px 0;">
+          <span style="font-size:9.5px;font-weight:700;color:#7dd3fc;">💠 Development Charges <span style="color:#6b7280;font-weight:600;">(set for whole building)</span></span>
+          <span style="font-size:11px;font-weight:800;color:#7dd3fc;">₹0</span>
         </div>
 
         <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Misc. Charges (IOU / Legal / Other)</label>
@@ -27590,11 +27630,20 @@ function _floorRiseExtraRate(b, fl) {
 }
 // b and fl are optional — pass them whenever available (every call site
 // that's already looping buildings/floors has them right there) so the
-// Floor Rise Charge factors into the total. Omitting them just skips that
-// addon rather than erroring, so old call sites still work unmodified.
+// Floor Rise Charge AND building-level Society/Development Charges factor
+// into the total. Omitting them just skips those addons rather than
+// erroring, so old call sites still work unmodified.
+//
+// Society/Development Charges: building-level (b.societyCharge,
+// b.devCharge) when set — entered ONCE per building via _setBuildingCharge()
+// and auto-applied to every flat, same pattern as Floor Rise Charge below.
+// Falls back to the flat's own f.society/f.dev for buildings that predate
+// this (or that were never given a building-level value) — existing saved
+// prices don't silently change.
 function _flatFinalPrice(f, b, fl) {
   var area = parseFloat(f.area) || 0, rate = parseFloat(f.rate) || 0;
-  var soc = parseFloat(f.society) || 0, dev = parseFloat(f.dev) || 0;
+  var soc = (b && b.societyCharge != null) ? (parseFloat(b.societyCharge) || 0) : (parseFloat(f.society) || 0);
+  var dev = (b && b.devCharge != null) ? (parseFloat(b.devCharge) || 0) : (parseFloat(f.dev) || 0);
   var misc = 0;
   (f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
   var riseExtra = area * _floorRiseExtraRate(b, fl);
@@ -27616,6 +27665,20 @@ window._setFloorRise = function (buildingId, field, value) {
   var num = parseFloat(value) || 0;
   if (field === 'start') b.floorRiseStart = Math.max(0, Math.round(num));
   else if (field === 'rate') b.floorRiseRate = Math.max(0, num);
+  ssales(data);
+  renderSalesManager();
+};
+// Society/Development Charges: same "set once per building, auto-applies
+// to every flat" pattern as Floor Rise Charge above — entered once here
+// instead of re-typed on every single flat.
+window._setBuildingCharge = function (buildingId, field, value) {
+  if (!isSalesFullAdmin()) { toast('Only the owner or Sales Manager can set building charges', 'err'); return; }
+  var data = lsales();
+  var b = (data.buildings || []).find(function (x) { return x.id === buildingId; });
+  if (!b) return;
+  var num = Math.max(0, parseFloat(value) || 0);
+  if (field === 'society') b.societyCharge = num;
+  else if (field === 'dev') b.devCharge = num;
   ssales(data);
   renderSalesManager();
 };
@@ -27944,6 +28007,26 @@ function renderSalesManager() {
             ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#c4b5fd;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:5px 9px;">🏗️ Floor rise charge active from floor ' + b.floorRiseStart + ': +' + _inr(b.floorRiseRate) + '/sqft per floor above that</div>')
             : '');
 
+      // Society/Development Charges — set ONCE per building instead of
+      // re-typed on every flat's edit form. Same "admin gets editable
+      // inputs, everyone else sees a plain summary line" pattern as Floor
+      // Rise Charge above — the amount is visible to every viewer, not
+      // just the admin, since it now factors into every flat's Final
+      // Price automatically (see _flatFinalPrice()).
+      var hasBuildingCharges = (parseFloat(b.societyCharge) > 0) || (parseFloat(b.devCharge) > 0);
+      var buildingChargesBlock = admin
+        ? ('<div style="margin-bottom:.6rem;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:10px;padding:.5rem .65rem;">'
+            + '<div style="font-size:9.5px;font-weight:800;color:#7dd3fc;margin-bottom:5px;">💠 Society &amp; Development Charges <span style="font-weight:600;color:rgba(255,255,255,.4);">(set once, auto-applies to every flat in this building)</span></div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Society Charges (₹)</label>'
+            + '<input type="number" min="0" value="' + (b.societyCharge || '') + '" placeholder="e.g. 25000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'society\',this.value)"></div>'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Development Charges (₹)</label>'
+            + '<input type="number" min="0" value="' + (b.devCharge || '') + '" placeholder="e.g. 15000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'dev\',this.value)"></div>'
+            + '</div></div>')
+        : (hasBuildingCharges
+            ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#7dd3fc;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:5px 9px;">💠 Society ' + _inr(b.societyCharge || 0) + ' + Development ' + _inr(b.devCharge || 0) + ' — included in every flat\'s price in this building</div>')
+            : '');
+
       return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;margin-bottom:10px;overflow:hidden;">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;padding:.7rem .85rem;cursor:pointer;background:rgba(8,145,178,.1);" onclick="_toggleBuildingOpen(\'' + b.id + '\')">'
         + '<div style="min-width:0;display:flex;align-items:center;gap:7px;"><span style="font-size:15px;">🏢</span><div><span style="font-size:13px;font-weight:900;color:#fff;">' + esc(b.name || 'Building') + '</span>'
@@ -27951,6 +28034,7 @@ function renderSalesManager() {
         + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">' + delBuildingBtn + '<span style="font-size:12px;color:rgba(255,255,255,.5);display:inline-block;transform:rotate(' + (open ? '180' : '0') + 'deg);transition:transform .2s;">▾</span></div>'
         + '</div>'
         + '<div style="display:' + (open ? 'block' : 'none') + ';padding:.7rem .85rem .85rem;">'
+        + buildingChargesBlock
         + floorRiseBlock
         + (floors.length ? floorsHtml : '<p style="font-size:10px;color:rgba(255,255,255,.35);text-align:center;padding:.5rem 0;">No floors in this building yet.</p>')
         + addFloorBtn
@@ -28229,10 +28313,26 @@ function _fdMiscRemove(i) {
 function _fdRecalc() {
   var area = parseFloat(document.getElementById('fd-area').value) || 0;
   var rate = parseFloat(document.getElementById('fd-rate').value) || 0;
-  var soc = parseFloat(document.getElementById('fd-society').value) || 0;
-  var dev = parseFloat(document.getElementById('fd-dev').value) || 0;
-  var misc = 0;
   var ctx = _fdCurrentFlat();
+  var b = ctx ? ctx.b : null;
+  var buildingHasCharges = b && (b.societyCharge != null || b.devCharge != null);
+  var soc, dev;
+  var socRow = document.getElementById('fd-society-row');
+  var socFixed = document.getElementById('fd-society-fixed'), devFixed = document.getElementById('fd-dev-fixed');
+  if (buildingHasCharges) {
+    soc = parseFloat(b.societyCharge) || 0;
+    dev = parseFloat(b.devCharge) || 0;
+    if (socRow) socRow.style.display = 'none';
+    if (socFixed) { socFixed.style.display = 'flex'; socFixed.querySelector('span:last-child').textContent = _inr(soc); }
+    if (devFixed) { devFixed.style.display = 'flex'; devFixed.querySelector('span:last-child').textContent = _inr(dev); }
+  } else {
+    soc = parseFloat(document.getElementById('fd-society').value) || 0;
+    dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+    if (socRow) socRow.style.display = '';
+    if (socFixed) socFixed.style.display = 'none';
+    if (devFixed) devFixed.style.display = 'none';
+  }
+  var misc = 0;
   var riseExtraRate = 0, riseExtra = 0;
   if (ctx && ctx.f) {
     (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
@@ -28260,8 +28360,16 @@ function saveFlatFields() {
   ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
   ctx.f.rate = parseFloat(document.getElementById('fd-rate').value) || 0;
-  ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
-  ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+  // Only write f.society/f.dev from the inputs when they're actually the
+  // visible, editable source of truth for this building (see _fdRecalc) —
+  // when building-level charges are set, these inputs are hidden and
+  // _flatFinalPrice() ignores f.society/f.dev entirely, so overwriting
+  // them here would just silently zero out old data for no reason.
+  var socRow = document.getElementById('fd-society-row');
+  if (!socRow || socRow.style.display !== 'none') {
+    ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
+    ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+  }
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
   var _priceAfter = _flatFinalPrice(ctx.f, ctx.b, ctx.fl);
