@@ -27261,22 +27261,10 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Society Charges (₹)</label>
             <input id="fd-society" type="number" class="fd-input" oninput="_fdRecalc()">
           </div>
-          <div id="fd-dev-row-inner">
+          <div>
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Development Charges (₹)</label>
             <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()">
           </div>
-        </div>
-        <!-- Shown instead of the inputs above when this building has
-             Society/Development Charges set once at the building level
-             (see buildingChargesBlock in renderSalesManager) — computed,
-             not editable, same pattern as Floor Rise Charge below. -->
-        <div id="fd-society-fixed" style="display:none;align-items:center;justify-content:space-between;margin-bottom:6px;padding:5px 0;">
-          <span style="font-size:9.5px;font-weight:700;color:#7dd3fc;">💠 Society Charges <span style="color:#6b7280;font-weight:600;">(set for whole building)</span></span>
-          <span style="font-size:11px;font-weight:800;color:#7dd3fc;">₹0</span>
-        </div>
-        <div id="fd-dev-fixed" style="display:none;align-items:center;justify-content:space-between;margin-bottom:8px;padding:5px 0;">
-          <span style="font-size:9.5px;font-weight:700;color:#7dd3fc;">💠 Development Charges <span style="color:#6b7280;font-weight:600;">(set for whole building)</span></span>
-          <span style="font-size:11px;font-weight:800;color:#7dd3fc;">₹0</span>
         </div>
 
         <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Misc. Charges (IOU / Legal / Other)</label>
@@ -27630,20 +27618,22 @@ function _floorRiseExtraRate(b, fl) {
 }
 // b and fl are optional — pass them whenever available (every call site
 // that's already looping buildings/floors has them right there) so the
-// Floor Rise Charge AND building-level Society/Development Charges factor
-// into the total. Omitting them just skips those addons rather than
-// erroring, so old call sites still work unmodified.
+// Floor Rise Charge factors into the total. Omitting them just skips that
+// addon rather than erroring, so old call sites still work unmodified.
 //
-// Society/Development Charges: building-level (b.societyCharge,
-// b.devCharge) when set — entered ONCE per building via _setBuildingCharge()
-// and auto-applied to every flat, same pattern as Floor Rise Charge below.
-// Falls back to the flat's own f.society/f.dev for buildings that predate
-// this (or that were never given a building-level value) — existing saved
-// prices don't silently change.
+// Society/Development Charges (and Rate) are SOFT-FILL: when a new flat
+// is created, its f.rate/f.society/f.dev get pre-populated from the
+// building's default (see openAddFlatModal / _addFlatSaveNew below), but
+// from that point on the FLAT's own value is what's actually used and
+// billed — someone can freely edit a specific flat's rate/charges to
+// account for a bigger BHK, a corner unit, etc. without that touching any
+// other flat. This is deliberately different from Floor Rise Charge just
+// below, which stays a hard, building-wide rule with no per-flat
+// override — floor rise is about the floor's position, not the unit
+// type, so there's no legitimate reason for it to vary flat-by-flat.
 function _flatFinalPrice(f, b, fl) {
   var area = parseFloat(f.area) || 0, rate = parseFloat(f.rate) || 0;
-  var soc = (b && b.societyCharge != null) ? (parseFloat(b.societyCharge) || 0) : (parseFloat(f.society) || 0);
-  var dev = (b && b.devCharge != null) ? (parseFloat(b.devCharge) || 0) : (parseFloat(f.dev) || 0);
+  var soc = parseFloat(f.society) || 0, dev = parseFloat(f.dev) || 0;
   var misc = 0;
   (f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
   var riseExtra = area * _floorRiseExtraRate(b, fl);
@@ -27677,7 +27667,8 @@ window._setBuildingCharge = function (buildingId, field, value) {
   var b = (data.buildings || []).find(function (x) { return x.id === buildingId; });
   if (!b) return;
   var num = Math.max(0, parseFloat(value) || 0);
-  if (field === 'society') b.societyCharge = num;
+  if (field === 'rate') b.defaultRate = num;
+  else if (field === 'society') b.societyCharge = num;
   else if (field === 'dev') b.devCharge = num;
   ssales(data);
   renderSalesManager();
@@ -28007,24 +27998,29 @@ function renderSalesManager() {
             ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#c4b5fd;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:5px 9px;">🏗️ Floor rise charge active from floor ' + b.floorRiseStart + ': +' + _inr(b.floorRiseRate) + '/sqft per floor above that</div>')
             : '');
 
-      // Society/Development Charges — set ONCE per building instead of
-      // re-typed on every flat's edit form. Same "admin gets editable
-      // inputs, everyone else sees a plain summary line" pattern as Floor
-      // Rise Charge above — the amount is visible to every viewer, not
-      // just the admin, since it now factors into every flat's Final
-      // Price automatically (see _flatFinalPrice()).
-      var hasBuildingCharges = (parseFloat(b.societyCharge) > 0) || (parseFloat(b.devCharge) > 0);
+      // Rate / Society / Development Charges — building-level DEFAULTS,
+      // set once here so adding a new flat only ever needs a Flat No. and
+      // Size typed in (see openAddFlatModal). Deliberately soft-fill, not
+      // hard-forced: these get copied into f.rate/f.society/f.dev at flat-
+      // creation time and are freely editable per flat after that — a 3BHK
+      // and a 1BHK in the same building can end up with different rates
+      // without touching this building-level default at all. Floor Rise
+      // Charge above stays the one hard, non-overridable exception, since
+      // it's a structural rule about the floor's position, not the unit.
+      var hasDefaults = (parseFloat(b.defaultRate) > 0) || (parseFloat(b.societyCharge) > 0) || (parseFloat(b.devCharge) > 0);
       var buildingChargesBlock = admin
         ? ('<div style="margin-bottom:.6rem;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:10px;padding:.5rem .65rem;">'
-            + '<div style="font-size:9.5px;font-weight:800;color:#7dd3fc;margin-bottom:5px;">💠 Society &amp; Development Charges <span style="font-weight:600;color:rgba(255,255,255,.4);">(set once, auto-applies to every flat in this building)</span></div>'
-            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
-            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Society Charges (₹)</label>'
+            + '<div style="font-size:9.5px;font-weight:800;color:#7dd3fc;margin-bottom:5px;">💠 Default Rate &amp; Charges <span style="font-weight:600;color:rgba(255,255,255,.4);">(soft-fills new flats — still editable per flat, e.g. for a different BHK)</span></div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Rate (₹/sqft)</label>'
+            + '<input type="number" min="0" value="' + (b.defaultRate || '') + '" placeholder="e.g. 5500" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'rate\',this.value)"></div>'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Society (₹)</label>'
             + '<input type="number" min="0" value="' + (b.societyCharge || '') + '" placeholder="e.g. 25000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'society\',this.value)"></div>'
-            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Development Charges (₹)</label>'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Development (₹)</label>'
             + '<input type="number" min="0" value="' + (b.devCharge || '') + '" placeholder="e.g. 15000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'dev\',this.value)"></div>'
             + '</div></div>')
-        : (hasBuildingCharges
-            ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#7dd3fc;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:5px 9px;">💠 Society ' + _inr(b.societyCharge || 0) + ' + Development ' + _inr(b.devCharge || 0) + ' — included in every flat\'s price in this building</div>')
+        : (hasDefaults
+            ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#7dd3fc;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:5px 9px;">💠 Default for new flats: ' + (parseFloat(b.defaultRate)>0 ? _inr(b.defaultRate)+'/sqft' : '—') + ' · Society ' + _inr(b.societyCharge || 0) + ' · Development ' + _inr(b.devCharge || 0) + ' <span style="color:rgba(255,255,255,.35)">(editable per flat)</span></div>')
             : '');
 
       return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;margin-bottom:10px;overflow:hidden;">'
@@ -28196,7 +28192,15 @@ function addSalesFlat(buildingId, floorId) {
   if (!fl) return;
   fl.flats = fl.flats || [];
   fl.flats.push({
-    id: gid(), flatNo: flatNo, type: type, area: area, rate: 0, society: 0, dev: 0,
+    id: gid(), flatNo: flatNo, type: type, area: area,
+    // Soft-fill from the building's defaults (see buildingChargesBlock /
+    // _setBuildingCharge) — pre-populated so the person adding this flat
+    // doesn't have to re-type the same rate/charges building-wide, but
+    // still just a normal, freely-editable per-flat value from here on.
+    // A 0 default just means "not set yet", same as before.
+    rate: parseFloat(b.defaultRate) || 0,
+    society: parseFloat(b.societyCharge) || 0,
+    dev: parseFloat(b.devCharge) || 0,
     misc: [], status: 'avail', remarks: [], updatedAt: Date.now()
   });
   ssales(data);
@@ -28313,26 +28317,10 @@ function _fdMiscRemove(i) {
 function _fdRecalc() {
   var area = parseFloat(document.getElementById('fd-area').value) || 0;
   var rate = parseFloat(document.getElementById('fd-rate').value) || 0;
-  var ctx = _fdCurrentFlat();
-  var b = ctx ? ctx.b : null;
-  var buildingHasCharges = b && (b.societyCharge != null || b.devCharge != null);
-  var soc, dev;
-  var socRow = document.getElementById('fd-society-row');
-  var socFixed = document.getElementById('fd-society-fixed'), devFixed = document.getElementById('fd-dev-fixed');
-  if (buildingHasCharges) {
-    soc = parseFloat(b.societyCharge) || 0;
-    dev = parseFloat(b.devCharge) || 0;
-    if (socRow) socRow.style.display = 'none';
-    if (socFixed) { socFixed.style.display = 'flex'; socFixed.querySelector('span:last-child').textContent = _inr(soc); }
-    if (devFixed) { devFixed.style.display = 'flex'; devFixed.querySelector('span:last-child').textContent = _inr(dev); }
-  } else {
-    soc = parseFloat(document.getElementById('fd-society').value) || 0;
-    dev = parseFloat(document.getElementById('fd-dev').value) || 0;
-    if (socRow) socRow.style.display = '';
-    if (socFixed) socFixed.style.display = 'none';
-    if (devFixed) devFixed.style.display = 'none';
-  }
+  var soc = parseFloat(document.getElementById('fd-society').value) || 0;
+  var dev = parseFloat(document.getElementById('fd-dev').value) || 0;
   var misc = 0;
+  var ctx = _fdCurrentFlat();
   var riseExtraRate = 0, riseExtra = 0;
   if (ctx && ctx.f) {
     (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
@@ -28360,16 +28348,8 @@ function saveFlatFields() {
   ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
   ctx.f.rate = parseFloat(document.getElementById('fd-rate').value) || 0;
-  // Only write f.society/f.dev from the inputs when they're actually the
-  // visible, editable source of truth for this building (see _fdRecalc) —
-  // when building-level charges are set, these inputs are hidden and
-  // _flatFinalPrice() ignores f.society/f.dev entirely, so overwriting
-  // them here would just silently zero out old data for no reason.
-  var socRow = document.getElementById('fd-society-row');
-  if (!socRow || socRow.style.display !== 'none') {
-    ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
-    ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
-  }
+  ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
+  ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
   var _priceAfter = _flatFinalPrice(ctx.f, ctx.b, ctx.fl);
