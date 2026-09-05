@@ -27253,7 +27253,7 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
           <input id="fd-area" type="number" class="fd-input" oninput="_fdRecalc()">
         </div>
         <div style="margin-bottom:8px;">
-          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft)</label>
+          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft) <span id="fd-rate-hint" style="font-weight:600;color:#7dd3fc;">🔗 Following building default</span></label>
           <input id="fd-rate" type="number" class="fd-input" oninput="_fdRecalc()">
         </div>
         <div id="fd-society-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -27266,6 +27266,7 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
             <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()">
           </div>
         </div>
+        <p style="font-size:8.5px;color:#7dd3fc;margin:-4px 0 8px;"><span id="fd-charges-hint">🔗 Following building default</span> — edit either field above and save to lock a custom value for just this flat</p>
 
         <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Misc. Charges (IOU / Legal / Other)</label>
         <div id="fd-misc-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px;"></div>
@@ -27621,23 +27622,37 @@ function _floorRiseExtraRate(b, fl) {
 // Floor Rise Charge factors into the total. Omitting them just skips that
 // addon rather than erroring, so old call sites still work unmodified.
 //
-// Society/Development Charges (and Rate) are SOFT-FILL: when a new flat
-// is created, its f.rate/f.society/f.dev get pre-populated from the
-// building's default (see openAddFlatModal / _addFlatSaveNew below), but
-// from that point on the FLAT's own value is what's actually used and
-// billed — someone can freely edit a specific flat's rate/charges to
-// account for a bigger BHK, a corner unit, etc. without that touching any
-// other flat. This is deliberately different from Floor Rise Charge just
-// below, which stays a hard, building-wide rule with no per-flat
-// override — floor rise is about the floor's position, not the unit
-// type, so there's no legitimate reason for it to vary flat-by-flat.
+// Rate / Society / Development Charges are LIVE-LINKED to the building's
+// current default (see buildingChargesBlock / _setBuildingCharge) for any
+// flat that hasn't been individually customized — f.rateCustom/
+// societyCustom/devCustom stay false. That link isn't a one-time copy: if
+// the building default changes later, every non-customized flat picks up
+// the new value automatically, no re-saving needed. The moment someone
+// saves a DIFFERENT value into a specific flat (see saveFlatFields), that
+// field's *Custom flag flips true and the flat's own stored value is used
+// from then on, independent of whatever the building default does next —
+// exactly the "same for everyone until someone manually changes it" model.
+// Floor Rise Charge stays the one hard, always-uniform exception (no
+// per-flat override at all) since it's structural, not unit-specific.
 function _flatFinalPrice(f, b, fl) {
-  var area = parseFloat(f.area) || 0, rate = parseFloat(f.rate) || 0;
-  var soc = parseFloat(f.society) || 0, dev = parseFloat(f.dev) || 0;
+  var area = parseFloat(f.area) || 0;
+  var rate = f.rateCustom ? (parseFloat(f.rate) || 0) : ((b && b.defaultRate != null) ? (parseFloat(b.defaultRate) || 0) : (parseFloat(f.rate) || 0));
+  var soc  = f.societyCustom ? (parseFloat(f.society) || 0) : ((b && b.societyCharge != null) ? (parseFloat(b.societyCharge) || 0) : (parseFloat(f.society) || 0));
+  var dev  = f.devCustom ? (parseFloat(f.dev) || 0) : ((b && b.devCharge != null) ? (parseFloat(b.devCharge) || 0) : (parseFloat(f.dev) || 0));
   var misc = 0;
   (f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
   var riseExtra = area * _floorRiseExtraRate(b, fl);
   return area * rate + soc + dev + misc + riseExtra;
+}
+// Effective (currently-in-effect) value for one of the three linkable
+// fields — what _flatFinalPrice would use right now. Shared by the flat
+// edit modal so what's shown in the input always matches what's billed.
+function _flatEffectiveValue(f, b, field) {
+  var customFlag = field + 'Custom';
+  var buildingField = field === 'rate' ? 'defaultRate' : (field === 'society' ? 'societyCharge' : 'devCharge');
+  if (f[customFlag]) return parseFloat(f[field]) || 0;
+  if (b && b[buildingField] != null) return parseFloat(b[buildingField]) || 0;
+  return parseFloat(f[field]) || 0;
 }
 function _inr(n) {
   n = Math.round(n || 0);
@@ -28193,14 +28208,14 @@ function addSalesFlat(buildingId, floorId) {
   fl.flats = fl.flats || [];
   fl.flats.push({
     id: gid(), flatNo: flatNo, type: type, area: area,
-    // Soft-fill from the building's defaults (see buildingChargesBlock /
-    // _setBuildingCharge) — pre-populated so the person adding this flat
-    // doesn't have to re-type the same rate/charges building-wide, but
-    // still just a normal, freely-editable per-flat value from here on.
-    // A 0 default just means "not set yet", same as before.
-    rate: parseFloat(b.defaultRate) || 0,
-    society: parseFloat(b.societyCharge) || 0,
-    dev: parseFloat(b.devCharge) || 0,
+    // Not customized yet — these stay live-linked to the building's
+    // current Rate/Society/Development default (see _flatFinalPrice /
+    // _flatEffectiveValue) until someone edits this specific flat's value
+    // to something different, at which point the matching *Custom flag
+    // below flips true in saveFlatFields() and this flat gets its own
+    // locked-in value from then on, independent of the building default.
+    rate: 0, society: 0, dev: 0,
+    rateCustom: false, societyCustom: false, devCustom: false,
     misc: [], status: 'avail', remarks: [], updatedAt: Date.now()
   });
   ssales(data);
@@ -28237,9 +28252,16 @@ function openFlatDetail(buildingId, floorId, flatId) {
   document.getElementById('fd-flatno').value = f.flatNo || '';
   document.getElementById('fd-type').innerHTML = _flatTypeOptionsHtml(f.type || '');
   document.getElementById('fd-area').value = f.area || '';
-  document.getElementById('fd-rate').value = f.rate || '';
-  document.getElementById('fd-society').value = f.society || '';
-  document.getElementById('fd-dev').value = f.dev || '';
+  // Show the EFFECTIVE value (building default if not customized, this
+  // flat's own locked-in value if it is) — always matches what
+  // _flatFinalPrice actually bills, never a stale snapshot.
+  document.getElementById('fd-rate').value = _flatEffectiveValue(f, b, 'rate') || '';
+  document.getElementById('fd-society').value = _flatEffectiveValue(f, b, 'society') || '';
+  document.getElementById('fd-dev').value = _flatEffectiveValue(f, b, 'dev') || '';
+  var rateHint = document.getElementById('fd-rate-hint');
+  if (rateHint) rateHint.textContent = f.rateCustom ? '✏️ Custom for this flat' : '🔗 Following building default';
+  var chargesHint = document.getElementById('fd-charges-hint');
+  if (chargesHint) chargesHint.textContent = (f.societyCustom || f.devCustom) ? '✏️ Custom for this flat' : '🔗 Following building default';
   // FIX: these used to be `disabled` for anyone but the Sales Manager/owner,
   // which blocked engineers from even trying out numbers. They're editable
   // for everyone now — typing here only ever feeds the live total-price
@@ -28327,6 +28349,20 @@ function _fdRecalc() {
     riseExtraRate = _floorRiseExtraRate(ctx.b, ctx.fl);
     riseExtra = area * riseExtraRate;
   }
+  // Live hint update — reflects what saveFlatFields() would actually lock
+  // in if saved right now, so it never lags behind what's typed.
+  var b = ctx ? ctx.b : null;
+  var rateHint = document.getElementById('fd-rate-hint');
+  if (rateHint) {
+    var rateMatchesDefault = b && b.defaultRate != null && rate === (parseFloat(b.defaultRate) || 0);
+    rateHint.textContent = rateMatchesDefault ? '🔗 Following building default' : '✏️ Custom for this flat';
+  }
+  var chargesHint = document.getElementById('fd-charges-hint');
+  if (chargesHint) {
+    var socMatches = b && b.societyCharge != null && soc === (parseFloat(b.societyCharge) || 0);
+    var devMatches = b && b.devCharge != null && dev === (parseFloat(b.devCharge) || 0);
+    chargesHint.textContent = (socMatches && devMatches) ? '🔗 Following building default' : '✏️ Custom for this flat';
+  }
   var riseRow = document.getElementById('fd-floorrise-row');
   if (riseRow) {
     if (riseExtraRate > 0) {
@@ -28347,9 +28383,26 @@ function saveFlatFields() {
   ctx.f.flatNo = document.getElementById('fd-flatno').value.trim();
   ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
-  ctx.f.rate = parseFloat(document.getElementById('fd-rate').value) || 0;
-  ctx.f.society = parseFloat(document.getElementById('fd-society').value) || 0;
-  ctx.f.dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+
+  var newRate = parseFloat(document.getElementById('fd-rate').value) || 0;
+  var newSoc  = parseFloat(document.getElementById('fd-society').value) || 0;
+  var newDev  = parseFloat(document.getElementById('fd-dev').value) || 0;
+  var b = ctx.b;
+  // "Still matches the current building default" (or no building default
+  // set at all) → keep following it live. Anything else → lock this
+  // flat's own value from now on, independent of whatever the building
+  // default does next. This is the one and only place these flags change
+  // — editing here is the "manually changed" trigger the linking exists
+  // to detect.
+  ctx.f.rate = newRate;
+  ctx.f.rateCustom = !(b && b.defaultRate != null && newRate === (parseFloat(b.defaultRate) || 0));
+  ctx.f.society = newSoc;
+  ctx.f.dev = newDev;
+  var socMatchesDefault = b && b.societyCharge != null && newSoc === (parseFloat(b.societyCharge) || 0);
+  var devMatchesDefault = b && b.devCharge != null && newDev === (parseFloat(b.devCharge) || 0);
+  ctx.f.societyCustom = !socMatchesDefault;
+  ctx.f.devCustom = !devMatchesDefault;
+
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
   var _priceAfter = _flatFinalPrice(ctx.f, ctx.b, ctx.fl);
