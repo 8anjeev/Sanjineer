@@ -27227,7 +27227,7 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
     </div>
     <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
 
-      <p id="fd-preview-note" style="display:none;font-size:9.5px;color:#fcd34d;background:rgba(245,158,11,.12);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:6px 9px;margin:0 0 .7rem;">👁️ View only — you can try different numbers below to see the total, but nothing here is saved. Only the owner or Sales Manager can actually update this flat.</p>
+      <p id="fd-preview-note" style="display:none;font-size:9.5px;color:#fcd34d;background:rgba(245,158,11,.12);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:6px 9px;margin:0 0 .7rem;">👁️ View only — only the owner or Sales Manager can update this flat.</p>
 
       <!-- Status buttons -->
       <div style="display:flex;gap:6px;margin-bottom:.8rem;">
@@ -27236,8 +27236,14 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
         <button class="fd-status-btn" data-status="sold" onclick="setFlatStatus('sold')" style="flex:1;padding:.5rem 0;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid rgba(248,113,113,.4);background:rgba(239,68,68,.12);color:#fca5a5;">🏁 Sold</button>
       </div>
 
-      <!-- Editable fields -->
-      <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.7rem;margin-bottom:.7rem;">
+      <!-- Invoice-style read-only view — shown to viewers instead of the
+           editable form below (see openFlatDetail). Built entirely via
+           _fdRenderInvoiceHtml() since the line-item count varies (misc
+           charges, floor rise only when applicable). -->
+      <div id="fd-invoice-view" style="display:none;"></div>
+
+      <!-- Editable fields (owner / Sales Manager only) -->
+      <div id="fd-edit-view" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.7rem;margin-bottom:.7rem;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Flat No.</label>
@@ -27252,8 +27258,9 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
           <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Area (sqft)</label>
           <input id="fd-area" type="number" class="fd-input" oninput="_fdRecalc()">
         </div>
+        <p style="font-size:8.5px;color:#7dd3fc;margin:0 0 6px;">💠 Rate &amp; charges below apply to <b>every flat</b> in this building — editing here changes it everywhere, not just this flat.</p>
         <div style="margin-bottom:8px;">
-          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft) <span id="fd-rate-hint" style="font-weight:600;color:#7dd3fc;">🔗 Following building default</span></label>
+          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft)</label>
           <input id="fd-rate" type="number" class="fd-input" oninput="_fdRecalc()">
         </div>
         <div id="fd-society-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -27266,7 +27273,10 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
             <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()">
           </div>
         </div>
-        <p style="font-size:8.5px;color:#7dd3fc;margin:-4px 0 8px;"><span id="fd-charges-hint">🔗 Following building default</span> — edit either field above and save to lock a custom value for just this flat</p>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Parking Charges (₹)</label>
+          <input id="fd-parking" type="number" class="fd-input" oninput="_fdRecalc()">
+        </div>
 
         <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Misc. Charges (IOU / Legal / Other)</label>
         <div id="fd-misc-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px;"></div>
@@ -27622,37 +27632,26 @@ function _floorRiseExtraRate(b, fl) {
 // Floor Rise Charge factors into the total. Omitting them just skips that
 // addon rather than erroring, so old call sites still work unmodified.
 //
-// Rate / Society / Development Charges are LIVE-LINKED to the building's
-// current default (see buildingChargesBlock / _setBuildingCharge) for any
-// flat that hasn't been individually customized — f.rateCustom/
-// societyCustom/devCustom stay false. That link isn't a one-time copy: if
-// the building default changes later, every non-customized flat picks up
-// the new value automatically, no re-saving needed. The moment someone
-// saves a DIFFERENT value into a specific flat (see saveFlatFields), that
-// field's *Custom flag flips true and the flat's own stored value is used
-// from then on, independent of whatever the building default does next —
-// exactly the "same for everyone until someone manually changes it" model.
-// Floor Rise Charge stays the one hard, always-uniform exception (no
-// per-flat override at all) since it's structural, not unit-specific.
+// Rate / Society / Development / Parking Charges are PURE building-level
+// values — one number each, shared by every flat in that building, with
+// zero per-flat divergence, ever. There's no "customize just this flat"
+// concept for these four: editing them from the building settings or from
+// inside any specific flat's expanded view (see saveFlatFields) both do
+// the exact same thing — update the one shared value on the building —
+// so every flat reflects it immediately. Floor Rise Charge is the one
+// other building-wide rule here, but stays structural (about the floor's
+// position, applied as an addon on top) rather than a flat editable value
+// like these four.
 function _flatFinalPrice(f, b, fl) {
   var area = parseFloat(f.area) || 0;
-  var rate = f.rateCustom ? (parseFloat(f.rate) || 0) : ((b && b.defaultRate != null) ? (parseFloat(b.defaultRate) || 0) : (parseFloat(f.rate) || 0));
-  var soc  = f.societyCustom ? (parseFloat(f.society) || 0) : ((b && b.societyCharge != null) ? (parseFloat(b.societyCharge) || 0) : (parseFloat(f.society) || 0));
-  var dev  = f.devCustom ? (parseFloat(f.dev) || 0) : ((b && b.devCharge != null) ? (parseFloat(b.devCharge) || 0) : (parseFloat(f.dev) || 0));
+  var rate = (b && parseFloat(b.defaultRate)) || 0;
+  var soc  = (b && parseFloat(b.societyCharge)) || 0;
+  var dev  = (b && parseFloat(b.devCharge)) || 0;
+  var parking = (b && parseFloat(b.parkingCharge)) || 0;
   var misc = 0;
   (f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
   var riseExtra = area * _floorRiseExtraRate(b, fl);
-  return area * rate + soc + dev + misc + riseExtra;
-}
-// Effective (currently-in-effect) value for one of the three linkable
-// fields — what _flatFinalPrice would use right now. Shared by the flat
-// edit modal so what's shown in the input always matches what's billed.
-function _flatEffectiveValue(f, b, field) {
-  var customFlag = field + 'Custom';
-  var buildingField = field === 'rate' ? 'defaultRate' : (field === 'society' ? 'societyCharge' : 'devCharge');
-  if (f[customFlag]) return parseFloat(f[field]) || 0;
-  if (b && b[buildingField] != null) return parseFloat(b[buildingField]) || 0;
-  return parseFloat(f[field]) || 0;
+  return area * rate + soc + dev + parking + misc + riseExtra;
 }
 function _inr(n) {
   n = Math.round(n || 0);
@@ -27685,6 +27684,7 @@ window._setBuildingCharge = function (buildingId, field, value) {
   if (field === 'rate') b.defaultRate = num;
   else if (field === 'society') b.societyCharge = num;
   else if (field === 'dev') b.devCharge = num;
+  else if (field === 'parking') b.parkingCharge = num;
   ssales(data);
   renderSalesManager();
 };
@@ -28014,28 +28014,31 @@ function renderSalesManager() {
             : '');
 
       // Rate / Society / Development Charges — building-level DEFAULTS,
-      // set once here so adding a new flat only ever needs a Flat No. and
-      // Size typed in (see openAddFlatModal). Deliberately soft-fill, not
-      // hard-forced: these get copied into f.rate/f.society/f.dev at flat-
-      // creation time and are freely editable per flat after that — a 3BHK
-      // and a 1BHK in the same building can end up with different rates
-      // without touching this building-level default at all. Floor Rise
-      // Charge above stays the one hard, non-overridable exception, since
-      // it's a structural rule about the floor's position, not the unit.
-      var hasDefaults = (parseFloat(b.defaultRate) > 0) || (parseFloat(b.societyCharge) > 0) || (parseFloat(b.devCharge) > 0);
+      // Rate, Society, Development, and Parking Charges are single,
+      // shared values per building — the SAME number applies to every
+      // flat in this building, always. Editable from here, or from inside
+      // any specific flat's expanded view (see saveFlatFields) — both are
+      // just two entry points to the one shared value; editing from
+      // either place updates every flat immediately. There is
+      // deliberately no per-flat override for these four. Floor Rise
+      // Charge above is the other building-wide rule, but stays a
+      // structural per-floor addon rather than a flat value like these.
+      var hasDefaults = (parseFloat(b.defaultRate) > 0) || (parseFloat(b.societyCharge) > 0) || (parseFloat(b.devCharge) > 0) || (parseFloat(b.parkingCharge) > 0);
       var buildingChargesBlock = admin
         ? ('<div style="margin-bottom:.6rem;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.25);border-radius:10px;padding:.5rem .65rem;">'
-            + '<div style="font-size:9.5px;font-weight:800;color:#7dd3fc;margin-bottom:5px;">💠 Default Rate &amp; Charges <span style="font-weight:600;color:rgba(255,255,255,.4);">(soft-fills new flats — still editable per flat, e.g. for a different BHK)</span></div>'
-            + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">'
+            + '<div style="font-size:9.5px;font-weight:800;color:#7dd3fc;margin-bottom:5px;">💠 Rate &amp; Charges <span style="font-weight:600;color:rgba(255,255,255,.4);">(one shared value for every flat in this building — same here or in any flat\'s expanded view)</span></div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
             + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Rate (₹/sqft)</label>'
             + '<input type="number" min="0" value="' + (b.defaultRate || '') + '" placeholder="e.g. 5500" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'rate\',this.value)"></div>'
             + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Society (₹)</label>'
             + '<input type="number" min="0" value="' + (b.societyCharge || '') + '" placeholder="e.g. 25000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'society\',this.value)"></div>'
             + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Development (₹)</label>'
             + '<input type="number" min="0" value="' + (b.devCharge || '') + '" placeholder="e.g. 15000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'dev\',this.value)"></div>'
+            + '<div><label style="font-size:8.5px;font-weight:700;color:#7dd3fc;display:block;margin-bottom:2px;">Parking (₹)</label>'
+            + '<input type="number" min="0" value="' + (b.parkingCharge || '') + '" placeholder="e.g. 50000" class="fd-input" style="padding:6px 8px;font-size:10.5px;" onchange="_setBuildingCharge(\'' + b.id + '\',\'parking\',this.value)"></div>'
             + '</div></div>')
         : (hasDefaults
-            ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#7dd3fc;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:5px 9px;">💠 Default for new flats: ' + (parseFloat(b.defaultRate)>0 ? _inr(b.defaultRate)+'/sqft' : '—') + ' · Society ' + _inr(b.societyCharge || 0) + ' · Development ' + _inr(b.devCharge || 0) + ' <span style="color:rgba(255,255,255,.35)">(editable per flat)</span></div>')
+            ? ('<div style="margin-bottom:.6rem;font-size:9px;color:#7dd3fc;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:5px 9px;">💠 ' + (parseFloat(b.defaultRate)>0 ? _inr(b.defaultRate)+'/sqft' : '—') + ' · Society ' + _inr(b.societyCharge || 0) + ' · Development ' + _inr(b.devCharge || 0) + ' · Parking ' + _inr(b.parkingCharge || 0) + ' <span style="color:rgba(255,255,255,.35)">(applies to every flat)</span></div>')
             : '');
 
       return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;margin-bottom:10px;overflow:hidden;">'
@@ -28208,14 +28211,10 @@ function addSalesFlat(buildingId, floorId) {
   fl.flats = fl.flats || [];
   fl.flats.push({
     id: gid(), flatNo: flatNo, type: type, area: area,
-    // Not customized yet — these stay live-linked to the building's
-    // current Rate/Society/Development default (see _flatFinalPrice /
-    // _flatEffectiveValue) until someone edits this specific flat's value
-    // to something different, at which point the matching *Custom flag
-    // below flips true in saveFlatFields() and this flat gets its own
-    // locked-in value from then on, independent of the building default.
-    rate: 0, society: 0, dev: 0,
-    rateCustom: false, societyCustom: false, devCustom: false,
+    // Rate/Society/Development/Parking Charges are NOT stored per-flat —
+    // they're pure building-level values, read straight from the building
+    // object every time (see _flatFinalPrice). Every flat in this building
+    // always reflects whatever the building's current values are.
     misc: [], status: 'avail', remarks: [], updatedAt: Date.now()
   });
   ssales(data);
@@ -28249,38 +28248,39 @@ function openFlatDetail(buildingId, floorId, flatId) {
   var admin = isSalesFullAdmin();
 
   document.getElementById('fd-title').textContent = (b.name ? b.name + ' — ' : '') + (fl.label || 'Floor') + ' — ' + (f.flatNo || 'Flat');
-  document.getElementById('fd-flatno').value = f.flatNo || '';
-  document.getElementById('fd-type').innerHTML = _flatTypeOptionsHtml(f.type || '');
-  document.getElementById('fd-area').value = f.area || '';
-  // Show the EFFECTIVE value (building default if not customized, this
-  // flat's own locked-in value if it is) — always matches what
-  // _flatFinalPrice actually bills, never a stale snapshot.
-  document.getElementById('fd-rate').value = _flatEffectiveValue(f, b, 'rate') || '';
-  document.getElementById('fd-society').value = _flatEffectiveValue(f, b, 'society') || '';
-  document.getElementById('fd-dev').value = _flatEffectiveValue(f, b, 'dev') || '';
-  var rateHint = document.getElementById('fd-rate-hint');
-  if (rateHint) rateHint.textContent = f.rateCustom ? '✏️ Custom for this flat' : '🔗 Following building default';
-  var chargesHint = document.getElementById('fd-charges-hint');
-  if (chargesHint) chargesHint.textContent = (f.societyCustom || f.devCustom) ? '✏️ Custom for this flat' : '🔗 Following building default';
-  // FIX: these used to be `disabled` for anyone but the Sales Manager/owner,
-  // which blocked engineers from even trying out numbers. They're editable
-  // for everyone now — typing here only ever feeds the live total-price
-  // recalculation below (_fdRecalc reads straight from these inputs), and
-  // saveFlatFields() itself still hard-blocks any non-admin from actually
-  // persisting a change. So a regular engineer can play with rate/area/etc.
-  // to show a client an estimate, but nothing they type is ever written to
-  // the flat or synced to the cloud unless they're the owner/Sales Manager.
-  ['fd-flatno', 'fd-type', 'fd-area', 'fd-rate', 'fd-society', 'fd-dev'].forEach(function (id) {
-    document.getElementById(id).disabled = false;
-  });
-  document.getElementById('fd-save-btn').style.display = admin ? 'block' : 'none';
-  document.getElementById('fd-misc-add-btn').style.display = admin ? 'block' : 'none';
-  document.getElementById('fd-del-btn').style.display = admin ? 'inline-block' : 'none';
+
+  var editView = document.getElementById('fd-edit-view');
+  var invoiceView = document.getElementById('fd-invoice-view');
+
+  if (!admin) {
+    // Viewers get a clean, read-only invoice-style breakdown instead of
+    // the editable form — see _fdRenderInvoiceHtml.
+    editView.style.display = 'none';
+    invoiceView.style.display = 'block';
+    invoiceView.innerHTML = _fdRenderInvoiceHtml(b, fl, f);
+  } else {
+    invoiceView.style.display = 'none';
+    editView.style.display = 'block';
+    document.getElementById('fd-flatno').value = f.flatNo || '';
+    document.getElementById('fd-type').innerHTML = _flatTypeOptionsHtml(f.type || '');
+    document.getElementById('fd-area').value = f.area || '';
+    // Rate/Society/Dev/Parking come straight from the building — there's
+    // only one value, shared by every flat, so this always matches exactly
+    // what every other flat in this building shows too.
+    document.getElementById('fd-rate').value = (b && b.defaultRate) || '';
+    document.getElementById('fd-society').value = (b && b.societyCharge) || '';
+    document.getElementById('fd-dev').value = (b && b.devCharge) || '';
+    document.getElementById('fd-parking').value = (b && b.parkingCharge) || '';
+    document.getElementById('fd-save-btn').style.display = 'block';
+    document.getElementById('fd-misc-add-btn').style.display = 'block';
+    document.getElementById('fd-del-btn').style.display = 'inline-block';
+    _fdRenderMisc(f.misc || [], admin);
+    _fdRecalc();
+  }
   var _fdNote = document.getElementById('fd-preview-note');
   if (_fdNote) _fdNote.style.display = admin ? 'none' : 'block';
+  if (!admin) document.getElementById('fd-del-btn').style.display = 'none';
 
-  _fdRenderMisc(f.misc || [], admin);
-  _fdRecalc();
   _fdRenderRemarks(f.remarks || []);
   document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-status') === f.status);
@@ -28296,6 +28296,55 @@ function openFlatDetail(buildingId, floorId, flatId) {
 
   _armModalGuard('flat-detail-modal');
   document.getElementById('flat-detail-modal').style.display = 'flex';
+}
+// Invoice-style read-only breakdown for viewers: building name + rate/sqft
+// at top, floor/flat below, then one line item per row (label left, amount
+// right) for the base amount and each charge, ending in Final Amount.
+function _fdRenderInvoiceHtml(b, fl, f) {
+  var area = parseFloat(f.area) || 0;
+  var rate = (b && parseFloat(b.defaultRate)) || 0;
+  var soc = (b && parseFloat(b.societyCharge)) || 0;
+  var dev = (b && parseFloat(b.devCharge)) || 0;
+  var parking = (b && parseFloat(b.parkingCharge)) || 0;
+  var riseRate = _floorRiseExtraRate(b, fl);
+  var riseAmt = area * riseRate;
+  var baseAmt = area * rate;
+  var misc = f.misc || [];
+  var miscTotal = 0;
+
+  function row(label, amt, opts) {
+    opts = opts || {};
+    return '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:' + (opts.pad || '7px 0') + ';' + (opts.border ? 'border-top:1px dashed rgba(255,255,255,.12);' : '') + '">'
+      + '<span style="font-size:' + (opts.size || '11px') + ';font-weight:' + (opts.weight || '600') + ';color:' + (opts.color || 'rgba(255,255,255,.75)') + ';">' + label + '</span>'
+      + '<span style="font-size:' + (opts.size || '11px') + ';font-weight:' + (opts.aw || '700') + ';color:' + (opts.ac || '#fff') + ';white-space:nowrap;">' + amt + '</span>'
+      + '</div>';
+  }
+
+  var miscRowsHtml = misc.map(function (m) {
+    miscTotal += parseFloat(m.amount) || 0;
+    return row(esc(m.label || 'Other Charge'), _inr(m.amount || 0), { border: true });
+  }).join('');
+
+  var total = baseAmt + soc + dev + parking + riseAmt + miscTotal;
+
+  return ''
+    + '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px;">'
+    + '<span style="font-size:14px;font-weight:900;color:#fff;">🏢 ' + esc(b.name || 'Building') + '</span>'
+    + '<span style="font-size:11px;font-weight:800;color:#7dd3fc;">' + _inr(rate) + '/sqft</span>'
+    + '</div>'
+    + '<p style="font-size:10.5px;color:rgba(255,255,255,.5);margin:0 0 10px;">' + esc(fl.label || 'Floor') + ' · Flat ' + esc(f.flatNo || '') + (f.type ? ' · ' + esc(f.type) : '') + '</p>'
+    + '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.7rem .85rem;margin-bottom:.7rem;">'
+    + row('Area (' + area + ' sqft × ' + _inr(rate) + ')', _inr(baseAmt), { size: '12px', weight: '800', color: '#fff' })
+    + row('Society Charges', _inr(soc), { border: true })
+    + row('Development Charges', _inr(dev), { border: true })
+    + row('Parking Charges', _inr(parking), { border: true })
+    + (riseAmt > 0 ? row('Floor Rise Charge (+' + _inr(riseRate) + '/sqft)', _inr(riseAmt), { border: true }) : '')
+    + miscRowsHtml
+    + '<div style="margin-top:8px;padding-top:9px;border-top:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:space-between;">'
+    + '<span style="font-size:12.5px;font-weight:900;color:#fff;">Final Amount</span>'
+    + '<span style="font-size:17px;font-weight:900;color:#6ee7b7;">' + _inr(total) + '</span>'
+    + '</div>'
+    + '</div>';
 }
 function closeFlatDetail() {
   document.getElementById('flat-detail-modal').style.display = 'none';
@@ -28341,6 +28390,8 @@ function _fdRecalc() {
   var rate = parseFloat(document.getElementById('fd-rate').value) || 0;
   var soc = parseFloat(document.getElementById('fd-society').value) || 0;
   var dev = parseFloat(document.getElementById('fd-dev').value) || 0;
+  var parkingEl = document.getElementById('fd-parking');
+  var parking = parkingEl ? (parseFloat(parkingEl.value) || 0) : 0;
   var misc = 0;
   var ctx = _fdCurrentFlat();
   var riseExtraRate = 0, riseExtra = 0;
@@ -28348,20 +28399,6 @@ function _fdRecalc() {
     (ctx.f.misc || []).forEach(function (m) { misc += parseFloat(m.amount) || 0; });
     riseExtraRate = _floorRiseExtraRate(ctx.b, ctx.fl);
     riseExtra = area * riseExtraRate;
-  }
-  // Live hint update — reflects what saveFlatFields() would actually lock
-  // in if saved right now, so it never lags behind what's typed.
-  var b = ctx ? ctx.b : null;
-  var rateHint = document.getElementById('fd-rate-hint');
-  if (rateHint) {
-    var rateMatchesDefault = b && b.defaultRate != null && rate === (parseFloat(b.defaultRate) || 0);
-    rateHint.textContent = rateMatchesDefault ? '🔗 Following building default' : '✏️ Custom for this flat';
-  }
-  var chargesHint = document.getElementById('fd-charges-hint');
-  if (chargesHint) {
-    var socMatches = b && b.societyCharge != null && soc === (parseFloat(b.societyCharge) || 0);
-    var devMatches = b && b.devCharge != null && dev === (parseFloat(b.devCharge) || 0);
-    chargesHint.textContent = (socMatches && devMatches) ? '🔗 Following building default' : '✏️ Custom for this flat';
   }
   var riseRow = document.getElementById('fd-floorrise-row');
   if (riseRow) {
@@ -28373,7 +28410,7 @@ function _fdRecalc() {
       riseRow.style.display = 'none';
     }
   }
-  var total = area * rate + soc + dev + misc + riseExtra;
+  var total = area * rate + soc + dev + parking + misc + riseExtra;
   document.getElementById('fd-final-price').textContent = _inr(total);
 }
 function saveFlatFields() {
@@ -28384,36 +28421,31 @@ function saveFlatFields() {
   ctx.f.type = document.getElementById('fd-type').value;
   ctx.f.area = parseFloat(document.getElementById('fd-area').value) || 0;
 
-  var newRate = parseFloat(document.getElementById('fd-rate').value) || 0;
-  var newSoc  = parseFloat(document.getElementById('fd-society').value) || 0;
-  var newDev  = parseFloat(document.getElementById('fd-dev').value) || 0;
+  // Rate/Society/Development/Parking are pure building-level values,
+  // shared by EVERY flat in this building — editing them here writes
+  // straight to the building object (ctx.b), the exact same place the
+  // building-settings inputs write to (see _setBuildingCharge above).
+  // This is NOT a per-flat override — saving here changes what every
+  // other flat in this building shows too, by design.
   var b = ctx.b;
-  // "Still matches the current building default" (or no building default
-  // set at all) → keep following it live. Anything else → lock this
-  // flat's own value from now on, independent of whatever the building
-  // default does next. This is the one and only place these flags change
-  // — editing here is the "manually changed" trigger the linking exists
-  // to detect.
-  ctx.f.rate = newRate;
-  ctx.f.rateCustom = !(b && b.defaultRate != null && newRate === (parseFloat(b.defaultRate) || 0));
-  ctx.f.society = newSoc;
-  ctx.f.dev = newDev;
-  var socMatchesDefault = b && b.societyCharge != null && newSoc === (parseFloat(b.societyCharge) || 0);
-  var devMatchesDefault = b && b.devCharge != null && newDev === (parseFloat(b.devCharge) || 0);
-  ctx.f.societyCustom = !socMatchesDefault;
-  ctx.f.devCustom = !devMatchesDefault;
+  if (b) {
+    b.defaultRate = parseFloat(document.getElementById('fd-rate').value) || 0;
+    b.societyCharge = parseFloat(document.getElementById('fd-society').value) || 0;
+    b.devCharge = parseFloat(document.getElementById('fd-dev').value) || 0;
+    b.parkingCharge = parseFloat(document.getElementById('fd-parking').value) || 0;
+  }
 
   ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
   var _priceAfter = _flatFinalPrice(ctx.f, ctx.b, ctx.fl);
   var _flatLabel = (ctx.b.name || 'Building') + ' ' + (ctx.fl.label || 'Floor') + ' — Flat ' + (ctx.f.flatNo || '');
   if (_priceAfter !== _priceBefore) {
-    _smLogActivity('price_change', _flatLabel + ': ' + _inr(_priceBefore) + ' → ' + _inr(_priceAfter));
+    _smLogActivity('price_change', (ctx.b.name || 'Building') + ' rate/charges updated (applies to every flat) — e.g. ' + _flatLabel + ': ' + _inr(_priceBefore) + ' → ' + _inr(_priceAfter));
   } else {
     _smLogActivity('flat_edit', _flatLabel);
   }
   document.getElementById('fd-title').textContent = (ctx.b.name ? ctx.b.name + ' — ' : '') + (ctx.fl.label || 'Floor') + ' — ' + (ctx.f.flatNo || 'Flat');
-  toast('Saved', 'ok');
+  toast('Saved — applies to every flat in this building', 'ok');
 }
 function setFlatStatus(status) {
   if (!isSalesFullAdmin()) {
