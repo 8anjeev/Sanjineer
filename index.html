@@ -27667,6 +27667,14 @@ window._setFloorRise = function (buildingId, field, value) {
   var num = parseFloat(value) || 0;
   if (field === 'start') b.floorRiseStart = Math.max(0, Math.round(num));
   else if (field === 'rate') b.floorRiseRate = Math.max(0, num);
+  // ROOT-CAUSE FIX (viewers/Sales Admins on other devices never seeing
+  // updated charges): _mergeSalesData() picks whichever side's building
+  // has the newer b.__ts, defaulting to the LOCAL copy on a tie. Every
+  // building-level field write used to leave b.__ts untouched after
+  // creation, so a tie (both sides still holding the building's original
+  // creation timestamp) was the permanent state — meaning this edit would
+  // never be recognized as "newer" by any other device's pull, forever.
+  b.__ts = Date.now();
   ssales(data);
   renderSalesManager();
 };
@@ -27683,6 +27691,9 @@ window._setBuildingCharge = function (buildingId, field, value) {
   else if (field === 'society') b.societyCharge = num;
   else if (field === 'dev') b.devCharge = num;
   else if (field === 'parking') b.parkingCharge = num;
+  // ROOT-CAUSE FIX (see matching note in _setFloorRise above): stamp the
+  // building so other devices' merges recognize this as the newer copy.
+  b.__ts = Date.now();
   ssales(data);
   renderSalesManager();
 };
@@ -28375,6 +28386,13 @@ function _fdAddMiscRow() {
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
   ctx.f.misc = ctx.f.misc || [];
   ctx.f.misc.push({ label: '', amount: 0 });
+  // ROOT-CAUSE FIX (same class of bug as the building charges above, one
+  // level down): the flats array merges by 'updatedAt', tie-breaking to
+  // LOCAL when equal/missing — misc edits used to never stamp this flat's
+  // updatedAt, so an admin-added charge could push fine but lose to a
+  // stale local copy on any device (viewer's included) that already had
+  // this flat cached from before the edit.
+  ctx.f.updatedAt = Date.now();
   ssales(ctx.data);
   _fdRenderMisc(ctx.f.misc, true);
   _fdRecalc();
@@ -28383,6 +28401,7 @@ function _fdMiscEdit(i, key, val) {
   if (!isSalesFullAdmin()) return;
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f || !ctx.f.misc || !ctx.f.misc[i]) return;
   ctx.f.misc[i][key] = (key === 'amount') ? (parseFloat(val) || 0) : val;
+  ctx.f.updatedAt = Date.now(); // see note in _fdAddMiscRow above
   ssales(ctx.data);
   _fdRecalc();
 }
@@ -28390,6 +28409,7 @@ function _fdMiscRemove(i) {
   if (!isSalesFullAdmin()) return;
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f || !ctx.f.misc) return;
   ctx.f.misc.splice(i, 1);
+  ctx.f.updatedAt = Date.now(); // see note in _fdAddMiscRow above
   ssales(ctx.data);
   _fdRenderMisc(ctx.f.misc, true);
   _fdRecalc();
@@ -28442,6 +28462,14 @@ function saveFlatFields() {
     b.societyCharge = parseFloat(document.getElementById('fd-society').value) || 0;
     b.devCharge = parseFloat(document.getElementById('fd-dev').value) || 0;
     b.parkingCharge = parseFloat(document.getElementById('fd-parking').value) || 0;
+    // ROOT-CAUSE FIX (viewers seeing ₹0 / stale charges — see the matching
+    // note in _setBuildingCharge): this writes straight to the same
+    // building object _setBuildingCharge does, but never stamped b.__ts,
+    // so _mergeSalesData's tie-break (equal/missing __ts on both sides
+    // defaults to LOCAL) meant this update could push fine but would
+    // never win a merge on any device that already had an older copy of
+    // this building — including the very viewers this data is for.
+    b.__ts = Date.now();
   }
 
   ctx.f.updatedAt = Date.now();
@@ -28517,6 +28545,7 @@ function addFlatRemark() {
   var ctx = _fdCurrentFlat(); if (!ctx || !ctx.f) return;
   ctx.f.remarks = ctx.f.remarks || [];
   ctx.f.remarks.push({ id: gid(), name: name, phone: phone, budget: budget, note: note, ts: Date.now() });
+  ctx.f.updatedAt = Date.now(); // see root-cause note in _fdAddMiscRow above
   ssales(ctx.data);
   document.getElementById('fd-remark-name').value = '';
   document.getElementById('fd-remark-phone').value = '';
