@@ -4900,7 +4900,7 @@ function _wsShowCreateWorkspace() {
     '<button style="' + _wsCardStylePro + '" onclick="_wsShowProForm()"><b>⭐ Pro — ₹30/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.55);">1 user · 10 projects</span></button>' +
     '<button style="' + _wsCardStyleEnterprise + '" onclick="_wsShowEnterpriseForm()">' +
       '<span style="position:absolute;top:-8px;right:10px;background:linear-gradient(135deg,#B8892E,#E8B94D);color:#1E1B3A;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:6px;letter-spacing:.03em;box-shadow:0 2px 6px rgba(0,0,0,.25);">RECOMMENDED</span>' +
-      '<b>🏢 Enterprise — ₹99/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.65);">Multiple users · multiple projects</span>' +
+      '<b>🏢 Enterprise — <span style="text-decoration:line-through;opacity:.55;font-weight:600;">₹199</span> ₹99/m</b><br><span style="font-size:11px;color:rgba(255,255,255,.65);">Multiple users · multiple projects</span>' +
     '</button>' +
     '<p id="ws-err" style="' + _wsErrStyle + 'display:none;"></p>'
   );
@@ -5028,7 +5028,7 @@ function _wsGoOffline() {
 }
 function _wsShowEnterpriseForm() {
   _wsBody(
-    '<p style="' + _wsTitleStyle + '">Enterprise — ₹99/m</p>' +
+    '<p style="' + _wsTitleStyle + '">Enterprise — <span style="text-decoration:line-through;opacity:.5;">₹199</span> ₹99/m</p>' +
     '<input id="ws-company-name" type="text" placeholder="Company Name" style="' + _wsInputStyle + '">' +
     '<input id="ws-owner-name" type="text" placeholder="Your Name (Owner)" value="' + _wsEsc(window._wsPendingName || '') + '" style="' + _wsInputStyle + '">' +
     '<button style="' + _wsBtnStyle + 'text-align:center;" onclick="_wsCreateEnterprise()">Continue to Payment — ₹99</button>' +
@@ -5307,14 +5307,14 @@ function _settShowPlanManage() {
     // whenever isExpired is true, regardless of tier.
     if (isOwner && isExpired && (plan === 'pro' || plan === 'enterprise')) {
       var renewFn = plan === 'enterprise' ? '_wsUpgradeToEnterprise' : '_wsUpgradeToPro';
-      var renewPrice = plan === 'enterprise' ? '₹99/m' : '₹30/m';
+      var renewPrice = plan === 'enterprise' ? '<span style="text-decoration:line-through;opacity:.55;">₹199</span> ₹99/m' : '₹30/m';
       html += '<button style="' + _wsCardStyle + 'background:linear-gradient(135deg,#f59e0b,#f97316);border:none;text-align:center;" onclick="' + renewFn + '()"><b>🔄 Renew Now — ' + renewPrice + '</b></button>';
     }
     if (isOwner && plan !== 'enterprise') {
       if (plan !== 'pro') {
         html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToPro()"><b>⭐ Upgrade to Pro — ₹30/m</b></button>';
       }
-      html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — ₹99/m</b>' +
+      html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — <span style="text-decoration:line-through;opacity:.55;font-weight:600;">₹199</span> ₹99/m</b>' +
         (plan === 'pro' ? '<br><span style="font-size:11px;color:rgba(255,255,255,.5);">Remaining Pro days carry over</span>' : '') + '</button>';
     } else if (isOwner && plan === 'enterprise' && !isExpired) {
       html += '<p style="font-size:11px;color:rgba(255,255,255,.5);margin:8px 0;">You\'re on our top plan. 🎉</p>';
@@ -6223,7 +6223,7 @@ function _wsSelectProject(p) {
       <span style="font-size:15px;flex-shrink:0">👑</span>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span style="color:#1E1B3A;font-weight:800;">Upgrade to Enterprise</span>
-        <span style="font-size:9px;font-weight:600;color:rgba(30,27,58,0.65)">₹99/m · remaining Pro days carry over</span>
+        <span style="font-size:9px;font-weight:600;color:rgba(30,27,58,0.65)"><span style="text-decoration:line-through;opacity:.6;">₹199</span> ₹99/m · remaining Pro days carry over</span>
       </div>
     </button>
 
@@ -19203,7 +19203,7 @@ function _mergeTombstones(localT, remoteT) {
 // ══════════════════════════════════════════════════════════════════
 
 // Rule: newest ts wins; if tombstone for that id is newer than ts → deleted wins
-function _mergeArrayStore(localArr, remoteArr, tombstones, idField, tsField, tombPrefix) {
+function _mergeArrayStore(localArr, remoteArr, tombstones, idField, tsField, tombPrefix, preferRemoteOnTie) {
   idField = idField || '__id'; tsField = tsField || '__ts'; tombPrefix = tombPrefix || '';
   var map = {};
   var idless = []; // items with no id at all — never deduped, just unioned so they can never be silently dropped
@@ -19220,10 +19220,17 @@ function _mergeArrayStore(localArr, remoteArr, tombstones, idField, tsField, tom
     var tomb = tombstones[tombPrefix + r[idField]] || 0;
     if (tomb >= (r[tsField] || 0)) return; // deleted — skip
     var local = map[r[idField]];
-    // Missing timestamps (older records created before this feature)
-    // are treated as tied — whichever side already has the record wins,
-    // so legacy untimestamped data never gets silently discarded.
-    if (!local || (r[tsField] || 0) > (local[tsField] || 0)) {
+    var rt = r[tsField] || 0, lt = local ? (local[tsField] || 0) : -1;
+    // Missing/equal timestamps (older records created before this feature,
+    // or an edit made before it stamped tsField at all) are a tie. Default
+    // callers keep local on a tie so legacy untimestamped data never gets
+    // silently discarded. preferRemoteOnTie flips that for call sites
+    // (Sales Manager flats) where a stuck local copy — not remote — is the
+    // known failure mode: an admin-authored edit that never bumped its own
+    // timestamp would otherwise never win against the very device it's
+    // meant to update, forever. Only the exact-tie case changes; any
+    // genuinely newer local edit (rt !== lt) still wins as before.
+    if (!local || rt > lt || (preferRemoteOnTie && rt === lt)) {
       map[r[idField]] = r;
     }
   });
@@ -19292,10 +19299,12 @@ function _mergeFloors(localFloors, remoteFloors, tombstones) {
     var lts = (lf && lf.__ts) || 0, rts = (rf && rf.__ts) || 0;
     var tomb = tombstones['flr__' + id] || 0;
     if (tomb && tomb >= Math.max(lts, rts)) return; // deleted, and the delete is the newest thing that happened to it
-    var base = (!lf) ? rf : (!rf) ? lf : (rts > lts ? rf : lf);
+    // >= not > : see preferRemoteOnTie note in _mergeArrayStore — a floor
+    // edited before its own __ts stamping existed ties forever otherwise.
+    var base = (!lf) ? rf : (!rf) ? lf : (rts >= lts ? rf : lf);
     if (!base) return;
     var merged = Object.assign({}, base);
-    merged.flats = _mergeArrayStore(lf ? lf.flats : [], rf ? rf.flats : [], tombstones, 'id', 'updatedAt', 'flt__');
+    merged.flats = _mergeArrayStore(lf ? lf.flats : [], rf ? rf.flats : [], tombstones, 'id', 'updatedAt', 'flt__', true);
     out.push(merged);
   });
   return out;
@@ -19314,7 +19323,14 @@ function _mergeSalesData(local, remote, tombstones) {
     var lts = (lb && lb.__ts) || 0, rts = (rb && rb.__ts) || 0;
     var tomb = tombstones['bld__' + id] || 0;
     if (tomb && tomb >= Math.max(lts, rts)) return;
-    var base = (!lb) ? rb : (!rb) ? lb : (rts > lts ? rb : lb);
+    // >= not > : a building's charge fields (rate/society/dev/parking/
+    // floor-rise) were, until this fix, never re-stamped after creation —
+    // so every already-saved edit sits in a permanent tie against a
+    // viewer's stale local copy. Preferring remote on that tie is what
+    // makes those already-saved values actually show up on the next pull,
+    // instead of only newly-edited fields (which get a fresh __ts and so
+    // already won on strict '>') getting through.
+    var base = (!lb) ? rb : (!rb) ? lb : (rts >= lts ? rb : lb);
     if (!base) return;
     var merged = Object.assign({}, base);
     merged.floors = _mergeFloors(lb ? lb.floors : [], rb ? rb.floors : [], tombstones);
@@ -27296,12 +27312,19 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
       <!-- Remarks / Interested Clients -->
       <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.7rem;">
         <p style="font-size:11px;font-weight:800;color:#fbbf24;margin-bottom:.5rem;">📝 Interested Clients / Remarks</p>
-        <div id="fd-remarks-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:.6rem;"></div>
-        <input id="fd-remark-name" type="text" placeholder="Client name" class="fd-input" style="margin-bottom:5px;">
-        <input id="fd-remark-phone" type="text" inputmode="tel" placeholder="Phone number" class="fd-input" style="margin-bottom:5px;">
-        <input id="fd-remark-budget" type="number" inputmode="numeric" placeholder="Client budget (₹, optional)" class="fd-input" style="margin-bottom:5px;">
-        <textarea id="fd-remark-note" placeholder="Note (optional)" rows="2" class="fd-input" style="margin-bottom:6px;resize:vertical;"></textarea>
-        <button onclick="addFlatRemark()" style="width:100%;padding:.5rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:11px;cursor:pointer;">+ Add Remark</button>
+        <button id="fd-remark-toggle-btn" onclick="_fdToggleRemarkForm()" style="width:100%;padding:.5rem;background:rgba(251,191,36,.12);border:1px dashed rgba(251,191,36,.45);border-radius:9px;color:#fbbf24;font-weight:800;font-size:11px;cursor:pointer;margin-bottom:.6rem;">+ Add Interested Client</button>
+        <div id="fd-remark-form" style="display:none;margin-bottom:.6rem;">
+          <input id="fd-remark-name" type="text" placeholder="Client name" class="fd-input" style="margin-bottom:5px;">
+          <input id="fd-remark-phone" type="text" inputmode="tel" placeholder="Phone number" class="fd-input" style="margin-bottom:5px;">
+          <input id="fd-remark-budget" type="number" inputmode="numeric" placeholder="Client budget (₹, optional)" class="fd-input" style="margin-bottom:5px;">
+          <textarea id="fd-remark-note" placeholder="Note (optional)" rows="2" class="fd-input" style="margin-bottom:6px;resize:vertical;"></textarea>
+          <button onclick="addFlatRemark()" style="width:100%;padding:.5rem;background:linear-gradient(135deg,#d97706,#f59e0b);color:#fff;border:none;border-radius:9px;font-weight:800;font-size:11px;cursor:pointer;">Save Remark</button>
+        </div>
+        <!-- Existing/added clients list — shown below the toggle button and
+             form, not above it, so a new visitor sees "add a client" first
+             and the running list underneath rather than a wall of past
+             entries before they even get to the form. -->
+        <div id="fd-remarks-list" style="display:flex;flex-direction:column;gap:6px;"></div>
       </div>
 
     </div>
@@ -28302,6 +28325,7 @@ function openFlatDetail(buildingId, floorId, flatId) {
 
 
   _fdRenderRemarks(f.remarks || []);
+  _fdToggleRemarkForm(false); // always start collapsed on open — see note above the function
   document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
     btn.classList.toggle('active', btn.getAttribute('data-status') === f.status);
     // FIX: status buttons are clickable for everyone now, same reasoning
@@ -28522,6 +28546,17 @@ function deleteSalesFlat() {
   closeFlatDetail();
   toast('Flat deleted', 'ok');
 }
+// Toggle the "add interested client" form open/closed. The form starts
+// collapsed every time the flat modal opens (see openFlatDetail) so the
+// list underneath is what's visible first, not an empty form.
+function _fdToggleRemarkForm(forceOpen) {
+  var form = document.getElementById('fd-remark-form');
+  var btn = document.getElementById('fd-remark-toggle-btn');
+  if (!form || !btn) return;
+  var opening = (typeof forceOpen === 'boolean') ? forceOpen : (form.style.display === 'none' || !form.style.display);
+  form.style.display = opening ? 'block' : 'none';
+  btn.textContent = opening ? '✕ Cancel' : '+ Add Interested Client';
+}
 function _fdRenderRemarks(remarks) {
   var wrap = document.getElementById('fd-remarks-list');
   if (!remarks.length) { wrap.innerHTML = '<p style="font-size:9px;color:rgba(255,255,255,.3);margin:0;">No remarks yet.</p>'; return; }
@@ -28552,6 +28587,7 @@ function addFlatRemark() {
   document.getElementById('fd-remark-budget').value = '';
   document.getElementById('fd-remark-note').value = '';
   _fdRenderRemarks(ctx.f.remarks);
+  _fdToggleRemarkForm(false);
   if (typeof _updateSalesClientsBadge === 'function') _updateSalesClientsBadge();
   toast('Remark added', 'ok');
 }
