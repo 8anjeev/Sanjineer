@@ -27227,8 +27227,6 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
     </div>
     <div style="overflow-y:auto;flex:1;padding:.8rem 1rem 1rem;">
 
-      <p id="fd-preview-note" style="display:none;font-size:9.5px;color:#fcd34d;background:rgba(245,158,11,.12);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:6px 9px;margin:0 0 .7rem;">👁️ View only — only the owner or Sales Manager can update this flat.</p>
-
       <!-- Status buttons -->
       <div style="display:flex;gap:6px;margin-bottom:.8rem;">
         <button class="fd-status-btn" data-status="avail" onclick="setFlatStatus('avail')" style="flex:1;padding:.5rem 0;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid rgba(52,211,153,.4);background:rgba(16,185,129,.12);color:#6ee7b7;">✅ Available</button>
@@ -27261,21 +27259,21 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
         <p style="font-size:8.5px;color:#7dd3fc;margin:0 0 6px;">💠 Rate &amp; charges below apply to <b>every flat</b> in this building — editing here changes it everywhere, not just this flat.</p>
         <div style="margin-bottom:8px;">
           <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Rate (₹ / sqft)</label>
-          <input id="fd-rate" type="number" class="fd-input" oninput="_fdRecalc()">
+          <input id="fd-rate" type="number" class="fd-input" oninput="_fdRecalc()" onchange="_fdSetBuildingCharge('rate',this.value)">
         </div>
         <div id="fd-society-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <div>
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Society Charges (₹)</label>
-            <input id="fd-society" type="number" class="fd-input" oninput="_fdRecalc()">
+            <input id="fd-society" type="number" class="fd-input" oninput="_fdRecalc()" onchange="_fdSetBuildingCharge('society',this.value)">
           </div>
           <div>
             <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Development Charges (₹)</label>
-            <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()">
+            <input id="fd-dev" type="number" class="fd-input" oninput="_fdRecalc()" onchange="_fdSetBuildingCharge('dev',this.value)">
           </div>
         </div>
         <div style="margin-bottom:8px;">
           <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:2px;">Parking Charges (₹)</label>
-          <input id="fd-parking" type="number" class="fd-input" oninput="_fdRecalc()">
+          <input id="fd-parking" type="number" class="fd-input" oninput="_fdRecalc()" onchange="_fdSetBuildingCharge('parking',this.value)">
         </div>
 
         <label style="font-size:9px;font-weight:700;color:#a78bfa;display:block;margin-bottom:3px;">Misc. Charges (IOU / Legal / Other)</label>
@@ -27687,6 +27685,19 @@ window._setBuildingCharge = function (buildingId, field, value) {
   else if (field === 'parking') b.parkingCharge = num;
   ssales(data);
   renderSalesManager();
+};
+// Lets the flat detail modal's Rate/Society/Dev/Parking inputs persist
+// immediately (same as editing from the building settings panel), instead
+// of only updating the on-screen preview until a separate Save Changes
+// click. Uses the currently-open flat's building id from _fdCtx. This is
+// what fixes the exact mismatch where an admin typed new numbers, saw the
+// live total update, but the values were never actually saved — so
+// viewers (who read the real saved building data) kept seeing the old
+// figures or zeros.
+window._fdSetBuildingCharge = function (field, value) {
+  if (!_fdCtx || !_fdCtx.buildingId) return;
+  _setBuildingCharge(_fdCtx.buildingId, field, value);
+  _fdRecalc();
 };
 
 // ── Dashboard summary card ───────────────────────────────────
@@ -28277,9 +28288,7 @@ function openFlatDetail(buildingId, floorId, flatId) {
     _fdRenderMisc(f.misc || [], admin);
     _fdRecalc();
   }
-  var _fdNote = document.getElementById('fd-preview-note');
-  if (_fdNote) _fdNote.style.display = admin ? 'none' : 'block';
-  if (!admin) document.getElementById('fd-del-btn').style.display = 'none';
+
 
   _fdRenderRemarks(f.remarks || []);
   document.querySelectorAll('.fd-status-btn').forEach(function (btn) {
