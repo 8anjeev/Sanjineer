@@ -16643,17 +16643,69 @@ function sdrwFloorList(list){
   _scheduleCloudPush();
 }
 
+// Generic small text-input modal — replaces prompt() so the styling
+// matches the rest of the app instead of falling back to a plain,
+// unthemed OS dialog (see _showProjectModal above for the pattern this
+// follows).
+function _showTextInputModal(opts) {
+  var id = '_txt-input-modal';
+  var existing = document.getElementById(id);
+  if (existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.id = id;
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+  modal.innerHTML =
+    '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:20px 18px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
+    + '<p style="font-size:14px;font-weight:800;color:#fff;margin:0 0 4px">' + _esc(opts.title||'') + '</p>'
+    + (opts.subtitle ? '<p style="font-size:11px;color:rgba(255,255,255,0.55);margin:0 0 12px">' + _esc(opts.subtitle) + '</p>' : '<div style="margin-bottom:10px"></div>')
+    + '<input id="' + id + '-input" type="text" value="' + _esc(opts.defaultVal||'') + '" placeholder="' + _esc(opts.placeholder||'') + '" maxlength="' + (opts.maxlength||60) + '"'
+    + ' style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f0e1a;border:1.5px solid rgba(255,255,255,0.2);border-radius:10px;color:#fff;font-size:14px;outline:none;margin-bottom:14px;">'
+    + '<div style="display:flex;gap:10px;">'
+    + '<button id="' + id + '-cancel" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+    + '<button id="' + id + '-confirm" style="flex:1;padding:10px;background:' + (opts.confirmGradient || 'linear-gradient(135deg,#4f46e5,#7c3aed)') + ';border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">' + _esc(opts.confirmLabel || 'Save') + '</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(modal);
+  var inp = document.getElementById(id + '-input');
+  var done = false;
+  function close(){ if (modal.parentNode) modal.remove(); }
+  var ok = function() {
+    if (done) return;
+    var v = inp.value.trim();
+    if (!v) { inp.style.borderColor = '#e11d48'; inp.focus(); return; }
+    done = true; close();
+    if (opts.onConfirm) opts.onConfirm(v);
+  };
+  var cancel = function(){
+    if (done) return;
+    done = true; close();
+    if (opts.onCancel) opts.onCancel();
+  };
+  document.getElementById(id + '-cancel').onclick = cancel;
+  document.getElementById(id + '-confirm').onclick = ok;
+  inp.onkeydown = function(e){ if (e.key === 'Enter') { e.preventDefault(); ok(); } else if (e.key === 'Escape') { e.preventDefault(); cancel(); } };
+  setTimeout(function(){ inp.focus(); }, 80);
+  modal.addEventListener('pointerdown', function(e){ if (e.target === modal) cancel(); });
+}
+
 function addDrawingFloor(){
   if (_blockIfReadOnlyData()) return;
-  var name = (prompt('New floor name (e.g. Third Floor, Terrace):', '') || '').trim();
-  if (!name) return;
-  var list = ldrwFloorList();
-  var existing = list.filter(function(f){ return f.toLowerCase() === name.toLowerCase(); })[0];
-  if (existing) { toast('That floor already exists', 'err'); selectRoom(existing); return; }
-  list.push(name);
-  sdrwFloorList(list);
-  selectRoom(name);
-  toast('Floor added', 'ok');
+  _showTextInputModal({
+    title: '➕ Add Floor',
+    subtitle: 'Give the new floor tab a name.',
+    placeholder: 'e.g. Third Floor, Terrace',
+    confirmLabel: 'Add',
+    confirmGradient: 'linear-gradient(135deg,#f59e0b,#f97316)',
+    onConfirm: function(name){
+      var list = ldrwFloorList();
+      var existing = list.filter(function(f){ return f.toLowerCase() === name.toLowerCase(); })[0];
+      if (existing) { toast('That floor already exists', 'err'); selectRoom(existing); return; }
+      list.push(name);
+      sdrwFloorList(list);
+      selectRoom(name);
+      toast('Floor added', 'ok');
+    }
+  });
 }
 
 function _drwSyncLabels(r){
@@ -16676,11 +16728,76 @@ function buildRoomTabs(){
   el.innerHTML=floors.map(function(r){
     var cnt=(store[r]||[]).length;
     var active=r===_currentRoom;
-    return '<button onclick="selectRoom(\''+_jsStrEsc(r)+'\')" style="flex-shrink:0;padding:0 12px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;'+
+    var rEsc=_jsStrEsc(r);
+    return '<button onclick="selectRoom(\''+rEsc+'\')" ondblclick="_startRenameFloor(event,\''+rEsc+'\')" title="Double-click to rename" style="flex-shrink:0;padding:0 12px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;'+
       (active?'background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;':'background:rgba(255,255,255,0.85);color:#374151;')+
-      '"><p style="line-height:1;font-size:13px">'+_esc(r)+'</p><p style="line-height:1;font-size:9px;opacity:.7;margin-top:1px">'+(cnt?cnt+' dwg':'empty')+'</p></button>';
+      '"><p class="drw-floor-label" style="line-height:1;font-size:13px">'+_esc(r)+'</p><p style="line-height:1;font-size:9px;opacity:.7;margin-top:1px">'+(cnt?cnt+' dwg':'empty')+'</p></button>';
   }).join('') +
   '<button onclick="addDrawingFloor()" style="flex-shrink:0;padding:0 14px;border-radius:10px;font-size:16px;font-weight:800;border:1px dashed rgba(79,70,229,0.5);cursor:pointer;background:rgba(79,70,229,0.08);color:#4f46e5;">+</button>';
+}
+
+// Double-click a floor tab to rename it in place. A dblclick is preceded
+// by two native click events, so the tab's own onclick=selectRoom(...)
+// still fires first (harmless — it just (re)selects that tab); this
+// swaps the tab's label <p> for a text input once the dblclick lands.
+function _startRenameFloor(evt, oldName){
+  if (evt && evt.stopPropagation) evt.stopPropagation();
+  if (_blockIfReadOnlyData()) return;
+  var btn = (evt && evt.currentTarget) || (evt && evt.target && evt.target.closest && evt.target.closest('button'));
+  if (!btn) return;
+  if (btn.querySelector('input.drw-floor-rename-input')) return; // already editing
+  var labelEl = btn.querySelector('.drw-floor-label');
+  if (!labelEl) return;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.className = 'drw-floor-rename-input';
+  input.style.cssText = 'width:78px;font-size:12px;font-weight:700;border:none;border-radius:5px;padding:1px 4px;outline:2px solid rgba(255,255,255,0.7);color:#111827;background:#fff;';
+  // Stop clicks/dblclicks on the input itself from bubbling to the
+  // button's onclick/ondblclick — otherwise typing/clicking mid-edit
+  // would re-trigger selectRoom() or restart the rename and blow away
+  // whatever's been typed so far.
+  ['click','mousedown','dblclick'].forEach(function(ev){ input.addEventListener(ev, function(e){ e.stopPropagation(); }); });
+  var settled = false;
+  function commit(){ if (settled) return; settled = true; _commitRenameFloor(oldName, input.value); }
+  function cancel(){ if (settled) return; settled = true; buildRoomTabs(); }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  labelEl.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function _commitRenameFloor(oldName, rawNewName){
+  var newName = (rawNewName || '').trim();
+  if (!newName || newName === oldName) { buildRoomTabs(); return; } // cleared or unchanged — just revert the input
+  if (_blockIfReadOnlyData()) { buildRoomTabs(); return; }
+  var floors = ldrwFloorList();
+  var dupe = floors.filter(function(f){ return f.toLowerCase() === newName.toLowerCase() && f !== oldName; })[0];
+  if (dupe) { toast('A floor named "'+dupe+'" already exists', 'err'); buildRoomTabs(); return; }
+  var idx = floors.indexOf(oldName);
+  if (idx === -1) { buildRoomTabs(); return; }
+  floors[idx] = newName;
+  sdrwFloorList(floors);
+  // Migrate any drawings already filed under the old floor key, and
+  // re-stamp each one's own .floor field so it stays consistent with
+  // the tab it's actually filed under (see saveDrawing()'s comment on
+  // why that field exists).
+  var store = ldrw();
+  if (store[oldName]) {
+    var list = store[oldName].map(function(d){ d.floor = newName; return d; });
+    delete store[oldName];
+    store[newName] = (store[newName] || []).concat(list);
+    sdrw(store);
+  }
+  if (_currentRoom === oldName) _currentRoom = newName;
+  _drwSyncLabels(_currentRoom);
+  buildRoomTabs();
+  renderDrawings();
+  toast('Floor renamed', 'ok');
 }
 
 function selectRoom(r){
