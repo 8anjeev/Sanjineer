@@ -16729,17 +16729,45 @@ function buildRoomTabs(){
     var cnt=(store[r]||[]).length;
     var active=r===_currentRoom;
     var rEsc=_jsStrEsc(r);
-    return '<button onclick="selectRoom(\''+rEsc+'\')" ondblclick="_startRenameFloor(event,\''+rEsc+'\')" title="Double-click to rename" style="flex-shrink:0;padding:0 12px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;'+
+    return '<button onclick="_handleFloorTabTap(event,\''+rEsc+'\')" ondblclick="_startRenameFloor(event,\''+rEsc+'\')" title="Double-tap to rename" style="flex-shrink:0;padding:0 12px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;'+
       (active?'background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;':'background:rgba(255,255,255,0.85);color:#374151;')+
       '"><p class="drw-floor-label" style="line-height:1;font-size:13px">'+_esc(r)+'</p><p style="line-height:1;font-size:9px;opacity:.7;margin-top:1px">'+(cnt?cnt+' dwg':'empty')+'</p></button>';
   }).join('') +
   '<button onclick="addDrawingFloor()" style="flex-shrink:0;padding:0 14px;border-radius:10px;font-size:16px;font-weight:800;border:1px dashed rgba(79,70,229,0.5);cursor:pointer;background:rgba(79,70,229,0.08);color:#4f46e5;">+</button>';
 }
 
-// Double-click a floor tab to rename it in place. A dblclick is preceded
-// by two native click events, so the tab's own onclick=selectRoom(...)
-// still fires first (harmless — it just (re)selects that tab); this
-// swaps the tab's label <p> for a text input once the dblclick lands.
+// BUGFIX: iOS/Android WebViews (this app's own in-app browser included)
+// generally do NOT synthesize a native 'dblclick' event from a double-tap
+// the way desktop mice do, so relying on ondblclick alone left the
+// rename feature dead on touch devices even though it worked in a
+// desktop browser. Every floor tab's onclick now routes through this
+// tap-timing check instead: two onclick's on the SAME tab within
+// DOUBLE_TAP_MS both fire on touch AND on a real mouse click, so this
+// reliably detects a "double-tap" on every platform. selectRoom() still
+// fires on every single tap exactly as before (no added latency); the
+// rename only triggers additionally when the second tap lands in time.
+// ondblclick is left in place too as a harmless desktop-mouse fallback —
+// _startRenameFloor() no-ops if the input is already open (see below),
+// so a genuine desktop double-click never opens rename twice.
+var _floorTapState = { name: null, time: 0 };
+var DOUBLE_TAP_MS = 400;
+function _handleFloorTabTap(evt, name){
+  var now = Date.now();
+  var isDoubleTap = _floorTapState.name === name && (now - _floorTapState.time) < DOUBLE_TAP_MS;
+  if (isDoubleTap) {
+    _floorTapState.name = null; _floorTapState.time = 0;
+    _startRenameFloor(evt, name);
+    return;
+  }
+  _floorTapState.name = name; _floorTapState.time = now;
+  selectRoom(name);
+}
+
+// Double-click/double-tap a floor tab to rename it in place. Reached via
+// _handleFloorTabTap() above on touch devices (the common case) and via
+// the native ondblclick on desktop; selectRoom(...) has already (re)run
+// once per tap by the time this fires — harmless, it just keeps that tab
+// selected — and this then swaps the tab's label <p> for a text input.
 function _startRenameFloor(evt, oldName){
   if (evt && evt.stopPropagation) evt.stopPropagation();
   if (_blockIfReadOnlyData()) return;
