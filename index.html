@@ -676,15 +676,33 @@ self.addEventListener('fetch', function(e) {
   <!-- Razorpay -->
   <script src="https://checkout.razorpay.com/v1/checkout.js" crossorigin="anonymous" onerror="window._rpLoadErr=true"></script>
 
-  <!-- ══════════ PRO USER FLAG ══════════ -->
+  <!-- ══════════ PRO/ENTERPRISE USER FLAGS ══════════ -->
   <script>
-  // PRO detection — reads localStorage flag (set by payment flow)
-  window.isProUser = (function() {
-    try { return localStorage.getItem('isProUser') === 'true'; } catch(e) { return false; }
-  })();
-  function _refreshProStatus() {
-    try { window.isProUser = localStorage.getItem('isProUser') === 'true'; } catch(e) {}
+  // PRO/Enterprise detection — prefers the real per-company plan cache
+  // (same localStorage key _applyPlanFromCompany writes, 'sanj_company_plan')
+  // and falls back to the older standalone 'isProUser' flag only if that
+  // cache isn't populated yet (e.g. very first load before any login has
+  // ever completed on this device).
+  // BUGFIX (req #3 — plan badge sometimes wrong): this used to read ONLY
+  // the legacy 'isProUser' flag and never set window.isEnterpriseUser at
+  // all — it stayed undefined until the async company reconcile finished,
+  // so any UI that rendered a plan badge before that resolved showed
+  // Free/blank regardless of the real plan, and a stale legacy value
+  // could clobber a correct read on the next refresh.
+  function _readCachedCompanyPlan() {
+    try { return localStorage.getItem('sanj_company_plan') || null; } catch(e) { return null; }
   }
+  function _refreshProStatus() {
+    var cachedPlan = _readCachedCompanyPlan();
+    if (cachedPlan) {
+      window.isProUser = (cachedPlan === 'pro' || cachedPlan === 'enterprise');
+      window.isEnterpriseUser = (cachedPlan === 'enterprise');
+    } else {
+      try { window.isProUser = localStorage.getItem('isProUser') === 'true'; } catch(e) { window.isProUser = false; }
+      window.isEnterpriseUser = false;
+    }
+  }
+  _refreshProStatus();
   </script>
 
   <!-- ══════════ MULTI-PROJECT STATE ══════════ -->
@@ -1929,32 +1947,45 @@ self.addEventListener('fetch', function(e) {
     var withinGrace = !isCurrentlyPaid && msSinceExpiry <= (GRACE_DAYS * ONE_DAY_MS);
     var graceExceeded = !isCurrentlyPaid && msSinceExpiry > (GRACE_DAYS * ONE_DAY_MS);
 
+    // req #4: keep the read-only lock in sync with the real expiry state
+    // on every single evaluation — set it the moment grace is exceeded,
+    // and just as importantly CLEAR it (restoring write access) the
+    // moment a fresh check shows it's no longer exceeded, e.g. right
+    // after renewing. Without this explicit clear a lock set by an
+    // earlier expired check would never lift on its own.
     if (graceExceeded) {
-      // Past the 3-day grace window — this is no longer a dismissible nag.
-      // Force a (non-destructive) sign-out and require re-login, where
-      // _wsSelectCompany's subscription check (already fixed to catch this
-      // via last_plan_tier) routes straight to the real payment gate.
-      // Once-per-day guard still applies so an already-open session isn't
-      // yanked repeatedly by the periodic re-check below.
-      var forceKey = 'sanj_sub_forcelogout_lastshown_' + companyId;
-      var today = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
-      if (safeLS.getItem(forceKey) === today) return;
-      safeLS.setItem(forceKey, today);
-      _forceSignOutForExpiredGrace(lastTier, companyName);
-      return;
+      if (!window._SUB_GRACE_EXPIRED) {
+        window._SUB_GRACE_EXPIRED = true;
+        try { safeLS.setItem('sanj_sub_grace_expired_' + companyId, '1'); } catch(e) {}
+      }
+    } else if (window._SUB_GRACE_EXPIRED) {
+      window._SUB_GRACE_EXPIRED = false;
+      try { safeLS.removeItem('sanj_sub_grace_expired_' + companyId); } catch(e) {}
+    }
+    if (typeof _recomputeEngineerReadOnly === 'function') _recomputeEngineerReadOnly();
+
+    if (!expiringSoon && !withinGrace && !graceExceeded) return; // fully current — nothing to nag about
+
+    // req #2: once the subscription has actually expired (withinGrace or
+    // graceExceeded), show the reminder every time the app is opened, not
+    // once a day — _perPageLoadShown guards only against re-showing it
+    // repeatedly during ONE already-open session (e.g. the 30-min
+    // periodic re-check below), not across separate app opens, since that
+    // guard is in-memory and resets on reload. The 24h-heads-up
+    // ("expiringSoon", not yet actually expired) keeps the gentler
+    // once-a-day cooldown — no need to nag before anything's even lapsed.
+    if (expiringSoon) {
+      var cooldownKey = 'sanj_sub_reminder_lastshown_' + companyId;
+      var today2 = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
+      if (safeLS.getItem(cooldownKey) === today2) return;
+      safeLS.setItem(cooldownKey, today2);
+    } else {
+      var phaseKey = companyId + ':' + (graceExceeded ? 'grace' : 'within');
+      if (window._subReminderShownThisLoad === phaseKey) return; // already shown for this phase this page load
+      window._subReminderShownThisLoad = phaseKey;
     }
 
-    if (!expiringSoon && !withinGrace) return;
-
-    // Once-per-calendar-day cooldown, per company — re-fires the next
-    // day if still unresolved: warn the day before, then daily during the
-    // grace window, until it's actually renewed.
-    var cooldownKey = 'sanj_sub_reminder_lastshown_' + companyId;
-    var today2 = (typeof ist === 'function') ? ist() : new Date().toISOString().slice(0,10);
-    if (safeLS.getItem(cooldownKey) === today2) return;
-    safeLS.setItem(cooldownKey, today2);
-
-    _showSubscriptionReminderModal(lastTier, expiringSoon, companyName);
+    _showSubscriptionReminderModal(lastTier, expiringSoon, companyName, graceExceeded);
   }
 
   // Mid-session safety net: _checkSubscriptionExpiryReminder only runs when
@@ -1970,6 +2001,13 @@ self.addEventListener('fetch', function(e) {
     catch (e) { console.error('[Subscription Reminder] periodic check failed:', e); }
   }, 30 * 60 * 1000);
 
+  // NOTE: no longer called — superseded by the read-only lock
+  // (window._SUB_GRACE_EXPIRED, set in _evaluateSubscriptionExpiry) plus
+  // the always-shown reminder modal below, per an explicit request to
+  // keep people working read-only past grace rather than force them out.
+  // Left defined rather than deleted in case a forced-logout gate is
+  // wanted again later.
+  //
   // Signs out WITHOUT wiping local project data (unlike doAdminLogout(),
   // which does a full destructive local-data purge for the "cancel/
   // unsubscribe entirely" flow — wrong tool here: someone whose grace
@@ -2004,7 +2042,15 @@ self.addEventListener('fetch', function(e) {
     };
   }
 
-  function _showSubscriptionReminderModal(planTier, expiringSoon, companyName) {
+  // graceExceeded (req #2 + #4): past the 3-day grace window this shows
+  // on EVERY app open (see _evaluateSubscriptionExpiry) instead of once a
+  // day, the copy makes clear the app is now read-only, and "Continue"
+  // is held disabled behind a 3-second countdown so the message actually
+  // gets read rather than reflex-dismissed — "Renew Now" stays clickable
+  // immediately since there's no reason to slow down someone ready to pay.
+  // The lock itself (window._SUB_GRACE_EXPIRED) is applied independently
+  // in _evaluateSubscriptionExpiry regardless of what's clicked here.
+  function _showSubscriptionReminderModal(planTier, expiringSoon, companyName, graceExceeded) {
     var planLabel = planTier === 'enterprise' ? 'ENTERPRISE' : 'PRO';
     var existing = document.getElementById('_sub-reminder-modal');
     if (existing) existing.remove();
@@ -2013,22 +2059,44 @@ self.addEventListener('fetch', function(e) {
     modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);padding:20px;';
     var headline = expiringSoon
       ? 'Your ' + planLabel + ' plan renews tomorrow'
-      : 'Your ' + planLabel + ' plan has expired';
+      : graceExceeded
+        ? 'Your ' + planLabel + ' subscription has expired'
+        : 'Your ' + planLabel + ' plan has expired';
     var body = expiringSoon
       ? 'Renew now to avoid losing ' + planLabel + ' features on ' + _escHtml(companyName||'this company') + ' tomorrow.'
-      : _escHtml(companyName||'This company') + ' has dropped to the Free plan. Renew to get your ' + planLabel + ' features back.';
+      : graceExceeded
+        ? _escHtml(companyName||'This company') + '\'s ' + planLabel + ' plan lapsed more than ' + GRACE_DAYS + ' days ago. The app is now <b>read-only</b> — you can still view everything, but editing is locked until you renew.'
+        : _escHtml(companyName||'This company') + ' has dropped to the Free plan. Renew to get your ' + planLabel + ' features back.';
+    var continueLabel = expiringSoon ? 'Later' : (graceExceeded ? 'Continue (read-only)' : 'Continue on Free');
     modal.innerHTML =
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 18px;width:100%;max-width:310px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
-      + '<div style="font-size:32px;margin-bottom:12px">' + (expiringSoon ? '⏰' : '⚠️') + '</div>'
+      + '<div style="font-size:32px;margin-bottom:12px">' + (expiringSoon ? '⏰' : graceExceeded ? '🔒' : '⚠️') + '</div>'
       + '<p style="font-size:15px;font-weight:800;color:#fff;margin:0 0 8px">' + headline + '</p>'
       + '<p style="font-size:12px;color:rgba(255,255,255,0.6);margin:0 0 20px;line-height:1.5">' + body + '</p>'
       + '<div style="display:flex;gap:10px;">'
-      + '<button id="_sub-rem-later" style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,0.6);font-size:13px;font-weight:700;cursor:pointer;">' + (expiringSoon ? 'Later' : 'Continue on Free') + '</button>'
+      + '<button id="_sub-rem-later" ' + (graceExceeded ? 'disabled ' : '') + 'style="flex:1;padding:10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:rgba(255,255,255,' + (graceExceeded ? '0.35' : '0.6') + ');font-size:13px;font-weight:700;cursor:' + (graceExceeded ? 'not-allowed' : 'pointer') + ';">' + continueLabel + (graceExceeded ? ' (3s)' : '') + '</button>'
       + '<button id="_sub-rem-renew" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#f97316);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">Renew Now</button>'
       + '</div>'
       + '</div>';
     document.body.appendChild(modal);
-    document.getElementById('_sub-rem-later').onclick = function(){ modal.remove(); };
+    var laterBtn = document.getElementById('_sub-rem-later');
+    laterBtn.onclick = function(){ if (graceExceeded && !laterBtn.dataset.ready) return; modal.remove(); };
+    if (graceExceeded) {
+      var secondsLeft = 3;
+      var countdownTimer = setInterval(function(){
+        secondsLeft--;
+        if (secondsLeft <= 0) {
+          clearInterval(countdownTimer);
+          laterBtn.disabled = false;
+          laterBtn.dataset.ready = '1';
+          laterBtn.style.cursor = 'pointer';
+          laterBtn.style.color = 'rgba(255,255,255,0.6)';
+          laterBtn.textContent = continueLabel;
+        } else {
+          laterBtn.textContent = continueLabel + ' (' + secondsLeft + 's)';
+        }
+      }, 1000);
+    }
     document.getElementById('_sub-rem-renew').onclick = function(){
       modal.remove();
       if (planTier === 'enterprise' && typeof _wsUpgradeToEnterprise === 'function') {
@@ -2039,7 +2107,10 @@ self.addEventListener('fetch', function(e) {
         toast('Visit app.sanjineer.in to renew', 'info');
       }
     };
-    modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
+    // Tap-outside-to-dismiss stays for the gentler reminders, but a
+    // graceExceeded lock has to actually be acknowledged via the timed
+    // Continue button — otherwise the 3-second read helps nothing.
+    if (!graceExceeded) modal.addEventListener('pointerdown', function(e){ if(e.target===modal) modal.remove(); });
   }
 
   document.addEventListener('DOMContentLoaded', function() {
@@ -2196,14 +2267,27 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   function _onSBAuthReady(user) {
     _adminSBUser = user;
     // Restore cached session UI without relogin
-    // Guarded: safeLS (defined later in the file) may not exist yet if this
-    // auth callback fires very early — e.g. when the browser's tracking
-    // prevention (Edge/Safari/Firefox ETP) makes Supabase's session check
-    // resolve before the rest of the page has finished loading. If safeLS
-    // isn't ready yet, just skip the cached-UI restore — it isn't lost,
-    // _onSBAuthReady runs again on the real SIGNED_IN event once everything
-    // has loaded.
-    if (typeof safeLS === 'undefined' || !safeLS) return;
+    // BUGFIX (req #1 — subscription check sometimes silently skipped):
+    // this used to just `return` here and rely on the real SIGNED_IN
+    // event firing again later to retry. That's only true for an
+    // interactive login — on a SILENT session restore (already-logged-in
+    // user just reopening the app), Supabase's SDK only emits
+    // 'INITIAL_SESSION', which this listener doesn't handle (only
+    // 'SIGNED_IN'/'SIGNED_OUT' below are wired up). So whenever safeLS
+    // happened not to be ready yet at this exact instant — e.g. the
+    // browser's tracking prevention (Edge/Safari/Firefox ETP) makes
+    // Supabase's session check resolve before the rest of the page has
+    // finished loading — the entire reconcile, and with it
+    // _checkSubscriptionExpiryReminder, was silently skipped for that
+    // whole page load with nothing left to retry it. Poll briefly instead
+    // (safeLS is defined very early in the page and this resolves almost
+    // immediately in practice).
+    if (typeof safeLS === 'undefined' || !safeLS) {
+      window._sbAuthReadyRetries = (window._sbAuthReadyRetries || 0) + 1;
+      if (window._sbAuthReadyRetries < 50) setTimeout(function(){ _onSBAuthReady(user); }, 100);
+      return;
+    }
+    window._sbAuthReadyRetries = 0;
     var role = safeLS.getItem('cm_admin_role');
     if (role === 'admin') {
       updateCloudBtn && updateCloudBtn();
@@ -5723,7 +5807,31 @@ function _blockIfReadOnlyData() {
     toast('👁️ Read-only access — this project is shared/joined as view-only', 'err');
     return true;
   }
+  // req #4: a subscription past its 3-day grace period locks writes for
+  // EVERYONE on that company, owner included — see _recomputeEngineerReadOnly.
+  if (typeof window !== 'undefined' && window._SUB_GRACE_EXPIRED) {
+    toast('🔒 Subscription expired — renew to unlock editing (read-only until then)', 'err');
+    return true;
+  }
   return false;
+}
+// req #4: subscription-grace-expired read-only lock. Kept as an
+// independent input ORed into window._ENGINEER_READONLY (via
+// _recomputeEngineerReadOnly, called from every place that used to assign
+// _ENGINEER_READONLY directly) rather than toggling _ENGINEER_READONLY
+// itself, so a later permission recompute (project switch, resync, etc.)
+// can never silently clear this lock for an owner whose grace has
+// actually run out — the only way it clears is _evaluateSubscriptionExpiry
+// itself confirming the subscription is valid again.
+window._SUB_GRACE_EXPIRED = window._SUB_GRACE_EXPIRED || false;
+window._ROLE_READONLY = window._ROLE_READONLY || false;
+// roleBasedReadOnly is optional — omit it to just re-derive
+// _ENGINEER_READONLY from the two stored inputs (used by the
+// subscription-expiry evaluator, which has no opinion on role).
+function _recomputeEngineerReadOnly(roleBasedReadOnly) {
+  if (typeof roleBasedReadOnly === 'boolean') window._ROLE_READONLY = roleBasedReadOnly;
+  window._ENGINEER_READONLY = !!window._ROLE_READONLY || !!window._SUB_GRACE_EXPIRED;
+  return window._ENGINEER_READONLY;
 }
 // Sets the legacy flags every existing call site already reads, but now
 // derived from the real permission set instead of a local membership
@@ -5786,7 +5894,7 @@ function _applyPermState(roleName) {
     // Progress Report" (which QDPR — Quick Daily Progress Report — and
     // its site-photo attachments both are), and is what site_engineer
     // is actually granted.
-    window._ENGINEER_READONLY = (roleName !== 'owner') && !hasPerm('dpr.write');
+    _recomputeEngineerReadOnly((roleName !== 'owner') && !hasPerm('dpr.write'));
     window._IS_VIEWER = (roleName === 'viewer');
     window._SALES_ADMIN_MODE = (roleName === 'sales_admin');
     // FIX: this was never set for new-schema joins (only the old,
@@ -5825,7 +5933,7 @@ function _applyPermState(roleName) {
     // Fail closed — if we can't confirm what someone's allowed to do,
     // treat them as read-only rather than silently granting write access.
     window._permSet = new Set();
-    window._ENGINEER_READONLY = (roleName !== 'owner');
+    _recomputeEngineerReadOnly(roleName !== 'owner');
     window._IS_VIEWER = false;
     window._SALES_ADMIN_MODE = false;
     window._ENGINEER_MODE = (roleName !== 'owner');
@@ -16729,45 +16837,17 @@ function buildRoomTabs(){
     var cnt=(store[r]||[]).length;
     var active=r===_currentRoom;
     var rEsc=_jsStrEsc(r);
-    return '<button onclick="_handleFloorTabTap(event,\''+rEsc+'\')" ondblclick="_startRenameFloor(event,\''+rEsc+'\')" title="Double-tap to rename" style="flex-shrink:0;padding:0 12px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;'+
+    return '<button onclick="selectRoom(\''+rEsc+'\')" ondblclick="_startRenameFloor(event,\''+rEsc+'\')" title="Double-click to rename" style="flex-shrink:0;padding:0 12px;border-radius:10px;font-size:11px;font-weight:700;border:none;cursor:pointer;'+
       (active?'background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;':'background:rgba(255,255,255,0.85);color:#374151;')+
       '"><p class="drw-floor-label" style="line-height:1;font-size:13px">'+_esc(r)+'</p><p style="line-height:1;font-size:9px;opacity:.7;margin-top:1px">'+(cnt?cnt+' dwg':'empty')+'</p></button>';
   }).join('') +
   '<button onclick="addDrawingFloor()" style="flex-shrink:0;padding:0 14px;border-radius:10px;font-size:16px;font-weight:800;border:1px dashed rgba(79,70,229,0.5);cursor:pointer;background:rgba(79,70,229,0.08);color:#4f46e5;">+</button>';
 }
 
-// BUGFIX: iOS/Android WebViews (this app's own in-app browser included)
-// generally do NOT synthesize a native 'dblclick' event from a double-tap
-// the way desktop mice do, so relying on ondblclick alone left the
-// rename feature dead on touch devices even though it worked in a
-// desktop browser. Every floor tab's onclick now routes through this
-// tap-timing check instead: two onclick's on the SAME tab within
-// DOUBLE_TAP_MS both fire on touch AND on a real mouse click, so this
-// reliably detects a "double-tap" on every platform. selectRoom() still
-// fires on every single tap exactly as before (no added latency); the
-// rename only triggers additionally when the second tap lands in time.
-// ondblclick is left in place too as a harmless desktop-mouse fallback —
-// _startRenameFloor() no-ops if the input is already open (see below),
-// so a genuine desktop double-click never opens rename twice.
-var _floorTapState = { name: null, time: 0 };
-var DOUBLE_TAP_MS = 400;
-function _handleFloorTabTap(evt, name){
-  var now = Date.now();
-  var isDoubleTap = _floorTapState.name === name && (now - _floorTapState.time) < DOUBLE_TAP_MS;
-  if (isDoubleTap) {
-    _floorTapState.name = null; _floorTapState.time = 0;
-    _startRenameFloor(evt, name);
-    return;
-  }
-  _floorTapState.name = name; _floorTapState.time = now;
-  selectRoom(name);
-}
-
-// Double-click/double-tap a floor tab to rename it in place. Reached via
-// _handleFloorTabTap() above on touch devices (the common case) and via
-// the native ondblclick on desktop; selectRoom(...) has already (re)run
-// once per tap by the time this fires — harmless, it just keeps that tab
-// selected — and this then swaps the tab's label <p> for a text input.
+// Double-click a floor tab to rename it in place. A dblclick is preceded
+// by two native click events, so the tab's own onclick=selectRoom(...)
+// still fires first (harmless — it just (re)selects that tab); this
+// swaps the tab's label <p> for a text input once the dblclick lands.
 function _startRenameFloor(evt, oldName){
   if (evt && evt.stopPropagation) evt.stopPropagation();
   if (_blockIfReadOnlyData()) return;
@@ -26823,7 +26903,19 @@ function _ownerOpenDesktopDashboard() {
 // ══════════════════════════════════════════════════════════════
 
 window._ENGINEER_MODE = false;
-window._ENGINEER_READONLY = false;
+// req #4: seed the subscription-grace read-only lock synchronously from
+// whatever the last check cached, before any async Supabase call has had
+// a chance to resolve — otherwise every reload reopens a brief writable
+// window for a company that's already known to be past its grace period.
+// _evaluateSubscriptionExpiry re-verifies this against the server shortly
+// after and corrects it (including clearing it on renewal) either way.
+(function(){
+  try {
+    var cid = localStorage.getItem('sanj_company_id');
+    if (cid && localStorage.getItem('sanj_sub_grace_expired_' + cid) === '1') window._SUB_GRACE_EXPIRED = true;
+  } catch(e) {}
+})();
+window._ENGINEER_READONLY = _recomputeEngineerReadOnly(false);
 
 // Redeeming a join code must never create a device-only identity. Without a
 // real Supabase session behind it, this person has no valid JWT — every
