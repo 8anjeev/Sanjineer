@@ -953,11 +953,35 @@ self.addEventListener('fetch', function(e) {
   // row for a LOCAL project that has no sanj_sb_project_map entry yet,
   // and writes that mapping so SanjCloud.ensureContext can resolve it.
   // Only meaningful for an owned (non-joined) project while signed in.
+  window._repairInFlight = window._repairInFlight || {};
   function _repairOwnedProjectCloudLink(proj, cb) {
     var companyId = (typeof window._wsCompanyId !== 'undefined' && window._wsCompanyId) || (typeof WS_COMPANY_KEY !== 'undefined' ? (function(){ try { return localStorage.getItem(WS_COMPANY_KEY); } catch(e) { return null; } })() : null);
     if (!companyId || typeof _sb === 'undefined' || !_sb || typeof _adminSBUser === 'undefined' || !_adminSBUser || !_adminSBUser.id) {
       if (cb) cb(false);
       return;
+    }
+    // BUGFIX (auto-creating duplicate projects with the same name): this
+    // repair can be triggered concurrently — cloudBackupNow's self-heal
+    // check (below) runs on every save via _scheduleCloudPush, which can
+    // fire several times in the seconds it takes one create_project
+    // round-trip to finish and actually write the sanj_sb_project_map
+    // entry that's supposed to stop it firing again. Until that write
+    // lands, EVERY one of those overlapping calls independently checked
+    // get_my_projects, each found nothing yet (because none of the others
+    // had returned either), and each went ahead and created its own cloud
+    // project row — the exact "Matrix Emrald" / "Matrix trinity" showing
+    // twice in the switcher. Track one in-flight attempt per local
+    // project id and queue every other caller's callback onto it instead
+    // of starting a second attempt.
+    if (window._repairInFlight[proj.id]) {
+      window._repairInFlight[proj.id].push(cb);
+      return;
+    }
+    window._repairInFlight[proj.id] = [cb];
+    function _finishAll(ok, existingLocalId) {
+      var cbs = window._repairInFlight[proj.id] || [];
+      delete window._repairInFlight[proj.id];
+      cbs.forEach(function(fn){ if (fn) fn(ok, existingLocalId); });
     }
     function _writeMapAndFinish(cloudProjectId) {
       try {
@@ -998,13 +1022,13 @@ self.addEventListener('fetch', function(e) {
           try { if (typeof _saveProjects === 'function') _saveProjects(); } catch(e) {}
           try { if (typeof _renderProjectDropdown === 'function') _renderProjectDropdown(); } catch(e) {}
           localStorage.setItem('sanj_sb_project_map', JSON.stringify(map));
-          if (cb) cb(true, existingLocalId);
+          _finishAll(true, existingLocalId);
           return;
         }
         map[proj.id] = { companyId: companyId, projectId: cloudProjectId, role: 'owner' };
         localStorage.setItem('sanj_sb_project_map', JSON.stringify(map));
       } catch(e) {}
-      if (cb) cb(true);
+      _finishAll(true);
     }
     // Safety: this can now run silently in the background (see
     // cloudBackupNow's self-heal check) rather than only from an explicit
@@ -1019,11 +1043,12 @@ self.addEventListener('fetch', function(e) {
       if (existing) { _writeMapAndFinish(existing.project_id); return; }
       _sb.rpc('create_project', { p_company_id: companyId, p_name: proj.name, p_code: null, p_address: null, p_start_date: null, p_end_date: null })
         .then(function(r) {
-          if (r.error || !r.data) { console.error('Cloud link failed for project "' + proj.name + '":', r.error); if (cb) cb(false); return; }
+          if (r.error || !r.data) { console.error('Cloud link failed for project "' + proj.name + '":', r.error); _finishAll(false); return; }
           _writeMapAndFinish(r.data);
-        }).catch(function(e) { console.error('Cloud link failed for project "' + proj.name + '":', e); if (cb) cb(false); });
-    }).catch(function(e) { console.error('Cloud link lookup failed for project "' + proj.name + '":', e); if (cb) cb(false); });
+        }).catch(function(e) { console.error('Cloud link failed for project "' + proj.name + '":', e); _finishAll(false); });
+    }).catch(function(e) { console.error('Cloud link lookup failed for project "' + proj.name + '":', e); _finishAll(false); });
   }
+
 
   function createProject(name) {
     // Joined members never create projects — that's the owner's company
@@ -1565,7 +1590,7 @@ self.addEventListener('fetch', function(e) {
     if (existing) existing.remove();
     var modal = document.createElement('div');
     modal.id = '_proj-input-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:20px;';
     modal.innerHTML =
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:20px 18px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
       + '<p style="font-size:14px;font-weight:800;color:#fff;margin:0 0 14px">' + title + '</p>'
@@ -1876,7 +1901,7 @@ self.addEventListener('fetch', function(e) {
     if (existing) existing.remove();
     var modal = document.createElement('div');
     modal.id = '_proj-input-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:20px;';
     modal.innerHTML =
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 18px;width:100%;max-width:300px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
       + '<div style="font-size:32px;margin-bottom:12px">👑</div>'
@@ -2018,7 +2043,7 @@ self.addEventListener('fetch', function(e) {
     var planLabel = planTier === 'enterprise' ? 'ENTERPRISE' : 'PRO';
     var modal = document.createElement('div');
     modal.id = '_sub-forcelogout-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:20px;';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:20px;';
     modal.innerHTML =
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:24px 18px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
       + '<div style="font-size:36px;margin-bottom:12px">🔒</div>'
@@ -2056,7 +2081,7 @@ self.addEventListener('fetch', function(e) {
     if (existing) existing.remove();
     var modal = document.createElement('div');
     modal.id = '_sub-reminder-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);padding:20px;';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:20px;';
     var headline = expiringSoon
       ? 'Your ' + planLabel + ' plan renews tomorrow'
       : graceExceeded
@@ -3037,7 +3062,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       align-items:center;
       justify-content:center;
       background:rgba(0,0,0,0.65)!important;
-      backdrop-filter:blur(8px)!important;
+      backdrop-filter:blur(8px)!important;-webkit-backdrop-filter:blur(8px)!important;
       -webkit-backdrop-filter:blur(8px)!important;
       animation:modalBgIn .18s ease-out;
     }
@@ -3048,7 +3073,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     @keyframes modalSlideIn{from{opacity:0;transform:scale(0.92) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
     #profile-modal,#att-modal,#ct-modal,#mat-purchase-modal,#mat-use-modal,#dept-add-modal,#master-att-modal,#manage-workers-modal{display:none;}
     #bill-view-modal{display:none;}
-    #apk-modal{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1rem;}
+    #apk-modal{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:1rem;}
     #apk-modal.show{display:flex;}
     /* Ensure fixed+inset+flex works for all modals */
     [style*="display: flex"].fixed,[style*="display:flex"].fixed{display:flex!important;}
@@ -4107,7 +4132,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
     .w-go:active{transform:translateY(0) scale(.98);}
     .w-go .wsm{position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.13),transparent);transition:left .5s;}
     .w-go:hover .wsm{left:100%;}
-    .w-ig{width:100%;padding:13px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);font-family:'DM Sans',sans-serif;font-weight:500;font-size:.88rem;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;text-decoration:none;backdrop-filter:blur(8px);}
+    .w-ig{width:100%;padding:13px 20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.85);font-family:'DM Sans',sans-serif;font-weight:500;font-size:.88rem;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;text-decoration:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
     .w-ig:hover{background:rgba(255,255,255,0.10);border-color:rgba(255,255,255,0.22);transform:translateY(-1px);}
     .w-chip{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.09);border-radius:99px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,0.55);font-family:'DM Sans',sans-serif;opacity:0;animation:wChipIn .45s cubic-bezier(.34,1.56,.64,1) both;animation-delay:.75s;transition:transform .18s,background .18s,color .18s,border-color .18s;}
     .w-chip:hover{transform:translateY(-2px) scale(1.05);background:rgba(99,102,241,0.16);border-color:rgba(129,140,248,0.4);color:rgba(255,255,255,0.85);}
@@ -4850,7 +4875,7 @@ function _wsOverlay() {
   if (el) return el;
   el = document.createElement('div');
   el.id = 'ws-overlay';
-  el.style.cssText = 'position:fixed;inset:0;z-index:800000;display:none;align-items:center;justify-content:center;background:rgba(6,5,16,.78);backdrop-filter:blur(6px);padding:16px;box-sizing:border-box;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:800000;display:none;align-items:center;justify-content:center;background:rgba(6,5,16,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:16px;box-sizing:border-box;';
   el.innerHTML =
     '<div id="ws-panel" style="width:100%;max-width:320px;max-height:80vh;overflow-y:auto;background:linear-gradient(165deg,#0F0C28,#241C5C 55%,#3A1D5E);border:1px solid rgba(232,185,77,.10);border-radius:16px;padding:14px;box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03);">' +
       '<div id="ws-body"></div>' +
@@ -5135,13 +5160,20 @@ function _wsShowProForm() {
   );
 }
 function _wsSubmitProForm() {
+  // Double-tap guard: a slow network response plus an impatient second
+  // tap on "Continue to Payment" would otherwise fire this twice,
+  // bootstrap_personal_workspace-ing two companies and create_project-ing
+  // two projects with the identical typed name.
+  if (window._wsSubmitProInFlight) return;
+  window._wsSubmitProInFlight = true;
   var projectName = ((document.getElementById('ws-pro-project') || {}).value || '').trim();
   var ownerName = ((document.getElementById('ws-pro-name') || {}).value || '').trim();
-  if (!projectName) { _wsSetErr('⚠️ Enter a project name'); return; }
-  if (!ownerName) { _wsSetErr('⚠️ Enter your name'); return; }
+  if (!projectName) { window._wsSubmitProInFlight = false; _wsSetErr('⚠️ Enter a project name'); return; }
+  if (!ownerName) { window._wsSubmitProInFlight = false; _wsSetErr('⚠️ Enter your name'); return; }
   window._wsPendingName = ownerName;
   _wsLoading('Creating your workspace…');
   _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: 'pro' }).then(function(r) {
+    window._wsSubmitProInFlight = false;
     if (r.error) { _wsShowProForm(); _wsSetErr(r.error.message); return; }
     var companyId = r.data;
     var row = { company_id: companyId, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: 'pro' };
@@ -5156,18 +5188,22 @@ function _wsSubmitProForm() {
         // if it didn't go through for some reason.
         _wsLaunchPayment('pro', row);
       });
-  }).catch(function(e) { _wsShowProForm(); _wsSetErr(e.message); });
+  }).catch(function(e) { window._wsSubmitProInFlight = false; _wsShowProForm(); _wsSetErr(e.message); });
 }
 function _wsCreatePersonal(tier) {
   // Free/other non-pro tiers only — Pro now goes through _wsShowProForm
   // first to collect the project + owner name per the flow map.
+  // Double-tap guard — see _wsSubmitProForm for why this matters.
+  if (window._wsCreatePersonalInFlight) return;
+  window._wsCreatePersonalInFlight = true;
   _wsLoading('Creating your workspace…');
   _sb.rpc('bootstrap_personal_workspace', { p_plan_tier: tier }).then(function(r) {
+    window._wsCreatePersonalInFlight = false;
     if (r.error) { _wsShowCreateWorkspace(); _wsSetErr(r.error.message); return; }
     var row = { company_id: r.data, company_name: 'My Workspace', is_personal_workspace: true, role_name: 'owner', plan_tier: tier };
     if (typeof _wsMarkOwnedCompany === 'function') _wsMarkOwnedCompany(r.data);
     _wsSelectCompany(row);
-  }).catch(function(e) { _wsShowCreateWorkspace(); _wsSetErr(e.message); });
+  }).catch(function(e) { window._wsCreatePersonalInFlight = false; _wsShowCreateWorkspace(); _wsSetErr(e.message); });
 }
 
 // ── Payment — launched directly, no intermediate "confirm plan" screen ──
@@ -6002,7 +6038,7 @@ function _wsSelectProject(p) {
 
 <!-- HEADER -->
 
-<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35">
+<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35;isolation:isolate;-webkit-transform:translateZ(0);transform:translateZ(0);">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
     <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
@@ -6114,7 +6150,7 @@ function _wsSelectProject(p) {
 
 <div id="settings-panel" style="display:none;position:fixed;inset:0;z-index:500000;align-items:flex-start;justify-content:flex-start;pointer-events:none;" onclick="if(event.target===this&&_modalGuardOk('settings-panel'))closeAllAndSettings()">
   <!-- Backdrop -->
-  <div id="sett-backdrop" style="position:absolute;inset:0;background:rgba(0,0,0,0);backdrop-filter:blur(0px);-webkit-backdrop-filter:blur(0px);transition:background .28s ease,backdrop-filter .28s ease,-webkit-backdrop-filter .28s ease;"></div>
+  <div id="sett-backdrop" style="position:absolute;inset:0;background:rgba(0,0,0,0.52);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);opacity:0;transition:opacity .28s ease;"></div>
   <!-- Drawer -->
   <div id="sett-drawer" style="position:relative;z-index:1;width:100%;max-width:270px;background:linear-gradient(165deg,#0F0C28 0%,#241C5C 45%,#4A1F72 85%,#5B2470 100%);border-radius:0 20px 20px 0;padding:14px 12px 12px 12px;box-shadow:10px 10px 50px rgba(0,0,0,0.65),0 0 0 1px rgba(232,185,77,0.08),inset 1px 0 0 rgba(255,255,255,0.04);transform:translateY(-110%) translateX(-110%);transition:transform .32s cubic-bezier(0.34,1.15,0.64,1),opacity .28s ease;opacity:0;">
 
@@ -6668,7 +6704,7 @@ function openSettingsPanel() {
   // Force reflow then animate
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
-      if (backdrop) { backdrop.style.background = 'rgba(0,0,0,0.52)'; backdrop.style.backdropFilter = 'blur(7px)'; backdrop.style.webkitBackdropFilter = 'blur(7px)'; }
+      if (backdrop) { backdrop.style.opacity = '1'; }
       if (drawer)   { drawer.style.transform = 'none'; drawer.style.opacity = '1'; }
       if (gear)     { gear.classList.add('gear-spin'); setTimeout(function(){ gear.classList.remove('gear-spin'); }, 500); }
     });
@@ -6692,7 +6728,7 @@ function closeSettingsPanel() {
   // fade-out animation) means Settings visually sinks behind anything
   // opened right after it, instead of blocking it for the next ~300ms.
   panel.style.zIndex = '1';
-  if (backdrop) { backdrop.style.background = 'rgba(0,0,0,0)'; backdrop.style.backdropFilter = 'blur(0px)'; backdrop.style.webkitBackdropFilter = 'blur(0px)'; }
+  if (backdrop) { backdrop.style.opacity = '0'; }
   if (drawer)   { drawer.style.transform = 'translateY(-110%) translateX(-110%)'; drawer.style.opacity = '0'; }
   setTimeout(function() { panel.style.display = 'none'; panel.style.pointerEvents = 'none'; }, 320);
 }
@@ -8574,7 +8610,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div><!-- end tab-boq -->
 
 <!-- ══ TODAY's WORK MODAL ══ -->
-<div id="boq-today-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);overflow-y:auto;padding:16px">
+<div id="boq-today-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow-y:auto;padding:16px">
   <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4)">
     <!-- Modal header -->
     <div style="background:linear-gradient(135deg,#0f2244,#1a3a6b);padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
@@ -16761,7 +16797,7 @@ function _showTextInputModal(opts) {
   if (existing) existing.remove();
   var modal = document.createElement('div');
   modal.id = id;
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:20px;';
   modal.innerHTML =
     '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:20px 18px;width:100%;max-width:320px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
     + '<p style="font-size:14px;font-weight:800;color:#fff;margin:0 0 4px">' + _esc(opts.title||'') + '</p>'
@@ -22040,7 +22076,7 @@ function openGSTReport() {
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'gst-report-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99998;display:flex;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(4px)';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99998;display:flex;align-items:flex-end;justify-content:center;padding:0;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
     overlay.innerHTML = '<div id="gst-report-panel" style="background:#f8fafc;border-radius:20px 20px 0 0;width:100%;max-width:500px;max-height:90vh;overflow-y:auto;padding:16px 14px 24px">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
       +'<p style="font-size:15px;font-weight:900;color:#1f2937">📊 GST & Tax Summary</p>'
@@ -22464,7 +22500,7 @@ function saveMasterAttendance() {
 
     var overlay = document.createElement('div');
     overlay.id = 'ma-confirm-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1.5rem;backdrop-filter:blur(4px)';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1.5rem;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
 
     var names = alreadyMarked.map(function(s){ return s.name; }).join(', ');
     overlay.innerHTML =
@@ -23573,7 +23609,7 @@ document.addEventListener('DOMContentLoaded', function() {
 .ichart-tip.show{opacity:1;}
 
 /* ── 4. SIGNATURE ───────────────────────────────────────────── */
-#sig-modal{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);align-items:center;justify-content:center;}
+#sig-modal{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;}
 #sig-modal.show{display:flex!important;}
 #sig-canvas{border:2px dashed rgba(99,102,241,.5);border-radius:10px;touch-action:none;cursor:crosshair;background:#fff;}
 .sig-thumb{display:inline-block;border:1.5px solid #e5e7eb;border-radius:7px;padding:2px 6px;cursor:pointer;transition:border-color .15s,box-shadow .15s;}
@@ -24796,7 +24832,7 @@ window.openShareProjectModal = function(projectId) {
   if (existing) existing.remove();
   var modal = document.createElement('div');
   modal.id = '_share-proj-modal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);padding:20px;';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:20px;';
   modal.innerHTML =
     '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:18px;width:100%;max-width:320px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6);">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
