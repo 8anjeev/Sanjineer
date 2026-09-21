@@ -1302,6 +1302,7 @@ self.addEventListener('fetch', function(e) {
   // ── Init on startup ───────────────────────────────────────────
   function _initProjects() {
     _loadProjects();
+    _dedupeLocalProjects();
     var saved = null;
     try { saved = localStorage.getItem('sanj_current_project'); } catch(e) {}
     if (window.projects.length === 0) {
@@ -1317,6 +1318,72 @@ self.addEventListener('fetch', function(e) {
       try { localStorage.setItem('sanj_current_project', window.currentProjectId); } catch(e) {}
     }
     _renderProjectDropdown();
+    // Any owned project that STILL isn't cloud-linked after the merge
+    // above (never successfully linked, or linked under a corrupted
+    // record) gets a link/merge attempt right away — not just the
+    // currently active one, which is all cloudBackupNow's self-heal check
+    // used to cover, so a duplicate sitting on a project you hadn't
+    // switched to yet could persist indefinitely. _repairOwnedProjectCloudLink
+    // is now safe to call repeatedly (in-flight guarded) and will merge
+    // into the real cloud project by name if one already exists.
+    if (typeof _sb !== 'undefined' && _sb && typeof _adminSBUser !== 'undefined' && _adminSBUser && typeof _repairOwnedProjectCloudLink === 'function') {
+      var map0 = {};
+      try { map0 = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+      (window.projects || []).forEach(function(p) {
+        if (p.joined) return; // joined projects are linked at join time, not here
+        if (!map0[p.id] || !map0[p.id].projectId) _repairOwnedProjectCloudLink(p, null);
+      });
+    }
+  }
+
+  // BUGFIX (existing installs still showing duplicate projects in the
+  // switcher): the merge logic inside _resolveLocalShellForCloudProject /
+  // _repairOwnedProjectCloudLink only cleans things up the NEXT time
+  // either of those runs for the affected project — it does nothing for
+  // duplicate local shells that are already sitting in window.projects
+  // from before those fixes existed, or from a reconcile that silently
+  // never ran (the _onSBAuthReady race). Confirmed against the database
+  // directly: a company with two "Matrix Emrald" entries showing in the
+  // switcher has exactly ONE real "Matrix Emrald" project row in Supabase
+  // — both local shells were pointing (or should point) at that same
+  // single cloud project. Run an explicit sweep on every boot: any two+
+  // local shells mapped to the exact same cloud project id are merged
+  // into one — keep whichever is currently active, else the oldest, drop
+  // the rest from both window.projects and the map.
+  function _dedupeLocalProjects() {
+    if (!window.projects || window.projects.length < 2) return;
+    var mapKey = 'sanj_sb_project_map';
+    var map = {};
+    try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
+    var byCloudId = {};
+    window.projects.forEach(function(p) {
+      var m = map[p.id];
+      if (!m || !m.projectId) return;
+      (byCloudId[m.projectId] = byCloudId[m.projectId] || []).push(p);
+    });
+    var removedAny = false;
+    Object.keys(byCloudId).forEach(function(cloudId) {
+      var group = byCloudId[cloudId];
+      if (group.length < 2) return;
+      var savedId = null;
+      try { savedId = localStorage.getItem('sanj_current_project'); } catch(e) {}
+      var keep = group.find(function(p){ return p.id === savedId; })
+        || group.slice().sort(function(a,b){ return (a.created_at||0) - (b.created_at||0); })[0];
+      group.forEach(function(p) {
+        if (p.id === keep.id) return;
+        window.projects = window.projects.filter(function(x){ return x.id !== p.id; });
+        delete map[p.id];
+        removedAny = true;
+        if (window.currentProjectId === p.id) window.currentProjectId = keep.id;
+        try {
+          if (localStorage.getItem('sanj_current_project') === p.id) localStorage.setItem('sanj_current_project', keep.id);
+        } catch(e) {}
+      });
+    });
+    if (removedAny) {
+      try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
+      try { if (typeof _saveProjects === 'function') _saveProjects(); } catch(e) {}
+    }
   }
 
   // Creates the user's first local project on demand. Only called from
@@ -6038,7 +6105,7 @@ function _wsSelectProject(p) {
 
 <!-- HEADER -->
 
-<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35;isolation:isolate;-webkit-transform:translateZ(0);transform:translateZ(0);">
+<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35;isolation:isolate;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
     <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
