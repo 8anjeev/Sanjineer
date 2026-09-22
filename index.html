@@ -1302,7 +1302,7 @@ self.addEventListener('fetch', function(e) {
   // ── Init on startup ───────────────────────────────────────────
   function _initProjects() {
     _loadProjects();
-    _dedupeLocalProjects();
+    _dedupOwnedProjectShellsByName();
     var saved = null;
     try { saved = localStorage.getItem('sanj_current_project'); } catch(e) {}
     if (window.projects.length === 0) {
@@ -1336,55 +1336,90 @@ self.addEventListener('fetch', function(e) {
     }
   }
 
-  // BUGFIX (existing installs still showing duplicate projects in the
-  // switcher): the merge logic inside _resolveLocalShellForCloudProject /
-  // _repairOwnedProjectCloudLink only cleans things up the NEXT time
-  // either of those runs for the affected project — it does nothing for
-  // duplicate local shells that are already sitting in window.projects
-  // from before those fixes existed, or from a reconcile that silently
-  // never ran (the _onSBAuthReady race). Confirmed against the database
-  // directly: a company with two "Matrix Emrald" entries showing in the
-  // switcher has exactly ONE real "Matrix Emrald" project row in Supabase
-  // — both local shells were pointing (or should point) at that same
-  // single cloud project. Run an explicit sweep on every boot: any two+
-  // local shells mapped to the exact same cloud project id are merged
-  // into one — keep whichever is currently active, else the oldest, drop
-  // the rest from both window.projects and the map.
-  function _dedupeLocalProjects() {
-    if (!window.projects || window.projects.length < 2) return;
+  // Scans every 'sanj_project_<pid>_*' key for this project id and
+  // returns true the moment it finds one holding real (non-empty)
+  // content — used to decide it's NOT safe to silently delete a
+  // duplicate shell. Broader than the older _hasAnyProjectData (which
+  // only checked the DPR 'cm_data' key) — this checks every module
+  // (drawings, machinery, expenses, materials, visits, ...), since any
+  // one of them holding real work is reason enough to refuse an
+  // automatic delete.
+  function _projectHasAnyData(pid) {
+    try {
+      var prefix = 'sanj_project_' + pid + '_';
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf(prefix) !== 0) continue;
+        var v = localStorage.getItem(k);
+        if (v && v !== '[]' && v !== '{}' && v !== 'null' && v !== '""') return true;
+      }
+    } catch(e) {}
+    return false;
+  }
+
+  // BUGFIX (duplicate projects still showing after the cloud-id-based
+  // dedup): _dedupJoinedProjectShells() (below) only catches duplicate
+  // shells that BOTH already have a sanj_sb_project_map entry pointing at
+  // the same cloud project id. Confirmed directly against the database
+  // that "Matrix Emrald"/"Matrix trinity" each have exactly ONE real row
+  // in Supabase, yet two local shells kept showing — meaning at least one
+  // of each pair never got a map entry in the first place (a failed/raced
+  // link attempt from before the in-flight guard existed), so the
+  // cloud-id check never even sees it as a candidate to merge. This
+  // catches that case directly by exact NAME instead of needing a map
+  // entry at all: any two+ non-joined local shells with the identical
+  // name are collapsed to one. To guarantee no data loss, if MORE THAN
+  // ONE shell in a same-named group actually has real project data, none
+  // of them are touched — that pair is left for manual review rather than
+  // guessed at. Runs on every dropdown render (not just boot), because a
+  // reconcile pass after boot can re-introduce a shell before this has a
+  // chance to run again otherwise.
+  function _dedupOwnedProjectShellsByName() {
+    if (!window.projects || window.projects.length < 2) return false;
     var mapKey = 'sanj_sb_project_map';
     var map = {};
     try { map = JSON.parse(localStorage.getItem(mapKey) || '{}'); } catch(e) {}
-    var byCloudId = {};
+    var groups = {};
     window.projects.forEach(function(p) {
-      var m = map[p.id];
-      if (!m || !m.projectId) return;
-      (byCloudId[m.projectId] = byCloudId[m.projectId] || []).push(p);
+      if (p.joined) return; // joined dupes are handled by _dedupJoinedProjectShells
+      var key = (p.name || '').trim().toLowerCase();
+      if (!key) return;
+      (groups[key] = groups[key] || []).push(p);
     });
-    var removedAny = false;
-    Object.keys(byCloudId).forEach(function(cloudId) {
-      var group = byCloudId[cloudId];
+    var changed = false;
+    window._dedupSkippedForSafety = [];
+    Object.keys(groups).forEach(function(key) {
+      var group = groups[key];
       if (group.length < 2) return;
-      var savedId = null;
-      try { savedId = localStorage.getItem('sanj_current_project'); } catch(e) {}
-      var keep = group.find(function(p){ return p.id === savedId; })
+      var withData = group.filter(function(p){ return _projectHasAnyData(p.id); });
+      if (withData.length > 1) {
+        // Two or more genuinely-used duplicates sharing a name — don't
+        // guess which one to remove. Leave both untouched.
+        window._dedupSkippedForSafety.push(group[0].name);
+        return;
+      }
+      var keeper = withData[0]
+        || group.find(function(p){ return p.id === window.currentProjectId; })
+        || group.find(function(p){ return map[p.id] && map[p.id].projectId; })
         || group.slice().sort(function(a,b){ return (a.created_at||0) - (b.created_at||0); })[0];
       group.forEach(function(p) {
-        if (p.id === keep.id) return;
+        if (p.id === keeper.id) return;
         window.projects = window.projects.filter(function(x){ return x.id !== p.id; });
-        delete map[p.id];
-        removedAny = true;
-        if (window.currentProjectId === p.id) window.currentProjectId = keep.id;
-        try {
-          if (localStorage.getItem('sanj_current_project') === p.id) localStorage.setItem('sanj_current_project', keep.id);
-        } catch(e) {}
+        if (map[p.id]) delete map[p.id];
+        changed = true;
+        if (window.currentProjectId === p.id) {
+          window.currentProjectId = keeper.id;
+          try { localStorage.setItem('sanj_current_project', keeper.id); } catch(e) {}
+        }
       });
     });
-    if (removedAny) {
+    if (changed) {
       try { localStorage.setItem(mapKey, JSON.stringify(map)); } catch(e) {}
       try { if (typeof _saveProjects === 'function') _saveProjects(); } catch(e) {}
     }
+    return changed;
   }
+  window._dedupOwnedProjectShellsByName = _dedupOwnedProjectShellsByName;
 
   // Creates the user's first local project on demand. Only called from
   // flows that genuinely need an own/local project (e.g. "Continue
@@ -1706,6 +1741,15 @@ self.addEventListener('fetch', function(e) {
     // corrupted map from an older session never shows the same project
     // twice in the switcher.
     if (typeof _dedupJoinedProjectShells === 'function') { try { _dedupJoinedProjectShells(); } catch(e) {} }
+    // Same idea, but by exact name for OWNED shells — catches duplicates
+    // that never got a cloud map entry at all, which the cloud-id-based
+    // check above structurally can't see. See _dedupOwnedProjectShellsByName.
+    if (typeof _dedupOwnedProjectShellsByName === 'function') { try { _dedupOwnedProjectShellsByName(); } catch(e) {} }
+    if (window._dedupSkippedForSafety && window._dedupSkippedForSafety.length && !window._dedupSkippedNoticeShown) {
+      window._dedupSkippedNoticeShown = true;
+      var names = window._dedupSkippedForSafety.join(', ');
+      setTimeout(function(){ toast('⚠️ "' + names + '" has duplicate entries that both contain data — review manually, not auto-merged', 'err'); }, 600);
+    }
 
     // Joined (non-owner) sessions get a lighter switcher: switch-only, with
     // a read/write badge per project, no rename/share/new-project actions
