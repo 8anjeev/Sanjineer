@@ -22,34 +22,36 @@ jobs:
         run: |
           git clone https://github.com/GoogleChromeLabs/svgomg-twa.git twa-project
 
-      - name: Fix Gradle and Android compatibility
+      - name: Patch old TWA template for modern Android
         working-directory: twa-project
         run: |
-          # Upgrade the old archived TWA template.
-          sed -i "s#classpath 'com.android.tools.build:gradle:3.2.1'#classpath 'com.android.tools.build:gradle:8.1.4'#" build.gradle
+          # Update the Android Gradle Plugin to a modern version that works with this legacy template.
+          sed -i "s#classpath 'com.android.tools.build:gradle:3.2.1'#classpath 'com.android.tools.build:gradle:7.4.2'#" build.gradle
 
-          # Replace the discontinued JCenter repository.
+          # Add google() if missing and replace jcenter() with mavenCentral().
+          if ! grep -q "google()" build.gradle; then
+            sed -i "s#repositories {#repositories {\n        google()#" build.gradle
+          fi
+          if ! grep -q "google()" app/build.gradle; then
+            sed -i "s#repositories {#repositories {\n        google()#" app/build.gradle
+          fi
+
           sed -i 's/jcenter()/mavenCentral()/g' build.gradle app/build.gradle
 
-          # Use modern Android SDK versions.
+          # Modernize SDKs and minSdk.
           sed -i 's/compileSdkVersion 29/compileSdkVersion 34/' app/build.gradle
           sed -i 's/targetSdkVersion 29/targetSdkVersion 34/' app/build.gradle
           sed -i 's/minSdkVersion 16/minSdkVersion 23/' app/build.gradle
 
-          # Enable AndroidX support.
+          # AndroidX compatibility.
           printf '\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n' >> gradle.properties
 
-          # AGP 8 requires an explicit namespace.
-          if ! grep -q "namespace" app/build.gradle; then
-            sed -i "s/^android {/android {\n    namespace 'com.sanjvik.sanjineer'/" app/build.gradle
-          fi
-
-          # Use a modern Android Browser Helper version.
+          # Upgrade browser helper to a version with exported attrs.
           sed -i \
             "s#com.google.androidbrowserhelper:androidbrowserhelper:1.1.0#com.google.androidbrowserhelper:androidbrowserhelper:2.6.0#" \
             app/build.gradle
 
-          # Keep the browser dependency compatible with compileSdk 34.
+          # Force compatible browser library for compileSdk 34.
           cat >> app/build.gradle <<'EOF'
 
           configurations.all {
@@ -59,20 +61,18 @@ jobs:
           }
           EOF
 
-      - name: Configure Sanjineer package and domain
+      - name: Configure package + domain
         working-directory: twa-project
         run: |
-          # Configure the Sanjineer app identity.
+          # Set the app domain and package.
           sed -i "s/svgomg\.firebaseapp\.com/app.sanjineer.in/g" app/build.gradle
           sed -i "s/org\.chromium\.twa\.svgomg/com.sanjvik.sanjineer/g" app/build.gradle
 
-          # IMPORTANT:
-          # AGP 8 rejects the old placeholder package in AndroidManifest.xml.
-          sed -i 's/package="com.placeholder"/package="com.sanjvik.sanjineer"/g' \
-            app/src/main/AndroidManifest.xml
+          # Remove the old placeholder package from the manifest.
+          sed -i 's/package="com.placeholder"/package="com.sanjvik.sanjineer"/g' app/src/main/AndroidManifest.xml
 
-          echo "=== Build configuration ==="
-          grep -E "applicationId|hostName|namespace" app/build.gradle || true
+          echo "=== Build config ==="
+          grep -E "applicationId|hostName" app/build.gradle || true
 
           echo "=== Manifest package ==="
           grep -n "package=" app/src/main/AndroidManifest.xml || true
@@ -94,15 +94,15 @@ jobs:
           echo "=== strings.xml ==="
           cat app/src/main/res/values/strings.xml
 
-      - name: Fix AndroidManifest exported attributes
+      - name: Fix AndroidManifest exported attribute
         working-directory: twa-project
         run: |
           MANIFEST="app/src/main/AndroidManifest.xml"
 
-          # Apply the package fix again defensively.
+          # Defensive replacement for the placeholder package.
           sed -i 's/package="com.placeholder"/package="com.sanjvik.sanjineer"/g' "$MANIFEST"
 
-          # LauncherActivity must be exported for Android 12 and newer.
+          # Add exported=true to the launcher activity for Android 12+.
           if grep -q 'android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"' "$MANIFEST"; then
             if ! grep -A3 'android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"' "$MANIFEST" | grep -q 'android:exported='; then
               sed -i \
@@ -114,16 +114,13 @@ jobs:
           echo "=== LauncherActivity ==="
           grep -A3 "LauncherActivity" "$MANIFEST" || true
 
-          echo "=== Final manifest ==="
-          cat "$MANIFEST"
-
-      - name: Set up Gradle
+      - name: Set up Gradle wrapper
         working-directory: twa-project
         run: |
           chmod +x gradlew
 
           sed -i \
-            's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-all.zip#' \
+            's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-7.6.1-all.zip#' \
             gradle/wrapper/gradle-wrapper.properties
 
           ./gradlew --version
@@ -138,7 +135,7 @@ jobs:
           APK_PATH="twa-project/app/build/outputs/apk/debug/app-debug.apk"
 
           if [ ! -f "$APK_PATH" ]; then
-            echo "Error: APK was not generated."
+            echo "Error: APK not generated."
             find twa-project/app/build/outputs -type f -maxdepth 6 2>/dev/null || true
             exit 1
           fi
