@@ -1,69 +1,56 @@
 name: Build APK
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: temurin
+
       - name: Clone TWA Quickstart
         run: |
           git clone https://github.com/GoogleChromeLabs/svgomg-twa.git twa-project
-      - name: Fix Gradle & Android Plugin Compatibility
+
+      - name: Fix Gradle and Android compatibility
+        working-directory: twa-project
         run: |
-          cd twa-project
-          # This TWA quickstart template is archived/unmaintained (2021) and
-          # pins Android Gradle Plugin 3.2.1 + jcenter() — both incompatible
-          # with the Gradle 8.7 we now bootstrap in "Setup Gradle" below.
-          # AGP 3.2.1 references org.gradle.initialization.BuildCompletionListener,
-          # an internal Gradle class removed in newer Gradle versions — that's
-          # exactly what crashed "Build APK". jcenter() has also been fully
-          # shut down since Feb 2022. Bump both, plus the SDK levels AGP 8.x
-          # requires, and enable AndroidX/Jetifier as a safety net for any old
-          # support-library references in this old template.
+          # Upgrade the old archived TWA template.
           sed -i "s#classpath 'com.android.tools.build:gradle:3.2.1'#classpath 'com.android.tools.build:gradle:8.1.4'#" build.gradle
+
+          # Replace the discontinued JCenter repository.
           sed -i 's/jcenter()/mavenCentral()/g' build.gradle app/build.gradle
+
+          # Use modern Android SDK versions.
           sed -i 's/compileSdkVersion 29/compileSdkVersion 34/' app/build.gradle
           sed -i 's/targetSdkVersion 29/targetSdkVersion 34/' app/build.gradle
-          printf '\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n' >> gradle.properties
-
-          # ROOT-CAUSE FIX 1/4 — AGP 8+ requires an explicit `namespace` in the
-          # android {} block. Older AGP derived it from the manifest's
-          # package="com.placeholder" attribute; that fallback was REMOVED in
-          # AGP 8. Without this, the build fails immediately at configuration
-          # time with "Namespace not specified. Please specify a namespace in
-          # the module's build file." — before a single line of code compiles.
-          sed -i "s/^android {/android {\n    namespace 'com.sanjvik.sanjineer'/" app/build.gradle
-
-          # ROOT-CAUSE FIX 2/4 — androidbrowserhelper 1.1.0 (2019) predates the
-          # targetSdk-31 android:exported requirement entirely: its OWN bundled
-          # manifest components (TrustedWebActivityService etc.) don't declare
-          # it either, and that's inside a downloaded AAR we can't sed. It also
-          # requires minSdkVersion 16, while any modern release needs 23+, so
-          # bumping alone (without also raising minSdk below) trades one
-          # manifest-merger failure for another ("uses-sdk:minSdkVersion 16
-          # cannot be smaller than 23 declared in library"). 2.6.0 is a stable
-          # release already built against compileSdk 31+ with exported set
-          # correctly throughout — swap it in.
-          sed -i "s#com.google.androidbrowserhelper:androidbrowserhelper:1.1.0#com.google.androidbrowserhelper:androidbrowserhelper:2.6.0#" app/build.gradle
           sed -i 's/minSdkVersion 16/minSdkVersion 23/' app/build.gradle
 
-          # ROOT-CAUSE FIX 5/5 — androidbrowserhelper 2.6.0 has a known upstream
-          # bug (GoogleChrome/android-browser-helper#538): it transitively pulls
-          # androidx.browser:1.9.0-alpha02, which demands compileSdk 36 + AGP
-          # 8.9.1+. Confirmed this isn't fixed by going to a newer
-          # androidbrowserhelper release either — even the later STABLE
-          # androidx.browser:1.9.0 still requires compileSdk 36, so chasing
-          # this forward just trades an accidental requirement for a
-          # deliberate one. Rather than cascade this 2019 template through
-          # compileSdk 36 / AGP 8.9+ / Gradle 8.11+ (a much bigger, riskier
-          # jump), force dependency resolution back to 1.8.0 — the last
-          # androidx.browser release before this compileSdk-36 floor kicked
-          # in, and functionally sufficient for what this TWA actually uses.
-          cat >> app/build.gradle << 'EOF'
+          # Enable AndroidX support.
+          printf '\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n' >> gradle.properties
+
+          # AGP 8 requires an explicit namespace.
+          if ! grep -q "namespace" app/build.gradle; then
+            sed -i "s/^android {/android {\n    namespace 'com.sanjvik.sanjineer'/" app/build.gradle
+          fi
+
+          # Use a modern Android Browser Helper version.
+          sed -i \
+            "s#com.google.androidbrowserhelper:androidbrowserhelper:1.1.0#com.google.androidbrowserhelper:androidbrowserhelper:2.6.0#" \
+            app/build.gradle
+
+          # Keep the browser dependency compatible with compileSdk 34.
+          cat >> app/build.gradle <<'EOF'
 
           configurations.all {
               resolutionStrategy {
@@ -71,33 +58,31 @@ jobs:
               }
           }
           EOF
-      - name: Update TWA Config - Package Name & Domain
-        run: |
-          cd twa-project
 
-          # ROOT-CAUSE FIX 3/4 — these sed patterns previously targeted
-          # jakearchibald.github.io/svgomg and io.jakearchibald.svgomg, which
-          # don't exist anywhere in this template. The actual defaults declared
-          # in the twaManifest map at the top of app/build.gradle are
-          # hostName: 'svgomg.firebaseapp.com' and
-          # applicationId: 'org.chromium.twa.svgomg'. The old patterns matched
-          # nothing, so this step was silently a no-op — the build (once it
-          # compiled) would have produced an APK still pointed at Google's demo
-          # site instead of app.sanjineer.in. Target the real strings instead.
+      - name: Configure Sanjineer package and domain
+        working-directory: twa-project
+        run: |
+          # Configure the Sanjineer app identity.
           sed -i "s/svgomg\.firebaseapp\.com/app.sanjineer.in/g" app/build.gradle
           sed -i "s/org\.chromium\.twa\.svgomg/com.sanjvik.sanjineer/g" app/build.gradle
 
-          # Verify the changes were made
-          echo "=== Updated build.gradle ==="
-          grep -E "(applicationId|hostName|namespace)" app/build.gradle
-      - name: Update TWA Config - App Name & Resources
+          # IMPORTANT:
+          # AGP 8 rejects the old placeholder package in AndroidManifest.xml.
+          sed -i 's/package="com.placeholder"/package="com.sanjvik.sanjineer"/g' \
+            app/src/main/AndroidManifest.xml
+
+          echo "=== Build configuration ==="
+          grep -E "applicationId|hostName|namespace" app/build.gradle || true
+
+          echo "=== Manifest package ==="
+          grep -n "package=" app/src/main/AndroidManifest.xml || true
+
+      - name: Configure app resources
+        working-directory: twa-project
         run: |
-          cd twa-project
-          
-          # Create the strings.xml file if it doesn't exist with correct values
           mkdir -p app/src/main/res/values
-          
-          cat > app/src/main/res/values/strings.xml << 'EOF'
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <string name="app_name">Sanjineer</string>
@@ -105,52 +90,72 @@ jobs:
               <string name="launch_url">/</string>
           </resources>
           EOF
-          
-          echo "=== Created strings.xml ==="
+
+          echo "=== strings.xml ==="
           cat app/src/main/res/values/strings.xml
-      - name: Fix AndroidManifest Exported Attribute
+
+      - name: Fix AndroidManifest exported attributes
+        working-directory: twa-project
         run: |
-          cd twa-project
-          # ROOT-CAUSE FIX 4/4 — LauncherActivity has two <intent-filter>
-          # blocks (MAIN/LAUNCHER + VIEW) but no android:exported attribute.
-          # Apps targeting API 31+ (we just bumped targetSdkVersion to 34)
-          # MUST explicitly declare android:exported on every component that
-          # has an intent-filter, or the manifest merger fails with
-          # "android:exported needs to be explicitly specified for element
-          # <activity#...LauncherActivity>". This activity is the app's actual
-          # launcher entry point, so it must be exported=true (not false) —
-          # everything else in this manifest (FileProvider, DelegationService)
-          # already declares its own exported value explicitly and doesn't
-          # need touching.
           MANIFEST="app/src/main/AndroidManifest.xml"
-          sed -i 's#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"\n            android:exported="true"#g' "$MANIFEST"
-          echo "=== LauncherActivity declaration after patch ==="
-          grep -A2 "LauncherActivity\"" "$MANIFEST"
-      - name: Setup Gradle
+
+          # Apply the package fix again defensively.
+          sed -i 's/package="com.placeholder"/package="com.sanjvik.sanjineer"/g' "$MANIFEST"
+
+          # LauncherActivity must be exported for Android 12 and newer.
+          if grep -q 'android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"' "$MANIFEST"; then
+            if ! grep -A3 'android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"' "$MANIFEST" | grep -q 'android:exported='; then
+              sed -i \
+                's#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"#android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"\n            android:exported="true"#' \
+                "$MANIFEST"
+            fi
+          fi
+
+          echo "=== LauncherActivity ==="
+          grep -A3 "LauncherActivity" "$MANIFEST" || true
+
+          echo "=== Final manifest ==="
+          cat "$MANIFEST"
+
+      - name: Set up Gradle
+        working-directory: twa-project
         run: |
-          cd twa-project
           chmod +x gradlew
-          sed -i 's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-all.zip#' gradle/wrapper/gradle-wrapper.properties
+
+          sed -i \
+            's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.7-all.zip#' \
+            gradle/wrapper/gradle-wrapper.properties
+
           ./gradlew --version
+
       - name: Build APK
+        working-directory: twa-project
         run: |
-          cd twa-project
           ./gradlew assembleDebug --build-cache --warning-mode all
+
       - name: Verify APK
         run: |
-          ls -lh twa-project/app/build/outputs/apk/debug/
-          if [ ! -f "twa-project/app/build/outputs/apk/debug/app-debug.apk" ]; then
-            echo "Error: APK not found!"
+          APK_PATH="twa-project/app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "Error: APK was not generated."
+            find twa-project/app/build/outputs -type f -maxdepth 6 2>/dev/null || true
             exit 1
           fi
-      - uses: actions/upload-artifact@v4
+
+          ls -lh "$APK_PATH"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
           name: sanjineer-apk
           path: twa-project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           retention-days: 30
-      - name: Create Release
+
+      - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: twa-project/app/build/outputs/apk/debug/app-debug.apk
         env:
