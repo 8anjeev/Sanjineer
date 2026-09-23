@@ -3,9 +3,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <title>Sanjineer — app.sanjineer.in</title>
   <meta name="theme-color" content="#4f46e5">
+  <!-- BUGFIX (header "blurred" on iOS, esp. as an installed home-screen
+       app): with apple-mobile-web-app-capable=yes but no status-bar-style
+       set, iOS falls back to its own translucent status bar, which
+       applies a NATIVE OS-level blur to whatever page content sits behind
+       it — completely outside any CSS on this page, which is why no
+       backdrop-filter/opacity/compositing fix touched it, and why it only
+       showed up as an installed app, never in a plain Safari tab.
+       black-translucent hands that whole region back to the page instead
+       (paired with the safe-area-inset-top padding added to #app-header
+       below, so the header's own content still clears the status bar
+       icons/notch rather than sitting underneath them). -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <!-- ═══ MUST BE FIRST SCRIPT: suppress all cross-origin opaque errors ═══ -->
@@ -6149,7 +6161,7 @@ function _wsSelectProject(p) {
 
 <!-- HEADER -->
 
-<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:3px 10px 4px 10px;position:relative;z-index:35;isolation:isolate;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;">
+<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:calc(3px + env(safe-area-inset-top, 0px)) 10px 4px 10px;position:relative;z-index:35;isolation:isolate;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
     <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
@@ -10894,9 +10906,24 @@ function applyProfile() {
   var el1 = document.getElementById('hdr-company');
   var el2 = document.getElementById('hdr-engineer');
   if (el1) {
-    el1.textContent = (p && p.company) ? p.company : 'Tap ⚙️ Edit Profile';
-    el1.style.opacity = (p && p.company) ? '1' : '0.45';
-    el1.style.fontStyle = (p && p.company) ? '' : 'italic';
+    // Don't regress an already-correct header title to the dim/italic
+    // placeholder on a transient empty read (e.g. right after switching
+    // company/project, before window._companySettingsCache has refreshed
+    // for the new one — lmergedProf() can legitimately return '' for a
+    // moment even though a real name was showing a second ago). Keep the
+    // last known-good name + full opacity displayed through that gap
+    // instead of flashing to "Tap ⚙️ Edit Profile" at 45% opacity, which
+    // reads as the header suddenly looking washed-out/soft.
+    if (p && p.company) {
+      el1.textContent = p.company;
+      el1.style.opacity = '1';
+      el1.style.fontStyle = '';
+    } else if (!el1.textContent || el1.textContent === 'Tap ⚙️ Edit Profile') {
+      el1.textContent = 'Tap ⚙️ Edit Profile';
+      el1.style.opacity = '0.45';
+      el1.style.fontStyle = 'italic';
+    }
+    // else: leave whatever name is already showing alone.
   }
   if (el2) el2.textContent = p ? p.engineer : 'Set your name';
   // If user has company logo show it in header; else default app logo — both transparent bg
