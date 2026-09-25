@@ -410,7 +410,7 @@ body.dm main [style*="background:rgba(0,0,0,.08)"]{background:rgba(255,255,255,.
     if (!('serviceWorker' in navigator)) return;
 
     var SW_CODE = `
-const CACHE   = 'sanjineer-v1';
+const CACHE   = 'sanjineer-v2'; // bumped so installed PWAs evict the pre-safe-area-fix cached shell
 const OFFLINE_QUEUE_KEY = 'sanj_offline_queue';
 
 // ── Install: cache the app shell (the page itself) ───────────────────────────
