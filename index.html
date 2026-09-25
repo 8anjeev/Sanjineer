@@ -3779,9 +3779,26 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
      Chips fill full nav height with zero wasted background on all 3 sides.
 -->
 <style id="nav-ratio-lock">
-/* ── Header: explicitly lock inner height ── */
+/* ── Header: explicitly lock inner height ──
+   ROOT-CAUSE FIX (iOS standalone PWA header hidden under the
+   status bar / notch / Dynamic Island): this rule is unconditional
+   (no media query) and carries !important, so — being the last
+   `#main-app > header` rule of equal specificity in the cascade —
+   it was the one actually deciding padding-top on every screen
+   size, including phones. It was hardcoded to 3px, which silently
+   discarded the safe-area-aware padding set inline on #app-header
+   (`calc(3px + env(safe-area-inset-top, 0px))`), since a stylesheet
+   !important always beats a non-!important inline style. Safari
+   tabs never showed the bug because they aren't laid out edge-to-
+   edge behind the status bar; viewport-fit=cover + standalone mode
+   is what makes the safe-area inset matter. Restoring the same
+   calc() here (with its 0px fallback) fixes the root cause without
+   any device-specific hack: env() resolves to 0 on devices/contexts
+   with no inset (desktop, non-notched phones, plain browser tabs),
+   so this is a no-op there and only shifts content on devices that
+   actually report a top inset. */
 #main-app > header {
-  padding-top: 3px !important;
+  padding-top: calc(3px + env(safe-area-inset-top, 0px)) !important;
   padding-bottom: 4px !important;
   flex-shrink: 0 !important;
 }
@@ -6251,24 +6268,13 @@ function _wsSelectProject(p) {
     </div>
   </div>
 </header>
-<script>
-// BUGFIX (header renders soft on first paint, only turns sharp once
-// something else forces a full repaint — e.g. opening Settings): rather
-// than rely on the user happening to open a modal to fix it, nudge the
-// header's own layer once, shortly after first paint, with an
-// imperceptible opacity toggle. This forces WebKit to recomposite it
-// without any visible flash, so it self-corrects on its own.
-(function(){
-  function _nudgeHeaderRepaint() {
-    var h = document.getElementById('app-header');
-    if (!h) return;
-    h.style.opacity = '0.999';
-    requestAnimationFrame(function(){ h.style.opacity = '1'; });
-  }
-  if (document.readyState === 'complete') setTimeout(_nudgeHeaderRepaint, 50);
-  else window.addEventListener('load', function(){ setTimeout(_nudgeHeaderRepaint, 50); });
-})();
-</script>
+<!-- REMOVED: an opacity-toggle "repaint nudge" script used to sit here.
+     After adding it, a screenshot showed the ENTIRE top chrome — including
+     the native iOS status bar icons themselves, which no webpage can style
+     — looking blurred, which a page-level opacity toggle can't cause on
+     its own. Most likely explanation: the toggle coincided with app cold
+     launch and got caught mid-repaint in a screenshot, making things look
+     worse rather than better. Removed rather than layered on top of.-->
 
 <!-- ========== SETTINGS PANEL ========== -->
 <!-- URL bottom sheet -->
