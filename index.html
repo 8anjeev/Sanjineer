@@ -24182,51 +24182,29 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 
 // ══════════════════════════════════════════════════════════════
-// 6. SERVICE WORKER (inline Blob — works without server)
+// 6. SERVICE WORKER — REMOVED (root-cause fix, iOS PWA stale-content bug)
 // ══════════════════════════════════════════════════════════════
-(function(){
-  if (!('serviceWorker' in navigator)) return;
-  var swCode = [
-    'var CACHE="sanjineer-v1";',
-    'var STATIC=["/"];',
-    'self.addEventListener("install",function(e){',
-    '  e.waitUntil(caches.open(CACHE).then(function(c){',
-    '    return c.addAll(STATIC);',
-    '  }));',
-    '  self.skipWaiting();',
-    '});',
-    'self.addEventListener("activate",function(e){',
-    '  e.waitUntil(caches.keys().then(function(keys){',
-    '    return Promise.all(keys.filter(function(k){return k!==CACHE;}).map(function(k){return caches.delete(k);}));',
-    '  }));',
-    '  self.clients.claim();',
-    '});',
-    'self.addEventListener("fetch",function(e){',
-    '  if(e.request.method!=="GET")return;',
-    '  e.respondWith(',
-    '    caches.match(e.request).then(function(cached){',
-    '      var net=fetch(e.request).then(function(resp){',
-    '        if(resp&&resp.status===200){',
-    '          var clone=resp.clone();',
-    '          caches.open(CACHE).then(function(c){c.put(e.request,clone);});',
-    '        }',
-    '        return resp;',
-    '      }).catch(function(){return cached;});',
-    '      return cached||net;',
-    '    })',
-    '  );',
-    '});'
-  ].join('\n');
-  try {
-    var blob = new Blob([swCode], {type:'application/javascript'});
-    var swUrl = URL.createObjectURL(blob);
-    navigator.serviceWorker.register(swUrl, {scope:'/'}).then(function(reg){
-      console.log('[SW] registered, scope:', reg.scope);
-    }).catch(function(e){
-      // Blob SW may be blocked in some browsers — silent fail
-    });
-  } catch(e) {}
-})();
+// This used to register a SECOND, independent Service Worker for the
+// same scope ('/') as the one already registered near the top of
+// <head> (search "SERVICE WORKER — OFFLINE FIRST CAPABILITY"). Two
+// workers competing for one scope isn't additive — whichever finishes
+// registering last calls skipWaiting()+clients.claim() and takes over
+// as the one actually serving every request. This one always won that
+// race (it runs later in page load), and unlike the first worker
+// (network-first for navigation, so a fresh deploy is visible on the
+// very next load), THIS one was cache-first for every GET including
+// navigation: caches.match(e.request) was returned immediately if
+// present, with the network fetch only used to silently refresh the
+// cache for a *future* load. Net effect: every code fix shipped to
+// the server — this safe-area fix included — got fetched and cached
+// correctly in the background, but the page the user actually saw
+// kept being the stale cached shell from before the deploy, often for
+// several launches in a row. That's why the header/placeholder-text
+// overlap kept reappearing no matter what changed upstream. Removed
+// outright rather than reconciled with the other worker, since it
+// duplicated strictly less functionality than the first (no
+// Supabase-aware handling, no offline mutation queue) and had no
+// reason to exist alongside it.
 
 // Floating "?" Guide button, its per-tab tips panel, and the Settings
 // toggle that used to control it have all been removed per request.
