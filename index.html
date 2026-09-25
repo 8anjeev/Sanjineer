@@ -6200,6 +6200,28 @@ function _wsSelectProject(p) {
 
 <div id="main-app" class="flex flex-col min-h-screen" style="width:100%;max-width:100%;margin:0;">
 
+<!-- BUGFIX (header still looks dim/blurred right under the notch/Dynamic
+     Island): #app-header's own padding already reserves
+     env(safe-area-inset-top) so its logo/text SHOULD sit fully below the
+     notch — but that only works if the browser is actually reporting the
+     real inset value. iOS reads viewport-fit=cover / the safe-area value
+     at the moment a Home Screen icon is added and can keep using a stale
+     (too-small, sometimes zero) value for an icon that was added before
+     that meta tag existed — so the logo/text can end up poking a few
+     pixels into the notch strip, and THAT sliver of detail is what iOS's
+     translucent status bar renders as a dim/blurred smear (it's shading
+     actual content back there, not a plain color, which is what makes it
+     visible at all).
+     This spacer is a second, independent line of defense that doesn't
+     depend on that calculation being right: it's a solid, fully OPAQUE
+     bar — same gradient as the header — painted on top of everything at
+     the exact top strip the OS reserves for the status bar/notch. Because
+     it's a flat, single color with nothing else drawn on it, there is
+     nothing for the status bar's translucency to visibly shade even if
+     the header underneath were ever slightly misaligned. pointer-events
+     is off so it never blocks taps on the real header/status-bar icons. -->
+<div id="notch-safe-spacer" class="g-tor-indigo600-vpurple600-pink500" style="position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top, 0px);z-index:36;pointer-events:none;"></div>
+
 <!-- HEADER -->
 
 <header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:calc(3px + env(safe-area-inset-top, 0px)) 10px 4px 10px;position:relative;z-index:35;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;">
