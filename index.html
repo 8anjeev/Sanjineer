@@ -66,6 +66,23 @@
 *,::before,::after{box-sizing:border-box}
 html{line-height:1.5;-webkit-text-size-adjust:100%}
 body{margin:0}
+/* BUGFIX (header looks "blurred" only when installed to the Home Screen):
+   the previous fix (status-bar-style black-translucent + safe-area padding
+   on #app-header) is correct for the RESTING state, but it doesn't stop
+   the iOS rubber-band bounce. In standalone mode there's no Safari chrome
+   to absorb an overscroll — so pulling past the top (or a fast fling that
+   snaps back) makes WebKit render a stretched/blurred frame of whatever
+   sits under the translucent status bar during that bounce. That stretched
+   frame is the "blur" in the screenshots. It never shows in a plain Safari
+   tab because Safari's own toolbar absorbs the bounce there instead.
+   Disabling the bounce at the root removes the glitch entirely; the
+   background-color is a same-color safety net so that even if some inner
+   scroller still overscrolls, it reveals brand color, not a white flash. */
+html,body{
+  overscroll-behavior-y:none;
+  overscroll-behavior-x:none;
+  background-color:#1e293b;
+}
 /* DISPLAY */
 .block{display:block}.inline-flex{display:inline-flex}.flex{display:flex}.grid{display:grid}.hidden{display:none!important}
 /* ANTI-FLICKER: smooth cross-fade instead of an instant hard swap whenever
@@ -6251,24 +6268,13 @@ function _wsSelectProject(p) {
     </div>
   </div>
 </header>
-<script>
-// BUGFIX (header renders soft on first paint, only turns sharp once
-// something else forces a full repaint — e.g. opening Settings): rather
-// than rely on the user happening to open a modal to fix it, nudge the
-// header's own layer once, shortly after first paint, with an
-// imperceptible opacity toggle. This forces WebKit to recomposite it
-// without any visible flash, so it self-corrects on its own.
-(function(){
-  function _nudgeHeaderRepaint() {
-    var h = document.getElementById('app-header');
-    if (!h) return;
-    h.style.opacity = '0.999';
-    requestAnimationFrame(function(){ h.style.opacity = '1'; });
-  }
-  if (document.readyState === 'complete') setTimeout(_nudgeHeaderRepaint, 50);
-  else window.addEventListener('load', function(){ setTimeout(_nudgeHeaderRepaint, 50); });
-})();
-</script>
+<!-- REMOVED: an opacity-toggle "repaint nudge" script used to sit here.
+     After adding it, a screenshot showed the ENTIRE top chrome — including
+     the native iOS status bar icons themselves, which no webpage can style
+     — looking blurred, which a page-level opacity toggle can't cause on
+     its own. Most likely explanation: the toggle coincided with app cold
+     launch and got caught mid-repaint in a screenshot, making things look
+     worse rather than better. Removed rather than layered on top of.-->
 
 <!-- ========== SETTINGS PANEL ========== -->
 <!-- URL bottom sheet -->
@@ -7682,7 +7688,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- NAV -->
 
-<nav id="main-site-nav" class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky top-0 z-30">
+<!-- BUGFIX (this bar is the actual "blurred header" bug, not #app-header
+     above it): #app-header is NOT sticky, so once the user scrolls even a
+     little, IT scrolls away and THIS bar — sticky + a real 16px
+     backdrop-blur — becomes the thing sitting at the very top of the
+     screen. With top:0 that means it sticks flush to the physical top
+     edge, landing directly under the iOS notch/Dynamic Island (or Android
+     status bar) with none of the safe-area padding #app-header has, which
+     is why it shows the status bar icons overlapping a blurred/frosted
+     strip only once scrolled, and only in standalone/home-screen mode
+     (a plain Safari tab never lets anything stick to the true top edge,
+     since Safari's own toolbar occupies that space instead).
+     Fix: keep its "stuck" resting position pinned just below the safe
+     area instead of the literal top edge. This only changes WHERE it
+     stops while scrolling — its size, colors, blur and content are
+     untouched, and unscrolled layout is unaffected since `top` on a
+     sticky element only matters once it would go past that point. -->
+<nav id="main-site-nav" class="bg-white/10 backdrop-blur-lg border-b border-white/10 sticky z-30" style="top:env(safe-area-inset-top, 0px)">
   <!-- Desktop-only: user name + plan validity chip, same visual depth/colour
        as the header, sitting in the top-left corner beside it. Hidden on
        mobile (mobile keeps the horizontal tab-scroller as the whole nav). -->
