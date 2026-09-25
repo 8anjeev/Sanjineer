@@ -2076,6 +2076,9 @@ self.addEventListener('fetch', function(e) {
       // below) can keep evaluating this without another RPC round-trip —
       // dates don't change on their own, only Date.now() does.
       window._subReminderCache = { companyId: company.company_id, companyName: company.company_name, lastTier: lastTier, endMs: endMs };
+      if (typeof WS_CEND_KEY !== 'undefined' && typeof safeLS !== 'undefined' && safeLS && window._wsCompanyId === company.company_id) {
+        try { safeLS.setItem(WS_CEND_KEY, company.subscription_end || ''); } catch(e) {}
+      }
 
       _evaluateSubscriptionExpiry(company.company_id, company.company_name, lastTier, endMs);
     } catch (e) {
@@ -4944,6 +4947,7 @@ var WS_CROLE_KEY     = 'sanj_company_role';
 // that check can be scoped correctly. See _ownsAnyCompany() below.
 var WS_CROLE_COMPANY_KEY = 'sanj_company_role_company_id';
 var WS_CPLAN_KEY     = 'sanj_company_plan';
+var WS_CEND_KEY       = 'sanj_company_sub_end';
 var WS_PROJECT_KEY  = 'sanj_project_id';
 var WS_PNAME_KEY     = 'sanj_project_name';
 var WS_PROLE_KEY     = 'sanj_project_role';
@@ -4965,6 +4969,7 @@ function _refreshPlanThenRun(cb) {
     var row = rows.find(function(x){ return x.company_id === companyId; });
     if (row) {
       var plan = row.plan_tier || 'free';
+      safeLS.setItem(WS_CEND_KEY, row.subscription_end || '');
       if (plan !== cachedPlan) {
         safeLS.setItem(WS_CPLAN_KEY, plan);
         if (window._wsCompanyId === companyId) window.userPlan = plan;
@@ -5458,7 +5463,23 @@ function _settRefreshLoginBtn() {
     var isMember = (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) || (role && role !== 'owner');
     var planLabel = isMember ? '🤝 Member' : (plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free');
     titleEl.textContent = email;
-    subEl.textContent = planLabel + (isMember ? ' · tap to manage' : ' plan · tap to manage');
+    // Members don't own the company's subscription, and Free has no expiry
+    // to count down — both keep the old "tap to manage" wording. Pro/
+    // Enterprise owners see actual days remaining instead.
+    if (!isMember && (plan === 'pro' || plan === 'enterprise')) {
+      var endRaw = safeLS.getItem(WS_CEND_KEY);
+      var daysLeftText = null;
+      if (endRaw) {
+        var endDate = new Date(endRaw);
+        if (!isNaN(endDate.getTime())) {
+          var daysLeft = Math.ceil((endDate - Date.now()) / 86400000);
+          daysLeftText = daysLeft > 0 ? (daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' left') : 'Expired';
+        }
+      }
+      subEl.textContent = planLabel + ' · ' + (daysLeftText || 'tap to manage');
+    } else {
+      subEl.textContent = planLabel + (isMember ? ' · tap to manage' : ' plan · tap to manage');
+    }
     if (iconEl) iconEl.textContent = '👤';
   } else {
     titleEl.textContent = 'Login / Cloud';
@@ -5583,6 +5604,7 @@ function _settShowPlanManage() {
     var rows = (r && r.data) || [];
     var row = rows.find(function(x){ return x.company_id === companyId; });
     var plan = row ? (row.plan_tier || 'free') : cachedPlan;
+    if (row) safeLS.setItem(WS_CEND_KEY, row.subscription_end || '');
 
     if (plan !== cachedPlan) {
       safeLS.setItem(WS_CPLAN_KEY, plan);
@@ -5689,6 +5711,7 @@ function _wsPollUpgrade(companyId, attempt, targetPlan, gen) {
     if (upgraded) {
       toast('🎉 Upgraded to ' + (targetPlan === 'enterprise' ? 'Enterprise' : 'Pro') + '!', 'ok');
       safeLS.setItem(WS_CPLAN_KEY, targetPlan);
+      safeLS.setItem(WS_CEND_KEY, (r.data && r.data.current_period_end) || '');
       if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(targetPlan);
       if (typeof _settRefreshLoginBtn === 'function') _settRefreshLoginBtn();
       return;
@@ -5809,6 +5832,7 @@ function _wsSelectCompanyConfirmed(c) {
   safeLS.setItem(WS_CROLE_KEY, c.role_name || 'owner');
   safeLS.setItem(WS_CROLE_COMPANY_KEY, c.company_id || '');
   safeLS.setItem(WS_CPLAN_KEY, c.plan_tier || '');
+  safeLS.setItem(WS_CEND_KEY, c.subscription_end || '');
   // Fixes Sales Manager / Share Project / Cross-Device Sharing / PO
   // Approvals being blocked for genuinely paid Enterprise owners — those
   // all gate on window.isEnterpriseUser, which only _applyPlanFromCompany
@@ -6161,7 +6185,7 @@ function _wsSelectProject(p) {
 
 <!-- HEADER -->
 
-<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:calc(3px + env(safe-area-inset-top, 0px)) 10px 4px 10px;position:relative;z-index:35;isolation:isolate;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;">
+<header id="app-header" class="g-tor-indigo600-vpurple600-pink500 shadow-2xl" style="padding:calc(3px + env(safe-area-inset-top, 0px)) 10px 4px 10px;position:relative;z-index:35;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;">
   <div class="flex items-center gap-2" style="height:44px">
     <!-- LEFT: App logo + URL below + Settings beside logo -->
     <div class="flex-shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:0;margin-top:3px">
@@ -6227,6 +6251,24 @@ function _wsSelectProject(p) {
     </div>
   </div>
 </header>
+<script>
+// BUGFIX (header renders soft on first paint, only turns sharp once
+// something else forces a full repaint — e.g. opening Settings): rather
+// than rely on the user happening to open a modal to fix it, nudge the
+// header's own layer once, shortly after first paint, with an
+// imperceptible opacity toggle. This forces WebKit to recomposite it
+// without any visible flash, so it self-corrects on its own.
+(function(){
+  function _nudgeHeaderRepaint() {
+    var h = document.getElementById('app-header');
+    if (!h) return;
+    h.style.opacity = '0.999';
+    requestAnimationFrame(function(){ h.style.opacity = '1'; });
+  }
+  if (document.readyState === 'complete') setTimeout(_nudgeHeaderRepaint, 50);
+  else window.addEventListener('load', function(){ setTimeout(_nudgeHeaderRepaint, 50); });
+})();
+</script>
 
 <!-- ========== SETTINGS PANEL ========== -->
 <!-- URL bottom sheet -->
