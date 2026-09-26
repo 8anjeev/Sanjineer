@@ -7,17 +7,30 @@
   <title>Sanjineer — app.sanjineer.in</title>
   <meta name="theme-color" content="#4f46e5">
   <!-- BUGFIX (header "blurred" on iOS, esp. as an installed home-screen
-       app): with apple-mobile-web-app-capable=yes but no status-bar-style
-       set, iOS falls back to its own translucent status bar, which
-       applies a NATIVE OS-level blur to whatever page content sits behind
-       it — completely outside any CSS on this page, which is why no
-       backdrop-filter/opacity/compositing fix touched it, and why it only
-       showed up as an installed app, never in a plain Safari tab.
-       black-translucent hands that whole region back to the page instead
-       (paired with the safe-area-inset-top padding added to #app-header
-       below, so the header's own content still clears the status bar
-       icons/notch rather than sitting underneath them). -->
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+       app): iOS's own status-bar chrome was applying a native OS-level
+       blur/vibrancy to whatever page content sat behind it — completely
+       outside any CSS on this page, which is why no backdrop-filter/
+       opacity/compositing fix ever touched it, and why it only showed up
+       as an installed app, never in a plain Safari tab.
+       First attempt: "black-translucent", which hands that whole region
+       back to the page (paired with safe-area-inset-top padding on
+       #app-header so content clears the notch/icons). That's the
+       standard fix and normally works, but on this user's device/iOS
+       version the native blur still showed through regardless — verified
+       the page's own layout was pixel-correct via headless rendering, so
+       nothing left to fix on the CSS side. Switched to "black" instead:
+       this makes iOS treat the status bar as real reserved OS chrome
+       again (solid black, own space, page content starts below it), so
+       there's no translucent region left for that OS-level blur bug to
+       apply to. Trade-off: the header's gradient no longer bleeds up
+       behind the status bar — the status bar row is now a plain solid
+       black strip. With this style iOS reports 0 for
+       env(safe-area-inset-top), so the existing
+       calc(3px + env(safe-area-inset-top, 0px)) on #app-header /
+       nav-ratio-lock below naturally simplifies to the original 3px —
+       no separate change needed there. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <!-- ═══ MUST BE FIRST SCRIPT: suppress all cross-origin opaque errors ═══ -->
@@ -410,7 +423,7 @@ body.dm main [style*="background:rgba(0,0,0,.08)"]{background:rgba(255,255,255,.
     if (!('serviceWorker' in navigator)) return;
 
     var SW_CODE = `
-const CACHE   = 'sanjineer-v2'; // bumped so installed PWAs evict the pre-safe-area-fix cached shell
+const CACHE   = 'sanjineer-v3'; // bumped again: status-bar-style switched from black-translucent to black
 const OFFLINE_QUEUE_KEY = 'sanj_offline_queue';
 
 // ── Install: cache the app shell (the page itself) ───────────────────────────
