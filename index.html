@@ -2541,7 +2541,19 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
       if (typeof window._applyPlanFromCompany === 'function') window._applyPlanFromCompany(company.plan_tier);
       if (typeof _checkSubscriptionExpiryReminder === 'function') _checkSubscriptionExpiryReminder(company);
 
-      _sb.rpc('get_my_projects', { p_company_id: company.company_id }).then(function(pr) {
+      // BUGFIX (header not loading all projects): this used to be scoped to
+      // a single company — get_my_projects({ p_company_id: company.company_id })
+      // — so an account belonging to MORE than one company (owns a personal
+      // workspace and separately owns/joined another company) only ever got
+      // that one "active" company's projects mirrored into window.projects.
+      // Every other company's projects were invisible in the header
+      // switcher, permanently, until that other company happened to become
+      // active for some unrelated reason. get_my_projects() with no
+      // p_company_id filter returns every project this account can see
+      // across ALL of its companies in one call — each row already carries
+      // its own company_id/company_name, used below instead of the single
+      // "active" company's.
+      _sb.rpc('get_my_projects').then(function(pr) {
         if (pr.error || !pr.data) { console.warn('[reconcile] get_my_projects failed', pr.error); return; }
         var serverProjects = pr.data || [];
         var hadCurrent = !!window.currentProjectId;
@@ -2555,7 +2567,7 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           // already exists for this cloud project, only creates one if
           // genuinely missing — never duplicates window.projects.
           var localId = (typeof window._resolveLocalShellForCloudProject === 'function')
-            ? window._resolveLocalShellForCloudProject(p.project_id, company.company_id, p.project_name, p.role_name, company.company_name, p.project_address)
+            ? window._resolveLocalShellForCloudProject(p.project_id, p.company_id, p.project_name, p.role_name, p.company_name, p.project_address)
             : null;
           if (!localId) return;
           if (p.project_id === storedProject) restoredId = localId;
