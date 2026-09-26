@@ -1075,7 +1075,7 @@ self.addEventListener('fetch', function(e) {
   }
 
 
-  function createProject(name) {
+  function createProject(name, skipCloudSync) {
     // Joined members never create projects — that's the owner's company
     // to manage, not theirs. This blocks it even if the button is somehow
     // still reachable, as defense in depth alongside hiding it in the UI.
@@ -1128,22 +1128,35 @@ self.addEventListener('fetch', function(e) {
     // finding no mapping for it), even though the owner genuinely was
     // signed in — the project itself just had no cloud counterpart to
     // sync to.
-    _repairOwnedProjectCloudLink(proj, function(ok) {
-      // Kick a push immediately rather than waiting for the next
-      // debounced save, in case the owner switches to this project and
-      // starts entering data before the RPC above resolved.
-      if (ok && window.currentProjectId === id && typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch(e) {} }
-      // BUGFIX: this used to fail completely silently — the local project
-      // would sit there forever, never able to sync, with no indication
-      // to the owner of why (e.g. the server rejected it as a duplicate
-      // name once the DB-level uniqueness constraint is in place, or the
-      // device was offline at the wrong moment). Surface it clearly so
-      // they know to rename or retry rather than quietly losing data
-      // entered into a project that can never leave this one device.
-      if (!ok && typeof toast === 'function') {
-        toast('⚠️ "' + proj.name + '" couldn\'t be saved online — check your connection or try a different name, then reopen this project to retry', 'err');
-      }
-    });
+    // BUGFIX (auto-creating a stray "My Project" in the cloud): this used
+    // to run unconditionally for every locally-created project, including
+    // the hardcoded offline-fallback default from _ensureLocalProject().
+    // That default only exists because window.projects was locally empty
+    // at that instant — which is NOT proof the signed-in account has no
+    // real cloud projects (a multi-company account only had one company's
+    // projects mirrored locally; a fresh/cleared browser hadn't reconciled
+    // yet). The result was a genuine new "My Project" row pushed straight
+    // into whatever company happened to be "active", indistinguishable
+    // from real user data. skipCloudSync keeps that default purely local,
+    // exactly as the "offline" flow that creates it intends.
+    if (!skipCloudSync) {
+      _repairOwnedProjectCloudLink(proj, function(ok) {
+        // Kick a push immediately rather than waiting for the next
+        // debounced save, in case the owner switches to this project and
+        // starts entering data before the RPC above resolved.
+        if (ok && window.currentProjectId === id && typeof _scheduleCloudPush === 'function') { try { _scheduleCloudPush(); } catch(e) {} }
+        // BUGFIX: this used to fail completely silently — the local project
+        // would sit there forever, never able to sync, with no indication
+        // to the owner of why (e.g. the server rejected it as a duplicate
+        // name once the DB-level uniqueness constraint is in place, or the
+        // device was offline at the wrong moment). Surface it clearly so
+        // they know to rename or retry rather than quietly losing data
+        // entered into a project that can never leave this one device.
+        if (!ok && typeof toast === 'function') {
+          toast('⚠️ "' + proj.name + '" couldn\'t be saved online — check your connection or try a different name, then reopen this project to retry', 'err');
+        }
+      });
+    }
     return proj;
   }
 
@@ -1453,12 +1466,51 @@ self.addEventListener('fetch', function(e) {
     if (window.projects.length > 0) {
       return window.projects.find(function(p){ return p.id === window.currentProjectId; }) || window.projects[0];
     }
-    var def = createProject('My Project');
+    // BUGFIX (auto-creating duplicate "My Project" for existing users): an
+    // empty window.projects only ever proved the LOCAL cache was empty —
+    // never that a signed-in account genuinely has no cloud projects. That
+    // gap (a multi-company account whose other companies hadn't been
+    // mirrored yet, a cleared/new browser before reconcile ran, etc.)
+    // caused a brand-new "My Project" to be fabricated and, via
+    // createProject()'s cloud-link step, actually created in the cloud for
+    // real users who already had real projects. Now: create the local
+    // default with skipCloudSync=true (see createProject) so it can never
+    // sync itself into existence, and if there's a signed-in cloud
+    // session, do one direct check first — restoring real cloud projects
+    // instead of fabricating a fake one whenever they're found.
+    var def = createProject('My Project', true);
     def.isDefault = true; // hidden from QDPR once a real/joined project exists
     _saveProjects();
     window.currentProjectId = def.id;
     try { localStorage.setItem('sanj_current_project', def.id); } catch(e) {}
     _renderProjectDropdown();
+
+    if (typeof _sb !== 'undefined' && _sb && typeof _adminSBUser !== 'undefined' && _adminSBUser && _adminSBUser.id) {
+      _sb.rpc('get_my_projects').then(function(pr) {
+        var serverProjects = (pr && pr.data) || [];
+        if (pr.error || serverProjects.length === 0) return; // genuinely no cloud projects — keep the local default as-is
+        // Real cloud projects exist after all — this was a local-cache gap,
+        // not a brand-new account. Drop the placeholder default and mirror
+        // the real ones in instead, so no fake "My Project" is left behind
+        // (and none was ever synced to the cloud, since skipCloudSync=true
+        // above kept it purely local the whole time).
+        window.projects = (window.projects || []).filter(function(p){ return p.id !== def.id; });
+        var wasActive = (window.currentProjectId === def.id);
+        if (typeof window._resolveLocalShellForCloudProject === 'function') {
+          serverProjects.forEach(function(p) {
+            if (!p || !p.project_id) return;
+            window._resolveLocalShellForCloudProject(p.project_id, p.company_id, p.project_name, p.role_name, p.company_name, p.project_address);
+          });
+        }
+        if (wasActive) {
+          window.currentProjectId = (window.projects[0] && window.projects[0].id) || null;
+          try { localStorage.setItem('sanj_current_project', window.currentProjectId || ''); } catch(e) {}
+        }
+        _saveProjects();
+        _renderProjectDropdown();
+      }).catch(function(e) { console.warn('[_ensureLocalProject] cloud check failed', e); });
+    }
+
     return def;
   }
   window._ensureLocalProject = _ensureLocalProject;
@@ -2574,6 +2626,38 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
           if (!firstResolvedId) firstResolvedId = localId;
           if (!firstOwnedId && p.role_name === 'owner') firstOwnedId = localId;
         });
+        // BUGFIX (deleted/junk cloud projects lingering in the header
+        // forever): everything above only ever ADDS or updates a local
+        // shell for a cloud project — it never removes one whose cloud
+        // project genuinely no longer exists (deleted directly in the
+        // database, or this account's access to it revoked). So a project
+        // removed server-side stayed visible in this browser's header
+        // forever, making a real backend fix look like it hadn't worked. A
+        // local shell that HAS a cloud-project mapping (sanj_sb_project_map)
+        // but is no longer in this fresh server list is gone/revoked, not
+        // merely "not yet synced" — safe to drop. Purely local, never-synced
+        // shells (no map entry — e.g. the offline default before it's ever
+        // linked) are left alone.
+        try {
+          var _rcMap2 = {};
+          try { _rcMap2 = JSON.parse(localStorage.getItem('sanj_sb_project_map') || '{}'); } catch(e) {}
+          var serverIds = {};
+          serverProjects.forEach(function(p) { if (p && p.project_id) serverIds[p.project_id] = true; });
+          var staleLocalIds = (window.projects || []).filter(function(p) {
+            var mapEntry = _rcMap2[p.id];
+            return mapEntry && mapEntry.projectId && !serverIds[mapEntry.projectId];
+          }).map(function(p){ return p.id; });
+          if (staleLocalIds.length) {
+            window.projects = (window.projects || []).filter(function(p) { return staleLocalIds.indexOf(p.id) === -1; });
+            staleLocalIds.forEach(function(id) { delete _rcMap2[id]; });
+            localStorage.setItem('sanj_sb_project_map', JSON.stringify(_rcMap2));
+            if (staleLocalIds.indexOf(window.currentProjectId) !== -1) {
+              window.currentProjectId = (window.projects[0] && window.projects[0].id) || null;
+              try { localStorage.setItem('sanj_current_project', window.currentProjectId || ''); } catch(e) {}
+            }
+            if (typeof _saveProjects === 'function') _saveProjects();
+          }
+        } catch(e) {}
         if (typeof _renderProjectDropdown === 'function') { try { _renderProjectDropdown(); } catch(e) {} }
         // Only auto-restore the active project if none is currently set —
         // never override a project the person is actively viewing.
