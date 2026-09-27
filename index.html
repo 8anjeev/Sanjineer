@@ -77,8 +77,27 @@
   <style id="tw">
 /* RESET */
 *,::before,::after{box-sizing:border-box}
-html{line-height:1.5;-webkit-text-size-adjust:100%}
-body{margin:0}
+/* BUGFIX (header shows native iOS blur/vibrancy on swipe-down, clears on
+   release, then returns): #main-app has no fixed height/overflow of its
+   own (min-h-screen, flex column) — the actual scrolling element is the
+   page itself (html/body), and neither had any overscroll-behavior set.
+   So swiping down past the top let the whole page rubber-band/bounce on
+   iOS, which briefly exposes real page content above y=0 — behind the
+   fixed header, in the exact strip the OS's own status-bar chrome sits
+   over. That's what very briefly renders as a native OS blur/vibrancy
+   flash: not a CSS backdrop-filter on the header (there isn't one), not
+   the status-bar-style meta tag (already "black", solid, no translucent
+   region to blur in normal layout) — only the bounce itself briefly moves
+   real content into that region. Scrolling and releasing snaps the bounce
+   back (clear), and it recurs on the next swipe past the top (or the next
+   idle period where the page re-settles into a bounce-able state) — "after
+   some time it starts again". Setting overscroll-behavior-y:none on both
+   html and body (belt-and-suspenders, since which one is the actual
+   scroller can vary by iOS version/rendering mode) stops the whole-page
+   bounce outright, so there's never a moment where content moves past
+   y=0 for the OS to render behind. */
+html{line-height:1.5;-webkit-text-size-adjust:100%;overscroll-behavior-y:none;}
+body{margin:0;overscroll-behavior-y:none;}
 /* DISPLAY */
 .block{display:block}.inline-flex{display:inline-flex}.flex{display:flex}.grid{display:grid}.hidden{display:none!important}
 /* ANTI-FLICKER: smooth cross-fade instead of an instant hard swap whenever
@@ -15876,9 +15895,23 @@ function _pdfHeader(appName, company, reportTitle, rightHtml, showEngineer){
              + '<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;margin-top:3px">app.sanjineer.in</p>';
     leftStyle = 'display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;flex-shrink:0;';
   } else {
-    logoHtml = '<img src="'+logoSrc+'" style="position:absolute;top:50%;left:0;transform:translateY(-50%);height:110%;width:auto;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">'
+    // BUGFIX (app logo on every PDF header: too big, and not centered over
+    // the "app.sanjineer.in" text below it): the logo was anchored to the
+    // left edge of its box (left:0) at height:110%, while the text below
+    // sat in a flex column with align-items:flex-start (also left-edge
+    // aligned). The logo is far wider than the text, so their left edges
+    // matching left their CENTERS badly mismatched — the logo visually
+    // sat well to the right of center over the text. Fixed at the root
+    // rather than with a guessed pixel offset (fragile — would drift if
+    // the text or logo size ever changes again): height:110%→88% shrinks
+    // the logo 20%, and both the logo (left:50%+translateX(-50%), added to
+    // the existing vertical centering) and the text (container
+    // align-items:center instead of flex-start) are now centered on the
+    // same box centerline, so their centers always match regardless of
+    // either element's exact rendered width.
+    logoHtml = '<img src="'+logoSrc+'" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:88%;width:auto;object-fit:contain;display:block;border-radius:8px;background:transparent;" onerror="this.style.display=\'none\'">'
              + '<p style="font-size:9px;color:rgba(255,255,255,0.6);line-height:1;position:relative;z-index:1;margin-top:auto;">app.sanjineer.in</p>';
-    leftStyle = 'display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;align-self:stretch;margin:-14px 0;padding:14px 0 4px 0;position:relative;overflow:visible;min-width:80px;flex-shrink:0;';
+    leftStyle = 'display:flex;flex-direction:column;align-items:center;justify-content:flex-end;align-self:stretch;margin:-14px 0;padding:14px 0 4px 0;position:relative;overflow:visible;min-width:80px;flex-shrink:0;';
   }
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:'+hColor+';border-radius:14px;margin-bottom:14px;overflow:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'
     +'<div style="'+leftStyle+'">'+logoHtml+'</div>'
