@@ -4057,6 +4057,35 @@ var supabase=function(e){function t(e,t){var r={};for(var s in e)Object.prototyp
   }
 }
 </style>
+<style id="nav-blur-fix">
+/* BUGFIX (top bar looks blurred, clears after a swipe, then blurs again).
+   On phones the header (#app-header) is position:relative and scrolls away,
+   leaving the tab bar (#main-site-nav) stuck to the top of the screen via
+   position:sticky. That bar was translucent (bg-white/10) WITH a 16px
+   backdrop-filter (backdrop-blur-lg). Sticky + backdrop-filter is a known
+   iOS WebKit problem: the blurred backdrop is only re-rendered when the
+   compositor is nudged, so the bar shows a stale/smeared blur, a scroll
+   gesture repaints it clean, and it drifts back to blurred later. The bar
+   is only 30px tall over a dark page background, so the blur added nothing
+   visible. Replaced with an opaque colour close to the old blended look
+   (10% white over the dark app background) and no backdrop-filter, plus
+   its own compositing layer so sticky scrolling stays crisp. Desktop
+   (>=1024px) already overrides this bar with its own solid gradient, so
+   this is scoped to smaller screens only. */
+@media (max-width: 1023px) {
+  #main-site-nav {
+    background-color: #262a4a !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  #app-header {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+}
+</style>
 <style id="mobile-compact-tabs">
 /* ════════════════════════════════════════════════════════════════
    MOBILE-ONLY COMPACT TAB LAYOUT (prototype — Materials tab)
