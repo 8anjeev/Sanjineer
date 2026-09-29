@@ -1198,6 +1198,17 @@ self.addEventListener('fetch', function(e) {
   var _switchProjectReloadTimer = null;
   function switchProject(projectId) {
     if (!projectId || projectId === window.currentProjectId) return;
+    // req #4 (reworked): while locked to a single project by an expired
+    // subscription, refuse any switch away from it — the dropdown already
+    // can't open to trigger one, but this is the actual enforcement point
+    // in case something else ever calls switchProject() directly (a stale
+    // handler, reconcile, etc.). The one exception is
+    // _enforceSubscriptionProjectLock() switching TO the locked project
+    // itself, which must always be allowed through.
+    if (window._SUB_GRACE_EXPIRED && window._SUB_LOCK_PROJECT_ID && projectId !== window._SUB_LOCK_PROJECT_ID) {
+      toast('🔒 Subscription expired — locked to your active project. Renew to switch projects again.', 'err');
+      return;
+    }
     _projMenuOpen = false;
 
     // Bump the epoch FIRST, before touching currentProjectId. Any cloud
@@ -1833,6 +1844,12 @@ self.addEventListener('fetch', function(e) {
     var wrap = document.getElementById('project-dropdown-wrap');
     if (!wrap) return;
 
+    // req #4 (reworked): if a subscription-expiry lock is active, make sure
+    // we're actually sitting on the locked project before rendering — see
+    // _enforceSubscriptionProjectLock for why this (rather than only the
+    // boot-time restore) is the reliable catch-all place for this.
+    if (typeof _enforceSubscriptionProjectLock === 'function') { try { _enforceSubscriptionProjectLock(); } catch(e) {} }
+
     // Self-heal any duplicate joined-project shells before rendering, so a
     // corrupted map from an older session never shows the same project
     // twice in the switcher.
@@ -1901,12 +1918,16 @@ self.addEventListener('fetch', function(e) {
         + '<span style="font-size:12px;font-weight:700;color:#a5b4fc;">New Project</span>'
         + '</div>';
 
+    // req #4 (reworked): while locked, the switcher must not open at all —
+    // it's a single-project pill, not a dropdown, until renewal.
+    var subLocked = !!window._SUB_GRACE_EXPIRED && !!window._SUB_LOCK_PROJECT_ID;
+
     var html =
       '<div id="proj-dd-inner" style="position:relative;display:inline-flex;">'
-      + '<button id="proj-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:pointer;min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
-      + '<span style="font-size:11px;flex-shrink:0">🗂️</span>'
+      + '<button id="proj-dd-btn" style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.13);border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:4px 8px 4px 7px;cursor:' + (subLocked?'not-allowed':'pointer') + ';min-width:82px;max-width:148px;-webkit-tap-highlight-color:transparent;outline:none;">'
+      + '<span style="font-size:11px;flex-shrink:0">' + (subLocked?'🔒':'🗂️') + '</span>'
       + '<span style="font-size:11px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + _escHtml(name) + '</span>'
-      + '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;transition:transform .18s">▾</span>'
+      + (subLocked ? '' : '<span id="proj-dd-arrow" style="font-size:9px;color:rgba(255,255,255,0.55);margin-left:2px;transition:transform .18s">▾</span>')
       + '</button>'
       + '<div id="proj-menu" style="display:none;position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);z-index:99998;background:#1e1b4b;border:1px solid rgba(255,255,255,0.16);border-radius:14px;min-width:200px;max-width:260px;box-shadow:0 12px 40px rgba(0,0,0,0.6);overflow:hidden;">'
       + listItems
@@ -1915,6 +1936,17 @@ self.addEventListener('fetch', function(e) {
       + '</div>';
 
     wrap.innerHTML = html;
+
+    // Locked: this project is fully read/write, but the switcher itself
+    // is inert — a tap just explains why instead of opening the menu.
+    if (subLocked) {
+      var lockedBtn = document.getElementById('proj-dd-btn');
+      if (lockedBtn) lockedBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        toast('🔒 Subscription expired — locked to this project. Renew to switch projects again.', 'err');
+      });
+      return;
+    }
 
     // ROOT-CAUSE FIX (dropdown sometimes seems to open on its own / needs
     // an extra tap): this function rebuilds proj-menu from scratch on
@@ -2193,9 +2225,29 @@ self.addEventListener('fetch', function(e) {
         window._SUB_GRACE_EXPIRED = true;
         try { safeLS.setItem('sanj_sub_grace_expired_' + companyId, '1'); } catch(e) {}
       }
+      // req #4 (rework): past 3 days, lock the account to whichever ONE
+      // project is currently open — not to read-only everywhere. Pin it
+      // the FIRST time grace is exceeded (don't re-pin on every 30-min
+      // re-check, which would silently re-lock to wherever they happened
+      // to be at that moment instead of staying put), persisted per
+      // company so it survives reload/re-login until renewal.
+      if (!window._SUB_LOCK_PROJECT_ID) {
+        var storedLock = null;
+        try { storedLock = safeLS.getItem('sanj_sub_lock_project_' + companyId); } catch(e) {}
+        window._SUB_LOCK_PROJECT_ID = storedLock || window.currentProjectId || null;
+        if (window._SUB_LOCK_PROJECT_ID) {
+          try { safeLS.setItem('sanj_sub_lock_project_' + companyId, window._SUB_LOCK_PROJECT_ID); } catch(e) {}
+        }
+      }
+      // If whatever's currently open isn't the locked project (stale tab,
+      // a fresh device, etc.), steer them into the locked one directly —
+      // see _renderProjectDropdown, which calls this on every render.
+      if (typeof _enforceSubscriptionProjectLock === 'function') _enforceSubscriptionProjectLock();
     } else if (window._SUB_GRACE_EXPIRED) {
       window._SUB_GRACE_EXPIRED = false;
+      window._SUB_LOCK_PROJECT_ID = null;
       try { safeLS.removeItem('sanj_sub_grace_expired_' + companyId); } catch(e) {}
+      try { safeLS.removeItem('sanj_sub_lock_project_' + companyId); } catch(e) {}
     }
     if (typeof _recomputeEngineerReadOnly === 'function') _recomputeEngineerReadOnly();
 
@@ -2300,9 +2352,9 @@ self.addEventListener('fetch', function(e) {
     var body = expiringSoon
       ? 'Renew now to avoid losing ' + planLabel + ' features on ' + _escHtml(companyName||'this company') + ' tomorrow.'
       : graceExceeded
-        ? _escHtml(companyName||'This company') + '\'s ' + planLabel + ' plan lapsed more than ' + GRACE_DAYS + ' days ago. The app is now <b>read-only</b> — you can still view everything, but editing is locked until you renew.'
+        ? _escHtml(companyName||'This company') + '\'s ' + planLabel + ' plan lapsed more than ' + GRACE_DAYS + ' days ago. You\'re now <b>locked to your currently open project</b> — full editing still works there, but switching to any other project is disabled until you renew.'
         : _escHtml(companyName||'This company') + ' has dropped to the Free plan. Renew to get your ' + planLabel + ' features back.';
-    var continueLabel = expiringSoon ? 'Later' : (graceExceeded ? 'Continue (read-only)' : 'Continue on Free');
+    var continueLabel = expiringSoon ? 'Later' : (graceExceeded ? 'Continue (locked to this project)' : 'Continue on Free');
     modal.innerHTML =
       '<div style="background:#1e1b4b;border:1px solid rgba(255,255,255,0.15);border-radius:18px;padding:22px 18px;width:100%;max-width:310px;box-shadow:0 24px 60px rgba(0,0,0,0.6);text-align:center;">'
       + '<div style="font-size:32px;margin-bottom:12px">' + (expiringSoon ? '⏰' : graceExceeded ? '🔒' : '⚠️') + '</div>'
@@ -6164,32 +6216,57 @@ function _blockIfReadOnlyData() {
     toast('👁️ Read-only access — this project is shared/joined as view-only', 'err');
     return true;
   }
-  // req #4: a subscription past its 3-day grace period locks writes for
-  // EVERYONE on that company, owner included — see _recomputeEngineerReadOnly.
-  if (typeof window !== 'undefined' && window._SUB_GRACE_EXPIRED) {
-    toast('🔒 Subscription expired — renew to unlock editing (read-only until then)', 'err');
+  // req #4 (reworked): a subscription past its 3-day grace period no
+  // longer locks writes company-wide. It locks the account to ONE
+  // project (window._SUB_LOCK_PROJECT_ID, pinned in
+  // _evaluateSubscriptionExpiry) with FULL read/write in that project —
+  // only a write attempted from a DIFFERENT project is blocked. The
+  // project switcher itself is disabled while locked (see
+  // _renderProjectDropdown), so reaching a different project at all
+  // should only happen via stale state, which this also catches.
+  if (typeof window !== 'undefined' && window._SUB_GRACE_EXPIRED
+      && window._SUB_LOCK_PROJECT_ID && window.currentProjectId !== window._SUB_LOCK_PROJECT_ID) {
+    toast('🔒 Subscription expired — locked to your active project. Renew to access others.', 'err');
     return true;
   }
   return false;
 }
-// req #4: subscription-grace-expired read-only lock. Kept as an
-// independent input ORed into window._ENGINEER_READONLY (via
-// _recomputeEngineerReadOnly, called from every place that used to assign
-// _ENGINEER_READONLY directly) rather than toggling _ENGINEER_READONLY
-// itself, so a later permission recompute (project switch, resync, etc.)
-// can never silently clear this lock for an owner whose grace has
-// actually run out — the only way it clears is _evaluateSubscriptionExpiry
-// itself confirming the subscription is valid again.
+// req #4 (reworked): subscription-grace-expired lock, now project-scoped
+// rather than a blanket read-only flag. window._SUB_GRACE_EXPIRED /
+// window._SUB_LOCK_PROJECT_ID are kept as independent inputs (set in
+// _evaluateSubscriptionExpiry) ORed into window._ENGINEER_READONLY only
+// when the CURRENTLY OPEN project isn't the locked one, so a later
+// permission recompute (project switch, resync, etc.) can never silently
+// clear this lock while genuinely on a different, unlocked project — the
+// only way it clears entirely is _evaluateSubscriptionExpiry confirming
+// the subscription is valid again.
 window._SUB_GRACE_EXPIRED = window._SUB_GRACE_EXPIRED || false;
+window._SUB_LOCK_PROJECT_ID = window._SUB_LOCK_PROJECT_ID || null;
 window._ROLE_READONLY = window._ROLE_READONLY || false;
 // roleBasedReadOnly is optional — omit it to just re-derive
 // _ENGINEER_READONLY from the two stored inputs (used by the
 // subscription-expiry evaluator, which has no opinion on role).
 function _recomputeEngineerReadOnly(roleBasedReadOnly) {
   if (typeof roleBasedReadOnly === 'boolean') window._ROLE_READONLY = roleBasedReadOnly;
-  window._ENGINEER_READONLY = !!window._ROLE_READONLY || !!window._SUB_GRACE_EXPIRED;
+  var subLocked = !!window._SUB_GRACE_EXPIRED
+    && (!window._SUB_LOCK_PROJECT_ID || window.currentProjectId !== window._SUB_LOCK_PROJECT_ID);
+  window._ENGINEER_READONLY = !!window._ROLE_READONLY || subLocked;
   return window._ENGINEER_READONLY;
 }
+// Steers the app back onto the one project it's locked to, if it isn't
+// already there and that project still exists locally. Safe to call
+// often — no-ops instantly when already on the locked project or not
+// locked at all. Called from _evaluateSubscriptionExpiry (right after the
+// lock is (re)confirmed) and from _renderProjectDropdown (runs on ~15
+// different app events, so this is the reliable place to catch "locked,
+// but landed somewhere else" regardless of how that happened).
+function _enforceSubscriptionProjectLock() {
+  if (!window._SUB_GRACE_EXPIRED || !window._SUB_LOCK_PROJECT_ID) return;
+  if (window.currentProjectId === window._SUB_LOCK_PROJECT_ID) return;
+  var exists = (window.projects || []).some(function(p){ return p.id === window._SUB_LOCK_PROJECT_ID; });
+  if (exists && typeof switchProject === 'function') switchProject(window._SUB_LOCK_PROJECT_ID);
+}
+window._enforceSubscriptionProjectLock = _enforceSubscriptionProjectLock;
 // Sets the legacy flags every existing call site already reads, but now
 // derived from the real permission set instead of a local membership
 // object. roleName is whatever get_my_projects()/get_my_companies()
@@ -9944,7 +10021,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="mp-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Chalan No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-chalan" placeholder="Delivery challan no." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
-        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Vehicle No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-vehicle" placeholder="e.g. MH04AB1234" style="text-transform:uppercase" onblur="_mpVehicleAutofill()" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Vehicle No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-vehicle" placeholder="e.g. MH04AB1234" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onblur="_mpVehicleAutofill()" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Size <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="mp-size" placeholder="e.g. 20mm, 10 tyre..." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="mp-qty" placeholder="e.g. 50" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
         <div><label class="text-xs font-semibold text-gray-500 block mb-1">Supplier Name</label><input type="text" id="mp-supplier" placeholder="Supplier / vendor name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
@@ -10959,22 +11036,24 @@ function cancelDel() {
 }
 
 // ============================================================
-// OWNER BROADCAST NOTICE — owner writes a message once, every other
-// device on the project (engineers, sales admins, viewers) pops it up
-// the next time they open/sync the app.
+// OWNER BROADCAST NOTICE — owner writes a message once, every active
+// member of the COMPANY (engineers, sales admins, viewers, across every
+// project, not just whichever one the owner had open) gets it the next
+// time they're online, and it shows exactly once per person.
 //
-// How it travels: it's stored under a normal project-scoped "cm_"
-// key (cm_broadcast), so it rides the SAME generic sync sweep that
-// already carries BOQ/quotations/invoices/tools/etc. through
-// cloud_backups → engineer_get_data/engineer_put_data → viewer pulls.
-// No new Supabase table or RPC needed. The "have I seen this one
-// already" marker is a plain (non "cm_") key, so it stays local to
-// this device only and is never synced — otherwise one device
-// dismissing it would silently suppress it everywhere.
+// BUGFIX: this used to live entirely inside one project's local storage
+// (cm_broadcast, riding the generic per-project cloud sync sweep), so it
+// only ever reached members of that ONE project — not "everyone" as the
+// button promised — and the "seen" marker was a plain local-device key,
+// so the same notice could resurface for someone on a second device, a
+// reinstall, or if the page reloaded mid-countdown before it was marked
+// seen. Reworked onto two dedicated Supabase tables instead (see the
+// company_notices / company_notice_reads migration): company_notices
+// (one row per sent notice, company_id-scoped) and company_notice_reads
+// (notice_id + user_id, one row per person who's actually dismissed it).
+// This is genuinely company-wide and genuinely once-per-PERSON — reading
+// happens against the real signed-in user, not local device state.
 // ============================================================
-function _broadcastKey() { return _pk('cm_broadcast'); }
-function _broadcastSeenKey() { return _pk('sanj_broadcast_seen'); }
-
 function openBroadcastComposer() {
   // Defense-in-depth: this is only ever linked from inside the Owner
   // Dashboard (mobile + desktop headers), which are themselves gated by
@@ -10991,11 +11070,11 @@ function openBroadcastComposer() {
         + '<div style="font-size:22px;">📢</div>'
         + '<div style="font-size:16px;font-weight:800;color:#1e1b4b;">Send Notice to Everyone</div>'
       + '</div>'
-      + '<div style="font-size:11.5px;color:#6b7280;margin-bottom:14px;line-height:1.4;">This pops up on every team member\'s screen (engineers, sales admins, viewers) the next time they open or sync the app.</div>'
+      + '<div style="font-size:11.5px;color:#6b7280;margin-bottom:14px;line-height:1.4;">This pops up once for every team member across ALL your projects (engineers, sales admins, viewers) the next time they open or sync the app.</div>'
       + '<textarea id="bc-compose-text" rows="4" maxlength="500" placeholder="Type your announcement or instruction..." style="width:100%;border:1.5px solid #e5e7eb;border-radius:12px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">'
         + '<button onclick="closeBroadcastComposer()" style="padding:9px 16px;border-radius:10px;border:none;background:#f3f4f6;color:#4b5563;font-weight:700;font-size:12.5px;cursor:pointer;">Cancel</button>'
-        + '<button onclick="sendBroadcastNotice()" style="padding:9px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">📢 Send to All</button>'
+        + '<button id="bc-send-btn" onclick="sendBroadcastNotice()" style="padding:9px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">📢 Send to All</button>'
       + '</div>'
     + '</div>';
   document.body.appendChild(modal);
@@ -11010,39 +11089,67 @@ function sendBroadcastNotice() {
   var t = document.getElementById('bc-compose-text');
   var msg = t ? t.value.trim() : '';
   if (!msg) { toast('Write a message first', 'err'); return; }
+  if (!_sb || !_adminSBUser) { toast('Sign in required to send a notice', 'err'); return; }
+  var cid = (typeof _currentCompanyId === 'function') ? _currentCompanyId() : (window._wsCompanyId || null);
+  if (!cid) { toast('Could not resolve your company — try again in a moment', 'err'); return; }
   var senderName = 'Owner';
   try {
     var p = (typeof lprof === 'function') ? lprof() : null;
     var g = (typeof lglobal === 'function') ? lglobal() : null;
     senderName = (g && g.company) || (p && p.engineer) || 'Owner';
   } catch(e) {}
-  var notice = {
-    id: 'bc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-    msg: msg,
-    ts: Date.now(),
-    by: senderName
-  };
-  try {
-    safeLS.setItem(_broadcastKey(), JSON.stringify(notice));
-    if (typeof _scheduleCloudPush === 'function') _scheduleCloudPush();
-  } catch(e) {}
-  closeBroadcastComposer();
-  toast('📢 Notice sent to everyone', 'ok');
+  var sendBtn = document.getElementById('bc-send-btn');
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+  _sb.from('company_notices').insert({
+    company_id: cid, sender_id: _adminSBUser.id, sender_name: senderName, message: msg
+  }).then(function(r) {
+    if (r.error) {
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📢 Send to All'; }
+      toast('Failed to send: ' + (r.error.message || 'try again'), 'err');
+      return;
+    }
+    closeBroadcastComposer();
+    toast('📢 Notice sent to everyone', 'ok');
+  }).catch(function() {
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '📢 Send to All'; }
+    toast('Failed to send — check your connection', 'err');
+  });
 }
 
-// Receiving side — called after any successful cloud pull / viewer fetch.
+// Receiving side. Call this whenever it's a good moment to check (company
+// resolved after login, a fresh cloud pull, tab becoming visible again) —
+// it's cheap (one small query) and no-ops instantly while a popup is
+// already showing or nothing's actually new.
 var _broadcastPopupShowing = false;
+var _broadcastCheckInFlight = false;
 function _checkBroadcastNotice() {
-  if (_broadcastPopupShowing) return;
-  try {
-    var raw = safeLS.getItem(_broadcastKey());
-    if (!raw) return;
-    var notice = JSON.parse(raw);
-    if (!notice || !notice.id || !notice.msg) return;
-    var seen = safeLS.getItem(_broadcastSeenKey());
-    if (seen === notice.id) return; // already acknowledged on this device
-    _showBroadcastPopup(notice);
-  } catch(e) {}
+  if (_broadcastPopupShowing || _broadcastCheckInFlight) return;
+  if (!_sb || !_adminSBUser) return;
+  var cid = (typeof _currentCompanyId === 'function') ? _currentCompanyId() : (window._wsCompanyId || null);
+  if (!cid) return;
+  _broadcastCheckInFlight = true;
+  _sb.from('company_notices')
+    .select('id,message,sender_name,created_at')
+    .eq('company_id', cid)
+    .order('created_at', { ascending: false })
+    .limit(10)
+    .then(function(r) {
+      _broadcastCheckInFlight = false;
+      var notices = (r && r.data) || [];
+      if (!notices.length) return;
+      _sb.from('company_notice_reads')
+        .select('notice_id')
+        .eq('user_id', _adminSBUser.id)
+        .in('notice_id', notices.map(function(n){ return n.id; }))
+        .then(function(r2) {
+          var readIds = {};
+          ((r2 && r2.data) || []).forEach(function(row){ readIds[row.notice_id] = true; });
+          // Newest unread first — if several piled up, show the latest one;
+          // dismissing it (see _showBroadcastPopup) re-checks for the next.
+          var unread = notices.find(function(n){ return !readIds[n.id]; });
+          if (unread) _showBroadcastPopup(unread);
+        }).catch(function() {});
+    }).catch(function() { _broadcastCheckInFlight = false; });
 }
 function _showBroadcastPopup(notice) {
   if (document.getElementById('_broadcast-popup-modal')) return;
@@ -11051,13 +11158,13 @@ function _showBroadcastPopup(notice) {
   modal.id = '_broadcast-popup-modal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(15,10,40,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
   var when = '';
-  try { when = new Date(notice.ts).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}); } catch(e) {}
+  try { when = new Date(notice.created_at).toLocaleString('en-IN', {timeZone:'Asia/Kolkata', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}); } catch(e) {}
   modal.innerHTML =
     '<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:24px 22px 20px;box-shadow:0 24px 70px rgba(0,0,0,.4);text-align:center;">'
       + '<div style="font-size:34px;margin-bottom:6px;">📢</div>'
-      + '<div style="font-size:15.5px;font-weight:800;color:#1e1b4b;margin-bottom:2px;">Notice from ' + esc(notice.by || 'Owner') + '</div>'
+      + '<div style="font-size:15.5px;font-weight:800;color:#1e1b4b;margin-bottom:2px;">Notice from ' + esc(notice.sender_name || 'Owner') + '</div>'
       + (when ? '<div style="font-size:10.5px;color:#9ca3af;margin-bottom:14px;">' + esc(when) + '</div>' : '<div style="margin-bottom:14px;"></div>')
-      + '<div style="font-size:13.5px;color:#374151;line-height:1.55;white-space:pre-wrap;text-align:left;background:#f9fafb;border-radius:12px;padding:14px;margin-bottom:18px;">' + esc(notice.msg) + '</div>'
+      + '<div style="font-size:13.5px;color:#374151;line-height:1.55;white-space:pre-wrap;text-align:left;background:#f9fafb;border-radius:12px;padding:14px;margin-bottom:18px;">' + esc(notice.message) + '</div>'
       + '<button id="bc-ok-btn" disabled style="width:100%;padding:12px;border-radius:12px;border:none;background:#d1d5db;color:#6b7280;font-weight:800;font-size:13.5px;cursor:not-allowed;">Wait 10s</button>'
     + '</div>';
   document.body.appendChild(modal);
@@ -11078,12 +11185,24 @@ function _showBroadcastPopup(notice) {
       btn.textContent = 'Wait ' + wait + 's';
     }
   }, 1000);
+  // BUGFIX: marking "seen" used to happen only inside this click handler,
+  // stored purely on-device — so an interrupted view (reload/close during
+  // the 10s wait, before ever clicking) meant it would show again next
+  // time, and a second device for the same person never knew it'd already
+  // been shown at all. Marked as read server-side (company_notice_reads)
+  // the moment it's actually shown, not only once acknowledged — the 10s
+  // hold still makes sure it's READ before the button is even clickable,
+  // it just no longer gates whether the "seen" record gets written.
+  if (_sb && _adminSBUser) {
+    _sb.from('company_notice_reads').insert({ notice_id: notice.id, user_id: _adminSBUser.id }).then(function(){}).catch(function(){});
+  }
   if (btn) btn.onclick = function() {
     if (btn.disabled) return;
-    try { safeLS.setItem(_broadcastSeenKey(), notice.id); } catch(e) {}
     clearInterval(iv);
     modal.remove();
     _broadcastPopupShowing = false;
+    // In case another notice was already waiting behind this one.
+    setTimeout(function(){ if (typeof _checkBroadcastNotice === 'function') _checkBroadcastNotice(); }, 300);
   };
 }
 
@@ -12644,7 +12763,7 @@ function qdprBuildRowsHTML(section){
         +_genericOptionsHTML(f.options, row[f.key]||'')
         +'</select>';
     } else {
-      control = '<input type="'+(f.type||'text')+'" value="'+esc(row[f.key]||'')+'" placeholder="'+(f.ph||'')+'" oninput="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+';box-sizing:border-box">';
+      control = '<input type="'+(f.type||'text')+'" value="'+esc(row[f.key]||'')+'" placeholder="'+(f.ph||'')+'" '+((f.key==='vehicleNo'&&section==='matBought')?'onblur="qdprVehicleAutofill(\''+row.id+'\')" ':'')+'oninput="qdprUpdRow(\''+section+'\',\''+row.id+'\',\''+f.key+'\',this.value)" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid '+QC.border+';font-size:13px;background:'+QC.white+';color:'+QC.ink+(f.key==='vehicleNo'?';text-transform:uppercase':'')+';box-sizing:border-box">';
     }
     return '<div style="'+(f.full?'grid-column:1/-1':'')+'">'
       +'<label style="display:block;font-size:9.5px;font-weight:700;color:'+QC.fog+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">'+_esc(f.label)+'</label>'
@@ -12681,7 +12800,10 @@ function qdprRowSection(icon, title, section){
 }
 function qdprUpdRow(sec, rid, field, val){
   var row = (qdprFormState[sec]||[]).find(function(r){ return r.id===rid; });
-  if (row) row[field] = val;
+  // Vehicle numbers are always stored (and later printed — reports, PDFs)
+  // in uppercase, same as the Material Received popup's #mp-vehicle field.
+  // Doing it here means it's caught regardless of entry path.
+  if (row) row[field] = (field==='vehicleNo') ? String(val||'').toUpperCase() : val;
 }
 function qdprAddRow(sec){
   qdprFormState[sec].push(Object.assign({id: uid()}, QDPR_ROW_BLANKS[sec]));
@@ -12690,6 +12812,28 @@ function qdprAddRow(sec){
 function qdprRmRow(sec, rid){
   qdprFormState[sec] = qdprFormState[sec].filter(function(r){ return r.id!==rid; });
   var el = document.getElementById('qdpr_rows_'+sec); if (el) el.innerHTML = qdprBuildRowsHTML(sec);
+}
+// Daily-report (QDPR) material rows: same company-wide vehicle lookup as the
+// Material Received popup. Fills Size, Qty, Unit and Supplier that are still
+// empty on this row from any earlier delivery by the same vehicle, in this
+// project or any other project of the company, then redraws the rows.
+function qdprVehicleAutofill(rid){
+  var row = (qdprFormState.matBought||[]).find(function(r){ return r.id===rid; });
+  if (!row) return;
+  var v = (row.vehicleNo||'').trim();
+  if (!v) return;
+  var hits = _vehicleLookupCompanyWide(v, row.material||'');
+  if (!hits.length) return;
+  var filled = false;
+  [['size','size'],['qty','qty'],['unit','unit'],['supplier','supplier']].forEach(function(pair){
+    if (row[pair[0]]!==undefined && String(row[pair[0]]).trim()!=='') return;
+    var val = _vehicleFirstValue(hits, pair[1]);
+    if (val!=='') { row[pair[0]] = String(val); filled = true; }
+  });
+  if (filled) {
+    var el = document.getElementById('qdpr_rows_matBought'); if (el) el.innerHTML = qdprBuildRowsHTML('matBought');
+    toast('Auto-filled from '+v+"'s previous deliveries — edit if different", 'ok');
+  }
 }
 function uid(){ return 'q'+Date.now()+Math.random().toString(36).slice(2,6); }
 
@@ -13148,7 +13292,7 @@ function _qdprSyncMaterials(pid, report){
     item.transactions.push(Object.assign({
       type:'purchase', qty: parseFloat(m.qty)||0, date: report.date, unit: m.unit||item.unit,
       cost: parseFloat(m.amount)||0, supplier: m.supplier||'QDPR Entry',
-      chalan_no: (m.chalanNo||'').trim(), vehicle_no: (m.vehicleNo||'').trim(), size: (m.size||'').trim(),
+      chalan_no: (m.chalanNo||'').trim(), vehicle_no: (m.vehicleNo||'').trim().toUpperCase(), size: (m.size||'').trim(),
       qdpr_report_id: reportId, qdpr_material_row: m.id
     }, (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {}));
   });
@@ -13187,7 +13331,7 @@ function _qdprSyncMaterials(pid, report){
       __id: gid(), __ts: Date.now(), type:'material',
       material_name: m.material.trim(), quantity: parseFloat(m.qty)||0, unit: m.unit||'',
       cost: cost, date: report.date, supplier: m.supplier||'QDPR Entry',
-      chalan_no: (m.chalanNo||'').trim(), vehicle_no: (m.vehicleNo||'').trim(), size: (m.size||'').trim(),
+      chalan_no: (m.chalanNo||'').trim(), vehicle_no: (m.vehicleNo||'').trim().toUpperCase(), size: (m.size||'').trim(),
       is_petty_cash:false,
       qdpr_report_id: reportId, qdpr_material_row: m.id
     });
@@ -14782,55 +14926,78 @@ function openMatPurchaseModal(id){
   _armModalGuard('mat-purchase-modal');
   document.getElementById('mat-purchase-modal').classList.add('modal-show');
 }
-// Matches the typed vehicle number against this material's own delivery
-// history (case-insensitive) and, on a match, suggests Size/Quantity from
-// that vehicle's most recent delivery — a given truck usually brings the
-// same load every time, so this saves re-typing it. Only fills fields
-// that are still empty, and both stay fully editable either way.
+// ── Company-wide vehicle lookup ─────────────────────────────────────────────
+// A truck's size/capacity, usual load and supplier don't depend on which
+// material or which site it delivered to, so once a vehicle number has been
+// entered ANYWHERE in the company, every later entry should reuse it.
+// Collects every purchase transaction carrying this vehicle number from
+// (a) every material of the open project and (b) every material of every
+// OTHER project under the SAME company that has been opened on this device
+// (project data lives in localStorage per project; sibling projects are
+// found through sanj_sb_project_map, matched on companyId). Returns them
+// ranked best-first: same material name first, then same project, then the
+// most recent date — so the fields below come from the closest match and
+// only fall back to looser ones for whatever is still empty.
+function _vehicleLookupCompanyWide(vehicleNo, materialName){
+  var v = (vehicleNo||'').trim().toLowerCase();
+  if (!v) return [];
+  var matNameKey = (materialName||'').trim().toLowerCase();
+  var curPid = window.currentProjectId;
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map')||'{}'); } catch(e) {}
+  var curCompany = (map[curPid]&&map[curPid].companyId) || window._wsCompanyId || null;
+  // Same-company local project ids (always includes the open one)
+  var pids = [curPid];
+  if (curCompany) {
+    (window.projects||[]).forEach(function(pr){
+      if (pr.id!==curPid && map[pr.id] && map[pr.id].companyId===curCompany) pids.push(pr.id);
+    });
+  }
+  var hits = [];
+  pids.forEach(function(pid){
+    var mats = [];
+    try { mats = JSON.parse(safeLS.getItem('sanj_project_'+pid+'_'+MATS)||'[]'); } catch(e) {}
+    mats.forEach(function(m){
+      var sameName = ((m.name||'').trim().toLowerCase()===matNameKey);
+      (m.transactions||[]).forEach(function(t){
+        if (t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v) {
+          hits.push({t:t, sameName:sameName, sameProject:(pid===curPid), date:t.date||''});
+        }
+      });
+    });
+  });
+  hits.sort(function(a,b){
+    if (a.sameName!==b.sameName) return a.sameName?-1:1;
+    if (a.sameProject!==b.sameProject) return a.sameProject?-1:1;
+    return (b.date>a.date)?1:(b.date<a.date?-1:0);
+  });
+  return hits;
+}
+// Takes the first non-empty value of a field down the ranked list.
+function _vehicleFirstValue(hits, field){
+  for (var i=0;i<hits.length;i++){ var val=hits[i].t[field]; if (val!==undefined && val!==null && String(val).trim()!=='') return val; }
+  return '';
+}
+// Fills Size, Quantity and Supplier for the typed vehicle number from the
+// company-wide history above. Only fills fields that are still empty and
+// everything stays editable.
 function _mpVehicleAutofill(){
   var vEl = document.getElementById('mp-vehicle');
   if (!vEl || !MID) return;
   var v = vEl.value.trim();
   vEl.value = v;
   if (!v) return;
-  var allMats = lmat();
-  var item = allMats.find(function(m){ return m.id===MID; });
+  var item = lmat().find(function(m){ return m.id===MID; });
   if (!item) return;
+  var hits = _vehicleLookupCompanyWide(v, item.name);
+  if (!hits.length) return;
   var sizeEl = document.getElementById('mp-size'), qtyEl = document.getElementById('mp-qty'), supplierEl = document.getElementById('mp-supplier');
-  var filledSomething = false;
-
-  // Same-material match first (existing behaviour) — a given truck usually
-  // brings the same load of the SAME material every time, so quantity is a
-  // safe suggestion here specifically.
-  var sameMatMatches = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v.toLowerCase(); });
-  var sameMatLatest = sameMatMatches.length ? sameMatMatches[sameMatMatches.length-1] : null;
-  if (sameMatLatest) {
-    if (sizeEl && !sizeEl.value && sameMatLatest.size) { sizeEl.value = sameMatLatest.size; filledSomething = true; }
-    if (qtyEl && !qtyEl.value && sameMatLatest.qty) { qtyEl.value = sameMatLatest.qty; filledSomething = true; }
-  }
-
-  // Cross-material fallback — the vehicle itself (its size/capacity, and
-  // usually its supplier/owner) doesn't change based on what it's
-  // carrying, so a match on a DIFFERENT material's delivery history is
-  // still a valid source for Size and Supplier. Quantity is deliberately
-  // NOT pulled from a cross-material match — how much of Sand a truck
-  // brought tells you nothing about how much Cement it'll bring.
-  if (!sizeEl || !sizeEl.value || !supplierEl || !supplierEl.value) {
-    var crossMatch = null, crossMatchDate = null;
-    allMats.forEach(function(m){
-      (m.transactions||[]).forEach(function(t){
-        if (t.type==='purchase' && t.vehicle_no && t.vehicle_no.trim().toLowerCase()===v.toLowerCase()) {
-          if (!crossMatch || (t.date||'') > crossMatchDate) { crossMatch = t; crossMatchDate = t.date||''; }
-        }
-      });
-    });
-    if (crossMatch) {
-      if (sizeEl && !sizeEl.value && crossMatch.size) { sizeEl.value = crossMatch.size; filledSomething = true; }
-      if (supplierEl && !supplierEl.value && crossMatch.supplier) { supplierEl.value = crossMatch.supplier; filledSomething = true; }
-    }
-  }
-
-  if (filledSomething) toast('Auto-filled from '+v+"'s last delivery — edit if different", 'ok');
+  var filled = false;
+  var size = _vehicleFirstValue(hits,'size'), qty = _vehicleFirstValue(hits,'qty'), sup = _vehicleFirstValue(hits,'supplier');
+  if (sizeEl && !sizeEl.value && size) { sizeEl.value = size; filled = true; }
+  if (qtyEl && !qtyEl.value && qty) { qtyEl.value = qty; filled = true; }
+  if (supplierEl && !supplierEl.value && sup) { supplierEl.value = sup; filled = true; }
+  if (filled) toast('Auto-filled from '+v+"'s previous deliveries — edit if different", 'ok');
 }
 function closeMatModal(){ document.getElementById('mat-purchase-modal').classList.remove('modal-show'); }
 function saveMatPurchase(){
@@ -14851,7 +15018,7 @@ function saveMatPurchase(){
   // only exist there for filtering/printing, not to be repeated on every
   // single entry.
   var txn=Object.assign({type:'purchase',qty:qty,date:date,unit:item.unit||'',cost:cost,supplier:supplier,
-      chalan_no:chalan.trim(),vehicle_no:vehicleNo.trim(),size:size.trim()},
+      chalan_no:chalan.trim(),vehicle_no:vehicleNo.trim().toUpperCase(),size:size.trim()},
     (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {});
   _saveBill('mp', function(key){
     txn.bill_id = key;
@@ -27283,7 +27450,10 @@ window._ENGINEER_MODE = false;
 (function(){
   try {
     var cid = localStorage.getItem('sanj_company_id');
-    if (cid && localStorage.getItem('sanj_sub_grace_expired_' + cid) === '1') window._SUB_GRACE_EXPIRED = true;
+    if (cid && localStorage.getItem('sanj_sub_grace_expired_' + cid) === '1') {
+      window._SUB_GRACE_EXPIRED = true;
+      window._SUB_LOCK_PROJECT_ID = localStorage.getItem('sanj_sub_lock_project_' + cid) || null;
+    }
   } catch(e) {}
 })();
 window._ENGINEER_READONLY = _recomputeEngineerReadOnly(false);
