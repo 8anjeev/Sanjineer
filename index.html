@@ -7370,6 +7370,7 @@ var _TAB_DEFS = [
   {id:'machinery',  label:'⚙️ Machinery'},
   {id:'expenses',   label:'💰 Expenses'},
   {id:'materials',  label:'🧱 Materials'},
+  {id:'steelrmc',   label:'🔩 Steel & RMC'},
   {id:'tools',      label:'🔧 Tools'},
   {id:'drawings',   label:'📐 Drawings'},
   {id:'rentals',    label:'📦 Rentals'},
@@ -7953,6 +7954,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="tab-btn text-white/70" data-tab="machinery" onclick="switchTab('machinery')"><span class="tab-btn-ico">⚙️</span><span class="tab-btn-label">Machinery</span></button>
     <button class="tab-btn text-white/70" data-tab="expenses" onclick="switchTab('expenses')"><span class="tab-btn-ico">💰</span><span class="tab-btn-label">Expenses</span></button>
     <button class="tab-btn text-white/70" data-tab="materials" onclick="switchTab('materials')"><span class="tab-btn-ico">🧱</span><span class="tab-btn-label">Materials</span></button>
+    <button class="tab-btn text-white/70" data-tab="steelrmc" onclick="switchTab('steelrmc')"><span class="tab-btn-ico">🔩</span><span class="tab-btn-label">Steel & RMC</span></button>
     <button class="tab-btn text-white/70" data-tab="tools" onclick="switchTab('tools')"><span class="tab-btn-ico">🔧</span><span class="tab-btn-label">Tools</span></button>
     <button class="tab-btn text-white/70" data-tab="drawings" onclick="switchTab('drawings')"><span class="tab-btn-ico">📐</span><span class="tab-btn-label">Drawings</span></button>
     <button class="tab-btn text-white/70" data-tab="rentals" onclick="switchTab('rentals')"><span class="tab-btn-ico">📦</span><span class="tab-btn-label">Rentals</span></button>
@@ -8536,6 +8538,66 @@ document.addEventListener('DOMContentLoaded', function() {
           </tr>
         </tfoot>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STEEL & RMC ===== -->
+<div id="tab-steelrmc" class="tab-content tab-hidden" style="display:none">
+  <div class="dt-l bg-white rounded-2xl p-3 mb-3 shadow-xl">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div style="display:flex;gap:6px">
+        <button type="button" id="srmc-cat-steel" onclick="srmcSetCat('steel')" style="padding:7px 14px;border-radius:10px;border:none;font-size:11.5px;font-weight:800;cursor:pointer;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff">🔩 Steel</button>
+        <button type="button" id="srmc-cat-rmc" onclick="srmcSetCat('rmc')" style="padding:7px 14px;border-radius:10px;border:none;font-size:11.5px;font-weight:800;cursor:pointer;background:#f3f4f6;color:#4b5563">🧱 RMC</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="printSteelRmc()" style="padding:7px 12px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#4b5563;font-size:11px;font-weight:700;cursor:pointer">🖨️ Print</button>
+        <button id="srmc-add-btn" onclick="openSteelRmcModal(null)" class="g-tor-amber500-orange500 text-white" style="padding:7px 14px;border-radius:10px;border:none;font-size:11.5px;font-weight:800;cursor:pointer">+ Add Steel Purchase</button>
+      </div>
+    </div>
+  </div>
+  <div id="srmc-list"></div>
+</div>
+
+<!-- ===== SRMC MODAL (Steel / RMC purchase entry) ===== -->
+<div id="srmc-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center p-4" style="display:none" onclick="if(event.target===this&&_modalGuardOk('srmc-modal'))closeSrmcModal()">
+  <div class="bg-white rounded-2xl p-3 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
+    <div class="flex items-center justify-between mb-2"><h3 id="srmc-modal-title" class="font-bold text-gray-800 text-sm">🔩 Steel Purchase</h3><button onclick="closeSrmcModal()" class="text-gray-400 text-xl">✕</button></div>
+    <div class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Date *</label><input type="date" id="srmc-date" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Chalan No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="srmc-chalan" placeholder="Delivery challan no." class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Vehicle No <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="srmc-vehicle" placeholder="e.g. MH04AB1234" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onblur="srmcVehicleAutofill()" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div id="srmc-steel-fields" style="display:contents">
+          <div><label class="text-xs font-semibold text-gray-500 block mb-1">Diameter *</label>
+            <select id="srmc-diameter" onchange="_srmcToggleNos()" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+              <option value="">— Select —</option>
+              <option value="6mm">6mm</option><option value="8mm">8mm</option><option value="10mm">10mm</option>
+              <option value="12mm">12mm</option><option value="16mm">16mm</option><option value="20mm">20mm</option>
+              <option value="25mm">25mm</option><option value="28mm">28mm</option><option value="32mm">32mm</option>
+              <option value="36mm">36mm</option><option value="Binding Wire">Binding Wire</option>
+            </select>
+          </div>
+          <div id="srmc-nos-wrap"><label class="text-xs font-semibold text-gray-500 block mb-1">No. of Bars <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="srmc-nos" placeholder="e.g. 120" step="1" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        </div>
+        <div id="srmc-rmc-fields" style="display:none">
+          <label class="text-xs font-semibold text-gray-500 block mb-1">Concrete Grade *</label>
+          <select id="srmc-grade" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-indigo-400">
+            <option value="">— Select —</option>
+            <option value="M10">M10</option><option value="M15">M15</option><option value="M20">M20</option>
+            <option value="M25">M25</option><option value="M30">M30</option><option value="M35">M35</option>
+            <option value="M40">M40</option><option value="M45">M45</option><option value="M50">M50</option>
+            <option value="M55">M55</option><option value="M60">M60</option><option value="M65">M65</option>
+            <option value="M70">M70</option><option value="M75">M75</option><option value="M80">M80</option>
+          </select>
+        </div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Quantity <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="srmc-qty" placeholder="e.g. 5000" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Unit</label><input type="text" id="srmc-unit" placeholder="Kg / Cum" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Supplier Name</label><input type="text" id="srmc-supplier" placeholder="Supplier / vendor name" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+        <div><label class="text-xs font-semibold text-gray-500 block mb-1">Total Cost (₹) <span class="font-normal text-gray-400">(opt)</span></label><input type="number" id="srmc-cost" placeholder="Total amount paid" step="any" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      </div>
+      <div><label class="text-xs font-semibold text-gray-500 block mb-1">Notes <span class="font-normal text-gray-400">(opt)</span></label><input type="text" id="srmc-notes" placeholder="Any remarks" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400"></div>
+      <button onclick="saveSteelRmc()" class="g-tor-amber500-orange500 w-full text-white py-2.5 rounded-xl font-bold text-sm active:scale-95">💾 Save Purchase</button>
     </div>
   </div>
 </div>
@@ -10437,6 +10499,13 @@ service cloud.firestore {
 // STORAGE
 // ============================================================
 var DB='cm_data', META='cm_meta', MATS='cm_matstore', DEPT='cm_dept', PROF='cm_profile', PHKEYS='cm_phkeys';
+// Steel & RMC purchase log — a normal project-scoped 'cm_' key, so (unlike
+// company-wide features such as Sales/Partners/Notices) it needs no
+// dedicated Supabase table: _buildLocalPayload's dynamic scan of cm_-
+// prefixed localStorage keys picks it up automatically into the generic
+// cm_all sync bucket, with the same per-key newest-wins timestamp
+// protection every other non-"dedicated" cm_ key already gets for free.
+var SRMC='cm_steelrmc';
 // Safe storage — falls back to in-memory when localStorage is blocked (incognito)
 var _memStore = {};
 var _ls = (function() {
@@ -10513,6 +10582,8 @@ function lm(){try{return JSON.parse(safeLS.getItem(_pk(META))||'{}');}catch(e){r
 function sm(x){safeLS.setItem(_pk(META),JSON.stringify(x));if(window._SANJ_SYNC_DEBUG)_sanjLog('save meta','key='+_pk(META),'ts='+Date.now());_scheduleCloudPush();}
 function lmat(){try{return JSON.parse(safeLS.getItem(_pk(MATS))||'[]');}catch(e){return [];}}
 function smat(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampArray(lmat(), x || []); } catch(e) {} safeLS.setItem(_pk(MATS),JSON.stringify(x));_scheduleCloudPush();}
+function lsrmc(){try{return JSON.parse(safeLS.getItem(_pk(SRMC))||'[]');}catch(e){return [];}}
+function ssrmc(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampArray(lsrmc(), x || []); } catch(e) {} safeLS.setItem(_pk(SRMC),JSON.stringify(x));_scheduleCloudPush();}
 function ldept(){try{return JSON.parse(safeLS.getItem(_pk(DEPT))||'{}');}catch(e){return {};}}
 function sdept(x){ if(_blockIfReadOnlyData())return; try { x = _autoStampKeyed(ldept(), x || {}); } catch(e) {} safeLS.setItem(_pk(DEPT),JSON.stringify(x));_scheduleCloudPush();}
 function lprof(){try{return JSON.parse(safeLS.getItem(_pk(PROF))||'null');}catch(e){return null;}}
@@ -11710,7 +11781,7 @@ function dismissPWA(){
 // ============================================================
 // TABS
 // ============================================================
-var TABS = ['dashboard','daily','attendance','boq','machinery','expenses','materials','tools','drawings','rentals','departmental','contractors','budget','schedule','punchlist','bill','quotation','visits'];
+var TABS = ['dashboard','daily','attendance','boq','machinery','expenses','materials','steelrmc','tools','drawings','rentals','departmental','contractors','budget','schedule','punchlist','bill','quotation','visits'];
 
 var _plFilter='all';
 
@@ -11761,6 +11832,7 @@ function switchTab(name) {
     else if (name === 'machinery')    loadMachinery();
     else if (name === 'expenses')     viewExpenses();
     else if (name === 'materials')    viewMaterials();
+    else if (name === 'steelrmc')     viewSteelRMC();
     else if (name === 'tools')        viewTools();
     else if (name === 'drawings')     initDrawingsTab();
     else if (name === 'rentals')      viewRentals();
@@ -15126,6 +15198,261 @@ function delMatTxn(matId,idx){
     toast('Deleted','ok'); viewMaterials(); if (typeof viewExpenses==='function') viewExpenses(); updateDash();
   });
 }
+// ══════════════════════════════════════════════════════════════════════════
+// STEEL & RMC — reinforcement steel and ready-mix concrete purchase log.
+// Same purchase-record pattern as Materials (date, qty, chalan, vehicle no.
+// with the same company-wide autofill, supplier, total cost, PDF in the
+// same house style) with the two differences Rajeev asked for: instead of
+// a free-text Size, Steel gets a Diameter dropdown (6mm–36mm, plus a
+// Binding Wire option so wire purchases on the same vehicle/chalan can be
+// logged accurately too) with a "No. of Bars" count, and RMC gets a
+// Concrete Grade dropdown (M10–M80, the standard IS 456 series) instead.
+// Stored as its own flat array (not nested under "material items" like
+// Materials is — there's no ongoing stock balance to track here, just a
+// purchase log) under project-scoped cm_ key SRMC (see its definition
+// next to MATS above for why no dedicated Supabase table was needed).
+// ══════════════════════════════════════════════════════════════════════════
+var _srmcActiveCat = 'steel'; // which sub-tab is showing, and default category for "+ Add"
+var SRMID = null; // record __id currently open in the edit modal (null = new)
+
+function srmcSetCat(cat){
+  _srmcActiveCat = cat;
+  var steelBtn = document.getElementById('srmc-cat-steel'), rmcBtn = document.getElementById('srmc-cat-rmc');
+  if (steelBtn) { steelBtn.style.background = (cat==='steel') ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : '#f3f4f6'; steelBtn.style.color = (cat==='steel') ? '#fff' : '#4b5563'; }
+  if (rmcBtn) { rmcBtn.style.background = (cat==='rmc') ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : '#f3f4f6'; rmcBtn.style.color = (cat==='rmc') ? '#fff' : '#4b5563'; }
+  var addBtn = document.getElementById('srmc-add-btn');
+  if (addBtn) addBtn.textContent = (cat==='steel') ? '+ Add Steel Purchase' : '+ Add RMC Purchase';
+  viewSteelRMC();
+}
+
+// ── Company-wide vehicle lookup — same idea as _vehicleLookupCompanyWide
+// for Materials, kept separate since the fields that get filled back in
+// (diameter/grade vs size) differ. Scans this project AND every sibling
+// project of the same company (via sanj_sb_project_map), ranked
+// same-category (steel/rmc) > same-project > most recent.
+function _srmcVehicleLookup(vehicleNo, category){
+  var v = (vehicleNo||'').trim().toLowerCase();
+  if (!v) return [];
+  var curPid = window.currentProjectId;
+  var map = {};
+  try { map = JSON.parse(localStorage.getItem('sanj_sb_project_map')||'{}'); } catch(e) {}
+  var curCompany = (map[curPid]&&map[curPid].companyId) || window._wsCompanyId || null;
+  var pids = [curPid];
+  if (curCompany) {
+    (window.projects||[]).forEach(function(pr){
+      if (pr.id!==curPid && map[pr.id] && map[pr.id].companyId===curCompany) pids.push(pr.id);
+    });
+  }
+  var hits = [];
+  pids.forEach(function(pid){
+    var recs = [];
+    try { recs = JSON.parse(safeLS.getItem('sanj_project_'+pid+'_'+SRMC)||'[]'); } catch(e) {}
+    recs.forEach(function(r){
+      if (r.vehicle_no && r.vehicle_no.trim().toLowerCase()===v) {
+        hits.push({r:r, sameCat:(r.category===category), sameProject:(pid===curPid), date:r.date||''});
+      }
+    });
+  });
+  hits.sort(function(a,b){
+    if (a.sameCat!==b.sameCat) return a.sameCat?-1:1;
+    if (a.sameProject!==b.sameProject) return a.sameProject?-1:1;
+    return (b.date>a.date)?1:(b.date<a.date?-1:0);
+  });
+  return hits;
+}
+function _srmcFirstValue(hits, field){
+  for (var i=0;i<hits.length;i++){ var val=hits[i].r[field]; if (val!==undefined && val!==null && String(val).trim()!=='') return val; }
+  return '';
+}
+function srmcVehicleAutofill(){
+  var vEl = document.getElementById('srmc-vehicle');
+  if (!vEl) return;
+  var v = vEl.value.trim();
+  vEl.value = v;
+  if (!v) return;
+  var hits = _srmcVehicleLookup(v, _srmcActiveCat);
+  if (!hits.length) return;
+  var filled = false;
+  var diaEl = document.getElementById('srmc-diameter'), gradeEl = document.getElementById('srmc-grade'),
+      nosEl = document.getElementById('srmc-nos'), qtyEl = document.getElementById('srmc-qty'),
+      unitEl = document.getElementById('srmc-unit'), supplierEl = document.getElementById('srmc-supplier');
+  if (_srmcActiveCat==='steel') {
+    var dia = _srmcFirstValue(hits,'diameter'); if (diaEl && !diaEl.value && dia) { diaEl.value = dia; _srmcToggleNos(); filled = true; }
+    var nos = _srmcFirstValue(hits,'nos'); if (nosEl && !nosEl.value && nos) { nosEl.value = nos; filled = true; }
+  } else {
+    var grade = _srmcFirstValue(hits,'grade'); if (gradeEl && !gradeEl.value && grade) { gradeEl.value = grade; filled = true; }
+  }
+  var qty = _srmcFirstValue(hits,'qty'); if (qtyEl && !qtyEl.value && qty) { qtyEl.value = qty; filled = true; }
+  var unit = _srmcFirstValue(hits,'unit'); if (unitEl && !unitEl.value && unit) { unitEl.value = unit; filled = true; }
+  var sup = _srmcFirstValue(hits,'supplier'); if (supplierEl && !supplierEl.value && sup) { supplierEl.value = sup; filled = true; }
+  if (filled) toast('Auto-filled from '+v+"'s previous deliveries — edit if different", 'ok');
+}
+
+function _srmcToggleFields(){
+  var steelWrap = document.getElementById('srmc-steel-fields'), rmcWrap = document.getElementById('srmc-rmc-fields');
+  // steelWrap uses display:contents (so its children sit directly in the
+  // parent grid) — restoring '' would collapse it to a normal block and
+  // break the 2-column layout, so 'contents' has to be set explicitly here.
+  if (steelWrap) steelWrap.style.display = (_srmcActiveCat==='steel') ? 'contents' : 'none';
+  if (rmcWrap) rmcWrap.style.display = (_srmcActiveCat==='rmc') ? '' : 'none';
+  _srmcToggleNos();
+}
+function _srmcToggleNos(){
+  var diaEl = document.getElementById('srmc-diameter'), nosWrap = document.getElementById('srmc-nos-wrap');
+  if (nosWrap) nosWrap.style.display = (diaEl && diaEl.value==='Binding Wire') ? 'none' : '';
+}
+
+function openSteelRmcModal(id){
+  SRMID = id||null;
+  var rec = id ? lsrmc().find(function(r){ return r.__id===id; }) : null;
+  var cat = rec ? rec.category : _srmcActiveCat;
+  _srmcActiveCat = cat; // so field visibility matches what's actually being edited
+  document.getElementById('srmc-modal-title').textContent = (rec?'Edit ':'') + (cat==='steel' ? '🔩 Steel Purchase' : '🧱 RMC Purchase');
+  document.getElementById('srmc-date').value = rec ? rec.date : ist();
+  document.getElementById('srmc-diameter').value = rec ? (rec.diameter||'') : '';
+  document.getElementById('srmc-nos').value = rec ? (rec.nos||'') : '';
+  document.getElementById('srmc-grade').value = rec ? (rec.grade||'') : '';
+  document.getElementById('srmc-qty').value = rec ? (rec.qty||'') : '';
+  document.getElementById('srmc-unit').value = rec ? (rec.unit||'') : (cat==='steel'?'Kg':'Cum');
+  document.getElementById('srmc-cost').value = rec ? (rec.cost||'') : '';
+  document.getElementById('srmc-chalan').value = rec ? (rec.chalan_no||'') : '';
+  document.getElementById('srmc-vehicle').value = rec ? (rec.vehicle_no||'') : '';
+  document.getElementById('srmc-supplier').value = rec ? (rec.supplier||'') : '';
+  document.getElementById('srmc-notes').value = rec ? (rec.notes||'') : '';
+  _srmcToggleFields();
+  _armModalGuard('srmc-modal');
+  document.getElementById('srmc-modal').classList.add('modal-show');
+}
+function closeSrmcModal(){ document.getElementById('srmc-modal').classList.remove('modal-show'); }
+
+function saveSteelRmc(){
+  var cat = _srmcActiveCat;
+  var date = document.getElementById('srmc-date').value || ist();
+  if (!date) { toast('Enter a date','err'); return; }
+  var diameter = document.getElementById('srmc-diameter').value;
+  var isBindingWire = (diameter==='Binding Wire');
+  var nos = parseFloat(document.getElementById('srmc-nos').value)||0;
+  var grade = document.getElementById('srmc-grade').value;
+  if (cat==='steel' && !diameter) { toast('Select a diameter (or Binding Wire)','err'); return; }
+  if (cat==='rmc' && !grade) { toast('Select a concrete grade','err'); return; }
+  var qty = parseFloat(document.getElementById('srmc-qty').value)||0;
+  var unit = document.getElementById('srmc-unit').value.trim();
+  var cost = parseFloat(document.getElementById('srmc-cost').value)||0;
+  var chalan = document.getElementById('srmc-chalan').value.trim();
+  var vehicleNo = document.getElementById('srmc-vehicle').value.trim().toUpperCase();
+  var supplier = document.getElementById('srmc-supplier').value.trim();
+  var notes = document.getElementById('srmc-notes').value.trim();
+  var fields = {category:cat, date:date, diameter:cat==='steel'?diameter:'', nos:(cat==='steel'&&!isBindingWire)?nos:0,
+    grade:cat==='rmc'?grade:'', qty:qty, unit:unit, cost:cost, chalan_no:chalan, vehicle_no:vehicleNo, supplier:supplier, notes:notes};
+  var recs = lsrmc();
+  if (SRMID) {
+    var rec = recs.find(function(r){ return r.__id===SRMID; });
+    if (!rec) return;
+    // FIX (same pattern as Materials' delMatTxn/saveMatPurchase): the cost
+    // is mirrored into a separate expense-ledger entry so dashboard/"Total
+    // Expenses" totals include it. On edit, remove the old mirrored entry
+    // first rather than leaving it counted alongside a new one.
+    if (rec.stock_log_id) { del(rec.stock_log_id); rec.stock_log_id = null; }
+    Object.assign(rec, fields);
+    if (cost > 0) {
+      var label = (cat==='steel') ? ('Steel'+(diameter?(' '+diameter):'')) : ('RMC '+grade);
+      var logEntry = ins({type:'material',material_name:label,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false,exp_type:'material',from_materials_tab:true,stock_synced:true});
+      rec.stock_log_id = logEntry.__id;
+    }
+  } else {
+    var newRec = Object.assign({}, fields, (typeof _newTxnStamp === 'function') ? _newTxnStamp() : {});
+    recs.push(newRec);
+    if (cost > 0) {
+      var label2 = (cat==='steel') ? ('Steel'+(diameter?(' '+diameter):'')) : ('RMC '+grade);
+      var logEntry2 = ins({type:'material',material_name:label2,quantity:qty,cost:cost,date:date,supplier:supplier,is_petty_cash:false,exp_type:'material',from_materials_tab:true,stock_synced:true});
+      newRec.stock_log_id = logEntry2.__id;
+    }
+  }
+  AD = ld();
+  ssrmc(recs);
+  closeSrmcModal();
+  toast('Saved','ok');
+  viewSteelRMC(); if (typeof viewExpenses==='function') viewExpenses(); updateDash();
+}
+
+function delSteelRmc(id){
+  askDel('Delete this purchase record?', function(){
+    var recs = lsrmc();
+    var idx = recs.findIndex(function(r){ return r.__id===id; });
+    if (idx===-1) return;
+    var rec = recs[idx];
+    if (rec.stock_log_id) { del(rec.stock_log_id); AD = ld(); }
+    // Tombstoned the same way delMatTxn does — without this, a stale copy
+    // synced down from another device could silently bring a deleted
+    // record right back (this store isn't in the dedicated per-record
+    // merge list, but a tombstone costs nothing and protects it if it ever
+    // is promoted to one, the way cm_po/cm_suppliers were).
+    if (typeof _addTombstone === 'function') _addTombstone('srmc__'+id, Date.now());
+    recs.splice(idx,1);
+    ssrmc(recs);
+    toast('Deleted','ok');
+    viewSteelRMC(); if (typeof viewExpenses==='function') viewExpenses(); updateDash();
+  });
+}
+
+function viewSteelRMC(){
+  var recs = lsrmc().filter(function(r){ return r.category===_srmcActiveCat; });
+  recs.sort(function(a,b){ return (b.date||'') > (a.date||'') ? 1 : ((b.date||'')<(a.date||'')?-1:0); });
+  var listDiv = document.getElementById('srmc-list');
+  if (!listDiv) return;
+
+  // Summary strip: totals grouped by diameter (steel) or grade (rmc), so
+  // "steel ordered of different sizes at the same purchase" is easy to
+  // see at a glance rather than only as a flat, unsorted list.
+  var groups = {}, order = [];
+  recs.forEach(function(r){
+    var key = _srmcActiveCat==='steel' ? (r.diameter||'—') : (r.grade||'—');
+    if (!groups[key]) { groups[key] = {qty:0, nos:0, cost:0, unit:r.unit||''}; order.push(key); }
+    groups[key].qty += (parseFloat(r.qty)||0);
+    groups[key].nos += (parseFloat(r.nos)||0);
+    groups[key].cost += (parseFloat(r.cost)||0);
+    if (!groups[key].unit) groups[key].unit = r.unit||'';
+  });
+  var sumHtml = order.length ? ('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+    order.map(function(k){
+      var g = groups[k];
+      var nosBit = (_srmcActiveCat==='steel' && k!=='Binding Wire' && g.nos) ? (' • '+g.nos+' bars') : '';
+      return '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;min-width:110px">'
+        + '<div style="font-size:10px;font-weight:800;color:#4f46e5">'+esc(k)+'</div>'
+        + '<div style="font-size:12px;font-weight:700;color:#1f2937">'+g.qty+' '+esc(g.unit)+nosBit+'</div>'
+        + (g.cost ? ('<div style="font-size:10px;color:#6b7280">'+fc(g.cost)+'</div>') : '')
+        + '</div>';
+    }).join('') + '</div>') : '';
+
+  if (!recs.length) {
+    listDiv.innerHTML = sumHtml + '<div style="text-align:center;padding:30px 10px;color:#9ca3af;font-size:12.5px">No '+(_srmcActiveCat==='steel'?'steel':'RMC')+' purchases recorded yet.</div>';
+    return;
+  }
+
+  listDiv.innerHTML = sumHtml + recs.map(function(r){
+    var sizeBit = _srmcActiveCat==='steel'
+      ? ('<b>'+esc(r.diameter||'—')+'</b>' + (r.diameter!=='Binding Wire' && r.nos ? (' · '+r.nos+' bars') : ''))
+      : ('<b>'+esc(r.grade||'—')+'</b>');
+    return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px 14px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+        + '<div style="font-size:12.5px;color:#1f2937;line-height:1.6">'
+          + sizeBit + (r.qty ? (' &nbsp;·&nbsp; ' + r.qty + ' ' + esc(r.unit||'')) : '') + '<br>'
+          + '<span style="color:#6b7280;font-size:11px">📅 '+esc(fd(r.date)||r.date||'')+(r.vehicle_no?(' &nbsp;🚚 '+esc(r.vehicle_no)):'')+(r.chalan_no?(' &nbsp;📄 '+esc(r.chalan_no)):'')+'</span>'
+          + (r.supplier ? ('<br><span style="color:#6b7280;font-size:11px">🏢 '+esc(r.supplier)+'</span>') : '')
+          + (r.notes ? ('<br><span style="color:#9ca3af;font-size:10.5px">'+esc(r.notes)+'</span>') : '')
+        + '</div>'
+        + '<div style="text-align:right;flex-shrink:0">'
+          + (r.cost ? ('<div style="font-size:13px;font-weight:800;color:#059669">'+fc(r.cost)+'</div>') : '')
+          + '<div style="margin-top:4px;display:flex;gap:6px;justify-content:flex-end">'
+            + '<button onclick="openSteelRmcModal(\''+r.__id+'\')" style="border:none;background:#eef2ff;color:#4f46e5;font-size:10px;font-weight:700;padding:4px 8px;border-radius:7px;cursor:pointer">Edit</button>'
+            + '<button onclick="delSteelRmc(\''+r.__id+'\')" style="border:none;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:4px 8px;border-radius:7px;cursor:pointer">Del</button>'
+          + '</div>'
+        + '</div>'
+      + '</div>'
+    + '</div>';
+  }).join('');
+}
+
 function viewMaterials(){
   // Silent background safety net: if any materials share the same name
   // (case/spacing-insensitive — the actual root cause was the Add
@@ -15316,6 +15643,102 @@ try{
     +_pdfFooter()+'</div></body></html>';
   opw(html);
 }catch(err){toast('Print error: '+err.message,'err');console.error('printStockList',err);}
+}
+
+// Steel & RMC purchase report — same house PDF style as Materials'
+// printStockList() (same _pdfHeader-backed header via
+// _matPrintHeaderHTML, same pcs() print CSS, same opw() window), just two
+// tables instead of one: Steel (with Diameter/No. of Bars columns) then
+// Ready-Mix Concrete (with a Grade column), each with its own subtotal.
+function printSteelRmc(){
+try{
+  var recs = lsrmc();
+  if (!recs.length) { toast('No Steel/RMC purchases recorded yet','err'); return; }
+  var steelRows = recs.filter(function(r){ return r.category==='steel'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  var rmcRows = recs.filter(function(r){ return r.category==='rmc'; }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+
+  var totalSteelQty=0, totalSteelCost=0, totalSteelNos=0;
+  var steelTrs=steelRows.map(function(r){
+    totalSteelQty+=(parseFloat(r.qty)||0); totalSteelCost+=(parseFloat(r.cost)||0); totalSteelNos+=(parseFloat(r.nos)||0);
+    return '<tr>'
+      +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
+      +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+_esc(r.diameter||'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+(r.diameter!=='Binding Wire'?(r.nos||'—'):'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+(r.qty||0)+' '+(r.unit||'')+'</td>'
+      +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicle_no||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.chalan_no||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var totalRmcQty=0, totalRmcCost=0;
+  var rmcTrs=rmcRows.map(function(r){
+    totalRmcQty+=(parseFloat(r.qty)||0); totalRmcCost+=(parseFloat(r.cost)||0);
+    return '<tr>'
+      +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
+      +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+_esc(r.grade||'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+(r.qty||0)+' '+(r.unit||'')+'</td>'
+      +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicle_no||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.chalan_no||'—')+'</td>'
+      +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var prof = lmergedProf();
+  var curProj = (window.projects||[]).find(function(p){ return p.id===window.currentProjectId; }) || {};
+  var companyBlock = '<span style="display:block;font-size:16px;font-weight:900;color:white;line-height:1.15">'+esc(prof.company||'Sanjineer')+'</span>'
+    + (curProj.name ? '<span style="display:block;font-size:11.5px;font-weight:700;color:rgba(255,255,255,0.85);margin-top:3px">'+esc(curProj.name)+'</span>' : '')
+    + (curProj.address ? '<span style="display:block;font-size:9px;color:rgba(255,255,255,0.65);margin-top:2px">'+esc(curProj.address)+'</span>' : '');
+  var rightBlock = '<span style="display:block;font-size:13px;font-weight:800;color:white;line-height:1.3">Steel &amp; RMC Report</span>'
+    + '<span style="display:block;font-size:10.5px;color:rgba(255,255,255,0.85);margin-top:3px">All Time</span>'
+    + '<span style="display:block;font-size:11px;font-weight:700;color:#ede9fe;margin-top:3px">Total: '+fc(totalSteelCost+totalRmcCost)+'</span>';
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Steel & RMC Report</title><style>'+pcs()
+    +'table{width:100%;border-collapse:collapse;margin-bottom:16px}'
+    +'thead th{background:linear-gradient(135deg,#7c3aed,#a855f7);color:white;padding:6px 8px;font-size:10px;font-weight:700;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    +'td{border-bottom:1px solid #f3f4f6}'
+    +'tbody tr:nth-child(even){background:#f9fafb}'
+    +'h3.srmc-h{font-size:12px;font-weight:800;color:#4f46e5;margin:0 0 6px}'
+    +'@media screen{.content{margin-top:126px}}'
+    +'</style></head><body>'
+    +'<div class="bar"><button class="bb" onclick="window.close()">&#8592; Back</button>'
+    +'<span style="flex:1;font-weight:700">Steel &amp; RMC Purchase Report</span>'
+    +'<button class="bp" onclick="window.print()">&#128438; Print</button>'
+    +'<button class="bx" onclick="window.close()">&#x2715;</button></div>'
+    +'<div class="content">'
+    +_matPrintHeaderHTML(companyBlock, rightBlock);
+
+  if (steelRows.length) {
+    html += '<h3 class="srmc-h">🔩 Steel</h3><table><thead><tr>'
+      +'<th>Date</th><th>Diameter</th><th style="text-align:center">Nos</th><th style="text-align:center">Qty</th>'
+      +'<th>Vehicle No</th><th>Chalan No</th><th>Supplier</th><th style="text-align:right">Cost</th>'
+      +'</tr></thead><tbody>'+steelTrs+'</tbody>'
+      +'<tfoot><tr style="background:#f5f3ff">'
+      +'<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="2">TOTAL</td>'
+      +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalSteelNos+'</td>'
+      +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalSteelQty+'</td>'
+      +'<td></td><td></td><td></td>'
+      +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalSteelCost)+'</td>'
+      +'</tr></tfoot></table>';
+  }
+  if (rmcRows.length) {
+    html += '<h3 class="srmc-h">🧱 Ready-Mix Concrete</h3><table><thead><tr>'
+      +'<th>Date</th><th>Grade</th><th style="text-align:center">Qty</th>'
+      +'<th>Vehicle No</th><th>Chalan No</th><th>Supplier</th><th style="text-align:right">Cost</th>'
+      +'</tr></thead><tbody>'+rmcTrs+'</tbody>'
+      +'<tfoot><tr style="background:#f5f3ff">'
+      +'<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="2">TOTAL</td>'
+      +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalRmcQty+'</td>'
+      +'<td></td><td></td><td></td>'
+      +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalRmcCost)+'</td>'
+      +'</tr></tfoot></table>';
+  }
+
+  html += _pdfFooter()+'</div></body></html>';
+  opw(html);
+}catch(err){toast('Print error: '+err.message,'err');console.error('printSteelRmc',err);}
 }
 
 // ============================================================
@@ -20992,10 +21415,11 @@ function _applyCloudData(d, silent, scopeKey, visible) {
     var dot = document.getElementById('cloud-sync-dot');
     if (dot) { dot.style.background = '#a78bfa'; setTimeout(function(){ dot.style.background = '#22c55e'; }, 1500); }
   }
-  // Owner broadcast notices ride in via the generic cm_all sweep above —
-  // check for one now that the merge for THIS project has landed. Only
-  // when visible: a background pull for a different joined project
-  // shouldn't pop something up over whatever the person is looking at.
+  // Owner broadcast notices now come from a dedicated company_notices
+  // Supabase table (not tied to this project's own sync at all) — this is
+  // just a convenient, already-firing moment to check for one. Only when
+  // visible: a background pull for a different joined project shouldn't
+  // pop something up over whatever the person is looking at.
   if (visible && typeof _checkBroadcastNotice === 'function') _checkBroadcastNotice();
 }
 
