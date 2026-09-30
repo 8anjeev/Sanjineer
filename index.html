@@ -15853,13 +15853,18 @@ try{
   var chipsHtml = _srmcChipsHtml(cat, recs);
   var totalQty=0, totalCost=0, totalNos=0, bodyTrs='', theadCells='';
 
+  // Column order (same for both categories, per house style requested):
+  // Date, Vehicle No, Chalan No, Supplier, [item-specific columns], Cost —
+  // shared delivery info first, then what was actually in the delivery,
+  // amount last.
   if (cat==='steel') {
-    theadCells = '<th>Date</th><th>Diameter</th><th style="text-align:center">Nos</th><th style="text-align:center">Qty</th>'
-      +'<th>Vehicle No</th><th>Chalan No</th><th>Supplier</th><th style="text-align:right">Cost</th>';
+    theadCells = '<th>Date</th><th>Vehicle No</th><th>Chalan No</th><th>Supplier</th>'
+      +'<th>Dia of Bar</th><th style="text-align:center">Nos</th><th style="text-align:center">Weight</th><th style="text-align:right">Amount</th>';
     // Same vehicle/chalan/supplier/cost can cover several diameters in one
     // delivery — group each record's diameter lines under ONE shared row
-    // via rowspan (Date/Vehicle/Chalan/Supplier/Cost appear once per
-    // record), Diameter/Nos/Weight repeating per line underneath.
+    // via rowspan (Date/Vehicle/Chalan/Supplier appear once per record,
+    // up front), Diameter/Nos/Weight repeating per line, Amount rowspan
+    // at the very end.
     bodyTrs = recs.map(function(r){
       var lines = _srmcLinesOf(r);
       if (!lines.length) lines = [{diameter:'—', nos:0, qty:0}];
@@ -15870,31 +15875,31 @@ try{
         totalNos += (parseFloat(ln.nos)||0);
         var tb = (i===0) ? 'border-top:2px solid #ddd6fe;' : '';
         var row = '<tr>';
-        if (i===0) row += '<td rowspan="'+rs+'" style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap;vertical-align:top;'+tb+'">'+fd(r.date)+'</td>';
+        if (i===0) {
+          row += '<td rowspan="'+rs+'" style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap;vertical-align:top;'+tb+'">'+fd(r.date)+'</td>'
+            +'<td rowspan="'+rs+'" style="padding:5px 8px;color:#0369a1;vertical-align:top;'+tb+'">'+(r.vehicle_no||'—')+'</td>'
+            +'<td rowspan="'+rs+'" style="padding:5px 8px;color:#6b7280;vertical-align:top;'+tb+'">'+(r.chalan_no||'—')+'</td>'
+            +'<td rowspan="'+rs+'" style="padding:5px 8px;color:#6b7280;vertical-align:top;'+tb+'">'+(r.supplier||'—')+'</td>';
+        }
         row += '<td style="padding:5px 8px;font-weight:700;color:#1f2937;'+tb+'">'+_esc(ln.diameter||'—')+'</td>'
           +'<td style="padding:5px 8px;text-align:center;color:#6b7280;'+tb+'">'+(ln.diameter!=='Binding Wire'?(ln.nos||'—'):'—')+'</td>'
           +'<td style="padding:5px 8px;text-align:center;color:#6b7280;'+tb+'">'+(ln.qty||0)+' '+(r.unit||'')+'</td>';
-        if (i===0) {
-          row += '<td rowspan="'+rs+'" style="padding:5px 8px;color:#0369a1;vertical-align:top;'+tb+'">'+(r.vehicle_no||'—')+'</td>'
-            +'<td rowspan="'+rs+'" style="padding:5px 8px;color:#6b7280;vertical-align:top;'+tb+'">'+(r.chalan_no||'—')+'</td>'
-            +'<td rowspan="'+rs+'" style="padding:5px 8px;color:#6b7280;vertical-align:top;'+tb+'">'+(r.supplier||'—')+'</td>'
-            +'<td rowspan="'+rs+'" style="padding:5px 8px;text-align:right;font-weight:700;color:#059669;vertical-align:top;'+tb+'">'+fc(r.cost)+'</td>';
-        }
+        if (i===0) row += '<td rowspan="'+rs+'" style="padding:5px 8px;text-align:right;font-weight:700;color:#059669;vertical-align:top;'+tb+'">'+fc(r.cost)+'</td>';
         return row+'</tr>';
       }).join('');
     }).join('');
   } else {
-    theadCells = '<th>Date</th><th>Grade</th><th style="text-align:center">Qty</th>'
-      +'<th>Vehicle No</th><th>Chalan No</th><th>Supplier</th><th style="text-align:right">Cost</th>';
+    theadCells = '<th>Date</th><th>Vehicle No</th><th>Chalan No</th><th>Supplier</th>'
+      +'<th>Grade</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th>';
     bodyTrs = recs.map(function(r){
       totalQty+=(parseFloat(r.qty)||0); totalCost+=(parseFloat(r.cost)||0);
       return '<tr>'
         +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
-        +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+_esc(r.grade||'—')+'</td>'
-        +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+(r.qty||0)+' '+(r.unit||'')+'</td>'
         +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicle_no||'—')+'</td>'
         +'<td style="padding:5px 8px;color:#6b7280">'+(r.chalan_no||'—')+'</td>'
         +'<td style="padding:5px 8px;color:#6b7280">'+(r.supplier||'—')+'</td>'
+        +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+_esc(r.grade||'—')+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;color:#6b7280">'+(r.qty||0)+' '+(r.unit||'')+'</td>'
         +'<td style="padding:5px 8px;text-align:right;font-weight:700;color:#059669">'+fc(r.cost)+'</td>'
         +'</tr>';
     }).join('');
@@ -15927,14 +15932,14 @@ try{
     +'<table><thead><tr>'+theadCells+'</tr></thead><tbody>'+bodyTrs+'</tbody>'
     +'<tfoot><tr style="background:#f5f3ff">'
     + (cat==='steel'
-        ? ('<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="2">TOTAL</td>'
+        ? ('<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="4">TOTAL</td>'
+           +'<td></td>'
            +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalNos+'</td>'
            +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalQty+'</td>'
-           +'<td></td><td></td><td></td>'
            +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalCost)+'</td>')
-        : ('<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="2">TOTAL</td>'
+        : ('<td style="padding:6px 8px;font-weight:900;color:#1e1b4b" colspan="4">TOTAL</td>'
+           +'<td></td>'
            +'<td style="padding:6px 8px;text-align:center;font-weight:900;color:#7c3aed">'+totalQty+'</td>'
-           +'<td></td><td></td><td></td>'
            +'<td style="padding:6px 8px;text-align:right;font-weight:900;color:#059669">'+fc(totalCost)+'</td>'))
     +'</tr></tfoot></table>'
     +_pdfFooter()+'</div></body></html>';
