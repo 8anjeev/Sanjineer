@@ -12412,10 +12412,10 @@ function viewDaily() {
     } else {
       stockTbl.innerHTML = allMats.map(function(item) {
         var currentStock = getbal(item);
-        var usedToday = (item.transactions||[]).filter(function(t){ return t.type==='use' && (t.date||'').startsWith(DD); }).reduce(function(s,t){ return s+t.qty; }, 0);
-        var purchasedToday = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && (t.date||'').startsWith(DD); }).reduce(function(s,t){ return s+t.qty; }, 0);
+        var usedToday = _q2((item.transactions||[]).filter(function(t){ return t.type==='use' && (t.date||'').startsWith(DD); }).reduce(function(s,t){ return s+t.qty; }, 0));
+        var purchasedToday = _q2((item.transactions||[]).filter(function(t){ return t.type==='purchase' && (t.date||'').startsWith(DD); }).reduce(function(s,t){ return s+t.qty; }, 0));
         // Previous day stock = current stock - today's purchases + today's usage
-        var prevStock = currentStock - purchasedToday + usedToday;
+        var prevStock = _q2(currentStock - purchasedToday + usedToday);
         var remaining = currentStock;
         var isLow = item.minQty > 0 && remaining <= item.minQty;
         var nameCell = isLow
@@ -14882,7 +14882,14 @@ function quickPickMaterial(id){
   openMatPurchaseModal(id);
   var pickEl = document.getElementById('mat-name-select'); if (pickEl) pickEl.value = '';
 }
-function getbal(item){ return (item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0); }
+// BUGFIX: repeatedly adding/subtracting many small decimal quantities
+// (binary floating point can't represent most decimals exactly) drifts
+// into results like 4998.299999999999 instead of 4998.3. Rounding to 2dp
+// after every running sum — not just the final display — stops that drift
+// from compounding further the next time this same total feeds into
+// another sum (e.g. prevStock = currentStock - purchasedToday + usedToday).
+function _q2(n){ n = parseFloat(n); if (!isFinite(n)) return 0; return Math.round(n*100)/100; }
+function getbal(item){ return _q2((item.transactions||[]).reduce(function(s,t){ return t.type==='purchase'?s+t.qty:s-t.qty; },0)); }
 function delMaterialItem(id){
   askDel('Delete material?', function(){
     if (typeof _addTombstone === 'function') _addTombstone('mat__'+id, Date.now());
@@ -15446,7 +15453,7 @@ function saveSteelRmc(){
   if (cat==='steel') {
     lines = _srmcCollectSteelLines();
     if (!lines.length) { toast('Add at least one diameter (or Binding Wire)','err'); return; }
-    lines.forEach(function(ln){ totalQty += (parseFloat(ln.qty)||0); totalNos += (parseFloat(ln.nos)||0); });
+    lines.forEach(function(ln){ totalQty = _q2(totalQty + (parseFloat(ln.qty)||0)); totalNos += (parseFloat(ln.nos)||0); });
   } else {
     if (!grade) { toast('Select a concrete grade','err'); return; }
     totalQty = parseFloat(document.getElementById('srmc-qty').value)||0;
@@ -15536,14 +15543,14 @@ function viewSteelRMC(){
       _srmcLinesOf(r).forEach(function(ln){
         var key = ln.diameter || '—';
         if (!groups[key]) { groups[key] = {qty:0, nos:0, cost:0, unit:r.unit||''}; order.push(key); }
-        groups[key].qty += (parseFloat(ln.qty)||0);
+        groups[key].qty = _q2(groups[key].qty + (parseFloat(ln.qty)||0));
         groups[key].nos += (parseFloat(ln.nos)||0);
         if (!groups[key].unit) groups[key].unit = r.unit||'';
       });
     } else {
       var key2 = r.grade || '—';
       if (!groups[key2]) { groups[key2] = {qty:0, nos:0, cost:0, unit:r.unit||''}; order.push(key2); }
-      groups[key2].qty += (parseFloat(r.qty)||0);
+      groups[key2].qty = _q2(groups[key2].qty + (parseFloat(r.qty)||0));
       groups[key2].cost += (parseFloat(r.cost)||0);
       if (!groups[key2].unit) groups[key2].unit = r.unit||'';
     }
@@ -15668,7 +15675,7 @@ function viewMaterials(){
   div.innerHTML=displayMats.map(function(item){
     var bal=getbal(item), low=item.minQty>0&&bal<=item.minQty;
     var txns=(item.transactions||[]).slice().reverse();
-    var tPQ=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+t.qty; },0);
+    var tPQ=_q2(item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+t.qty; },0));
     var tC=item.transactions.filter(function(t){ return t.type==='purchase'; }).reduce(function(s,t){ return s+(parseFloat(t.cost)||0); },0);
     return '<div style="background:white;border-radius:12px;overflow:hidden;margin-bottom:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">'
       +'<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #f3f4f6">'
@@ -15750,7 +15757,7 @@ try{
 
   var totalQty=0, totalCost=0;
   var trs=rows.map(function(r){
-    totalQty+=r.qty; totalCost+=r.cost;
+    totalQty=_q2(totalQty+r.qty); totalCost+=r.cost;
     return '<tr>'
       +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
       +'<td style="padding:5px 8px;font-weight:700;color:#1f2937">'+_esc(r.material)+'</td>'
@@ -15824,14 +15831,14 @@ function _srmcChipsHtml(category, recs){
       _srmcLinesOf(r).forEach(function(ln){
         var key = ln.diameter || '—';
         if (!groups[key]) { groups[key] = {qty:0, nos:0, unit:r.unit||''}; order.push(key); }
-        groups[key].qty += (parseFloat(ln.qty)||0);
+        groups[key].qty = _q2(groups[key].qty + (parseFloat(ln.qty)||0));
         groups[key].nos += (parseFloat(ln.nos)||0);
         if (!groups[key].unit) groups[key].unit = r.unit||'';
       });
     } else {
       var key2 = r.grade || '—';
       if (!groups[key2]) { groups[key2] = {qty:0, nos:0, unit:r.unit||''}; order.push(key2); }
-      groups[key2].qty += (parseFloat(r.qty)||0);
+      groups[key2].qty = _q2(groups[key2].qty + (parseFloat(r.qty)||0));
       if (!groups[key2].unit) groups[key2].unit = r.unit||'';
     }
   });
@@ -15883,7 +15890,7 @@ try{
       totalCost += (parseFloat(r.cost)||0);
       var rs = lines.length;
       return lines.map(function(ln, i){
-        totalQty += (parseFloat(ln.qty)||0);
+        totalQty = _q2(totalQty + (parseFloat(ln.qty)||0));
         totalNos += (parseFloat(ln.nos)||0);
         var tb = (i===0) ? 'border-top:2px solid #ddd6fe;' : '';
         var row = '<tr>';
@@ -15904,7 +15911,7 @@ try{
     theadCells = '<th>Date</th><th>Vehicle No</th><th>Chalan No</th><th>Supplier</th>'
       +'<th>Grade</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th>';
     bodyTrs = recs.map(function(r){
-      totalQty+=(parseFloat(r.qty)||0); totalCost+=(parseFloat(r.cost)||0);
+      totalQty=_q2(totalQty+(parseFloat(r.qty)||0)); totalCost+=(parseFloat(r.cost)||0);
       return '<tr>'
         +'<td style="padding:5px 8px;font-weight:600;color:#374151;white-space:nowrap">'+fd(r.date)+'</td>'
         +'<td style="padding:5px 8px;color:#0369a1">'+(r.vehicle_no||'—')+'</td>'
@@ -17084,9 +17091,9 @@ var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Report</
   var allMats = lmat(); if (!allMats.length) return '';
   var rows = allMats.map(function(item){
     var currentStock = getbal(item);
-    var usedToday = (item.transactions||[]).filter(function(t){ return t.type==='use' && (t.date||'').startsWith(d); }).reduce(function(s,t){ return s+t.qty; }, 0);
-    var purchasedToday = (item.transactions||[]).filter(function(t){ return t.type==='purchase' && (t.date||'').startsWith(d); }).reduce(function(s,t){ return s+t.qty; }, 0);
-    var prevStock = currentStock - purchasedToday + usedToday;
+    var usedToday = _q2((item.transactions||[]).filter(function(t){ return t.type==='use' && (t.date||'').startsWith(d); }).reduce(function(s,t){ return s+t.qty; }, 0));
+    var purchasedToday = _q2((item.transactions||[]).filter(function(t){ return t.type==='purchase' && (t.date||'').startsWith(d); }).reduce(function(s,t){ return s+t.qty; }, 0));
+    var prevStock = _q2(currentStock - purchasedToday + usedToday);
     var remaining = currentStock;
     var isLow = item.minQty > 0 && remaining <= item.minQty;
     var nameCell = isLow
