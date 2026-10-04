@@ -5674,6 +5674,38 @@ function _settRefreshUpgradeBtn() {
 }
 // ── Settings login button — shows email + plan when logged in, opens
 // login when not. Call after any login/logout/plan change. ──
+// Applies the plan-tier look to the Login/Cloud row: unchanged default for
+// Free, silver for Pro, gold (the same treatment the old standalone
+// "Upgrade to Enterprise" row used) for Enterprise. Separate from the text
+// logic below so it can also be called with 'free' to reset the row when
+// nobody's logged in.
+function _settApplyPlanRowStyle(plan) {
+  var btn = document.getElementById('sett-login-btn');
+  var iconEl = document.getElementById('sett-login-icon');
+  var titleEl = document.getElementById('sett-login-title');
+  var subEl = document.getElementById('sett-login-sub');
+  if (!btn) return;
+  if (plan === 'enterprise' || plan === 'pro') {
+    var dark = 'rgba(30,27,58,.72)';
+    btn.style.background = plan === 'enterprise'
+      ? 'linear-gradient(135deg,var(--sj-gold-deep),var(--sj-gold))'
+      : 'linear-gradient(135deg,var(--sj-silver-deep),var(--sj-silver))';
+    btn.style.borderColor = plan === 'enterprise' ? '#F0CD7A' : '#DADFE6';
+    btn.style.boxShadow = plan === 'enterprise' ? '0 4px 16px rgba(232,185,77,.3)' : '0 4px 16px rgba(138,144,156,.28)';
+    if (iconEl) { iconEl.style.background = 'rgba(30,27,58,.14)'; iconEl.style.borderColor = 'rgba(30,27,58,.25)'; }
+    if (titleEl) titleEl.style.color = '#1E1B3A';
+    if (subEl) subEl.style.color = dark;
+  } else {
+    // Free (or logged out, or a joined Member — see the isMember check at
+    // the call site) — back to the row's normal default look.
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    btn.style.boxShadow = '';
+    if (iconEl) { iconEl.style.background = 'var(--sj-gold-soft)'; iconEl.style.borderColor = 'rgba(232,185,77,.35)'; }
+    if (titleEl) titleEl.style.color = '';
+    if (subEl) subEl.style.color = '';
+  }
+}
 function _settRefreshLoginBtn() {
   var titleEl = document.getElementById('sett-login-title');
   var subEl = document.getElementById('sett-login-sub');
@@ -5688,6 +5720,10 @@ function _settRefreshLoginBtn() {
     // Member instead of implying they personally hold the company's plan.
     var isMember = (typeof window._ENGINEER_MODE !== 'undefined' && window._ENGINEER_MODE) || (role && role !== 'owner');
     var planLabel = isMember ? '🤝 Member' : (plan === 'enterprise' ? '🏢 Enterprise' : plan === 'pro' ? '⭐ Pro' : '🆓 Free');
+    // Silver/gold is specifically the plan OWNER's status — a joined
+    // engineer/sales_admin ("Member") sees the row's normal look even
+    // though the company itself is on Pro/Enterprise.
+    _settApplyPlanRowStyle(isMember ? 'free' : plan);
     titleEl.textContent = email;
     // Members don't own the company's subscription, and Free has no expiry
     // to count down — both keep the old "tap to manage" wording. Pro/
@@ -5711,6 +5747,7 @@ function _settRefreshLoginBtn() {
     titleEl.textContent = 'Login / Cloud';
     subEl.textContent = 'Sign in for backup & sync';
     if (iconEl) iconEl.textContent = '🔒';
+    _settApplyPlanRowStyle('free');
   }
 }
 // Dispatcher for the Settings login button — logged in → plan management,
@@ -5804,7 +5841,7 @@ function _settShowPlanManage() {
       if (plan !== 'pro') {
         html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToPro()"><b>⭐ Upgrade to Pro — ₹30/m</b></button>';
       }
-      html += '<button style="' + _wsCardStyle + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — <span style="text-decoration:line-through;opacity:.55;font-weight:600;">₹199</span> ₹99/m</b>' +
+      html += '<button style="' + _wsCardStyleEnterprise + '" onclick="_wsUpgradeToEnterprise()"><b>🏢 Upgrade to Enterprise — <span style="text-decoration:line-through;opacity:.55;font-weight:600;">₹199</span> ₹99/m</b>' +
         (plan === 'pro' ? '<br><span style="font-size:11px;color:rgba(255,255,255,.5);">Remaining Pro days carry over</span>' : '') + '</button>';
     } else if (isOwner && plan === 'enterprise' && !isExpired) {
       html += '<p style="font-size:11px;color:rgba(255,255,255,.5);margin:8px 0;">You\'re on our top plan. 🎉</p>';
@@ -6567,6 +6604,12 @@ function _wsSelectProject(p) {
         --sj-gold-soft: rgba(232,185,77,.16);
         --sj-indigo: #6C5CE7;
         --sj-indigo-deep: #4F3FC7;
+        /* Pro-tier silver, mirroring the gold tokens above one-for-one so
+           the account row can switch palettes by plan (free: unchanged
+           indigo/default, pro: silver, enterprise: gold). */
+        --sj-silver: #C7CDD6;
+        --sj-silver-deep: #8A909C;
+        --sj-silver-soft: rgba(199,205,214,.16);
       }
 
       /* ── Micro-animation tokens ── */
@@ -6764,17 +6807,19 @@ function _wsSelectProject(p) {
          toggle #sett-logout-btn (_settRefreshLoginBtn) is null-safe and
          simply no-ops now that the element is gone. -->
 
-    <!-- Upgrade to Enterprise — hidden by default, shown via JS (see
-         _settRefreshUpgradeBtn) only for a Pro-plan company owner. This is
-         the single highest-value CTA in the panel, so it's the one place
-         gold goes bold rather than just accenting a border. -->
-    <button class="sett-btn sett-row" onclick="_settRipple(event,this);_wsUpgradeToEnterprise()" id="sett-upgrade-btn" style="display:none;background:linear-gradient(135deg,var(--sj-gold-deep),var(--sj-gold));border-color:#F0CD7A;box-shadow:0 4px 16px rgba(232,185,77,.3);">
-      <span style="font-size:15px;flex-shrink:0">👑</span>
-      <div style="display:flex;flex-direction:column;gap:1px">
-        <span style="color:#1E1B3A;font-weight:800;">Upgrade to Enterprise</span>
-        <span style="font-size:9px;font-weight:600;color:rgba(30,27,58,0.65)"><span style="text-decoration:line-through;opacity:.6;">₹199</span> ₹99/m · remaining Pro days carry over</span>
-      </div>
-    </button>
+    <!-- BUGFIX: the standalone "Upgrade to Enterprise" row that used to
+         live here duplicated the exact same CTA already inside the
+         Sanjineer Cloud account panel (opened by the Login/Cloud row right
+         above — see _wsCardStyle's "Upgrade to Enterprise" button). Rather
+         than show the same upgrade offer twice, it's removed from here;
+         the account panel is the one place it lives now. The Login/Cloud
+         row itself now carries the plan-tier look instead (silver for
+         Pro, gold for Enterprise — see _settApplyPlanRowStyle), so the
+         upgrade prompt and the current-plan indicator aren't fighting for
+         attention as two separate gold rows. #sett-upgrade-btn no longer
+         exists; _settRefreshUpgradeBtn() is left in place but is now
+         permanently a no-op (same pattern as the removed logout button
+         above — null-safe, harmless, never called with anything to find). -->
 
     <!-- Profile Settings -->
     <button class="sett-btn sett-row" onclick="_settRipple(event,this);closeSettingsPanel();setTimeout(openEditProfile,360)">
