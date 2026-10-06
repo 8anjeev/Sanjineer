@@ -28728,6 +28728,14 @@ window._wsMarkOwnedCompany = _wsMarkOwnedCompany;
   .fd-input{width:100%;padding:8px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#fff;font-size:12px;outline:none;box-sizing:border-box;font-family:inherit;}
   .fd-input:disabled{opacity:.55;cursor:not-allowed;}
   .fd-status-btn.active{box-shadow:0 0 0 2px rgba(255,255,255,.55) inset;transform:scale(1.03);}
+  /* BUGFIX: Sold/Booked only ever showed as the same pale, low-opacity
+     tint as the unselected toggle options — a flat's actual status didn't
+     read as noticeably different at a glance. The selected (.active)
+     Sold/Booked button now gets a solid, saturated fill instead; Available
+     stays as-is (never raised as an issue, and "nothing sold yet" reading
+     as a subtle/neutral state is correct). */
+  .fd-status-btn.active[data-status="sold"]{background:rgba(220,38,38,.55) !important;border-color:rgba(248,113,113,.9) !important;color:#fff !important;}
+  .fd-status-btn.active[data-status="book"]{background:rgba(180,83,9,.6) !important;border-color:rgba(251,191,36,.9) !important;color:#fff !important;}
   .flat-pill{padding:7px 6px;border-radius:9px;font-size:10px;font-weight:800;cursor:pointer;border:1.5px solid;text-align:left;transition:transform .12s;}
   .flat-pill:active{transform:scale(.94);}
 </style>
@@ -29576,8 +29584,13 @@ function renderSalesManager() {
 
         var flatsHtml = visibleFlats.map(function (f) {
           var bg, bd, fg;
-          if (f.status === 'sold') { bg = 'rgba(239,68,68,.18)'; bd = 'rgba(248,113,113,.5)'; fg = '#fca5a5'; }
-          else if (f.status === 'book') { bg = 'rgba(245,158,11,.18)'; bd = 'rgba(251,191,36,.5)'; fg = '#fcd34d'; }
+          // BUGFIX: Sold/Booked pills used the same pale 18%-opacity tint
+          // as Available, so a sold flat didn't visually stand out from
+          // an empty one on the grid — exactly what makes the grid useful
+          // at a glance. Sold/Booked are now solid, saturated fills with
+          // white text; Available is unchanged (never the complaint).
+          if (f.status === 'sold') { bg = 'rgba(220,38,38,.55)'; bd = 'rgba(248,113,113,.9)'; fg = '#ffffff'; }
+          else if (f.status === 'book') { bg = 'rgba(180,83,9,.55)'; bd = 'rgba(251,191,36,.9)'; fg = '#ffffff'; }
           else { bg = 'rgba(16,185,129,.18)'; bd = 'rgba(52,211,153,.5)'; fg = '#6ee7b7'; }
           return '<button class="flat-pill" onclick="openFlatDetail(\'' + b.id + '\',\'' + fl.id + '\',\'' + f.id + '\')" style="background:' + bg + ';border-color:' + bd + ';color:' + fg + ';">'
             + '<div style="font-weight:900;">' + esc(f.flatNo || '—') + '</div>'
