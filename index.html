@@ -2129,13 +2129,24 @@ self.addEventListener('fetch', function(e) {
   }
 
   // ── PRO/ENTERPRISE upgrade popup ──────────────────────────────
+  // BUGFIX: this map was referenced (via the comment below) but never
+  // actually defined anywhere in the file, so _UPGRADE_FEATURE_PLAN[...]
+  // always evaluated to undefined and EVERY gated feature — including
+  // genuinely Enterprise-only ones like Sales Manager, Purchase Order
+  // Approvals, and Cross-Device Sharing — fell through to the hardcoded
+  // 'pro' default below, showing "PRO Feature" / "only available for PRO
+  // users" even when the real requirement was Enterprise. Features not
+  // listed here (Multiple Projects, Logo Upload, Owner Dashboard, Partner
+  // Investment Tracker) are correctly Pro-or-above, so they're left to
+  // that same default rather than listed explicitly.
+  var _UPGRADE_FEATURE_PLAN = {
+    'Sales Manager': 'enterprise',
+    'Purchase Order Approvals': 'enterprise',
+    'Cross-Device Sharing': 'enterprise'
+  };
   function _showUpgradePopup(featureName) {
-    // _UPGRADE_FEATURE_PLAN is defined later in the file (near the pricing
-    // modal) but this function is only ever CALLED after the whole page
-    // has loaded, so it's always available by then.
-    var plan = (typeof _UPGRADE_FEATURE_PLAN !== 'undefined' && _UPGRADE_FEATURE_PLAN[featureName]) || 'pro';
+    var plan = _UPGRADE_FEATURE_PLAN[featureName] || 'pro';
     var planLabel = plan === 'enterprise' ? 'ENTERPRISE' : 'PRO';
-    _showProjectModal('🔒 PRO Feature', '', null); // reuse modal shell differently
     var existing = document.getElementById('_proj-input-modal');
     if (existing) existing.remove();
     var modal = document.createElement('div');
